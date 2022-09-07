@@ -38,22 +38,23 @@ classifiers = [
 ]
 requires-python = '>=3.7'
 dependencies = [
-#    'pydantic>=2.0.0',
-    'python-dotenv>=0.10.4',
+    'pydantic',
+    'python-dotenv>=0.21.0',
 ]
 dynamic = ['version']
 
 [project.urls]
 Homepage = 'https://github.com/pydantic/pydantic-settings'
-#Documentation = 'https://pydantic-docs.helpmanual.io'
 Funding = 'https://github.com/sponsors/samuelcolvin'
 Source = 'https://github.com/pydantic/pydantic-settings'
-#Changelog = 'https://pydantic-docs.helpmanual.io/changelog'
+Changelog = 'https://github.com/pydantic/pydantic-settings/releases'
+# TODO: Documentation
 
 [tool.pytest.ini_options]
 testpaths = 'tests'
 filterwarnings = [
     'error',
+    'ignore:This is a placeholder until pydantic-settings.*:UserWarning',
 ]
 
 [tool.flake8]
