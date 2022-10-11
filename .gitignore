@@ -15,6 +15,9 @@ test.py
 .coverage
 .hypothesis
 /htmlcov/
+/docs/.changelog.md
+/docs/.version.md
+/docs/.tmp_examples/
 /site/
 /site.zip
 .pytest_cache/

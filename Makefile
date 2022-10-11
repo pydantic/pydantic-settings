@@ -34,3 +34,20 @@ testcov: test
 
 .PHONY: all
 all: lint mypy testcov
+
+.PHONY: docs
+docs:
+	flake8 --max-line-length=80 docs/examples/
+	python docs/build/main.py
+	mkdocs build
+
+.PHONY: docs-serve
+docs-serve:
+	python docs/build/main.py
+	mkdocs serve
+
+.PHONY: publish-docs
+publish-docs:
+	zip -r site.zip site
+	@curl -H "Content-Type: application/zip" -H "Authorization: Bearer ${NETLIFY}" \
+	      --data-binary "@site.zip" https://api.netlify.com/api/v1/sites/pydantic-docs.netlify.com/deploys
