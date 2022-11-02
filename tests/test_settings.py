@@ -13,10 +13,11 @@ from pydantic_settings.main import (
     EnvSettingsSource,
     InitSettingsSource,
     SecretsSettingsSource,
-    SettingsError,
+    # SettingsError,
     SettingsSourceCallable,
     read_env_file,
 )
+from pydantic_settings.sources import SettingsError
 
 try:
     import dotenv
@@ -96,7 +97,7 @@ def test_nested_env_delimiter(env):
         v6: str
 
     class SubValue(BaseSettings):
-        v4: str
+        v4: str = Field(...,env='api_key')
         v5: int
         sub_sub: SubSubValue
 
@@ -113,6 +114,7 @@ def test_nested_env_delimiter(env):
 
         class Config:
             env_nested_delimiter = '__'
+            
 
     env.set('top', '{"v1": "json-1", "v2": "json-2", "sub": {"v5": "xx"}}')
     env.set('top__sub__v5', '5')
@@ -122,6 +124,7 @@ def test_nested_env_delimiter(env):
     env.set('v0_union', '0')
     env.set('top__sub__sub_sub__v6', '6')
     env.set('top__sub__v4', '4')
+    env.set('api_key', '4')
     cfg = Cfg()
     assert cfg.dict() == {
         'v0': '0',
@@ -267,7 +270,7 @@ def test_env_list(env):
     env.set('different1', 'value 1')
     env.set('different2', 'value 2')
     s = Settings()
-    assert s.foobar == 'value 1'
+    assert s.foobar == 'value 1' # TODO: Has to change the order.
 
 
 def test_env_list_field(env):

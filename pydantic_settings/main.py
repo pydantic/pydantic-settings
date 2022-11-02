@@ -7,7 +7,9 @@ from pydantic.config import BaseConfig, Extra
 from pydantic.fields import ModelField
 from pydantic.main import BaseModel
 from pydantic.typing import StrPath, display_as_type, get_origin, is_union
-from pydantic.utils import deep_update, path_type, sequence_like
+from pydantic.utils import deep_update, path_type, sequence_like, lenient_issubclass
+
+from .sources import SettingsSource
 
 env_file_sentinel = str(object())
 
@@ -68,11 +70,28 @@ class BaseSettings(BaseModel):
         )
         file_secret_settings = SecretsSettingsSource(secrets_dir=_secrets_dir or self.__config__.secrets_dir)
         # Provide a hook to set built-in sources priority and add / remove sources
-        sources = self.__config__.customise_sources(
-            init_settings=init_settings, env_settings=env_settings, file_secret_settings=file_secret_settings
-        )
+        
+        sources = [
+            # SettingsMapper(
+            #     source=init_kwargs,
+            #     case_sensitivity=self.__config__.case_sensitive,
+            #     prefix=self.__config__.env_prefix,
+            #     nesting_delimiter=''
+            # ),
+            InitSettingsSource(
+                init_kwargs
+            ),
+            SettingsSource(
+            source=os.environ, 
+            case_sensitive=self.__config__.case_sensitive, 
+            prefix=self.__config__.env_prefix,
+            nesting_delimiter=_env_nested_delimiter if _env_nested_delimiter is not None else self.__config__.env_nested_delimiter
+            )]
+        # sources = self.__config__.customise_sources(
+        #     init_settings=init_settings, env_settings=env_settings, file_secret_settings=file_secret_settings
+        # )
         if sources:
-            return deep_update(*reversed([source(self) for source in sources]))
+            return deep_update(*reversed([init_kwargs]+[source(self) for source in sources] ))
         else:
             # no one should mean to do this, but I think returning an empty dict is marginally preferable
             # to an informative error and much better than a confusing error
@@ -104,6 +123,7 @@ class BaseSettings(BaseModel):
                         FutureWarning,
                     )
                 env_names = {cls.env_prefix + field.name}
+                # env_names = {field.name}
             elif isinstance(env, str):
                 env_names = {env}
             elif isinstance(env, (set, frozenset)):
@@ -145,6 +165,7 @@ class InitSettingsSource:
 
     def __repr__(self) -> str:
         return f'InitSettingsSource(init_kwargs={self.init_kwargs!r})'
+
 
 
 class EnvSettingsSource:
@@ -231,9 +252,10 @@ class EnvSettingsSource:
         """
         Find out if a field is complex, and if so whether JSON errors should be ignored
         """
-        if field.is_complex():
+        if field.is_complex(): # If the shape is > 1 or is a pydantic model or a subclass of BaseModel, Set, Frozenset, List, Dict etc.
             allow_parse_failure = False
         elif is_union(get_origin(field.type_)) and field.sub_fields and any(f.is_complex() for f in field.sub_fields):
+            # If there are multiple type mappin, it's not guaranteed all subfields are json, so it's all right to be no json.
             allow_parse_failure = True
         else:
             return False, False
@@ -245,7 +267,7 @@ class EnvSettingsSource:
         Process env_vars and extract the values of keys containing env_nested_delimiter into nested dictionaries.
 
         This is applied to a single field, hence filtering by env_var prefix.
-        """
+        """ 
         prefixes = [f'{env_name}{self.env_nested_delimiter}' for env_name in field.field_info.extra['env_names']]
         result: Dict[str, Any] = {}
         for env_name, env_val in env_vars.items():
