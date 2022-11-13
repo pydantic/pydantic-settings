@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from pydantic.typing import StrPath
 from pydantic.utils import path_type
 
-from .exceptions import SettingsError
+from .utils import SettingsError
 
 DotenvType = Union[StrPath, List[StrPath], Tuple[StrPath, ...]]
 

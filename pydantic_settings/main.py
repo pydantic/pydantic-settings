@@ -9,10 +9,9 @@ from pydantic.utils import deep_update, sequence_like
 
 from .mapper import SourceMapper
 from .sources import env_source, secret_source
+from .utils import DotenvType, env_file_sentinel
 
-env_file_sentinel = str(object())
 SettingsSourceCallable = Callable[['BaseSettings'], Dict[str, Any]]
-DotenvType = Union[StrPath, List[StrPath], Tuple[StrPath, ...]]
 
 
 class BaseSettings(BaseModel):

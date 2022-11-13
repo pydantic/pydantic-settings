@@ -9,9 +9,9 @@ import pytest
 from pydantic import BaseModel, Field, HttpUrl, NoneStr, SecretStr, ValidationError, dataclasses
 
 from pydantic_settings import BaseSettings
-from pydantic_settings.exceptions import SettingsError
 from pydantic_settings.main import SettingsSourceCallable  # SettingsError,
 from pydantic_settings.sources import dotenv_source
+from pydantic_settings.utils import SettingsError
 
 try:
     import dotenv

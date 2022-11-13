@@ -7,11 +7,7 @@ from pydantic.fields import ModelField
 from pydantic.typing import get_origin, is_union
 from pydantic.utils import lenient_issubclass
 
-from .exceptions import SettingsError
-
-
-class KeyMapNotFound(Exception):
-    pass
+from .utils import SettingsError
 
 
 class EmptyClass:
@@ -68,12 +64,12 @@ class SourceMapper:
     def get_value(self, key: str, should_raise: bool = False) -> Any:
         if key not in self.keymap:
             if should_raise:
-                raise KeyMapNotFound(f"Key {key} isn't provided any of setting sources")
+                raise SettingsError(f"Key {key} isn't provided any of setting sources")
             return EmptyClass()
         k = self.keymap[key]
         return self.source.get(k)
 
-    def __call__(self, settings: Any) -> Dict[str, Any]:
+    def __call__(self, settings: BaseModel) -> Dict[str, Any]:
         """Maps the values from different sources to the settings instance.
 
         The precedence of the sources are determined by it's order in the list
@@ -84,9 +80,6 @@ class SourceMapper:
         for field in settings.__fields__.values():
             self.parse_field(field, result, '')
         return result
-
-    def is_parse_failure_allowed(self, field: ModelField):
-        return is_union(get_origin(field.type_)) and field.sub_fields and any(f.is_complex() for f in field.sub_fields)
 
     def parse_field(self, field: ModelField, result: dict, prefix: str = '') -> None:
         """

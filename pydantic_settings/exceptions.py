@@ -1,2 +1,0 @@
-class SettingsError(ValueError):
-    pass
