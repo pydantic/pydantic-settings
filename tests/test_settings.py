@@ -885,7 +885,7 @@ def test_read_dotenv_vars(tmp_path):
     prod_env = tmp_path / '.env.prod'
     prod_env.write_text(test_prod_env_file)
 
-    source = dotenv_source(file_paths=[base_env, prod_env], encoding='utf8')
+    source = dotenv_source(env_file_paths=[base_env, prod_env], env_file_encoding='utf8')
     # source = EnvSettingsSource(env_file=[base_env, prod_env], env_file_encoding='utf8')
     # assert source._read_env_files(case_sensitive=False) == {
     #     'debug_mode': 'false',

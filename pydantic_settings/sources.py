@@ -11,20 +11,20 @@ from .utils import SettingsError
 DotenvType = Union[StrPath, List[StrPath], Tuple[StrPath, ...]]
 
 
-def secret_source(dir_path: Optional[StrPath] = None) -> Dict[str, Any]:
+def secret_source(secrets_dir_path: Optional[StrPath] = None) -> Dict[str, Any]:
     secrets = {}
-    if not dir_path:
+    if not secrets_dir_path:
         return secrets
 
-    dir_path = Path(dir_path).expanduser()
-    if not dir_path.exists():
-        warnings.warn(f'directory "{dir_path}" does not exist')
+    secrets_dir_path = Path(secrets_dir_path).expanduser()
+    if not secrets_dir_path.exists():
+        warnings.warn(f'directory "{secrets_dir_path}" does not exist')
         return secrets
 
-    if not dir_path.is_dir():
-        raise SettingsError(f'secrets_dir must reference a directory, not a {path_type(dir_path)}')
+    if not secrets_dir_path.is_dir():
+        raise SettingsError(f'secrets_dir must reference a directory, not a {path_type(secrets_dir_path)}')
 
-    for f in dir_path.iterdir():
+    for f in secrets_dir_path.iterdir():
         # warnings.warn(
         #     f'attempted to load secret file "{path}" but found a {path_type(path)} instead.',
         #     stacklevel=4,
@@ -35,30 +35,30 @@ def secret_source(dir_path: Optional[StrPath] = None) -> Dict[str, Any]:
     return secrets
 
 
-def dotenv_source(file_paths: Optional[DotenvType], encoding: Optional[str] = None) -> Dict[str, Any]:
+def dotenv_source(env_file_paths: Optional[DotenvType], env_file_encoding: Optional[str] = None) -> Dict[str, Any]:
     try:
         from dotenv import dotenv_values
     except ImportError as e:
         raise ImportError('python-dotenv is not installed, run `pip install pydantic[dotenv]`') from e
 
-    encoding = encoding if encoding else 'utf8'
+    env_file_encoding = env_file_encoding if env_file_encoding else 'utf8'
     dotenv_vars = {}
-    if file_paths is None:
+    if env_file_paths is None:
         return dotenv_vars
 
-    if isinstance(file_paths, (str, os.PathLike)):
-        file_paths = [file_paths]
+    if isinstance(env_file_paths, (str, os.PathLike)):
+        env_file_paths = [env_file_paths]
 
-    for file_path in file_paths:
+    for file_path in env_file_paths:
         file_path = Path(file_path).expanduser()
         if not file_path.is_file():
             continue
-        dotenv_vars.update(dotenv_values(file_path, encoding=encoding))
+        dotenv_vars.update(dotenv_values(file_path, encoding=env_file_encoding))
     return dotenv_vars
 
 
-def env_source(file_path: Optional[DotenvType], encoding: str = 'utf8'):
+def env_source(env_file_paths: Optional[DotenvType], env_file_encoding: str = 'utf8'):
     env_vars = {}
-    if file_path:
-        env_vars.update(dotenv_source(file_path, encoding))
+    if env_file_paths:
+        env_vars.update(dotenv_source(env_file_paths, env_file_encoding))
     return {**env_vars, **os.environ}
