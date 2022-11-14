@@ -9,7 +9,7 @@ from pydantic.typing import StrPath, display_as_type
 from pydantic.utils import deep_update, sequence_like
 
 from .source_mappers import SourceMapper
-from .sources import env_source, secret_source
+from .source_providers import env_source_provider, secret_source_provider
 from .utils import DotenvType, SettingsError, env_file_sentinel
 
 SettingsSourceCallable = Callable[[Iterator[ModelField]], Dict[str, Any]]
@@ -50,7 +50,7 @@ class BaseSettings(BaseModel):
         _env_nested_delimiter: Optional[str] = None,
         _secrets_dir: Optional[StrPath] = None,
     ) -> Dict[str, Any]:
-        def get_attribute(name: str):
+        def get_attribute(name: str) -> Any:
             attr_with_fallback: Dict[str, Tuple[Any, str]] = {
                 'env_file_paths': (
                     _env_file if _env_file != env_file_sentinel else self.__config__.env_file,
@@ -86,7 +86,7 @@ class BaseSettings(BaseModel):
         _mappers: List[SettingsSourceCallable] = [
             lambda settings: init_kwargs,
         ]
-        for source_callable in self.__config__.sources:
+        for source_provider in self.__config__.source_providers:
             # The following subroutine instantiates the source provider. For the
             # instantiation, it will search for instantiation attributes from
             # Config class. Config class must contain attribute with exact name
@@ -95,7 +95,7 @@ class BaseSettings(BaseModel):
             # instantiate during the compile time rather we take it during the
             # runtime and is helpful specially in the case of instances where
             # user needs to login etc.
-            signature = inspect.signature(source_callable)
+            signature = inspect.signature(source_provider)
             kwargs = {}
             args = []
             for parameter in signature.parameters.values():
@@ -108,13 +108,14 @@ class BaseSettings(BaseModel):
                     raise SettingsError("`*args`, `**kwargs` isn't supported for the sources yet.")
                 else:
                     args.append(parameter_value)
-            source = source_callable(*args, **kwargs)
+            source = source_provider(*args, **kwargs)
             _mappers.append(
                 SourceMapper(
                     source=source,
                     case_sensitive=self.__config__.case_sensitive,
                     nesting_delimiter=get_attribute('nesting_delimiter'),
-                    complex_loader=self.__config__.parse_env_var,
+                    complex_parser=self.__config__.parse_env_var,
+                    get_field_info=self.__config__.get_field_info,
                 ),
             )
         mappers = self.__config__.customise_sources(*_mappers)
@@ -135,7 +136,7 @@ class BaseSettings(BaseModel):
         extra: Extra = Extra.forbid
         arbitrary_types_allowed: bool = True
         case_sensitive: bool = False
-        sources: List[Callable[..., Mapping[str, Any]]] = [env_source, secret_source]
+        source_providers: List[Callable[..., Mapping[str, Any]]] = [env_source_provider, secret_source_provider]
 
         @classmethod
         def prepare_field(cls, field: ModelField) -> None:

@@ -14,7 +14,7 @@ class _Empty:
     pass
 
 
-def default_complex_loader(field_name: str, raw_value: str):
+def default_complex_parser(field_name: str, raw_value: str) -> Mapping[str, Any]:
     return json.loads(raw_value)
 
 
@@ -28,26 +28,27 @@ def field_is_complex(field: ModelField) -> Tuple[bool, bool]:
         allow_parse_failure = True
     else:
         return False, False
-
     return True, allow_parse_failure
 
 
 class SourceMapper:
-    __slots__ = ('source', 'case_sensitive', 'prefix', 'nesting_delimiter', 'complex_loader')
+    __slots__ = ('source', 'case_sensitive', 'nesting_delimiter', 'complex_parser', 'get_field_info')
 
     def __init__(
         self,
         source: Mapping[str, Any],
+        get_field_info: Callable[[str], Mapping[str, Any]],
         case_sensitive: bool = False,
         nesting_delimiter: Optional[str] = None,
-        complex_loader: Callable = default_complex_loader,
+        complex_parser: Callable[[str, str], Mapping[str, Any]] = default_complex_parser,
     ):
         self.source = source
         self.case_sensitive = case_sensitive
         self.nesting_delimiter = nesting_delimiter
-        self.complex_loader = complex_loader
+        self.complex_parser = complex_parser
+        self.get_field_info = get_field_info
 
-    @property
+    @property  # type: ignore
     @lru_cache()
     def keymap(self) -> Dict[str, str]:
         """Builds a keymap that holds the mapping keys that follows SourceMapper
@@ -64,13 +65,10 @@ class SourceMapper:
             keydb[key] = source_key
         return keydb
 
-    def get_value_from_source(self, key: str, should_raise: bool = False) -> Any:
-        if key not in self.keymap:
-            if should_raise:
-                raise SettingsError(f"Key {key} isn't provided any of setting sources")
-            return _Empty
-        k = self.keymap[key]
-        return self.source.get(k)
+    def has_env(self, field: ModelField) -> bool:
+        field_info = self.get_field_info(field.name)
+        env = field_info.get('env') or field.field_info.extra.get('env')
+        return env is not None
 
     def __call__(self, fields: Iterator[ModelField]) -> Dict[str, Any]:
         """Generates mapping between the settings field to values from the
@@ -84,56 +82,63 @@ class SourceMapper:
         for field in fields:
             # Since the fields are alreay prefixed by Config, we don't need a
             # seed prefix here.
-            self.parse_field(field, result, '')
+            self.update_result_for_field(field, '', result)
         return result
 
-    def parse_field(self, field: ModelField, result: Dict[str, Any], prefix: str = '') -> None:
+    def update_result_for_field(self, field: ModelField, prefix: str, result: Dict[str, Any]) -> None:
         """Parses value for given field and populates it to the result dictionary."""
-        env_names = field.field_info.extra.get('env_names', [])
-        prefixed_env_names = [f'{prefix}{env}' for env in env_names]
-        search_radar = prefixed_env_names if field.name in env_names else env_names
-        response = self.deserialize_field(search_radar, field)
+        names = field.field_info.extra.get('env_names', [])
+        if not self.has_env(field):
+            names = [f'{prefix}{env}' for env in names]
+
+        response = self.get_field_value(names, field)
         if response != _Empty:
             if isinstance(response, dict):
                 result.setdefault(field.alias, {}).update(response)
             else:
                 result[field.alias] = response
 
-        if not env_names:
-            return
-        if lenient_issubclass(field.type_, BaseModel):
-            if self.nesting_delimiter is None:
-                # Don't parse if nested_delimiter is not specified
-                return
-            for prefix_without_nesting in prefixed_env_names:
-                prefix_with_nesting = f'{prefix_without_nesting}{self.nesting_delimiter}'
+        # In case of nested setting where field is a BaseModel, and if the
+        # nesting_delimiter is provided, we would further parse the fields and
+        # use the prefix `{name}{nesting_delimiter}` to further parse subfields.
+        # If the nesting delimiter is not given, we would assume that the
+        # previous deserialize already full dictionary representing subfields
+        if lenient_issubclass(field.type_, BaseModel) and self.nesting_delimiter:
+            for name in names:
+                nesting_prefix = f'{name}{self.nesting_delimiter}'
                 for f in field.type_.__fields__.values():
-                    self.parse_field(f, result.setdefault(field.alias, {}), prefix_with_nesting)
+                    self.update_result_for_field(f, nesting_prefix, result.setdefault(field.alias, {}))
 
-    def deserialize_field(self, search_radar: List[str], field: ModelField):
+    def get_field_value(self, search_radar: List[str], field: ModelField) -> Any:
         dict_result = {}
         for key in search_radar:
-            value = self.get_value_from_source(key)
-            if value == _Empty:
+            source_key = self.keymap.get(key)  # type: ignore
+            if not source_key:
                 continue
-            # TODO: Could there be no situation that user deliberately sets None as value?
+
+            value = self.source.get(source_key)
             if value is None:
+                # TODO: Perhapse, in some case we intentionally want to pass None value?
                 continue
+
             is_complex, is_parse_failure_allowed = field_is_complex(field)
             if is_complex:
                 # If field is complex and value is not dict, try to parse it.
                 if not isinstance(value, dict):
                     try:
-                        value = self.complex_loader(field.name, value)
+                        value = self.complex_parser(field.name, value)
                     except ValueError as e:
                         if not is_parse_failure_allowed:
                             raise SettingsError(f'error parsing env var "{key}"') from e
 
+            # If the value is dict, there might be other fractions of dictionary
+            # in another key, so instead of returning value, keep on looking
             if isinstance(value, dict):
                 # Carryon to search for more values of dictionary else return
                 dict_result.update(value)
             else:
                 return value
+
         if not dict_result:
             return _Empty
         return dict_result

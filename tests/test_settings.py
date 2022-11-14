@@ -10,8 +10,8 @@ from pydantic import BaseModel, Field, HttpUrl, NoneStr, SecretStr, ValidationEr
 from pydantic.fields import ModelField
 
 from pydantic_settings import BaseSettings
-from pydantic_settings.main import SettingsSourceCallable  # SettingsError,
-from pydantic_settings.sources import dotenv_source
+from pydantic_settings.settings import SettingsSourceCallable  # SettingsError,
+from pydantic_settings.source_providers import dotenv_source_provider
 from pydantic_settings.utils import SettingsError
 
 try:
@@ -778,7 +778,7 @@ def test_read_env_file_cast_sensitive(tmp_path):
 
     # assert env_source(p) == {'a': 'test', 'b': '123'}
     # mapper = SourceMapper(env_source(p), case_sensitive=True)
-    assert dotenv_source(p) == {'a': 'test', 'B': '123'}
+    assert dotenv_source_provider(p) == {'a': 'test', 'B': '123'}
 
 
 @pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
@@ -786,7 +786,7 @@ def test_read_env_file_syntax_wrong(tmp_path):
     p = tmp_path / '.env'
     p.write_text('NOT_AN_ASSIGNMENT')
 
-    assert dotenv_source(p) == {'NOT_AN_ASSIGNMENT': None}
+    assert dotenv_source_provider(p) == {'NOT_AN_ASSIGNMENT': None}
 
 
 @pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
@@ -886,24 +886,12 @@ def test_read_dotenv_vars(tmp_path):
     prod_env = tmp_path / '.env.prod'
     prod_env.write_text(test_prod_env_file)
 
-    source = dotenv_source(env_file_paths=[base_env, prod_env], env_file_encoding='utf8')
-    # source = EnvSettingsSource(env_file=[base_env, prod_env], env_file_encoding='utf8')
-    # assert source._read_env_files(case_sensitive=False) == {
-    #     'debug_mode': 'false',
-    #     'host': 'https://example.com/services',
-    #     'port': '8000',
-    # }
-
+    source = dotenv_source_provider(env_file_paths=[base_env, prod_env], env_file_encoding='utf8')
     assert source == {
         'debug_mode': 'false',
         'host': 'https://example.com/services',
         'Port': '8000',
     }
-
-
-# @pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
-# def test_read_dotenv_vars_when_env_file_is_none():
-#     assert EnvSettingsSource(env_file=None, env_file_encoding=None)._read_env_files(case_sensitive=False) == {}
 
 
 @pytest.mark.skipif(dotenv, reason='python-dotenv is installed')
@@ -1095,20 +1083,23 @@ def test_secrets_missing_location(tmp_path):
         Settings()
 
 
-# @pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
-# def test_secrets_file_is_a_directory(tmp_path):
-#     p1 = tmp_path / 'foo'
-#     p1.mkdir()
+@pytest.mark.skip  # Skipped since we don't load env from secrets non dynatically anymore.
+def test_secrets_file_is_a_directory(tmp_path):
+    p1 = tmp_path / 'foo'
+    p1.mkdir()
 
-#     class Settings(BaseSettings):
-#         foo: Optional[str]
+    class Settings(BaseSettings):
+        foo: Optional[str]
 
-#         class Config:
-#             secrets_dir = tmp_path
+        class Config:
+            secrets_dir = tmp_path
 
-# with pytest.warns(UserWarning, match=f'attempted to load secret file \
-#     "{tmp_path}/foo" but found a directory inste'):
-#         Settings()
+    with pytest.warns(
+        UserWarning,
+        match=f'attempted to load secret file \
+        "{tmp_path}/foo" but found a directory inste',
+    ):
+        Settings()
 
 
 @pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
