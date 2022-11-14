@@ -57,7 +57,7 @@ def dotenv_source(env_file_paths: Optional[DotenvType], env_file_encoding: Optio
     return dotenv_vars
 
 
-def env_source(env_file_paths: Optional[DotenvType], env_file_encoding: str = 'utf8'):
+def env_source(env_file_paths: DotenvType, env_file_encoding: str = 'utf8'):
     env_vars = {}
     if env_file_paths:
         env_vars.update(dotenv_source(env_file_paths, env_file_encoding))

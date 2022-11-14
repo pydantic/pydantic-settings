@@ -1,6 +1,6 @@
 import inspect
 import warnings
-from typing import AbstractSet, Any, Callable, ClassVar, Dict, List, Optional, Tuple, Type, Union
+from typing import AbstractSet, Any, Callable, ClassVar, Dict, Iterator, List, Mapping, Optional, Tuple, Type, Union
 
 from pydantic.config import BaseConfig, Extra
 from pydantic.fields import ModelField
@@ -8,11 +8,11 @@ from pydantic.main import BaseModel
 from pydantic.typing import StrPath, display_as_type
 from pydantic.utils import deep_update, sequence_like
 
-from .mapper import SourceMapper
+from .source_mappers import SourceMapper
 from .sources import env_source, secret_source
-from .utils import DotenvType, env_file_sentinel
+from .utils import DotenvType, SettingsError, env_file_sentinel
 
-SettingsSourceCallable = Callable[['BaseSettings'], Dict[str, Any]]
+SettingsSourceCallable = Callable[[Iterator[ModelField]], Dict[str, Any]]
 
 
 class BaseSettings(BaseModel):
@@ -80,27 +80,46 @@ class BaseSettings(BaseModel):
                     warnings.warn(warning, DeprecationWarning)
             return value
 
-        sources = [
+        # init_kwargs are treated separately from all other sources. The
+        # Config.sources need not include the init_kwargs. If the user wishes to
+        # override the init_kwargs, they can do so with customize_sources
+        _mappers: List[SettingsSourceCallable] = [
             lambda settings: init_kwargs,
         ]
         for source_callable in self.__config__.sources:
+            # The following subroutine instantiates the source provider. For the
+            # instantiation, it will search for instantiation attributes from
+            # Config class. Config class must contain attribute with exact name
+            # as the parameter expected by the provider function. The reason we
+            # are taking instantiation here is that use don't have to themselves
+            # instantiate during the compile time rather we take it during the
+            # runtime and is helpful specially in the case of instances where
+            # user needs to login etc.
             signature = inspect.signature(source_callable)
             kwargs = {}
-            for parameter in signature.parameters:
-                kwargs[parameter] = get_attribute(parameter)
-            source = source_callable(**kwargs)
-            sources.append(
+            args = []
+            for parameter in signature.parameters.values():
+                parameter_value = get_attribute(parameter.name)
+                if not parameter_value and parameter.default != inspect._empty:
+                    parameter_value = parameter.default
+                if parameter.kind in {parameter.POSITIONAL_OR_KEYWORD, parameter.KEYWORD_ONLY}:
+                    kwargs[parameter.name] = parameter_value
+                elif parameter.kind in {parameter.VAR_KEYWORD, parameter.VAR_POSITIONAL}:
+                    raise SettingsError("`*args`, `**kwargs` isn't supported for the sources yet.")
+                else:
+                    args.append(parameter_value)
+            source = source_callable(*args, **kwargs)
+            _mappers.append(
                 SourceMapper(
                     source=source,
                     case_sensitive=self.__config__.case_sensitive,
-                    prefix=self.__config__.env_prefix,
                     nesting_delimiter=get_attribute('nesting_delimiter'),
                     complex_loader=self.__config__.parse_env_var,
                 ),
             )
-        sources = self.__config__.customise_sources(*sources)
-        if sources:
-            return deep_update(*reversed([source(self) for source in sources]))
+        mappers = self.__config__.customise_sources(*_mappers)
+        if mappers:
+            return deep_update(*reversed([source(iter(self.__fields__.values())) for source in mappers]))
         else:
             # no one should mean to do this, but I think returning an empty dict is marginally preferable
             # to an informative error and much better than a confusing error
@@ -116,7 +135,7 @@ class BaseSettings(BaseModel):
         extra: Extra = Extra.forbid
         arbitrary_types_allowed: bool = True
         case_sensitive: bool = False
-        sources = [env_source, secret_source]
+        sources: List[Callable[..., Mapping[str, Any]]] = [env_source, secret_source]
 
         @classmethod
         def prepare_field(cls, field: ModelField) -> None:
@@ -133,7 +152,6 @@ class BaseSettings(BaseModel):
                         FutureWarning,
                     )
                 env_names = {cls.env_prefix + field.name}
-                # env_names = {field.name}
             elif isinstance(env, str):
                 env_names = {env}
             elif isinstance(env, (set, frozenset)):

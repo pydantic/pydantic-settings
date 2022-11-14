@@ -3,10 +3,11 @@ import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple, Union
 
 import pytest
 from pydantic import BaseModel, Field, HttpUrl, NoneStr, SecretStr, ValidationError, dataclasses
+from pydantic.fields import ModelField
 
 from pydantic_settings import BaseSettings
 from pydantic_settings.main import SettingsSourceCallable  # SettingsError,
@@ -1161,13 +1162,9 @@ def test_external_settings_sources_filter_env_vars():
             self.user = user
             self.password = password
 
-        def __call__(self, settings: BaseSettings) -> Dict[str, str]:
+        def __call__(self, fields: Iterator[ModelField]) -> Dict[str, str]:
             vault_vars = vault_storage[f'{self.user}:{self.password}']
-            return {
-                field.alias: vault_vars[field.name]
-                for field in settings.__fields__.values()
-                if field.name in vault_vars
-            }
+            return {field.alias: vault_vars[field.name] for field in fields if field.name in vault_vars}
 
     class Settings(BaseSettings):
         apple: str

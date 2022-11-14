@@ -1,6 +1,6 @@
 import json
 from functools import lru_cache
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Tuple
 
 from pydantic import BaseModel
 from pydantic.fields import ModelField
@@ -10,7 +10,7 @@ from pydantic.utils import lenient_issubclass
 from .utils import SettingsError
 
 
-class EmptyClass:
+class _Empty:
     pass
 
 
@@ -37,14 +37,12 @@ class SourceMapper:
 
     def __init__(
         self,
-        source: Mapping,
+        source: Mapping[str, Any],
         case_sensitive: bool = False,
-        prefix: Optional[str] = None,
         nesting_delimiter: Optional[str] = None,
         complex_loader: Callable = default_complex_loader,
     ):
         self.source = source
-        self.prefix = prefix
         self.case_sensitive = case_sensitive
         self.nesting_delimiter = nesting_delimiter
         self.complex_loader = complex_loader
@@ -52,51 +50,54 @@ class SourceMapper:
     @property
     @lru_cache()
     def keymap(self) -> Dict[str, str]:
+        """Builds a keymap that holds the mapping keys that follows SourceMapper
+        heurestics such as case_sensitivity to the original key of the provider.
+        """
         keydb: Dict[str, str] = {}
         for source_key in self.source.keys():
             key = str(source_key) if self.case_sensitive else str(source_key).lower()
             if key in keydb:
-                # Take the first one only
+                # If the key has already been parsed, it will be ignored. User
+                # should be mindful about the keys with same name in different
+                # cases.
                 continue
             keydb[key] = source_key
         return keydb
 
-    def get_value(self, key: str, should_raise: bool = False) -> Any:
+    def get_value_from_source(self, key: str, should_raise: bool = False) -> Any:
         if key not in self.keymap:
             if should_raise:
                 raise SettingsError(f"Key {key} isn't provided any of setting sources")
-            return EmptyClass()
+            return _Empty
         k = self.keymap[key]
         return self.source.get(k)
 
-    def __call__(self, settings: BaseModel) -> Dict[str, Any]:
-        """Maps the values from different sources to the settings instance.
+    def __call__(self, fields: Iterator[ModelField]) -> Dict[str, Any]:
+        """Generates mapping between the settings field to values from the
+        source based on heurestics defined by user.
 
-        The precedence of the sources are determined by it's order in the list
-        The default order is Initkwargs, Environment and secret
+        The mapping only consists of the the result for matched fields.
+        Therefore, there aren't any extras coming from the SourceMapper.
         """
 
         result: Dict[str, Any] = {}
-        for field in settings.__fields__.values():
+        for field in fields:
+            # Since the fields are alreay prefixed by Config, we don't need a
+            # seed prefix here.
             self.parse_field(field, result, '')
         return result
 
-    def parse_field(self, field: ModelField, result: dict, prefix: str = '') -> None:
-        """
-        Process env_vars and extract the values of keys containing env_nested_delimiter into nested dictionaries.
-
-        This is applied to a single field, hence filtering by env_var prefix.
-        """
+    def parse_field(self, field: ModelField, result: Dict[str, Any], prefix: str = '') -> None:
+        """Parses value for given field and populates it to the result dictionary."""
         env_names = field.field_info.extra.get('env_names', [])
         prefixed_env_names = [f'{prefix}{env}' for env in env_names]
         search_radar = prefixed_env_names if field.name in env_names else env_names
         response = self.deserialize_field(search_radar, field)
-        if not isinstance(response, EmptyClass):
+        if response != _Empty:
             if isinstance(response, dict):
                 result.setdefault(field.alias, {}).update(response)
             else:
                 result[field.alias] = response
-                print("This response can't be non dict")
 
         if not env_names:
             return
@@ -112,8 +113,8 @@ class SourceMapper:
     def deserialize_field(self, search_radar: List[str], field: ModelField):
         dict_result = {}
         for key in search_radar:
-            value = self.get_value(key)
-            if isinstance(value, EmptyClass):
+            value = self.get_value_from_source(key)
+            if value == _Empty:
                 continue
             # TODO: Could there be no situation that user deliberately sets None as value?
             if value is None:
@@ -134,5 +135,5 @@ class SourceMapper:
             else:
                 return value
         if not dict_result:
-            return EmptyClass()
+            return _Empty
         return dict_result
