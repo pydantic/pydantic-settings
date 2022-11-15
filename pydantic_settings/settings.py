@@ -136,6 +136,7 @@ class BaseSettings(BaseModel):
         extra: Extra = Extra.forbid
         arbitrary_types_allowed: bool = True
         case_sensitive: bool = False
+        # TODO: Make source configurable from here, like setting Mapper Class, kwargs for Mapper class etc.
         source_providers: List[Callable[..., Mapping[str, Any]]] = [env_source_provider, secret_source_provider]
 
         @classmethod
