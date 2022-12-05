@@ -64,7 +64,8 @@ class BaseSettings(BaseModel):
                     _env_nested_delimiter
                     if _env_nested_delimiter is not None
                     else self.__config__.env_nested_delimiter,
-                    '_env_nested_delimiter, Config.env_nested_delimiter depricated in favor of Config.nesting_delimiter',
+                    '_env_nested_delimiter, Config.env_nested_delimiter depricated in favor of \
+                        Config.nesting_delimiter',
                 ),
                 'prefix': (self.__config__.env_prefix, 'Config.env_prifix depricated in favor of Config.prefix'),
                 'secrets_dir_path': (
