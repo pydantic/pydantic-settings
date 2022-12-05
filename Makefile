@@ -25,7 +25,7 @@ mypy:
 
 .PHONY: test
 test:
-	coverage run -m pytest --durations=10 -W ignore::DeprecationWarning
+	coverage run -m pytest --durations=10
 
 .PHONY: testcov
 testcov: test

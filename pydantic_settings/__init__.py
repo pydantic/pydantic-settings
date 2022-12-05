@@ -1,6 +1,6 @@
 import warnings
 
-from .settings import BaseSettings
+from .main import BaseSettings
 from .version import VERSION
 
 __all__ = ('BaseSettings',)

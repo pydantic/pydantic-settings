@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, HttpUrl, NoneStr, SecretStr, ValidationEr
 from pydantic.fields import ModelField
 
 from pydantic_settings import BaseSettings
-from pydantic_settings.settings import SettingsSourceCallable  # SettingsError,
+from pydantic_settings.main import SettingsSourceCallable  # SettingsError,
 from pydantic_settings.source_providers import dotenv_source_provider
 from pydantic_settings.utils import SettingsError
 

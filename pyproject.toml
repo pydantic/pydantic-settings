@@ -55,6 +55,7 @@ testpaths = 'tests'
 filterwarnings = [
     'error',
     'ignore:This is a placeholder until pydantic-settings.*:UserWarning',
+    'ignore:.* depricated in favor of .*:DeprecationWarning:pydantic_settings.main'
 ]
 
 [tool.flake8]
