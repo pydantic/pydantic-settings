@@ -1,7 +1,7 @@
 import os
 import warnings
 from pathlib import Path
-from typing import Any, Dict, Iterator, Mapping, Optional, List, Union
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Union
 
 from pydantic.typing import StrPath
 from pydantic.utils import path_type
@@ -48,10 +48,8 @@ def secret_source_provider(secrets_dir_paths: Optional[Union[StrPath, List[StrPa
         if not path.is_dir():
             raise SettingsError(f'secrets_dir must reference a directory, not a {path_type(path)}')
         paths.append(path)
-    
     if not paths:
         return secrets
-    
     return SecretSource(paths)
 
 
