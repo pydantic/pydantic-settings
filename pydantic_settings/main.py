@@ -68,7 +68,7 @@ class BaseSettings(BaseModel):
                         Config.nesting_delimiter',
                 ),
                 'prefix': (self.__config__.env_prefix, 'Config.env_prifix depricated in favor of Config.prefix'),
-                'secrets_dir_path': (
+                'secrets_dir_paths': (
                     _secrets_dir if _secrets_dir else self.__config__.secrets_dir,
                     '_secrets_dir, Config.secrets_dir depricated in favor of secrets_dir_path',
                 ),

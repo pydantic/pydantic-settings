@@ -1,7 +1,7 @@
 import os
 import warnings
 from pathlib import Path
-from typing import Any, Dict, Iterator, Mapping, Optional
+from typing import Any, Dict, Iterator, Mapping, Optional, List, Union
 
 from pydantic.typing import StrPath
 from pydantic.utils import path_type
@@ -10,12 +10,13 @@ from .utils import DotenvType, SettingsError
 
 
 class SecretSource(Mapping[str, Any]):
-    def __init__(self, secrets_dir_path: Path) -> None:
-        self.secrets_dir_path = secrets_dir_path
+    def __init__(self, secrets_dir_paths: List[Path]) -> None:
+        self.secrets_dir_paths = secrets_dir_paths
         self._valid_paths: Dict[str, Path] = {}
-        for f in self.secrets_dir_path.iterdir():
-            if f.is_file():
-                self._valid_paths[f.name] = f
+        for path in self.secrets_dir_paths:
+            for f in path.iterdir():
+                if f.is_file() and f.name not in self._valid_paths:
+                    self._valid_paths[f.name] = f
 
     def __getitem__(self, key: str) -> Any:
         file_path = self._valid_paths.get(key)
@@ -29,22 +30,29 @@ class SecretSource(Mapping[str, Any]):
         return len(self._valid_paths)
 
 
-def secret_source_provider(secrets_dir_path: Optional[StrPath] = None) -> Mapping[str, Any]:
+def secret_source_provider(secrets_dir_paths: Optional[Union[StrPath, List[StrPath]]] = None) -> Mapping[str, Any]:
     """Returns dictionary with filename as key and the content as values for all
     files in secrets_dir_path"""
     secrets: Mapping[str, Any] = {}
-    if not secrets_dir_path:
+    if not secrets_dir_paths:
+        secrets_dir_paths = []
+
+    paths: List[Path] = []
+    if isinstance(secrets_dir_paths, (str, os.PathLike)):
+        secrets_dir_paths = [secrets_dir_paths]
+    for path in secrets_dir_paths:
+        path = Path(path).expanduser()
+        if not path.exists():
+            warnings.warn(f'directory "{path}" does not exist')
+            continue
+        if not path.is_dir():
+            raise SettingsError(f'secrets_dir must reference a directory, not a {path_type(path)}')
+        paths.append(path)
+    
+    if not paths:
         return secrets
-
-    secrets_dir_path = Path(secrets_dir_path).expanduser()
-    if not secrets_dir_path.exists():
-        warnings.warn(f'directory "{secrets_dir_path}" does not exist')
-        return secrets
-
-    if not secrets_dir_path.is_dir():
-        raise SettingsError(f'secrets_dir must reference a directory, not a {path_type(secrets_dir_path)}')
-
-    return SecretSource(secrets_dir_path)
+    
+    return SecretSource(paths)
 
 
 def dotenv_source_provider(
