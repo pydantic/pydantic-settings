@@ -1261,16 +1261,29 @@ def _parse_custom_dict(value: str) -> Callable[[str], Dict[int, str]]:
     return res
 
 
+class CustomEnvSettingsSource(EnvSettingsSource):
+    def prepare_field(self, field_name: str, field: ModelField, value: Any) -> Any:
+        if not value:
+            return None
+
+        return _parse_custom_dict(value)
+
+
 def test_env_setting_source_custom_env_parse(env):
     class Settings(BaseSettings):
         top: Dict[int, str]
 
         class Config:
             @classmethod
-            def parse_env_var(cls, field_name: str, raw_val: str):
-                if field_name == 'top':
-                    return _parse_custom_dict(raw_val)
-                return cls.json_loads(raw_val)
+            def customise_sources(
+                cls,
+                settings_cls: type['BaseSettings'],
+                init_settings: SettingsSourceCallable,
+                env_settings: SettingsSourceCallable,
+                dotenv_settings: SettingsSourceCallable,
+                file_secret_settings: SettingsSourceCallable,
+            ) -> Tuple[SettingsSourceCallable, ...]:
+                return (CustomEnvSettingsSource(settings_cls),)
 
     with pytest.raises(ValidationError):
         Settings()
@@ -1279,20 +1292,39 @@ def test_env_setting_source_custom_env_parse(env):
     assert s.top == {1: 'apple', 2: 'banana'}
 
 
+class BadCustomEnvSettingsSource(EnvSettingsSource):
+    def prepare_field(self, field_name: str, field: ModelField, value: Any) -> Any:
+        """A custom parsing function passed into env parsing test."""
+        return int(value)
+
+
 def test_env_settings_source_custom_env_parse_is_bad(env):
     class Settings(BaseSettings):
         top: Dict[int, str]
 
         class Config:
             @classmethod
-            def parse_env_var(cls, field_name: str, raw_val: str):
-                if field_name == 'top':
-                    return int(raw_val)
-                return cls.json_loads(raw_val)
+            def customise_sources(
+                cls,
+                settings_cls: type['BaseSettings'],
+                init_settings: SettingsSourceCallable,
+                env_settings: SettingsSourceCallable,
+                dotenv_settings: SettingsSourceCallable,
+                file_secret_settings: SettingsSourceCallable,
+            ) -> Tuple[SettingsSourceCallable, ...]:
+                return (BadCustomEnvSettingsSource(settings_cls),)
 
     env.set('top', '1=apple,2=banana')
     with pytest.raises(SettingsError, match='error parsing value for field "top"'):
         Settings()
+
+
+class CustomSecretsSettingsSource(SecretsSettingsSource):
+    def prepare_field(self, field_name: str, field: ModelField, value: Any) -> Any:
+        if not value:
+            return None
+
+        return _parse_custom_dict(value)
 
 
 def test_secret_settings_source_custom_env_parse(tmp_path):
@@ -1306,10 +1338,15 @@ def test_secret_settings_source_custom_env_parse(tmp_path):
             secrets_dir = tmp_path
 
             @classmethod
-            def parse_env_var(cls, field_name: str, raw_val: str):
-                if field_name == 'top':
-                    return _parse_custom_dict(raw_val)
-                return cls.json_loads(raw_val)
+            def customise_sources(
+                cls,
+                settings_cls: type['BaseSettings'],
+                init_settings: SettingsSourceCallable,
+                env_settings: SettingsSourceCallable,
+                dotenv_settings: SettingsSourceCallable,
+                file_secret_settings: SettingsSourceCallable,
+            ) -> Tuple[SettingsSourceCallable, ...]:
+                return (CustomSecretsSettingsSource(settings_cls, tmp_path),)
 
     s = Settings()
     assert s.top == {1: 'apple', 2: 'banana'}

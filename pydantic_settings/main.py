@@ -77,7 +77,9 @@ class BaseSettings(BaseModel):
             env_prefix_len=len(self.__config__.env_prefix),
         )
 
-        file_secret_settings = SecretsSettingsSource(self.__class__, secrets_dir=_secrets_dir or self.__config__.secrets_dir)
+        file_secret_settings = SecretsSettingsSource(
+            self.__class__, secrets_dir=_secrets_dir or self.__config__.secrets_dir
+        )
         # Provide a hook to set built-in sources priority and add / remove sources
         sources = self.__config__.customise_sources(
             self.__class__,
@@ -163,17 +165,20 @@ class PydanticBaseSource(ABC):
 
     def prepare_field(self, field_name: str, field: ModelField, value: Any) -> Any:
         if field.is_complex():
-            try:
-                return json.loads(value)
-            except ValueError as e:
-                raise SettingsError(f'error parsing value for field "{field_name}"') from e
+            return json.loads(value)
         return value
 
     def __call__(self) -> dict[str, Any]:
         d: Dict[str, Any] = {}
 
         for name, field in self.settings_cls.__fields__.items():
-            field_value = self.prepare_field(name, field, self.get_field_value(field))
+            field_value = self.get_field_value(field)
+
+            try:
+                field_value = self.prepare_field(name, field, field_value)
+            except ValueError as e:
+                raise SettingsError(f'error parsing value for field "{name}"') from e
+
             if field_value is not None:
                 d[field.alias] = field_value
 
@@ -256,7 +261,7 @@ class SecretsSettingsSource(PydanticBaseSource):
 
 
 class EnvSettingsSource(PydanticBaseSource):
-    __slots__ = ('env_file', 'env_file_encoding', 'env_nested_delimiter', 'env_prefix_len')
+    __slots__ = ('env_nested_delimiter', 'env_prefix_len')
 
     def __init__(
         self,
@@ -299,7 +304,7 @@ class EnvSettingsSource(PydanticBaseSource):
                     value = json.loads(value)
                 except ValueError as e:
                     if not allow_parse_failure:
-                        raise SettingsError(f'error parsing value for field "{field_name}"') from e
+                        raise e
 
                 if isinstance(value, dict):
                     return deep_update(value, self.explode_env_vars(field, self.env_vars))
@@ -351,6 +356,8 @@ class EnvSettingsSource(PydanticBaseSource):
 
 
 class DotEnvSettingsSource(EnvSettingsSource):
+    __slots__ = ('env_file', 'env_file_encoding', 'env_nested_delimiter', 'env_prefix_len')
+
     def __init__(
         self,
         settings_cls: type[BaseSettings],
