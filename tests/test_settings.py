@@ -225,7 +225,7 @@ def test_set_dict_model(env):
 
 def test_invalid_json(env):
     env.set('apples', '["russet", "granny smith",]')
-    with pytest.raises(SettingsError, match='error parsing env var "apples"'):
+    with pytest.raises(SettingsError, match='error parsing value for field "apples"'):
         ComplexSettings()
 
 
@@ -1067,7 +1067,7 @@ def test_secrets_path_invalid_json(tmp_path):
         class Config:
             secrets_dir = tmp_path
 
-    with pytest.raises(SettingsError, match='error parsing env var "foo"'):
+    with pytest.raises(SettingsError, match='error parsing value for field "foo"'):
         Settings()
 
 
@@ -1235,19 +1235,19 @@ def test_customise_sources_empty():
 
 def test_builtins_settings_source_repr():
     assert (
-        repr(InitSettingsSource(init_kwargs={'apple': 'value 0', 'banana': 'value 1'}))
+        repr(InitSettingsSource(BaseSettings, init_kwargs={'apple': 'value 0', 'banana': 'value 1'}))
         == "InitSettingsSource(init_kwargs={'apple': 'value 0', 'banana': 'value 1'})"
     )
     assert (
-        repr(EnvSettingsSource(BaseSettings(), env_nested_delimiter='__'))
+        repr(EnvSettingsSource(BaseSettings, env_nested_delimiter='__'))
         == "EnvSettingsSource(env_nested_delimiter='__', env_prefix_len=0)"
     )
-    assert repr(DotEnvSettingsSource(BaseSettings(), env_file='.env', env_file_encoding='utf-8')) == (
+    assert repr(DotEnvSettingsSource(BaseSettings, env_file='.env', env_file_encoding='utf-8')) == (
         "DotEnvSettingsSource(env_file='.env', env_file_encoding='utf-8', "
         'env_nested_delimiter=None, env_prefix_len=0)'
     )
     assert (
-        repr(SecretsSettingsSource(BaseSettings(), secrets_dir='/secrets'))
+        repr(SecretsSettingsSource(BaseSettings, secrets_dir='/secrets'))
         == "SecretsSettingsSource(secrets_dir='/secrets')"
     )
 
@@ -1291,7 +1291,7 @@ def test_env_settings_source_custom_env_parse_is_bad(env):
                 return cls.json_loads(raw_val)
 
     env.set('top', '1=apple,2=banana')
-    with pytest.raises(SettingsError, match='error parsing env var "top"'):
+    with pytest.raises(SettingsError, match='error parsing value for field "top"'):
         Settings()
 
 

@@ -57,16 +57,16 @@ class BaseSettings(BaseModel):
         _secrets_dir: Optional[StrPath] = None,
     ) -> Dict[str, Any]:
         # Configure built-in sources
-        init_settings = InitSettingsSource(init_kwargs=init_kwargs)
+        init_settings = InitSettingsSource(self.__class__, init_kwargs=init_kwargs)
         env_settings = EnvSettingsSource(
-            self,
+            self.__class__,
             env_nested_delimiter=(
                 _env_nested_delimiter if _env_nested_delimiter is not None else self.__config__.env_nested_delimiter
             ),
             env_prefix_len=len(self.__config__.env_prefix),
         )
         dotenv_settings = DotEnvSettingsSource(
-            self,
+            self.__class__,
             env_file=(_env_file if _env_file != env_file_sentinel else self.__config__.env_file),
             env_file_encoding=(
                 _env_file_encoding if _env_file_encoding is not None else self.__config__.env_file_encoding
@@ -77,10 +77,10 @@ class BaseSettings(BaseModel):
             env_prefix_len=len(self.__config__.env_prefix),
         )
 
-        file_secret_settings = SecretsSettingsSource(self, secrets_dir=_secrets_dir or self.__config__.secrets_dir)
+        file_secret_settings = SecretsSettingsSource(self.__class__, secrets_dir=_secrets_dir or self.__config__.secrets_dir)
         # Provide a hook to set built-in sources priority and add / remove sources
         sources = self.__config__.customise_sources(
-            self,
+            self.__class__,
             init_settings=init_settings,
             env_settings=env_settings,
             dotenv_settings=dotenv_settings,
@@ -136,11 +136,11 @@ class BaseSettings(BaseModel):
         def customise_sources(
             cls,
             settings_cls: type['BaseSettings'],
-            init_settings: SettingsSourceCallable,
-            env_settings: SettingsSourceCallable,
-            dotenv_settings: SettingsSourceCallable,
-            file_secret_settings: SettingsSourceCallable,
-        ) -> Tuple[SettingsSourceCallable, ...]:
+            init_settings: 'PydanticBaseSource',
+            env_settings: 'PydanticBaseSource',
+            dotenv_settings: 'PydanticBaseSource',
+            file_secret_settings: 'PydanticBaseSource',
+        ) -> Tuple['PydanticBaseSource', ...]:
             return init_settings, env_settings, dotenv_settings, file_secret_settings
 
         @classmethod
@@ -161,17 +161,19 @@ class PydanticBaseSource(ABC):
     def get_field_value(self, field: ModelField) -> Any:
         pass
 
-    @classmethod
-    def prepare_field(cls, field: ModelField, value: Any) -> Any:
-        if field.is_complex:
-            return json.loads(value)
+    def prepare_field(self, field_name: str, field: ModelField, value: Any) -> Any:
+        if field.is_complex():
+            try:
+                return json.loads(value)
+            except ValueError as e:
+                raise SettingsError(f'error parsing value for field "{field_name}"') from e
         return value
 
     def __call__(self) -> dict[str, Any]:
         d: Dict[str, Any] = {}
 
-        for field in self.settings_cls.__fields__.values():
-            field_value = self.get_field_value(field)
+        for name, field in self.settings_cls.__fields__.items():
+            field_value = self.prepare_field(name, field, self.get_field_value(field))
             if field_value is not None:
                 d[field.alias] = field_value
 
@@ -181,8 +183,9 @@ class PydanticBaseSource(ABC):
 class InitSettingsSource(PydanticBaseSource):
     __slots__ = ('init_kwargs',)
 
-    def __init__(self, init_kwargs: Dict[str, Any]):
+    def __init__(self, settings_cls: type[BaseSettings], init_kwargs: Dict[str, Any]):
         self.init_kwargs = init_kwargs
+        super().__init__(settings_cls)
 
     def get_field_value(self, field: ModelField) -> Any:
         pass
@@ -241,21 +244,12 @@ class SecretsSettingsSource(PydanticBaseSource):
                 continue
 
             if path.is_file():
-                return self.prepare_field(field, path.read_text().strip(), env_name)
+                return path.read_text().strip()
             else:
                 warnings.warn(
                     f'attempted to load secret file "{path}" but found a {path_type(path)} instead.',
                     stacklevel=4,
                 )
-
-    @classmethod
-    def prepare_field(cls, field: ModelField, value: Any, env_name: str) -> Any:
-        if field.is_complex():
-            try:
-                return json.loads(value)
-            except ValueError as e:
-                raise SettingsError(f'error parsing env var "{env_name}"') from e
-        return value
 
     def __repr__(self) -> str:
         return f'SecretsSettingsSource(secrets_dir={self.secrets_dir!r})'
@@ -289,9 +283,9 @@ class EnvSettingsSource(PydanticBaseSource):
             if env_val is not None:
                 break
 
-        return self.prepare_field(field, env_val, env_name)
+        return env_val
 
-    def prepare_field(self, field: ModelField, value: Any, env_name: str) -> Any:
+    def prepare_field(self, field_name: str, field: ModelField, value: Any) -> Any:
         is_complex, allow_parse_failure = self.field_is_complex(field)
         if is_complex:
             if value is None:
@@ -305,7 +299,7 @@ class EnvSettingsSource(PydanticBaseSource):
                     value = json.loads(value)
                 except ValueError as e:
                     if not allow_parse_failure:
-                        raise SettingsError(f'error parsing env var "{env_name}"') from e
+                        raise SettingsError(f'error parsing value for field "{field_name}"') from e
 
                 if isinstance(value, dict):
                     return deep_update(value, self.explode_env_vars(field, self.env_vars))
