@@ -3,7 +3,7 @@ import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 
 import pytest
 from pydantic import BaseModel, Field, HttpUrl, NoneStr, SecretStr, ValidationError, dataclasses
@@ -525,7 +525,7 @@ def test_env_takes_precedence(env):
             @classmethod
             def customise_sources(
                 cls,
-                settings_cls: type['BaseSettings'],
+                settings_cls: Type['BaseSettings'],
                 init_settings: SettingsSourceCallable,
                 env_settings: SettingsSourceCallable,
                 dotenv_settings: SettingsSourceCallable,
@@ -557,7 +557,7 @@ def test_config_file_settings_nornir(env):
             @classmethod
             def customise_sources(
                 cls,
-                settings_cls: type['BaseSettings'],
+                settings_cls: Type['BaseSettings'],
                 init_settings: SettingsSourceCallable,
                 env_settings: SettingsSourceCallable,
                 dotenv_settings: SettingsSourceCallable,
@@ -1156,7 +1156,7 @@ def test_external_settings_sources_precedence(env):
             @classmethod
             def customise_sources(
                 cls,
-                settings_cls: type['BaseSettings'],
+                settings_cls: Type['BaseSettings'],
                 init_settings: SettingsSourceCallable,
                 env_settings: SettingsSourceCallable,
                 dotenv_settings: SettingsSourceCallable,
@@ -1179,7 +1179,7 @@ def test_external_settings_sources_filter_env_vars():
     vault_storage = {'user:password': {'apple': 'value 0', 'banana': 'value 2'}}
 
     class VaultSettingsSource(PydanticBaseSource):
-        def __init__(self, settings_cls: type[BaseSettings], user: str, password: str):
+        def __init__(self, settings_cls: Type[BaseSettings], user: str, password: str):
             self.user = user
             self.password = password
             super().__init__(settings_cls)
@@ -1203,7 +1203,7 @@ def test_external_settings_sources_filter_env_vars():
             @classmethod
             def customise_sources(
                 cls,
-                settings_cls: type[BaseSettings],
+                settings_cls: Type[BaseSettings],
                 init_settings: SettingsSourceCallable,
                 env_settings: SettingsSourceCallable,
                 dotenv_settings: SettingsSourceCallable,
@@ -1277,7 +1277,7 @@ def test_env_setting_source_custom_env_parse(env):
             @classmethod
             def customise_sources(
                 cls,
-                settings_cls: type['BaseSettings'],
+                settings_cls: Type['BaseSettings'],
                 init_settings: SettingsSourceCallable,
                 env_settings: SettingsSourceCallable,
                 dotenv_settings: SettingsSourceCallable,
@@ -1306,7 +1306,7 @@ def test_env_settings_source_custom_env_parse_is_bad(env):
             @classmethod
             def customise_sources(
                 cls,
-                settings_cls: type['BaseSettings'],
+                settings_cls: Type['BaseSettings'],
                 init_settings: SettingsSourceCallable,
                 env_settings: SettingsSourceCallable,
                 dotenv_settings: SettingsSourceCallable,
@@ -1340,7 +1340,7 @@ def test_secret_settings_source_custom_env_parse(tmp_path):
             @classmethod
             def customise_sources(
                 cls,
-                settings_cls: type['BaseSettings'],
+                settings_cls: Type['BaseSettings'],
                 init_settings: SettingsSourceCallable,
                 env_settings: SettingsSourceCallable,
                 dotenv_settings: SettingsSourceCallable,

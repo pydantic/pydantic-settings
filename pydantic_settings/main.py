@@ -137,7 +137,7 @@ class BaseSettings(BaseModel):
         @classmethod
         def customise_sources(
             cls,
-            settings_cls: type['BaseSettings'],
+            settings_cls: Type['BaseSettings'],
             init_settings: 'PydanticBaseSource',
             env_settings: 'PydanticBaseSource',
             dotenv_settings: 'PydanticBaseSource',
@@ -154,7 +154,7 @@ class BaseSettings(BaseModel):
 
 
 class PydanticBaseSource(ABC):
-    def __init__(self, settings_cls: type[BaseSettings]):
+    def __init__(self, settings_cls: Type[BaseSettings]):
         self.settings_cls = settings_cls
         self.config = settings_cls.__config__
         self.case_sensitive = self.config.case_sensitive
@@ -168,7 +168,7 @@ class PydanticBaseSource(ABC):
             return json.loads(value)
         return value
 
-    def __call__(self) -> dict[str, Any]:
+    def __call__(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {}
 
         for name, field in self.settings_cls.__fields__.items():
@@ -188,7 +188,7 @@ class PydanticBaseSource(ABC):
 class InitSettingsSource(PydanticBaseSource):
     __slots__ = ('init_kwargs',)
 
-    def __init__(self, settings_cls: type[BaseSettings], init_kwargs: Dict[str, Any]):
+    def __init__(self, settings_cls: Type[BaseSettings], init_kwargs: Dict[str, Any]):
         self.init_kwargs = init_kwargs
         super().__init__(settings_cls)
 
@@ -205,7 +205,7 @@ class InitSettingsSource(PydanticBaseSource):
 class SecretsSettingsSource(PydanticBaseSource):
     __slots__ = ('secrets_dir',)
 
-    def __init__(self, settings_cls: type[BaseSettings], secrets_dir: Optional[StrPath]):
+    def __init__(self, settings_cls: Type[BaseSettings], secrets_dir: Optional[StrPath]):
         self.secrets_dir: Optional[StrPath] = secrets_dir
         super().__init__(settings_cls)
 
@@ -265,7 +265,7 @@ class EnvSettingsSource(PydanticBaseSource):
 
     def __init__(
         self,
-        settings_cls: type[BaseSettings],
+        settings_cls: Type[BaseSettings],
         env_nested_delimiter: Optional[str] = None,
         env_prefix_len: int = 0,
     ):
@@ -360,7 +360,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
 
     def __init__(
         self,
-        settings_cls: type[BaseSettings],
+        settings_cls: Type[BaseSettings],
         env_file: Optional[DotenvType],
         env_file_encoding: Optional[str],
         env_nested_delimiter: Optional[str] = None,
