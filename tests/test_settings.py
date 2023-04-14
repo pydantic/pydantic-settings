@@ -9,17 +9,15 @@ import pytest
 from pydantic import BaseModel, Field, HttpUrl, NoneStr, SecretStr, ValidationError, dataclasses
 from pydantic.fields import ModelField
 
-from pydantic_settings import BaseSettings
-from pydantic_settings.main import (
+from pydantic_settings import (
+    BaseSettings,
     DotEnvSettingsSource,
     EnvSettingsSource,
     InitSettingsSource,
-    PydanticBaseSource,
+    PydanticBaseSettingsSource,
     SecretsSettingsSource,
-    SettingsError,
-    SettingsSourceCallable,
-    read_env_file,
 )
+from pydantic_settings.sources import SettingsError, SettingsSourceCallable, read_env_file
 
 try:
     import dotenv
@@ -225,7 +223,7 @@ def test_set_dict_model(env):
 
 def test_invalid_json(env):
     env.set('apples', '["russet", "granny smith",]')
-    with pytest.raises(SettingsError, match='error parsing value for field "apples"'):
+    with pytest.raises(SettingsError, match='error parsing value for field "apples" from source "EnvSettingsSource"'):
         ComplexSettings()
 
 
@@ -1067,7 +1065,7 @@ def test_secrets_path_invalid_json(tmp_path):
         class Config:
             secrets_dir = tmp_path
 
-    with pytest.raises(SettingsError, match='error parsing value for field "foo"'):
+    with pytest.raises(SettingsError, match='error parsing value for field "foo" from source "SecretsSettingsSource"'):
         Settings()
 
 
@@ -1178,7 +1176,7 @@ def test_external_settings_sources_precedence(env):
 def test_external_settings_sources_filter_env_vars():
     vault_storage = {'user:password': {'apple': 'value 0', 'banana': 'value 2'}}
 
-    class VaultSettingsSource(PydanticBaseSource):
+    class VaultSettingsSource(PydanticBaseSettingsSource):
         def __init__(self, settings_cls: Type[BaseSettings], user: str, password: str):
             self.user = user
             self.password = password
@@ -1262,7 +1260,7 @@ def _parse_custom_dict(value: str) -> Callable[[str], Dict[int, str]]:
 
 
 class CustomEnvSettingsSource(EnvSettingsSource):
-    def prepare_field(self, field_name: str, field: ModelField, value: Any) -> Any:
+    def prepare_field_value(self, field_name: str, field: ModelField, value: Any) -> Any:
         if not value:
             return None
 
@@ -1293,7 +1291,7 @@ def test_env_setting_source_custom_env_parse(env):
 
 
 class BadCustomEnvSettingsSource(EnvSettingsSource):
-    def prepare_field(self, field_name: str, field: ModelField, value: Any) -> Any:
+    def prepare_field_value(self, field_name: str, field: ModelField, value: Any) -> Any:
         """A custom parsing function passed into env parsing test."""
         return int(value)
 
@@ -1315,12 +1313,14 @@ def test_env_settings_source_custom_env_parse_is_bad(env):
                 return (BadCustomEnvSettingsSource(settings_cls),)
 
     env.set('top', '1=apple,2=banana')
-    with pytest.raises(SettingsError, match='error parsing value for field "top"'):
+    with pytest.raises(
+        SettingsError, match='error parsing value for field "top" from source "BadCustomEnvSettingsSource"'
+    ):
         Settings()
 
 
 class CustomSecretsSettingsSource(SecretsSettingsSource):
-    def prepare_field(self, field_name: str, field: ModelField, value: Any) -> Any:
+    def prepare_field_value(self, field_name: str, field: ModelField, value: Any) -> Any:
         if not value:
             return None
 
@@ -1350,3 +1350,30 @@ def test_secret_settings_source_custom_env_parse(tmp_path):
 
     s = Settings()
     assert s.top == {1: 'apple', 2: 'banana'}
+
+
+class BadCustomSettingsSource(EnvSettingsSource):
+    def get_field_value(self, field: ModelField) -> Any:
+        raise ValueError('Error')
+
+
+def test_custom_source_get_field_value_error(env):
+    class Settings(BaseSettings):
+        top: Dict[int, str]
+
+        class Config:
+            @classmethod
+            def customise_sources(
+                cls,
+                settings_cls: Type['BaseSettings'],
+                init_settings: SettingsSourceCallable,
+                env_settings: SettingsSourceCallable,
+                dotenv_settings: SettingsSourceCallable,
+                file_secret_settings: SettingsSourceCallable,
+            ) -> Tuple[SettingsSourceCallable, ...]:
+                return (BadCustomSettingsSource(settings_cls),)
+
+    with pytest.raises(
+        SettingsError, match='error getting value for field "top" from source "BadCustomSettingsSource"'
+    ):
+        Settings()
