@@ -9,7 +9,7 @@ from pydantic.main import BaseModel
 from pydantic.typing import StrPath, display_as_type
 from pydantic.utils import deep_update, sequence_like
 
-from pydantic_settings.sources import (
+from .sources import (
     DotEnvSettingsSource,
     DotenvType,
     EnvSettingsSource,
