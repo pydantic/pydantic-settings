@@ -3,20 +3,21 @@ import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 
 import pytest
 from pydantic import BaseModel, Field, HttpUrl, NoneStr, SecretStr, ValidationError, dataclasses
+from pydantic.fields import ModelField
 
-from pydantic_settings import BaseSettings
-from pydantic_settings.main import (
+from pydantic_settings import (
+    BaseSettings,
+    DotEnvSettingsSource,
     EnvSettingsSource,
     InitSettingsSource,
+    PydanticBaseSettingsSource,
     SecretsSettingsSource,
-    SettingsError,
-    SettingsSourceCallable,
-    read_env_file,
 )
+from pydantic_settings.sources import SettingsError, SettingsSourceCallable, read_env_file
 
 try:
     import dotenv
@@ -222,7 +223,7 @@ def test_set_dict_model(env):
 
 def test_invalid_json(env):
     env.set('apples', '["russet", "granny smith",]')
-    with pytest.raises(SettingsError, match='error parsing env var "apples"'):
+    with pytest.raises(SettingsError, match='error parsing value for field "apples" from source "EnvSettingsSource"'):
         ComplexSettings()
 
 
@@ -522,8 +523,10 @@ def test_env_takes_precedence(env):
             @classmethod
             def customise_sources(
                 cls,
+                settings_cls: Type['BaseSettings'],
                 init_settings: SettingsSourceCallable,
                 env_settings: SettingsSourceCallable,
+                dotenv_settings: SettingsSourceCallable,
                 file_secret_settings: SettingsSourceCallable,
             ) -> Tuple[SettingsSourceCallable, ...]:
                 return env_settings, init_settings
@@ -540,7 +543,7 @@ def test_config_file_settings_nornir(env):
     See https://github.com/pydantic/pydantic/pull/341#issuecomment-450378771
     """
 
-    def nornir_settings_source(settings: BaseSettings) -> Dict[str, Any]:
+    def nornir_settings_source() -> Dict[str, Any]:
         return {'param_a': 'config a', 'param_b': 'config b', 'param_c': 'config c'}
 
     class Settings(BaseSettings):
@@ -552,8 +555,10 @@ def test_config_file_settings_nornir(env):
             @classmethod
             def customise_sources(
                 cls,
+                settings_cls: Type['BaseSettings'],
                 init_settings: SettingsSourceCallable,
                 env_settings: SettingsSourceCallable,
+                dotenv_settings: SettingsSourceCallable,
                 file_secret_settings: SettingsSourceCallable,
             ) -> Tuple[SettingsSourceCallable, ...]:
                 return env_settings, init_settings, nornir_settings_source
@@ -888,7 +893,7 @@ def test_read_dotenv_vars(tmp_path):
     prod_env = tmp_path / '.env.prod'
     prod_env.write_text(test_prod_env_file)
 
-    source = EnvSettingsSource(env_file=[base_env, prod_env], env_file_encoding='utf8')
+    source = DotEnvSettingsSource(BaseSettings(), env_file=[base_env, prod_env], env_file_encoding='utf8')
     assert source._read_env_files(case_sensitive=False) == {
         'debug_mode': 'false',
         'host': 'https://example.com/services',
@@ -904,7 +909,12 @@ def test_read_dotenv_vars(tmp_path):
 
 @pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_read_dotenv_vars_when_env_file_is_none():
-    assert EnvSettingsSource(env_file=None, env_file_encoding=None)._read_env_files(case_sensitive=False) == {}
+    assert (
+        DotEnvSettingsSource(BaseSettings(), env_file=None, env_file_encoding=None)._read_env_files(
+            case_sensitive=False
+        )
+        == {}
+    )
 
 
 @pytest.mark.skipif(dotenv, reason='python-dotenv is installed')
@@ -1055,11 +1065,11 @@ def test_secrets_path_invalid_json(tmp_path):
         class Config:
             secrets_dir = tmp_path
 
-    with pytest.raises(SettingsError, match='error parsing env var "foo"'):
+    with pytest.raises(SettingsError, match='error parsing value for field "foo" from source "SecretsSettingsSource"'):
         Settings()
 
 
-def test_secrets_missing(tmp_path):
+def test_secrets_missing1(tmp_path):
     class Settings(BaseSettings):
         foo: str
 
@@ -1129,10 +1139,10 @@ def test_secrets_dotenv_precedence(tmp_path):
 
 
 def test_external_settings_sources_precedence(env):
-    def external_source_0(settings: BaseSettings) -> Dict[str, str]:
+    def external_source_0() -> Dict[str, str]:
         return {'apple': 'value 0', 'banana': 'value 2'}
 
-    def external_source_1(settings: BaseSettings) -> Dict[str, str]:
+    def external_source_1() -> Dict[str, str]:
         return {'apple': 'value 1', 'raspberry': 'value 3'}
 
     class Settings(BaseSettings):
@@ -1144,11 +1154,20 @@ def test_external_settings_sources_precedence(env):
             @classmethod
             def customise_sources(
                 cls,
+                settings_cls: Type['BaseSettings'],
                 init_settings: SettingsSourceCallable,
                 env_settings: SettingsSourceCallable,
+                dotenv_settings: SettingsSourceCallable,
                 file_secret_settings: SettingsSourceCallable,
             ) -> Tuple[SettingsSourceCallable, ...]:
-                return init_settings, env_settings, file_secret_settings, external_source_0, external_source_1
+                return (
+                    init_settings,
+                    env_settings,
+                    dotenv_settings,
+                    file_secret_settings,
+                    external_source_0,
+                    external_source_1,
+                )
 
     env.set('banana', 'value 1')
     assert Settings().dict() == {'apple': 'value 0', 'banana': 'value 1', 'raspberry': 'value 3'}
@@ -1157,16 +1176,20 @@ def test_external_settings_sources_precedence(env):
 def test_external_settings_sources_filter_env_vars():
     vault_storage = {'user:password': {'apple': 'value 0', 'banana': 'value 2'}}
 
-    class VaultSettingsSource:
-        def __init__(self, user: str, password: str):
+    class VaultSettingsSource(PydanticBaseSettingsSource):
+        def __init__(self, settings_cls: Type[BaseSettings], user: str, password: str):
             self.user = user
             self.password = password
+            super().__init__(settings_cls)
 
-        def __call__(self, settings: BaseSettings) -> Dict[str, str]:
+        def get_field_value(self, field: ModelField) -> Any:
+            pass
+
+        def __call__(self) -> Dict[str, str]:
             vault_vars = vault_storage[f'{self.user}:{self.password}']
             return {
                 field.alias: vault_vars[field.name]
-                for field in settings.__fields__.values()
+                for field in self.settings_cls.__fields__.values()
                 if field.name in vault_vars
             }
 
@@ -1178,15 +1201,17 @@ def test_external_settings_sources_filter_env_vars():
             @classmethod
             def customise_sources(
                 cls,
+                settings_cls: Type[BaseSettings],
                 init_settings: SettingsSourceCallable,
                 env_settings: SettingsSourceCallable,
+                dotenv_settings: SettingsSourceCallable,
                 file_secret_settings: SettingsSourceCallable,
             ) -> Tuple[SettingsSourceCallable, ...]:
                 return (
                     init_settings,
                     env_settings,
                     file_secret_settings,
-                    VaultSettingsSource(user='user', password='password'),
+                    VaultSettingsSource(settings_cls, user='user', password='password'),
                 )
 
     assert Settings().dict() == {'apple': 'value 0', 'banana': 'value 2'}
@@ -1208,14 +1233,21 @@ def test_customise_sources_empty():
 
 def test_builtins_settings_source_repr():
     assert (
-        repr(InitSettingsSource(init_kwargs={'apple': 'value 0', 'banana': 'value 1'}))
+        repr(InitSettingsSource(BaseSettings, init_kwargs={'apple': 'value 0', 'banana': 'value 1'}))
         == "InitSettingsSource(init_kwargs={'apple': 'value 0', 'banana': 'value 1'})"
     )
     assert (
-        repr(EnvSettingsSource(env_file='.env', env_file_encoding='utf-8'))
-        == "EnvSettingsSource(env_file='.env', env_file_encoding='utf-8', env_nested_delimiter=None)"
+        repr(EnvSettingsSource(BaseSettings, env_nested_delimiter='__'))
+        == "EnvSettingsSource(env_nested_delimiter='__', env_prefix_len=0)"
     )
-    assert repr(SecretsSettingsSource(secrets_dir='/secrets')) == "SecretsSettingsSource(secrets_dir='/secrets')"
+    assert repr(DotEnvSettingsSource(BaseSettings, env_file='.env', env_file_encoding='utf-8')) == (
+        "DotEnvSettingsSource(env_file='.env', env_file_encoding='utf-8', "
+        'env_nested_delimiter=None, env_prefix_len=0)'
+    )
+    assert (
+        repr(SecretsSettingsSource(BaseSettings, secrets_dir='/secrets'))
+        == "SecretsSettingsSource(secrets_dir='/secrets')"
+    )
 
 
 def _parse_custom_dict(value: str) -> Callable[[str], Dict[int, str]]:
@@ -1227,16 +1259,29 @@ def _parse_custom_dict(value: str) -> Callable[[str], Dict[int, str]]:
     return res
 
 
+class CustomEnvSettingsSource(EnvSettingsSource):
+    def prepare_field_value(self, field_name: str, field: ModelField, value: Any) -> Any:
+        if not value:
+            return None
+
+        return _parse_custom_dict(value)
+
+
 def test_env_setting_source_custom_env_parse(env):
     class Settings(BaseSettings):
         top: Dict[int, str]
 
         class Config:
             @classmethod
-            def parse_env_var(cls, field_name: str, raw_val: str):
-                if field_name == 'top':
-                    return _parse_custom_dict(raw_val)
-                return cls.json_loads(raw_val)
+            def customise_sources(
+                cls,
+                settings_cls: Type['BaseSettings'],
+                init_settings: SettingsSourceCallable,
+                env_settings: SettingsSourceCallable,
+                dotenv_settings: SettingsSourceCallable,
+                file_secret_settings: SettingsSourceCallable,
+            ) -> Tuple[SettingsSourceCallable, ...]:
+                return (CustomEnvSettingsSource(settings_cls),)
 
     with pytest.raises(ValidationError):
         Settings()
@@ -1245,20 +1290,41 @@ def test_env_setting_source_custom_env_parse(env):
     assert s.top == {1: 'apple', 2: 'banana'}
 
 
+class BadCustomEnvSettingsSource(EnvSettingsSource):
+    def prepare_field_value(self, field_name: str, field: ModelField, value: Any) -> Any:
+        """A custom parsing function passed into env parsing test."""
+        return int(value)
+
+
 def test_env_settings_source_custom_env_parse_is_bad(env):
     class Settings(BaseSettings):
         top: Dict[int, str]
 
         class Config:
             @classmethod
-            def parse_env_var(cls, field_name: str, raw_val: str):
-                if field_name == 'top':
-                    return int(raw_val)
-                return cls.json_loads(raw_val)
+            def customise_sources(
+                cls,
+                settings_cls: Type['BaseSettings'],
+                init_settings: SettingsSourceCallable,
+                env_settings: SettingsSourceCallable,
+                dotenv_settings: SettingsSourceCallable,
+                file_secret_settings: SettingsSourceCallable,
+            ) -> Tuple[SettingsSourceCallable, ...]:
+                return (BadCustomEnvSettingsSource(settings_cls),)
 
     env.set('top', '1=apple,2=banana')
-    with pytest.raises(SettingsError, match='error parsing env var "top"'):
+    with pytest.raises(
+        SettingsError, match='error parsing value for field "top" from source "BadCustomEnvSettingsSource"'
+    ):
         Settings()
+
+
+class CustomSecretsSettingsSource(SecretsSettingsSource):
+    def prepare_field_value(self, field_name: str, field: ModelField, value: Any) -> Any:
+        if not value:
+            return None
+
+        return _parse_custom_dict(value)
 
 
 def test_secret_settings_source_custom_env_parse(tmp_path):
@@ -1272,10 +1338,42 @@ def test_secret_settings_source_custom_env_parse(tmp_path):
             secrets_dir = tmp_path
 
             @classmethod
-            def parse_env_var(cls, field_name: str, raw_val: str):
-                if field_name == 'top':
-                    return _parse_custom_dict(raw_val)
-                return cls.json_loads(raw_val)
+            def customise_sources(
+                cls,
+                settings_cls: Type['BaseSettings'],
+                init_settings: SettingsSourceCallable,
+                env_settings: SettingsSourceCallable,
+                dotenv_settings: SettingsSourceCallable,
+                file_secret_settings: SettingsSourceCallable,
+            ) -> Tuple[SettingsSourceCallable, ...]:
+                return (CustomSecretsSettingsSource(settings_cls, tmp_path),)
 
     s = Settings()
     assert s.top == {1: 'apple', 2: 'banana'}
+
+
+class BadCustomSettingsSource(EnvSettingsSource):
+    def get_field_value(self, field: ModelField) -> Any:
+        raise ValueError('Error')
+
+
+def test_custom_source_get_field_value_error(env):
+    class Settings(BaseSettings):
+        top: Dict[int, str]
+
+        class Config:
+            @classmethod
+            def customise_sources(
+                cls,
+                settings_cls: Type['BaseSettings'],
+                init_settings: SettingsSourceCallable,
+                env_settings: SettingsSourceCallable,
+                dotenv_settings: SettingsSourceCallable,
+                file_secret_settings: SettingsSourceCallable,
+            ) -> Tuple[SettingsSourceCallable, ...]:
+                return (BadCustomSettingsSource(settings_cls),)
+
+    with pytest.raises(
+        SettingsError, match='error getting value for field "top" from source "BadCustomSettingsSource"'
+    ):
+        Settings()
