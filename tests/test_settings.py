@@ -276,7 +276,7 @@ def test_non_class(env):
 
 @pytest.mark.parametrize('dataclass_decorator', (pydantic_dataclasses.dataclass, dataclasses.dataclass))
 def test_generic_dataclass(env, dataclass_decorator):
-    T = TypeVar("T")
+    T = TypeVar('T')
 
     @dataclass_decorator
     class GenericDataclass(Generic[T]):
@@ -303,7 +303,7 @@ def test_generic_dataclass(env, dataclass_decorator):
 
 
 def test_generic_basemodel(env):
-    T = TypeVar("T")
+    T = TypeVar('T')
 
     class GenericModel(BaseModel, Generic[T]):
         x: T
@@ -329,7 +329,7 @@ def test_generic_basemodel(env):
 
 
 def test_annotated(env):
-    T = TypeVar("T")
+    T = TypeVar('T')
 
     class GenericModel(BaseModel, Generic[T]):
         x: T
