@@ -11,6 +11,10 @@ class SetEnv:
         self.envars.add(name)
         os.environ[name] = value
 
+    def pop(self, name):
+        self.envars.remove(name)
+        os.environ.pop(name)
+
     def clear(self):
         for n in self.envars:
             os.environ.pop(n)
