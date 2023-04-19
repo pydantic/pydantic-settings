@@ -1,11 +1,13 @@
+import dataclasses
 import os
 import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
+from typing import Any, Callable, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 import pytest
+from annotated_types import MinLen
 from pydantic import (
     AliasChoices,
     AliasPath,
@@ -15,9 +17,10 @@ from pydantic import (
     HttpUrl,
     SecretStr,
     ValidationError,
-    dataclasses,
+    dataclasses as pydantic_dataclasses,
 )
 from pydantic.fields import FieldInfo
+from typing_extensions import Annotated
 
 from pydantic_settings import (
     BaseSettings,
@@ -213,6 +216,28 @@ def test_list(env):
     assert s.date.pips is False
 
 
+def test_annotated_list(env):
+    class AnnotatedComplexSettings(BaseSettings):
+        apples: Annotated[List[str], MinLen(2)] = []
+
+    env.set('apples', '["russet", "granny smith"]')
+    s = AnnotatedComplexSettings()
+    assert s.apples == ['russet', 'granny smith']
+
+    env.set('apples', '["russet"]')
+    with pytest.raises(ValidationError) as exc_info:
+        AnnotatedComplexSettings()
+    assert exc_info.value.errors() == [
+        {
+            'ctx': {'actual_length': 1, 'field_type': 'List', 'min_length': 2},
+            'input': ['russet'],
+            'loc': ('apples',),
+            'msg': 'List should have at least 2 items after validation, not 1',
+            'type': 'too_short',
+        }
+    ]
+
+
 def test_set_dict_model(env):
     env.set('bananas', '[1, 2, 3, 3]')
     env.set('CARROTS', '{"a": null, "b": 4}')
@@ -247,6 +272,86 @@ def test_non_class(env):
     env.set('FOOBAR', 'xxx')
     s = Settings()
     assert s.foobar == 'xxx'
+
+
+@pytest.mark.parametrize('dataclass_decorator', (pydantic_dataclasses.dataclass, dataclasses.dataclass))
+def test_generic_dataclass(env, dataclass_decorator):
+    T = TypeVar("T")
+
+    @dataclass_decorator
+    class GenericDataclass(Generic[T]):
+        x: T
+
+    class ComplexSettings(BaseSettings):
+        field: GenericDataclass[int]
+
+    env.set('field', '{"x": 1}')
+    s = ComplexSettings()
+    assert s.field.x == 1
+
+    env.set('field', '{"x": "a"}')
+    with pytest.raises(ValidationError) as exc_info:
+        ComplexSettings()
+    assert exc_info.value.errors() == [
+        {
+            'input': 'a',
+            'loc': ('field', 'x'),
+            'msg': 'Input should be a valid integer, unable to parse string as an integer',
+            'type': 'int_parsing',
+        }
+    ]
+
+
+def test_generic_basemodel(env):
+    T = TypeVar("T")
+
+    class GenericModel(BaseModel, Generic[T]):
+        x: T
+
+    class ComplexSettings(BaseSettings):
+        field: GenericModel[int]
+
+    env.set('field', '{"x": 1}')
+    s = ComplexSettings()
+    assert s.field.x == 1
+
+    env.set('field', '{"x": "a"}')
+    with pytest.raises(ValidationError) as exc_info:
+        ComplexSettings()
+    assert exc_info.value.errors() == [
+        {
+            'input': 'a',
+            'loc': ('field', 'x'),
+            'msg': 'Input should be a valid integer, unable to parse string as an integer',
+            'type': 'int_parsing',
+        }
+    ]
+
+
+def test_annotated(env):
+    T = TypeVar("T")
+
+    class GenericModel(BaseModel, Generic[T]):
+        x: T
+
+    class ComplexSettings(BaseSettings):
+        field: GenericModel[int]
+
+    env.set('field', '{"x": 1}')
+    s = ComplexSettings()
+    assert s.field.x == 1
+
+    env.set('field', '{"x": "a"}')
+    with pytest.raises(ValidationError) as exc_info:
+        ComplexSettings()
+    assert exc_info.value.errors() == [
+        {
+            'input': 'a',
+            'loc': ('field', 'x'),
+            'msg': 'Input should be a valid integer, unable to parse string as an integer',
+            'type': 'int_parsing',
+        }
+    ]
 
 
 def test_env_str(env):
@@ -407,7 +512,7 @@ def test_case_sensitive(monkeypatch):
 
 
 def test_nested_dataclass(env):
-    @dataclasses.dataclass
+    @pydantic_dataclasses.dataclass
     class MyDataclass:
         foo: int
         bar: str
