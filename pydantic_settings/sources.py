@@ -74,6 +74,7 @@ class PydanticBaseSettingsSource(ABC):
             return json.loads(value)
         return value
 
+    @abstractmethod
     def __call__(self) -> Dict[str, Any]:
         pass
 
