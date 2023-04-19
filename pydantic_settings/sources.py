@@ -53,11 +53,10 @@ class PydanticBaseSettingsSource(ABC):
         pass
 
     def field_is_complex(self, field: FieldInfo) -> bool:
-        return (
-            lenient_issubclass(field.annotation, (BaseModel, list, set, frozenset, dict))
-            or get_origin(field.annotation) in (BaseModel, dict, list, set, frozenset)
-            or is_dataclass(field.annotation)
-        )
+        def _annotation_is_complex(annotation: type[Any] | None) -> bool:
+            return lenient_issubclass(annotation, (BaseModel, list, set, frozenset, dict)) or is_dataclass(annotation)
+
+        return _annotation_is_complex(field.annotation) or _annotation_is_complex(get_origin(field.annotation))
 
     def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
         """
