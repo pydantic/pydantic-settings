@@ -6,7 +6,7 @@ import warnings
 from abc import ABC, abstractmethod
 from dataclasses import is_dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, Type, Union
 
 from pydantic import BaseModel, DirectoryPath, FilePath
 from pydantic._internal._typing_extra import origin_is_union
@@ -21,7 +21,6 @@ if TYPE_CHECKING:
 
 
 DotenvType = Union[FilePath, List[FilePath], Tuple[FilePath, ...]]
-SettingsSourceCallable = Callable[['BaseSettings'], Dict[str, Any]]
 
 
 class SettingsError(ValueError):

@@ -30,7 +30,7 @@ from pydantic_settings import (
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
 )
-from pydantic_settings.sources import SettingsError, SettingsSourceCallable, read_env_file
+from pydantic_settings.sources import SettingsError, read_env_file
 
 try:
     import dotenv
@@ -535,12 +535,12 @@ def test_env_takes_precedence(env):
         @classmethod
         def customise_sources(
             cls,
-            settings_cls: Type['BaseSettings'],
-            init_settings: SettingsSourceCallable,
-            env_settings: SettingsSourceCallable,
-            dotenv_settings: SettingsSourceCallable,
-            file_secret_settings: SettingsSourceCallable,
-        ) -> Tuple[SettingsSourceCallable, ...]:
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
             return env_settings, init_settings
 
     env.set('BAR', 'env setting')
@@ -566,12 +566,12 @@ def test_config_file_settings_nornir(env):
         @classmethod
         def customise_sources(
             cls,
-            settings_cls: Type['BaseSettings'],
-            init_settings: SettingsSourceCallable,
-            env_settings: SettingsSourceCallable,
-            dotenv_settings: SettingsSourceCallable,
-            file_secret_settings: SettingsSourceCallable,
-        ) -> Tuple[SettingsSourceCallable, ...]:
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
             return env_settings, init_settings, nornir_settings_source
 
     env.set('PARAM_C', 'env setting c')
@@ -1153,12 +1153,12 @@ def test_external_settings_sources_precedence(env):
         @classmethod
         def customise_sources(
             cls,
-            settings_cls: Type['BaseSettings'],
-            init_settings: SettingsSourceCallable,
-            env_settings: SettingsSourceCallable,
-            dotenv_settings: SettingsSourceCallable,
-            file_secret_settings: SettingsSourceCallable,
-        ) -> Tuple[SettingsSourceCallable, ...]:
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
             return (
                 init_settings,
                 env_settings,
@@ -1200,11 +1200,11 @@ def test_external_settings_sources_filter_env_vars():
         def customise_sources(
             cls,
             settings_cls: Type[BaseSettings],
-            init_settings: SettingsSourceCallable,
-            env_settings: SettingsSourceCallable,
-            dotenv_settings: SettingsSourceCallable,
-            file_secret_settings: SettingsSourceCallable,
-        ) -> Tuple[SettingsSourceCallable, ...]:
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
             return (
                 init_settings,
                 env_settings,
@@ -1272,12 +1272,12 @@ def test_env_setting_source_custom_env_parse(env):
         @classmethod
         def customise_sources(
             cls,
-            settings_cls: Type['BaseSettings'],
-            init_settings: SettingsSourceCallable,
-            env_settings: SettingsSourceCallable,
-            dotenv_settings: SettingsSourceCallable,
-            file_secret_settings: SettingsSourceCallable,
-        ) -> Tuple[SettingsSourceCallable, ...]:
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
             return (CustomEnvSettingsSource(settings_cls),)
 
     with pytest.raises(ValidationError):
@@ -1300,12 +1300,12 @@ def test_env_settings_source_custom_env_parse_is_bad(env):
         @classmethod
         def customise_sources(
             cls,
-            settings_cls: Type['BaseSettings'],
-            init_settings: SettingsSourceCallable,
-            env_settings: SettingsSourceCallable,
-            dotenv_settings: SettingsSourceCallable,
-            file_secret_settings: SettingsSourceCallable,
-        ) -> Tuple[SettingsSourceCallable, ...]:
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
             return (BadCustomEnvSettingsSource(settings_cls),)
 
     env.set('top', '1=apple,2=banana')
@@ -1334,12 +1334,12 @@ def test_secret_settings_source_custom_env_parse(tmp_path):
 
         def customise_sources(
             cls,
-            settings_cls: Type['BaseSettings'],
-            init_settings: SettingsSourceCallable,
-            env_settings: SettingsSourceCallable,
-            dotenv_settings: SettingsSourceCallable,
-            file_secret_settings: SettingsSourceCallable,
-        ) -> Tuple[SettingsSourceCallable, ...]:
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
             return (CustomSecretsSettingsSource(settings_cls, tmp_path),)
 
     s = Settings()
@@ -1358,12 +1358,12 @@ def test_custom_source_get_field_value_error(env):
         @classmethod
         def customise_sources(
             cls,
-            settings_cls: Type['BaseSettings'],
-            init_settings: SettingsSourceCallable,
-            env_settings: SettingsSourceCallable,
-            dotenv_settings: SettingsSourceCallable,
-            file_secret_settings: SettingsSourceCallable,
-        ) -> Tuple[SettingsSourceCallable, ...]:
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
             return (BadCustomSettingsSource(settings_cls),)
 
     with pytest.raises(
