@@ -1,6 +1,6 @@
 from pathlib import Path
 
-path_types = {
+path_type_labels = {
     'is_dir': 'directory',
     'is_file': 'file',
     'is_mount': 'mount point',
@@ -12,12 +12,12 @@ path_types = {
 }
 
 
-def path_type(p: Path) -> str:
+def path_type_label(p: Path) -> str:
     """
     Find out what sort of thing a path is.
     """
     assert p.exists(), 'path does not exist'
-    for method, name in path_types.items():
+    for method, name in path_type_labels.items():
         if getattr(p, method)():
             return name
 

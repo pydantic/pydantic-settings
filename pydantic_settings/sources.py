@@ -14,7 +14,7 @@ from pydantic._internal._utils import deep_update, lenient_issubclass
 from pydantic.fields import FieldInfo
 from typing_extensions import get_origin
 
-from pydantic_settings.utils import path_type
+from pydantic_settings.utils import path_type_label
 
 if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
@@ -38,17 +38,18 @@ class PydanticBaseSettingsSource(ABC):
         self.config = settings_cls.model_config
 
     @abstractmethod
-    def get_field_value(self, field: FieldInfo, field_name: str) -> Tuple[str, Any, bool]:
+    def get_field_value(self, field: FieldInfo, field_name: str) -> Tuple[Any, str, bool]:
         """
-        Get the value and key for a field.
+        Gets the value, the key for model creation, and a flag to determine whether value is complex.
 
         This is an abstract method that should be overrided in every settings source classes.
 
         Args:
             field (FieldInfo): The field.
+            field_name (str): The field name.
 
         Returns:
-            Tuple[str, Any, bool]: The key, value and a bool to determine whether value is complex.
+            Tuple[str, Any, bool]: The key, value and a flag to determine whether value is complex.
         """
         pass
 
@@ -60,12 +61,13 @@ class PydanticBaseSettingsSource(ABC):
 
     def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
         """
-        Prepare the value of a field.
+        Prepares the value of a field.
 
         Args:
             field_name (str): The field name.
             field (FieldInfo): The field.
             value (Any): The value of the field that has to be prepared.
+            value_is_complex: A flag to determine whether value is complex.
 
         Returns:
             Any: The prepared value.
@@ -84,7 +86,7 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         self.init_kwargs = init_kwargs
         super().__init__(settings_cls)
 
-    def get_field_value(self, field: FieldInfo, field_name: str) -> Tuple[str, Any, bool]:
+    def get_field_value(self, field: FieldInfo, field_name: str) -> Tuple[Any, str, bool]:
         pass
 
     def __call__(self) -> Dict[str, Any]:
@@ -99,6 +101,22 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         return value.lower() if not self.config.get('case_sensitive') else value
 
     def _extract_field_info(self, field: FieldInfo, field_name: str) -> List[Tuple[str, str, bool]]:
+        """
+        Extracts field info. This info is used to get the value of field from environment variables.
+
+        It returns a list of tuples, each tuple contains:
+            * field_key: The key of field that has to be used in model creation.
+            * env_name: The environment variable name of the field.
+            * value_is_complex: A flag to determine whether the value from environment variable
+              is complex and has to be parsed.
+
+        Args:
+            field (FieldInfo): The field.
+            field_name (str): The field name.
+
+        Returns:
+            List[Tuple[str, str, bool]]: List of tuples, each tuple contanis field_key, env_name, and value_is_complex.
+        """
         field_info: List[Tuple[str, str, bool]] = []
         v_alias = field.validation_alias
 
@@ -125,7 +143,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
         for field_name, field in self.settings_cls.model_fields.items():
             try:
-                field_key, field_value, value_is_complex = self.get_field_value(field, field_name)
+                field_value, field_key, value_is_complex = self.get_field_value(field, field_name)
             except Exception as e:
                 raise SettingsError(
                     f'error getting value for field "{field_name}" from source "{self.__class__.__name__}"'
@@ -165,7 +183,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
             return secrets
 
         if not self.secrets_path.is_dir():
-            raise SettingsError(f'secrets_dir must reference a directory, not a {path_type(self.secrets_path)}')
+            raise SettingsError(f'secrets_dir must reference a directory, not a {path_type_label(self.secrets_path)}')
 
         return super().__call__()
 
@@ -181,7 +199,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
                 return f
         return None
 
-    def get_field_value(self, field: FieldInfo, field_name: str) -> Tuple[str, Any, bool]:
+    def get_field_value(self, field: FieldInfo, field_name: str) -> Tuple[Any, str, bool]:
         for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
             path = self.find_case_path(
                 self.secrets_path, env_name, self.settings_cls.model_config.get('case_sensitive')
@@ -191,14 +209,14 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
                 continue
 
             if path.is_file():
-                return field_key, path.read_text().strip(), value_is_complex
+                return path.read_text().strip(), field_key, value_is_complex
             else:
                 warnings.warn(
-                    f'attempted to load secret file "{path}" but found a {path_type(path)} instead.',
+                    f'attempted to load secret file "{path}" but found a {path_type_label(path)} instead.',
                     stacklevel=4,
                 )
 
-        return field_key, None, value_is_complex
+        return None, field_key, value_is_complex
 
     def __repr__(self) -> str:
         return f'SecretsSettingsSource(secrets_dir={self.secrets_dir!r})'
@@ -223,14 +241,14 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             return os.environ
         return {k.lower(): v for k, v in os.environ.items()}
 
-    def get_field_value(self, field: FieldInfo, field_name: str) -> Tuple[str, Any, bool]:
+    def get_field_value(self, field: FieldInfo, field_name: str) -> Tuple[Any, str, bool]:
         env_val: Optional[str] = None
         for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
             env_val = self.env_vars.get(env_name)
             if env_val is not None:
                 break
 
-        return field_key, env_val, value_is_complex
+        return env_val, field_key, value_is_complex
 
     def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
         is_complex, allow_parse_failure = self._field_is_complex(field)
