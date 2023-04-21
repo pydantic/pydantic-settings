@@ -890,6 +890,26 @@ def test_multiple_env_file(tmp_path):
 
 
 @pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
+def test_model_env_file_override_model_config(tmp_path):
+    base_env = tmp_path / '.env'
+    base_env.write_text(test_default_env_file)
+    prod_env = tmp_path / '.env.prod'
+    prod_env.write_text(test_prod_env_file)
+
+    class Settings(BaseSettings):
+        debug_mode: bool
+        host: str
+        port: int
+
+        model_config = ConfigDict(env_file=prod_env)
+
+    s = Settings(_env_file=base_env)
+    assert s.debug_mode is True
+    assert s.host == 'localhost'
+    assert s.port == 8000
+
+
+@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_multiple_env_file_encoding(tmp_path):
     base_env = tmp_path / '.env'
     base_env.write_text('pika=p!±@', encoding='latin-1')
