@@ -17,6 +17,7 @@ __all__ = (
     'SecretsSettingsSource',
     'EnvSettingsSource',
     'DotEnvSettingsSource',
+    '__version__',
 )
 
 __version__ = VERSION
