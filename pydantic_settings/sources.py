@@ -4,19 +4,23 @@ import json
 import os
 import warnings
 from abc import ABC, abstractmethod
+from dataclasses import is_dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, Type, Union
 
-from pydantic.fields import ModelField
-from pydantic.typing import StrPath, get_origin, is_union
-from pydantic.utils import deep_update, path_type
+from pydantic import BaseModel
+from pydantic._internal._typing_extra import origin_is_union
+from pydantic._internal._utils import deep_update, lenient_issubclass
+from pydantic.fields import FieldInfo
+from typing_extensions import get_origin
+
+from pydantic_settings.utils import path_type_label
 
 if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
 
 
-DotenvType = Union[StrPath, List[StrPath], Tuple[StrPath, ...]]
-SettingsSourceCallable = Callable[['BaseSettings'], Dict[str, Any]]
+DotenvType = Union[Path, List[Path], Tuple[Path, ...]]
 
 
 class SettingsError(ValueError):
@@ -30,61 +34,50 @@ class PydanticBaseSettingsSource(ABC):
 
     def __init__(self, settings_cls: Type[BaseSettings]):
         self.settings_cls = settings_cls
-        self.config = settings_cls.__config__
+        self.config = settings_cls.model_config
 
     @abstractmethod
-    def get_field_value(self, field: ModelField) -> Any:
+    def get_field_value(self, field: FieldInfo, field_name: str) -> Tuple[Any, str, bool]:
         """
-        Get the value for a field.
+        Gets the value, the key for model creation, and a flag to determine whether value is complex.
 
         This is an abstract method that should be overrided in every settings source classes.
 
         Args:
-            field (ModelField): The field.
+            field (FieldInfo): The field.
+            field_name (str): The field name.
 
         Returns:
-            Any: The value of the field.
+            Tuple[str, Any, bool]: The key, value and a flag to determine whether value is complex.
         """
         pass
 
-    def prepare_field_value(self, field_name: str, field: ModelField, value: Any) -> Any:
+    def field_is_complex(self, field: FieldInfo) -> bool:
+        def _annotation_is_complex(annotation: type[Any] | None) -> bool:
+            return lenient_issubclass(annotation, (BaseModel, list, set, frozenset, dict)) or is_dataclass(annotation)
+
+        return _annotation_is_complex(field.annotation) or _annotation_is_complex(get_origin(field.annotation))
+
+    def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
         """
-        Prepare the value of a field.
+        Prepares the value of a field.
 
         Args:
             field_name (str): The field name.
-            field (ModelField): The field.
+            field (FieldInfo): The field.
             value (Any): The value of the field that has to be prepared.
+            value_is_complex: A flag to determine whether value is complex.
 
         Returns:
             Any: The prepared value.
         """
-        if field.is_complex():
+        if self.field_is_complex(field) or value_is_complex:
             return json.loads(value)
         return value
 
+    @abstractmethod
     def __call__(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {}
-
-        for name, field in self.settings_cls.__fields__.items():
-            try:
-                field_value = self.get_field_value(field)
-            except Exception as e:
-                raise SettingsError(
-                    f'error getting value for field "{name}" from source "{self.__class__.__name__}"'
-                ) from e
-
-            try:
-                field_value = self.prepare_field_value(name, field, field_value)
-            except ValueError as e:
-                raise SettingsError(
-                    f'error parsing value for field "{name}" from source "{self.__class__.__name__}"'
-                ) from e
-
-            if field_value is not None:
-                d[field.alias] = field_value
-
-        return d
+        pass
 
 
 class InitSettingsSource(PydanticBaseSettingsSource):
@@ -92,7 +85,7 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         self.init_kwargs = init_kwargs
         super().__init__(settings_cls)
 
-    def get_field_value(self, field: ModelField) -> Any:
+    def get_field_value(self, field: FieldInfo, field_name: str) -> Tuple[Any, str, bool]:
         pass
 
     def __call__(self) -> Dict[str, Any]:
@@ -102,9 +95,77 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         return f'InitSettingsSource(init_kwargs={self.init_kwargs!r})'
 
 
-class SecretsSettingsSource(PydanticBaseSettingsSource):
-    def __init__(self, settings_cls: Type[BaseSettings], secrets_dir: Optional[StrPath]):
-        self.secrets_dir: Optional[StrPath] = secrets_dir
+class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
+    def _apply_case_sensitive(self, value: str) -> str:
+        return value.lower() if not self.config.get('case_sensitive') else value
+
+    def _extract_field_info(self, field: FieldInfo, field_name: str) -> List[Tuple[str, str, bool]]:
+        """
+        Extracts field info. This info is used to get the value of field from environment variables.
+
+        It returns a list of tuples, each tuple contains:
+            * field_key: The key of field that has to be used in model creation.
+            * env_name: The environment variable name of the field.
+            * value_is_complex: A flag to determine whether the value from environment variable
+              is complex and has to be parsed.
+
+        Args:
+            field (FieldInfo): The field.
+            field_name (str): The field name.
+
+        Returns:
+            List[Tuple[str, str, bool]]: List of tuples, each tuple contanis field_key, env_name, and value_is_complex.
+        """
+        field_info: List[Tuple[str, str, bool]] = []
+        v_alias = field.validation_alias
+
+        if v_alias:
+            if isinstance(v_alias, list):  # AliasChoices, AliasPath
+                for alias in v_alias:
+                    if isinstance(alias, str):  # AliasPath
+                        field_info.append((alias, self._apply_case_sensitive(alias), True if len(alias) > 1 else False))
+                    elif isinstance(alias, list):  # AliasChoices
+                        field_info.append(
+                            (alias[0], self._apply_case_sensitive(alias[0]), True if len(alias) > 1 else False)
+                        )
+            else:  # string validation alias
+                field_info.append(
+                    (v_alias, self._apply_case_sensitive(self.config.get('env_prefix', '') + v_alias), False)
+                )
+        else:
+            field_info.append(
+                (field_name, self._apply_case_sensitive(self.config.get('env_prefix', '') + field_name), False)
+            )
+
+        return field_info
+
+    def __call__(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {}
+
+        for field_name, field in self.settings_cls.model_fields.items():
+            try:
+                field_value, field_key, value_is_complex = self.get_field_value(field, field_name)
+            except Exception as e:
+                raise SettingsError(
+                    f'error getting value for field "{field_name}" from source "{self.__class__.__name__}"'
+                ) from e
+
+            try:
+                field_value = self.prepare_field_value(field_name, field, field_value, value_is_complex)
+            except ValueError as e:
+                raise SettingsError(
+                    f'error parsing value for field "{field_name}" from source "{self.__class__.__name__}"'
+                ) from e
+
+            if field_value is not None:
+                d[field_key] = field_value
+
+        return d
+
+
+class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
+    def __init__(self, settings_cls: Type[BaseSettings], secrets_dir: Optional[Union[str, Path]]):
+        self.secrets_dir = secrets_dir
         super().__init__(settings_cls)
 
     def __call__(self) -> Dict[str, Any]:
@@ -123,7 +184,7 @@ class SecretsSettingsSource(PydanticBaseSettingsSource):
             return secrets
 
         if not self.secrets_path.is_dir():
-            raise SettingsError(f'secrets_dir must reference a directory, not a {path_type(self.secrets_path)}')
+            raise SettingsError(f'secrets_dir must reference a directory, not a {path_type_label(self.secrets_path)}')
 
         return super().__call__()
 
@@ -139,26 +200,30 @@ class SecretsSettingsSource(PydanticBaseSettingsSource):
                 return f
         return None
 
-    def get_field_value(self, field: ModelField) -> Any:
-        for env_name in field.field_info.extra['env_names']:
-            path = self.find_case_path(self.secrets_path, env_name, self.settings_cls.__config__.case_sensitive)
+    def get_field_value(self, field: FieldInfo, field_name: str) -> Tuple[Any, str, bool]:
+        for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
+            path = self.find_case_path(
+                self.secrets_path, env_name, self.settings_cls.model_config.get('case_sensitive', False)
+            )
             if not path:
                 # path does not exist, we curently don't return a warning for this
                 continue
 
             if path.is_file():
-                return path.read_text().strip()
+                return path.read_text().strip(), field_key, value_is_complex
             else:
                 warnings.warn(
-                    f'attempted to load secret file "{path}" but found a {path_type(path)} instead.',
+                    f'attempted to load secret file "{path}" but found a {path_type_label(path)} instead.',
                     stacklevel=4,
                 )
+
+        return None, field_key, value_is_complex
 
     def __repr__(self) -> str:
         return f'SecretsSettingsSource(secrets_dir={self.secrets_dir!r})'
 
 
-class EnvSettingsSource(PydanticBaseSettingsSource):
+class EnvSettingsSource(PydanticBaseEnvSettingsSource):
     def __init__(
         self,
         settings_cls: Type[BaseSettings],
@@ -173,25 +238,25 @@ class EnvSettingsSource(PydanticBaseSettingsSource):
         self.env_vars: Mapping[str, Optional[str]] = self._load_env_vars()
 
     def _load_env_vars(self) -> Mapping[str, Optional[str]]:
-        if self.settings_cls.__config__.case_sensitive:
+        if self.settings_cls.model_config.get('case_sensitive'):
             return os.environ
         return {k.lower(): v for k, v in os.environ.items()}
 
-    def get_field_value(self, field: ModelField) -> Any:
+    def get_field_value(self, field: FieldInfo, field_name: str) -> Tuple[Any, str, bool]:
         env_val: Optional[str] = None
-        for env_name in field.field_info.extra['env_names']:
+        for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
             env_val = self.env_vars.get(env_name)
             if env_val is not None:
                 break
 
-        return env_val
+        return env_val, field_key, value_is_complex
 
-    def prepare_field_value(self, field_name: str, field: ModelField, value: Any) -> Any:
-        is_complex, allow_parse_failure = self.field_is_complex(field)
-        if is_complex:
+    def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
+        is_complex, allow_parse_failure = self._field_is_complex(field)
+        if is_complex or value_is_complex:
             if value is None:
                 # field is complex but no value found so far, try explode_env_vars
-                env_val_built = self.explode_env_vars(field, self.env_vars)
+                env_val_built = self.explode_env_vars(field_name, field, self.env_vars)
                 if env_val_built:
                     return env_val_built
             else:
@@ -203,33 +268,37 @@ class EnvSettingsSource(PydanticBaseSettingsSource):
                         raise e
 
                 if isinstance(value, dict):
-                    return deep_update(value, self.explode_env_vars(field, self.env_vars))
+                    return deep_update(value, self.explode_env_vars(field_name, field, self.env_vars))
                 else:
                     return value
         elif value is not None:
             # simplest case, field is not complex, we only need to add the value if it was found
             return value
 
-    def field_is_complex(self, field: ModelField) -> Tuple[bool, bool]:
+    def _field_is_complex(self, field: FieldInfo) -> Tuple[bool, bool]:
         """
         Find out if a field is complex, and if so whether JSON errors should be ignored
         """
-        if field.is_complex():
+        if self.field_is_complex(field):
             allow_parse_failure = False
-        elif is_union(get_origin(field.type_)) and field.sub_fields and any(f.is_complex() for f in field.sub_fields):
+        elif origin_is_union(get_origin(field.annotation)):
             allow_parse_failure = True
         else:
             return False, False
 
         return True, allow_parse_failure
 
-    def explode_env_vars(self, field: ModelField, env_vars: Mapping[str, Optional[str]]) -> Dict[str, Any]:
+    def explode_env_vars(
+        self, field_name: str, field: FieldInfo, env_vars: Mapping[str, Optional[str]]
+    ) -> Dict[str, Any]:
         """
         Process env_vars and extract the values of keys containing env_nested_delimiter into nested dictionaries.
 
         This is applied to a single field, hence filtering by env_var prefix.
         """
-        prefixes = [f'{env_name}{self.env_nested_delimiter}' for env_name in field.field_info.extra['env_names']]
+        prefixes = [
+            f'{env_name}{self.env_nested_delimiter}' for _, env_name, _ in self._extract_field_info(field, field_name)
+        ]
         result: Dict[str, Any] = {}
         for env_name, env_val in env_vars.items():
             if not any(env_name.startswith(prefix) for prefix in prefixes):
@@ -267,7 +336,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
 
     def _load_env_vars(self) -> Mapping[str, Optional[str]]:
         env_vars = super()._load_env_vars()
-        dotenv_vars = self._read_env_files(self.settings_cls.__config__.case_sensitive)
+        dotenv_vars = self._read_env_files(self.settings_cls.model_config.get('case_sensitive', False))
         if dotenv_vars:
             env_vars = {**dotenv_vars, **env_vars}
 
@@ -298,9 +367,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
         )
 
 
-def read_env_file(
-    file_path: StrPath, *, encoding: str = None, case_sensitive: bool = False
-) -> Dict[str, Optional[str]]:
+def read_env_file(file_path: Path, *, encoding: str = None, case_sensitive: bool = False) -> Dict[str, Optional[str]]:
     try:
         from dotenv import dotenv_values
     except ImportError as e:

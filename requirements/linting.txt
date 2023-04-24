@@ -70,7 +70,7 @@ tomli==2.0.1
     #   black
     #   flake8-pyproject
     #   mypy
-typing-extensions==4.3.0
+typing-extensions==4.5.0
     # via mypy
 virtualenv==20.16.4
     # via pre-commit
