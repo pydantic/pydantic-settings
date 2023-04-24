@@ -4,4 +4,10 @@
 [![Coverage](https://codecov.io/gh/pydantic/pydantic-settings/branch/main/graph/badge.svg)](https://codecov.io/gh/pydantic/pydantic-settings)
 [![license](https://img.shields.io/github/license/pydantic/pydantic-settings.svg)](https://github.com/pydantic/pydantic-settings/blob/main/LICENSE)
 
-Settings management using Pydantic. **Currently a work in progress.**
+Settings management using Pydantic, this is the new official home of Pydantic's `BaseSettings`.
+
+**Currently a work in progress.**
+
+This package was kindly donated to the [Pydantic organisation](https://github.com/pydantic/pydantic) by Daniel Daniels, see [pydantic/pydantic#4492](https://github.com/pydantic/pydantic/pull/4492) for discussion.
+
+For the old "Hipster-orgazmic tool to mange application settings" package, see [version 0.2.5](https://pypi.org/project/pydantic-settings/0.2.5/).

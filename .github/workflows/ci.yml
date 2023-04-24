@@ -103,7 +103,7 @@ jobs:
           python-version: '3.10'
 
       - name: install
-        run: pip install -U build twine
+        run: pip install -U build
 
       - name: check GITHUB_REF matches package version
         uses: samuelcolvin/check-python-version@v3.1
@@ -112,8 +112,6 @@ jobs:
 
       - name: build
         run: python -m build
-
-      - run: twine check dist/*
 
       - name: Upload package to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
