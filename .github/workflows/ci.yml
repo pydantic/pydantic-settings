@@ -74,8 +74,6 @@ jobs:
 
   check:  # This job does nothing and is only used for the branch protection
     if: always()
-    outputs:
-      result: ${{ steps.all-green.outputs.result }}
     needs: [lint, test]
     runs-on: ubuntu-latest
 
