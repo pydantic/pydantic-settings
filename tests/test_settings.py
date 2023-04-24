@@ -533,7 +533,7 @@ def test_env_takes_precedence(env):
         bar: str
 
         @classmethod
-        def customise_sources(
+        def settings_customise_sources(
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
@@ -564,7 +564,7 @@ def test_config_file_settings_nornir(env):
         param_c: str
 
         @classmethod
-        def customise_sources(
+        def settings_customise_sources(
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
@@ -1171,7 +1171,7 @@ def test_external_settings_sources_precedence(env):
         raspberry: str
 
         @classmethod
-        def customise_sources(
+        def settings_customise_sources(
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
@@ -1217,7 +1217,7 @@ def test_external_settings_sources_filter_env_vars():
         banana: str
 
         @classmethod
-        def customise_sources(
+        def settings_customise_sources(
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
@@ -1242,7 +1242,7 @@ def test_customise_sources_empty():
         banana: str = 'default'
 
         @classmethod
-        def customise_sources(cls, *args, **kwargs):
+        def settings_customise_sources(cls, *args, **kwargs):
             return ()
 
     assert Settings().model_dump() == {'apple': 'default', 'banana': 'default'}
@@ -1290,7 +1290,7 @@ def test_env_setting_source_custom_env_parse(env):
         top: Dict[int, str]
 
         @classmethod
-        def customise_sources(
+        def settings_customise_sources(
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
@@ -1318,7 +1318,7 @@ def test_env_settings_source_custom_env_parse_is_bad(env):
         top: Dict[int, str]
 
         @classmethod
-        def customise_sources(
+        def settings_customise_sources(
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
@@ -1352,7 +1352,7 @@ def test_secret_settings_source_custom_env_parse(tmp_path):
 
         model_config = ConfigDict(secrets_dir=tmp_path)
 
-        def customise_sources(
+        def settings_customise_sources(
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
@@ -1376,7 +1376,7 @@ def test_custom_source_get_field_value_error(env):
         top: Dict[int, str]
 
         @classmethod
-        def customise_sources(
+        def settings_customise_sources(
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,

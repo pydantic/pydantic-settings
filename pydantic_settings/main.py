@@ -56,7 +56,7 @@ class BaseSettings(BaseModel):
         )
 
     @classmethod
-    def customise_sources(
+    def settings_customise_sources(
         cls,
         settings_cls: Type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
@@ -103,7 +103,7 @@ class BaseSettings(BaseModel):
             self.__class__, secrets_dir=_secrets_dir or self.model_config.get('secrets_dir')
         )
         # Provide a hook to set built-in sources priority and add / remove sources
-        sources = self.customise_sources(
+        sources = self.settings_customise_sources(
             self.__class__,
             init_settings=init_settings,
             env_settings=env_settings,
