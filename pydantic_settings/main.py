@@ -1,8 +1,9 @@
 from __future__ import annotations as _annotations
 
-from typing import Any, Dict, Optional, Tuple, Type
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple, Type, Union
 
-from pydantic import ConfigDict, DirectoryPath, FilePath
+from pydantic import ConfigDict
 from pydantic._internal._utils import deep_update
 from pydantic.main import BaseModel
 
@@ -15,7 +16,16 @@ from .sources import (
     SecretsSettingsSource,
 )
 
-env_file_sentinel: DotenvType = FilePath('')
+env_file_sentinel: DotenvType = Path('')
+
+
+class SettingsConfigDict(ConfigDict):
+    case_sensitive: bool
+    env_prefix: str
+    env_file: Optional[DotenvType]
+    env_file_encoding: Optional[str]
+    env_nested_delimiter: Optional[str]
+    secrets_dir: Optional[Union[str, Path]]
 
 
 class BaseSettings(BaseModel):
@@ -31,12 +41,12 @@ class BaseSettings(BaseModel):
         _env_file: Optional[DotenvType] = env_file_sentinel,
         _env_file_encoding: Optional[str] = None,
         _env_nested_delimiter: Optional[str] = None,
-        _secrets_dir: Optional[DirectoryPath] = None,
+        _secrets_dir: Optional[Union[str, Path]] = None,
         **values: Any,
     ) -> None:
         # Uses something other than `self` the first arg to allow "self" as a settable attribute
         super().__init__(
-            **__pydantic_self__._build_values(
+            **__pydantic_self__._settings_build_values(
                 values,
                 _env_file=_env_file,
                 _env_file_encoding=_env_file_encoding,
@@ -56,13 +66,13 @@ class BaseSettings(BaseModel):
     ) -> Tuple[PydanticBaseSettingsSource, ...]:
         return init_settings, env_settings, dotenv_settings, file_secret_settings
 
-    def _build_values(
+    def _settings_build_values(
         self,
         init_kwargs: Dict[str, Any],
         _env_file: Optional[DotenvType] = None,
         _env_file_encoding: Optional[str] = None,
         _env_nested_delimiter: Optional[str] = None,
-        _secrets_dir: Optional[DirectoryPath] = None,
+        _secrets_dir: Optional[Union[str, Path]] = None,
     ) -> Dict[str, Any]:
         # Configure built-in sources
         init_settings = InitSettingsSource(self.__class__, init_kwargs=init_kwargs)
@@ -73,7 +83,7 @@ class BaseSettings(BaseModel):
                 if _env_nested_delimiter is not None
                 else self.model_config.get('env_nested_delimiter')
             ),
-            env_prefix_len=len(self.model_config.get('env_prefix')),
+            env_prefix_len=len(self.model_config.get('env_prefix', '')),
         )
         dotenv_settings = DotEnvSettingsSource(
             self.__class__,
@@ -86,7 +96,7 @@ class BaseSettings(BaseModel):
                 if _env_nested_delimiter is not None
                 else self.model_config.get('env_nested_delimiter')
             ),
-            env_prefix_len=len(self.model_config.get('env_prefix')),
+            env_prefix_len=len(self.model_config.get('env_prefix', '')),
         )
 
         file_secret_settings = SecretsSettingsSource(
@@ -107,7 +117,7 @@ class BaseSettings(BaseModel):
             # to an informative error and much better than a confusing error
             return {}
 
-    model_config = ConfigDict(  # type: ignore[typeddict-item]
+    model_config = SettingsConfigDict(
         extra='forbid',
         arbitrary_types_allowed=True,
         validate_default=True,

@@ -8,7 +8,7 @@ from dataclasses import is_dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, Type, Union
 
-from pydantic import BaseModel, DirectoryPath, FilePath
+from pydantic import BaseModel
 from pydantic._internal._typing_extra import origin_is_union
 from pydantic._internal._utils import deep_update, lenient_issubclass
 from pydantic.fields import FieldInfo
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
 
 
-DotenvType = Union[FilePath, List[FilePath], Tuple[FilePath, ...]]
+DotenvType = Union[Path, List[Path], Tuple[Path, ...]]
 
 
 class SettingsError(ValueError):
@@ -129,10 +129,12 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                             (alias[0], self._apply_case_sensitive(alias[0]), True if len(alias) > 1 else False)
                         )
             else:  # string validation alias
-                field_info.append((v_alias, self._apply_case_sensitive(self.config.get('env_prefix') + v_alias), False))
+                field_info.append(
+                    (v_alias, self._apply_case_sensitive(self.config.get('env_prefix', '') + v_alias), False)
+                )
         else:
             field_info.append(
-                (field_name, self._apply_case_sensitive(self.config.get('env_prefix') + field_name), False)
+                (field_name, self._apply_case_sensitive(self.config.get('env_prefix', '') + field_name), False)
             )
 
         return field_info
@@ -162,8 +164,8 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
 
 class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
-    def __init__(self, settings_cls: Type[BaseSettings], secrets_dir: Optional[DirectoryPath]):
-        self.secrets_dir: Optional[DirectoryPath] = secrets_dir
+    def __init__(self, settings_cls: Type[BaseSettings], secrets_dir: Optional[Union[str, Path]]):
+        self.secrets_dir = secrets_dir
         super().__init__(settings_cls)
 
     def __call__(self) -> Dict[str, Any]:
@@ -201,7 +203,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
     def get_field_value(self, field: FieldInfo, field_name: str) -> Tuple[Any, str, bool]:
         for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
             path = self.find_case_path(
-                self.secrets_path, env_name, self.settings_cls.model_config.get('case_sensitive')
+                self.secrets_path, env_name, self.settings_cls.model_config.get('case_sensitive', False)
             )
             if not path:
                 # path does not exist, we curently don't return a warning for this
@@ -334,7 +336,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
 
     def _load_env_vars(self) -> Mapping[str, Optional[str]]:
         env_vars = super()._load_env_vars()
-        dotenv_vars = self._read_env_files(self.settings_cls.model_config.get('case_sensitive'))
+        dotenv_vars = self._read_env_files(self.settings_cls.model_config.get('case_sensitive', False))
         if dotenv_vars:
             env_vars = {**dotenv_vars, **env_vars}
 
@@ -365,9 +367,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
         )
 
 
-def read_env_file(
-    file_path: FilePath, *, encoding: str = None, case_sensitive: bool = False
-) -> Dict[str, Optional[str]]:
+def read_env_file(file_path: Path, *, encoding: str = None, case_sensitive: bool = False) -> Dict[str, Optional[str]]:
     try:
         from dotenv import dotenv_values
     except ImportError as e:
