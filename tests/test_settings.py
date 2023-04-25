@@ -1390,3 +1390,80 @@ def test_custom_source_get_field_value_error(env):
         SettingsError, match='error getting value for field "top" from source "BadCustomSettingsSource"'
     ):
         Settings()
+
+
+def test_nested_env_complex_values(env):
+    class SubSubModel(BaseSettings):
+        dvals: Dict
+
+    class SubModel(BaseSettings):
+        vals: List[str]
+        sub_sub_model: SubSubModel
+
+    class Cfg(BaseSettings):
+        sub_model: SubModel
+
+        model_config = ConfigDict(env_prefix='cfg_', env_nested_delimiter='__')
+
+    env.set('cfg_sub_model__vals', '["one", "two"]')
+    env.set('cfg_sub_model__sub_sub_model__dvals', '{"three": 4}')
+
+    assert Cfg().model_dump() == {'sub_model': {'vals': ['one', 'two'], 'sub_sub_model': {'dvals': {'three': 4}}}}
+
+    env.set('cfg_sub_model__vals', 'invalid')
+    with pytest.raises(
+        SettingsError, match='error parsing value for field "sub_model" from source "EnvSettingsSource"'
+    ):
+        Cfg()
+
+
+def test_nested_env_nonexisting_field(env):
+    class SubModel(BaseSettings):
+        vals: List[str]
+
+    class Cfg(BaseSettings):
+        sub_model: SubModel
+
+        model_config = ConfigDict(env_prefix='cfg_', env_nested_delimiter='__')
+
+    env.set('cfg_sub_model__foo_vals', '[]')
+    with pytest.raises(ValidationError):
+        Cfg()
+
+
+def test_nested_env_nonexisting_field_deep(env):
+    class SubModel(BaseSettings):
+        vals: List[str]
+
+    class Cfg(BaseSettings):
+        sub_model: SubModel
+
+        model_config = ConfigDict(env_prefix='cfg_', env_nested_delimiter='__')
+
+    env.set('cfg_sub_model__vals__foo__bar__vals', '[]')
+    with pytest.raises(ValidationError):
+        Cfg()
+
+
+def test_nested_env_union_complex_values(env):
+    class SubModel(BaseSettings):
+        vals: Union[List[str], Dict[str, str]]
+
+    class Cfg(BaseSettings):
+        sub_model: SubModel
+
+        model_config = ConfigDict(env_prefix='cfg_', env_nested_delimiter='__')
+
+    env.set('cfg_sub_model__vals', '["one", "two"]')
+    assert Cfg().model_dump() == {'sub_model': {'vals': ['one', 'two']}}
+
+    env.set('cfg_sub_model__vals', '{"three": "four"}')
+    assert Cfg().model_dump() == {'sub_model': {'vals': {'three': 'four'}}}
+
+    env.set('cfg_sub_model__vals', 'stringval')
+    with pytest.raises(ValidationError):
+        Cfg()
+
+    env.set('cfg_sub_model__vals', '{"invalid": dict}')
+    with pytest.raises(ValidationError):
+        Cfg()

@@ -288,6 +288,16 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
         return True, allow_parse_failure
 
+    @staticmethod
+    def next_field(field: Optional[FieldInfo], key: str) -> Optional[FieldInfo]:
+        if not field or origin_is_union(get_origin(field.annotation)):
+            # no support for Unions of complex BaseSettings fields
+            return None
+        elif field.annotation and hasattr(field.annotation, 'model_fields') and field.annotation.model_fields.get(key):
+            return field.annotation.model_fields[key]
+
+        return None
+
     def explode_env_vars(
         self, field_name: str, field: FieldInfo, env_vars: Mapping[str, Optional[str]]
     ) -> Dict[str, Any]:
@@ -307,8 +317,24 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             env_name_without_prefix = env_name[self.env_prefix_len :]
             _, *keys, last_key = env_name_without_prefix.split(self.env_nested_delimiter)
             env_var = result
+            target_field: Optional[FieldInfo] = field
+
             for key in keys:
+                target_field = self.next_field(target_field, key)
                 env_var = env_var.setdefault(key, {})
+
+            # get proper field with last_key
+            target_field = self.next_field(target_field, last_key)
+
+            # check if env_val maps to a complex field and if so, parse the env_val
+            if target_field and env_val:
+                is_complex, allow_json_failure = self._field_is_complex(target_field)
+                if is_complex:
+                    try:
+                        env_val = json.loads(env_val)
+                    except ValueError as e:
+                        if not allow_json_failure:
+                            raise e
             env_var[last_key] = env_val
 
         return result
