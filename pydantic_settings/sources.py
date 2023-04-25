@@ -290,6 +290,25 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
     @staticmethod
     def next_field(field: Optional[FieldInfo], key: str) -> Optional[FieldInfo]:
+        """
+        Find the field in a sub model by key(env name)
+
+        By having the following models:
+
+            class SubSubModel(BaseSettings):
+                dvals: Dict
+
+            class SubModel(BaseSettings):
+                vals: List[str]
+                sub_sub_model: SubSubModel
+
+            class Cfg(BaseSettings):
+                sub_model: SubModel
+
+        Then:
+            next_field(sub_model, 'vals') Returns the `vals` field of `SubModel` class
+            next_field(sub_model, 'sub_sub_model') Returns `sub_sub_model` field of `SubModel` class
+        """
         if not field or origin_is_union(get_origin(field.annotation)):
             # no support for Unions of complex BaseSettings fields
             return None
