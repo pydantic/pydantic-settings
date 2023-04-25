@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     model_config = ConfigDict(env_file_encoding='utf-8')
 
     @classmethod
-    def customise_sources(
+    def settings_customise_sources(
         cls,
         settings_cls: Type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,

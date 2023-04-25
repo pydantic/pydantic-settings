@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     my_api_key: str
 
     @classmethod
-    def customise_sources(
+    def settings_customise_sources(
         cls,
         settings_cls: Type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,

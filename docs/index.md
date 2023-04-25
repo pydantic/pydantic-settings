@@ -213,7 +213,7 @@ class Settings(BaseSettings):
     numbers: List[int]
 
     @classmethod
-    def customise_sources(
+    def settings_customise_sources(
         cls,
         settings_cls: Type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
@@ -387,10 +387,10 @@ the selected value is determined as follows (in descending order of priority):
 ## Customise settings sources
 
 If the default order of priority doesn't match your needs, it's possible to change it by overriding
-the `customise_sources` method of your `Settings` .
+the `settings_customise_sources` method of your `Settings` .
 
-`customise_sources` takes four callables as arguments and returns any number of callables as a tuple. In turn these
-callables are called to build the inputs to the fields of the settings class.
+`settings_customise_sources` takes four callables as arguments and returns any number of callables as a tuple.
+In turn these callables are called to build the inputs to the fields of the settings class.
 
 Each callable should take an instance of the settings class as its sole argument and return a `dict`.
 
@@ -408,7 +408,7 @@ class Settings(BaseSettings):
     database_dsn: PostgresDsn
 
     @classmethod
-    def customise_sources(
+    def settings_customise_sources(
         cls,
         settings_cls: Type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
@@ -430,7 +430,7 @@ By flipping `env_settings` and `init_settings`, environment variables now have p
 ### Adding sources
 
 As explained earlier, *pydantic* ships with multiples built-in settings sources. However, you may occasionally
-need to add your own custom sources, `customise_sources` makes this very easy:
+need to add your own custom sources, `settings_customise_sources` makes this very easy:
 
 ```py
 import json
@@ -479,7 +479,7 @@ class Settings(BaseSettings):
     model_config = ConfigDict(env_file_encoding='utf-8')
 
     @classmethod
-    def customise_sources(
+    def settings_customise_sources(
         cls,
         settings_cls: Type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
@@ -515,7 +515,7 @@ class Settings(BaseSettings):
     my_api_key: str
 
     @classmethod
-    def customise_sources(
+    def settings_customise_sources(
         cls,
         settings_cls: Type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,

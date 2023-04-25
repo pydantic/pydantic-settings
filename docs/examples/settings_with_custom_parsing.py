@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     numbers: List[int]
 
     @classmethod
-    def customise_sources(
+    def settings_customise_sources(
         cls,
         settings_cls: Type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
