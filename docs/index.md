@@ -85,6 +85,7 @@ The following rules are used to determine which environment variable(s) are read
 * Custom environment variable names can be set like:
   * `Field(validation_alias=...)` (see `api_key` and `redis_dsn` above)
 * When specifying custom environment variable names, either a string, `AliasChoices`, `AliasPath` my be provided.
+  * `env_prefix` is not considered.
   * When specifying a `AliasChoices`, order matters: the first detected value is used.
   * For example, for `redis_dsn` above, `service_redis_dsn` would take precedence over `redis_url`.
 
