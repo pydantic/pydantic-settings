@@ -129,9 +129,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                             (alias[0], self._apply_case_sensitive(alias[0]), True if len(alias) > 1 else False)
                         )
             else:  # string validation alias
-                field_info.append(
-                    (v_alias, self._apply_case_sensitive(self.config.get('env_prefix', '') + v_alias), False)
-                )
+                field_info.append((v_alias, self._apply_case_sensitive(v_alias), False))
         else:
             field_info.append(
                 (field_name, self._apply_case_sensitive(self.config.get('env_prefix', '') + field_name), False)
