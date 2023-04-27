@@ -69,8 +69,6 @@ print(Settings().model_dump())
 """
 ```
 
-<!--- {!.tmp_examples/settings_main.md!} --->
-
 ## Environment variable names
 
 The following rules are used to determine which environment variable(s) are read for a given field:
@@ -101,7 +99,6 @@ class Settings(BaseSettings):
 
     model_config = ConfigDict(case_sensitive=True)
 ```
-<!--- {!.tmp_examples/settings_case_sensitive.md!} --->
 
 When `case_sensitive` is `True`, the environment variable names must match field names (optionally with a prefix),
 so in this example
@@ -181,8 +178,6 @@ print(Settings().model_dump())
 """
 ```
 
-<!--- {!.tmp_examples/settings_nested_env.md!} --->
-
 `env_nested_delimiter` can be configured via the `model_config` as shown above, or via the
 `_env_nested_delimiter` keyword argument on instantiation.
 
@@ -229,8 +224,6 @@ os.environ['numbers'] = '1,2,3'
 print(Settings().model_dump())
 #> {'numbers': [1, 2, 3]}
 ```
-
-<!--- {!.tmp_examples/settings_with_custom_parsing.md!} --->
 
 ## Dotenv (.env) support
 
@@ -424,8 +417,6 @@ print(Settings(database_dsn='postgres://postgres@localhost:5432/kwargs_db'))
 #> database_dsn=Url('postgres://postgres@localhost:5432/kwargs_db')
 ```
 
-<!--- {!.tmp_examples/settings_env_priority.md!} --->
-
 By flipping `env_settings` and `init_settings`, environment variables now have precedence over `__init__` kwargs.
 
 ### Adding sources
@@ -500,8 +491,6 @@ print(Settings())
 #> foobar='spam'
 ```
 
-<!--- {!.tmp_examples/settings_add_custom_source.md!} --->
-
 ### Removing sources
 
 You might also want to disable a source:
@@ -531,5 +520,3 @@ class Settings(BaseSettings):
 print(Settings(my_api_key='this is ignored'))
 # requires: `MY_API_KEY` env variable to be set, e.g. `export MY_API_KEY=xxx`
 ```
-
-<!--- {!.tmp_examples/settings_disable_source.md!} --->
