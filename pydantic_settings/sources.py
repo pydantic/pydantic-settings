@@ -178,7 +178,9 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         for name, value in field_values.items():
             sub_model_field: Optional[FieldInfo] = None
 
-            if not field.annotation:
+            # This is here to make mypy happy
+            # Item "None" of "Optional[Type[Any]]" has no attribute "model_fields"
+            if not field.annotation or not hasattr(field.annotation, 'model_fields'):
                 values[name] = value
                 continue
 
