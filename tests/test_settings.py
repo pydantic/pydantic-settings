@@ -418,7 +418,7 @@ def test_env_inheritance_config(env):
     env.set('foobar_parent_from_config', 'foobar_parent_from_config')
     env.set('foobar_child_from_config', 'foobar_child_from_config')
 
-    env.set('prefix_foobar_child_from_field', 'prefix_foobar_child_from_field')
+    env.set('foobar_child_from_field', 'foobar_child_from_field')
 
     # a. Child class config overrides prefix
     class Parent(BaseSettings):
@@ -429,7 +429,7 @@ def test_env_inheritance_config(env):
     class Child(Parent):
         model_config = ConfigDict(env_prefix='prefix_')
 
-    assert Child().foobar == 'prefix_foobar_parent_from_field'
+    assert Child().foobar == 'foobar_parent_from_field'
 
     # b. Child class overrides field
     class Parent(BaseSettings):
@@ -451,7 +451,7 @@ def test_env_inheritance_config(env):
 
         model_config = ConfigDict(env_prefix='prefix_')
 
-    assert Child().foobar == 'prefix_foobar_child_from_field'
+    assert Child().foobar == 'foobar_child_from_field'
 
 
 def test_invalid_validation_alias(env):
@@ -496,6 +496,21 @@ def test_validation_aliases_alias_choices(env):
     env.pop('foo1')
     env.set('bar', '["val1", "val2", "val3"]')
     assert Settings().foobar == 'val3'
+
+
+def test_validation_alias_with_env_prefix(env):
+    class Settings(BaseSettings):
+        foobar: str = Field(validation_alias='foo')
+
+        model_config = ConfigDict(env_prefix='p_')
+
+    env.set('p_foo', 'bar')
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert exc_info.value.errors() == [{'type': 'missing', 'loc': ('foo',), 'msg': 'Field required', 'input': {}}]
+
+    env.set('foo', 'bar')
+    assert Settings().foobar == 'bar'
 
 
 def test_case_sensitive(monkeypatch):
