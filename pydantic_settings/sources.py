@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from pydantic._internal._typing_extra import origin_is_union
 from pydantic._internal._utils import deep_update, lenient_issubclass
 from pydantic.fields import FieldInfo
-from typing_extensions import get_args, get_origin
+from typing_extensions import get_origin
 
 from pydantic_settings.utils import path_type_label
 
