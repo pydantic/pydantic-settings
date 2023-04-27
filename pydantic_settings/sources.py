@@ -144,6 +144,61 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
         return field_info
 
+    def _replace_field_names_case_insensitively(self, field: FieldInfo, field_values: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Replace field names in values dict by looking in models fields insensitively.
+
+        By having the following models:
+
+            class SubSubSub(BaseModel):
+                VaL3: str
+
+            class SubSub(BaseModel):
+                Val2: str
+                SUB_sub_SuB: SubSubSub
+
+            class Sub(BaseModel):
+                VAL1: str
+                SUB_sub: SubSub
+
+            class Settings(BaseSettings):
+                nested: Sub
+
+                model_config = ConfigDict(env_nested_delimiter='__')
+
+        Then:
+            _replace_field_names_case_insensitively(
+                field,
+                {"val1": "v1", "sub_SUB": {"VAL2": "v2", "sub_SUB_sUb": {"vAl3": "v3"}}}
+            )
+            Returns {'VAL1': 'v1', 'SUB_sub': {'Val2': 'v2', 'SUB_sub_SuB': {'VaL3': 'v3'}}}
+        """
+        values: Dict[str, Any] = {}
+
+        for name, value in field_values.items():
+            sub_model_field: Optional[FieldInfo] = None
+
+            if not field.annotation:
+                values[name] = value
+                continue
+
+            # Find field in sub model by looking in fields case insensitively
+            for sub_model_field_name, f in field.annotation.model_fields.items():
+                if sub_model_field_name.lower() == name.lower():
+                    sub_model_field = f
+                    break
+
+            if not sub_model_field:
+                values[name] = value
+                continue
+
+            if lenient_issubclass(sub_model_field.annotation, BaseModel):
+                values[sub_model_field_name] = self._replace_field_names_case_insensitively(sub_model_field, value)
+            else:
+                values[sub_model_field_name] = value
+
+        return values
+
     def __call__(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {}
 
@@ -163,7 +218,10 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                 ) from e
 
             if field_value is not None:
-                d[field_key] = field_value
+                if not self.config.get('case_sensitive', False) and lenient_issubclass(field.annotation, BaseModel):
+                    d[field_key] = self._replace_field_names_case_insensitively(field, field_value)
+                else:
+                    d[field_key] = field_value
 
         return d
 
