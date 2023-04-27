@@ -184,7 +184,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
             # Find field in sub model by looking in fields case insensitively
             for sub_model_field_name, f in field.annotation.model_fields.items():
-                if sub_model_field_name.lower() == name.lower():
+                if not f.validation_alias and sub_model_field_name.lower() == name.lower():
                     sub_model_field = f
                     break
 
