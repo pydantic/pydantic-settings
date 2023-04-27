@@ -4,15 +4,16 @@ import json
 import os
 import warnings
 from abc import ABC, abstractmethod
+from collections import deque
 from dataclasses import is_dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
 
 from pydantic import BaseModel
 from pydantic._internal._typing_extra import origin_is_union
 from pydantic._internal._utils import deep_update, lenient_issubclass
 from pydantic.fields import FieldInfo
-from typing_extensions import get_origin
+from typing_extensions import get_args, get_origin
 
 from pydantic_settings.utils import path_type_label
 
@@ -53,10 +54,16 @@ class PydanticBaseSettingsSource(ABC):
         pass
 
     def field_is_complex(self, field: FieldInfo) -> bool:
-        def _annotation_is_complex(annotation: type[Any] | None) -> bool:
-            return lenient_issubclass(annotation, (BaseModel, list, set, frozenset, dict)) or is_dataclass(annotation)
+        """
+        Checks whether a field is complex, in which case it will attempt to be parsed as JSON.
 
-        return _annotation_is_complex(field.annotation) or _annotation_is_complex(get_origin(field.annotation))
+        Args:
+            field (FieldInfo): The field.
+
+        Returns:
+            bool: Whether the field is complex.
+        """
+        return _annotation_is_complex(field.annotation)
 
     def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
         """
@@ -433,3 +440,22 @@ def find_case_path(dir_path: Path, file_name: str, case_sensitive: bool) -> Opti
         elif not case_sensitive and f.name.lower() == file_name.lower():
             return f
     return None
+
+
+def _annotation_is_complex(annotation: type[Any] | None) -> bool:
+    origin = get_origin(annotation)
+    return (
+        _annotation_is_complex_inner(annotation)
+        or _annotation_is_complex_inner(origin)
+        or hasattr(origin, '__pydantic_core_schema__')
+        or hasattr(origin, '__get_pydantic_core_schema__')
+    )
+
+
+def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:
+    if lenient_issubclass(annotation, str):
+        return False
+
+    return lenient_issubclass(annotation, (BaseModel, Mapping, Sequence, tuple, set, frozenset, deque)) or is_dataclass(
+        annotation
+    )
