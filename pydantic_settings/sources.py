@@ -150,6 +150,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
         By having the following models:
 
+            ```py
             class SubSubSub(BaseModel):
                 VaL3: str
 
@@ -165,6 +166,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                 nested: Sub
 
                 model_config = ConfigDict(env_nested_delimiter='__')
+            ```
 
         Then:
             _replace_field_names_case_insensitively(
@@ -360,6 +362,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
         By having the following models:
 
+            ```py
             class SubSubModel(BaseSettings):
                 dvals: Dict
 
@@ -369,6 +372,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
             class Cfg(BaseSettings):
                 sub_model: SubModel
+            ```
 
         Then:
             next_field(sub_model, 'vals') Returns the `vals` field of `SubModel` class
