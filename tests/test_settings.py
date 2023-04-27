@@ -622,6 +622,10 @@ def test_env_union_with_complex_subfields_parses_plain_if_json_fails(env):
     class Settings(BaseSettings):
         content: Union[A, B, datetime]
 
+    env.set('content', '{"a": "test"}')
+    s = Settings()
+    assert s.content == A(a='test')
+
     env.set('content', '2020-07-05T00:00:00Z')
     s = Settings()
     assert s.content == datetime(2020, 7, 5, 0, 0, tzinfo=timezone.utc)
