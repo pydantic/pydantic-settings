@@ -29,6 +29,7 @@ classifiers = [
     'Intended Audience :: Information Technology',
     'Intended Audience :: System Administrators',
     'License :: OSI Approved :: MIT License',
+    'Framework :: Pydantic',
     'Operating System :: Unix',
     'Operating System :: POSIX :: Linux',
     'Environment :: Console',
