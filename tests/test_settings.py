@@ -1486,3 +1486,29 @@ def test_nested_env_union_complex_values(env):
     env.set('cfg_sub_model__vals', '{"invalid": dict}')
     with pytest.raises(ValidationError):
         Cfg()
+
+
+def test_nested_model_case_insensitive(env):
+    class SubSubSub(BaseModel):
+        VaL3: str
+        val4: str = Field(validation_alias='VAL4')
+
+    class SubSub(BaseModel):
+        Val2: str
+        SUB_sub_SuB: SubSubSub
+
+    class Sub(BaseModel):
+        VAL1: str
+        SUB_sub: SubSub
+
+    class Settings(BaseSettings):
+        nested: Sub
+
+        model_config = ConfigDict(env_nested_delimiter='__')
+
+    env.set('nested', '{"val1": "v1", "sub_SUB": {"VAL2": "v2", "sub_SUB_sUb": {"vAl3": "v3", "VAL4": "v4"}}}')
+    s = Settings()
+    assert s.nested.VAL1 == 'v1'
+    assert s.nested.SUB_sub.Val2 == 'v2'
+    assert s.nested.SUB_sub.SUB_sub_SuB.VaL3 == 'v3'
+    assert s.nested.SUB_sub.SUB_sub_SuB.val4 == 'v4'
