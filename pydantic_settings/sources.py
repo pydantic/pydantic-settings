@@ -204,7 +204,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         return values
 
     def __call__(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {}
+        data: Dict[str, Any] = {}
 
         for field_name, field in self.settings_cls.model_fields.items():
             try:
@@ -223,11 +223,11 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
             if field_value is not None:
                 if not self.config.get('case_sensitive', False) and lenient_issubclass(field.annotation, BaseModel):
-                    d[field_key] = self._replace_field_names_case_insensitively(field, field_value)
+                    data[field_key] = self._replace_field_names_case_insensitively(field, field_value)
                 else:
-                    d[field_key] = field_value
+                    data[field_key] = field_value
 
-        return d
+        return data
 
 
 class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
@@ -449,12 +449,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
         super().__init__(settings_cls, env_nested_delimiter, env_prefix_len)
 
     def _load_env_vars(self) -> Mapping[str, Optional[str]]:
-        env_vars = super()._load_env_vars()
-        dotenv_vars = self._read_env_files(self.settings_cls.model_config.get('case_sensitive', False))
-        if dotenv_vars:
-            env_vars = {**dotenv_vars, **env_vars}
-
-        return env_vars
+        return self._read_env_files(self.settings_cls.model_config.get('case_sensitive', False))
 
     def _read_env_files(self, case_sensitive: bool) -> Mapping[str, Optional[str]]:
         env_files = self.env_file
@@ -464,7 +459,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
         if isinstance(env_files, (str, os.PathLike)):
             env_files = [env_files]
 
-        dotenv_vars = {}
+        dotenv_vars: Dict[str, Optional[str]] = {}
         for env_file in env_files:
             env_path = Path(env_file).expanduser()
             if env_path.is_file():
@@ -474,6 +469,17 @@ class DotEnvSettingsSource(EnvSettingsSource):
 
         return dotenv_vars
 
+    def __call__(self) -> Dict[str, Any]:
+        data: Dict[str, Any] = super().__call__()
+
+        # As `extra` config is allowed in dotenv settings source, We have to
+        # update data with extra env variabels from dotenv file.
+        for k, v in self.env_vars.items():
+            if v is not None and k not in data:
+                data[k] = v
+
+        return data
+
     def __repr__(self) -> str:
         return (
             f'DotEnvSettingsSource(env_file={self.env_file!r}, env_file_encoding={self.env_file_encoding!r}, '
@@ -481,7 +487,9 @@ class DotEnvSettingsSource(EnvSettingsSource):
         )
 
 
-def read_env_file(file_path: Path, *, encoding: str = None, case_sensitive: bool = False) -> Dict[str, Optional[str]]:
+def read_env_file(
+    file_path: Path, *, encoding: Optional[str] = None, case_sensitive: bool = False
+) -> Mapping[str, Optional[str]]:
     try:
         from dotenv import dotenv_values
     except ImportError as e:

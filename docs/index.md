@@ -299,6 +299,10 @@ Because python-dotenv is used to parse the file, bash-like semantics such as `ex
 (depending on your OS and environment) may allow your dotenv file to also be used with `source`,
 see [python-dotenv's documentation](https://saurabh-kumar.com/python-dotenv/#usages) for more details.
 
+Pydantic settings consider `extra` config in case of dotenv file. It means if you set the `extra=forbid`
+on `model_config` and your dotenv file contains an entry for a field that is not defined in settings model,
+it will raise `ValidationError` in settings construction.
+
 ## Secret Support
 
 Placing secret values in files is a common pattern to provide sensitive configuration to an application.

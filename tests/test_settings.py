@@ -680,12 +680,17 @@ def test_env_file_config_case_sensitive(tmp_path):
         b: str
         c: str
 
-        model_config = ConfigDict(env_file=p, case_sensitive=True)
+        model_config = ConfigDict(env_file=p, case_sensitive=True, extra='ignore')
 
     with pytest.raises(ValidationError) as exc_info:
         Settings()
     assert exc_info.value.errors() == [
-        {'type': 'missing', 'loc': ('a',), 'msg': 'Field required', 'input': {'b': 'better string', 'c': 'best string'}}
+        {
+            'type': 'missing',
+            'loc': ('a',),
+            'msg': 'Field required',
+            'input': {'b': 'better string', 'c': 'best string', 'A': 'good string'},
+        }
     ]
 
 
@@ -1512,3 +1517,35 @@ def test_nested_model_case_insensitive(env):
     assert s.nested.SUB_sub.Val2 == 'v2'
     assert s.nested.SUB_sub.SUB_sub_SuB.VaL3 == 'v3'
     assert s.nested.SUB_sub.SUB_sub_SuB.val4 == 'v4'
+
+
+@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
+def test_dotenv_extra_allow(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('a=b\nx=y')
+
+    class Settings(BaseSettings):
+        a: str
+
+        model_config = ConfigDict(env_file=p, extra='allow')
+
+    s = Settings()
+    assert s.a == 'b'
+    assert s.x == 'y'
+
+
+@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
+def test_dotenv_extra_forbid(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('a=b\nx=y')
+
+    class Settings(BaseSettings):
+        a: str
+
+        model_config = ConfigDict(env_file=p, extra='forbid')
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert exc_info.value.errors() == [
+        {'type': 'extra_forbidden', 'loc': ('x',), 'msg': 'Extra inputs are not permitted', 'input': 'y'}
+    ]
