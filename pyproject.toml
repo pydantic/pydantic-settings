@@ -30,6 +30,7 @@ classifiers = [
     'Intended Audience :: System Administrators',
     'License :: OSI Approved :: MIT License',
     'Framework :: Pydantic',
+    'Framework :: Pydantic :: 2',
     'Operating System :: Unix',
     'Operating System :: POSIX :: Linux',
     'Environment :: Console',
