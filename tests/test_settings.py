@@ -1549,3 +1549,36 @@ def test_dotenv_extra_forbid(tmp_path):
     assert exc_info.value.errors() == [
         {'type': 'extra_forbidden', 'loc': ('x',), 'msg': 'Extra inputs are not permitted', 'input': 'y'}
     ]
+
+
+@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
+def test_dotenv_extra_case_insensitive(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('a=b')
+
+    class Settings(BaseSettings):
+        A: str
+
+        model_config = ConfigDict(env_file=p, extra='forbid')
+
+    s = Settings()
+    assert s.A == 'b'
+
+
+@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
+def test_dotenv_extra_sub_model_case_insensitive(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('a=b\nSUB_model={"v": "v1"}')
+
+    class SubModel(BaseModel):
+        v: str
+
+    class Settings(BaseSettings):
+        A: str
+        sub_MODEL: SubModel
+
+        model_config = ConfigDict(env_file=p, extra='forbid')
+
+    s = Settings()
+    assert s.A == 'b'
+    assert s.sub_MODEL.v == 'v1'

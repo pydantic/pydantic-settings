@@ -472,11 +472,21 @@ class DotEnvSettingsSource(EnvSettingsSource):
     def __call__(self) -> Dict[str, Any]:
         data: Dict[str, Any] = super().__call__()
 
+        data_lower_keys: List[str] = []
+        if not self.settings_cls.model_config.get('case_sensitive', False):
+            data_lower_keys = [x.lower() for x in data.keys()]
+
         # As `extra` config is allowed in dotenv settings source, We have to
         # update data with extra env variabels from dotenv file.
-        for k, v in self.env_vars.items():
-            if v is not None and k not in data:
-                data[k] = v
+        for env_name, env_value in self.env_vars.items():
+            if env_value is not None:
+                env_name_without_prefix = env_name[self.env_prefix_len :]
+                first_key, *_ = env_name_without_prefix.split(self.env_nested_delimiter)
+
+                if (data_lower_keys and first_key not in data_lower_keys) or (
+                    not data_lower_keys and first_key not in data
+                ):
+                    data[first_key] = env_value
 
         return data
 
