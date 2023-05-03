@@ -1,7 +1,7 @@
 from __future__ import annotations as _annotations
 
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Type, Union
+from typing import Any
 
 from pydantic import ConfigDict
 from pydantic._internal._utils import deep_update
@@ -22,10 +22,10 @@ env_file_sentinel: DotenvType = Path('')
 class SettingsConfigDict(ConfigDict):
     case_sensitive: bool
     env_prefix: str
-    env_file: Optional[DotenvType]
-    env_file_encoding: Optional[str]
-    env_nested_delimiter: Optional[str]
-    secrets_dir: Optional[Union[str, Path]]
+    env_file: DotenvType | None
+    env_file_encoding: str | None
+    env_nested_delimiter: str | None
+    secrets_dir: str | Path | None
 
 
 class BaseSettings(BaseModel):
@@ -38,10 +38,10 @@ class BaseSettings(BaseModel):
 
     def __init__(
         __pydantic_self__,
-        _env_file: Optional[DotenvType] = env_file_sentinel,
-        _env_file_encoding: Optional[str] = None,
-        _env_nested_delimiter: Optional[str] = None,
-        _secrets_dir: Optional[Union[str, Path]] = None,
+        _env_file: DotenvType | None = env_file_sentinel,
+        _env_file_encoding: str | None = None,
+        _env_nested_delimiter: str | None = None,
+        _secrets_dir: str | Path | None = None,
         **values: Any,
     ) -> None:
         # Uses something other than `self` the first arg to allow "self" as a settable attribute
@@ -58,22 +58,22 @@ class BaseSettings(BaseModel):
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: Type[BaseSettings],
+        settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
-    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
         return init_settings, env_settings, dotenv_settings, file_secret_settings
 
     def _settings_build_values(
         self,
-        init_kwargs: Dict[str, Any],
-        _env_file: Optional[DotenvType] = None,
-        _env_file_encoding: Optional[str] = None,
-        _env_nested_delimiter: Optional[str] = None,
-        _secrets_dir: Optional[Union[str, Path]] = None,
-    ) -> Dict[str, Any]:
+        init_kwargs: dict[str, Any],
+        _env_file: DotenvType | None = None,
+        _env_file_encoding: str | None = None,
+        _env_nested_delimiter: str | None = None,
+        _secrets_dir: str | Path | None = None,
+    ) -> dict[str, Any]:
         # Configure built-in sources
         init_settings = InitSettingsSource(self.__class__, init_kwargs=init_kwargs)
         env_settings = EnvSettingsSource(
