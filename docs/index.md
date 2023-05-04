@@ -1,6 +1,3 @@
----
-description: Support for loading a settings or config class from environment variables or secrets files.
----
 
 If you create a model that inherits from `BaseSettings`, the model initialiser will attempt to determine
 the values of any fields not passed as keyword arguments by reading from the environment. (Default values
