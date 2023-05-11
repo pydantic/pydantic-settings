@@ -1582,3 +1582,25 @@ def test_dotenv_extra_sub_model_case_insensitive(tmp_path):
     s = Settings()
     assert s.A == 'b'
     assert s.sub_MODEL.v == 'v1'
+
+
+def test_nested_bytes_field(env):
+    class SubModel(BaseModel):
+        v1: str
+        v2: bytes
+
+    class Settings(BaseSettings):
+        v0: str
+        sub_model: SubModel
+
+        model_config = ConfigDict(env_nested_delimiter='__', env_prefix='TEST_')
+
+    env.set('TEST_V0', 'v0')
+    env.set('TEST_SUB_MODEL__V1', 'v1')
+    env.set('TEST_SUB_MODEL__V2', 'v2')
+
+    s = Settings()
+
+    assert s.v0 == 'v0'
+    assert s.sub_model.v1 == 'v1'
+    assert s.sub_model.v2 == b'v2'
