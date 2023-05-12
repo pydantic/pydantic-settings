@@ -532,7 +532,7 @@ def _annotation_is_complex(annotation: type[Any] | None) -> bool:
 
 
 def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:
-    if lenient_issubclass(annotation, str):
+    if lenient_issubclass(annotation, (str, bytes)):
         return False
 
     return lenient_issubclass(annotation, (BaseModel, Mapping, Sequence, tuple, set, frozenset, deque)) or is_dataclass(
