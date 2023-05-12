@@ -2,7 +2,6 @@ black
 flake8
 flake8-quotes
 flake8-pyproject
-hypothesis
 isort
 pyupgrade
 mypy
