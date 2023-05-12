@@ -40,7 +40,7 @@ classifiers = [
 ]
 requires-python = '>=3.7'
 dependencies = [
-    'pydantic==v2.0a3',
+    'pydantic==v2.0a4',
     'python-dotenv>=0.21.0',
 ]
 dynamic = ['version']
