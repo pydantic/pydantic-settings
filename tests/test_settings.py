@@ -57,7 +57,9 @@ def test_sub_env_override(env):
 def test_sub_env_missing():
     with pytest.raises(ValidationError) as exc_info:
         SimpleSettings()
-    assert exc_info.value.errors() == [{'type': 'missing', 'loc': ('apple',), 'msg': 'Field required', 'input': {}}]
+    assert exc_info.value.errors(include_url=False) == [
+        {'type': 'missing', 'loc': ('apple',), 'msg': 'Field required', 'input': {}}
+    ]
 
 
 def test_other_setting():
@@ -227,7 +229,7 @@ def test_annotated_list(env):
     env.set('apples', '["russet"]')
     with pytest.raises(ValidationError) as exc_info:
         AnnotatedComplexSettings()
-    assert exc_info.value.errors() == [
+    assert exc_info.value.errors(include_url=False) == [
         {
             'ctx': {'actual_length': 1, 'field_type': 'List', 'min_length': 2},
             'input': ['russet'],
@@ -292,7 +294,7 @@ def test_generic_dataclass(env, dataclass_decorator):
     env.set('field', '{"x": "a"}')
     with pytest.raises(ValidationError) as exc_info:
         ComplexSettings()
-    assert exc_info.value.errors() == [
+    assert exc_info.value.errors(include_url=False) == [
         {
             'input': 'a',
             'loc': ('field', 'x'),
@@ -318,7 +320,7 @@ def test_generic_basemodel(env):
     env.set('field', '{"x": "a"}')
     with pytest.raises(ValidationError) as exc_info:
         ComplexSettings()
-    assert exc_info.value.errors() == [
+    assert exc_info.value.errors(include_url=False) == [
         {
             'input': 'a',
             'loc': ('field', 'x'),
@@ -344,7 +346,7 @@ def test_annotated(env):
     env.set('field', '{"x": "a"}')
     with pytest.raises(ValidationError) as exc_info:
         ComplexSettings()
-    assert exc_info.value.errors() == [
+    assert exc_info.value.errors(include_url=False) == [
         {
             'input': 'a',
             'loc': ('field', 'x'),
@@ -507,7 +509,9 @@ def test_validation_alias_with_env_prefix(env):
     env.set('p_foo', 'bar')
     with pytest.raises(ValidationError) as exc_info:
         Settings()
-    assert exc_info.value.errors() == [{'type': 'missing', 'loc': ('foo',), 'msg': 'Field required', 'input': {}}]
+    assert exc_info.value.errors(include_url=False) == [
+        {'type': 'missing', 'loc': ('foo',), 'msg': 'Field required', 'input': {}}
+    ]
 
     env.set('foo', 'bar')
     assert Settings().foobar == 'bar'
@@ -523,7 +527,9 @@ def test_case_sensitive(monkeypatch):
     monkeypatch.setattr(os, 'environ', value={'Foo': 'foo'})
     with pytest.raises(ValidationError) as exc_info:
         Settings()
-    assert exc_info.value.errors() == [{'type': 'missing', 'loc': ('foo',), 'msg': 'Field required', 'input': {}}]
+    assert exc_info.value.errors(include_url=False) == [
+        {'type': 'missing', 'loc': ('foo',), 'msg': 'Field required', 'input': {}}
+    ]
 
 
 def test_nested_dataclass(env):
@@ -684,7 +690,7 @@ def test_env_file_config_case_sensitive(tmp_path):
 
     with pytest.raises(ValidationError) as exc_info:
         Settings()
-    assert exc_info.value.errors() == [
+    assert exc_info.value.errors(include_url=False) == [
         {
             'type': 'missing',
             'loc': ('a',),
@@ -1127,7 +1133,9 @@ def test_secrets_missing(tmp_path):
     with pytest.raises(ValidationError) as exc_info:
         Settings()
 
-    assert exc_info.value.errors() == [{'type': 'missing', 'loc': ('foo',), 'msg': 'Field required', 'input': {}}]
+    assert exc_info.value.errors(include_url=False) == [
+        {'type': 'missing', 'loc': ('foo',), 'msg': 'Field required', 'input': {}}
+    ]
 
 
 def test_secrets_invalid_secrets_dir(tmp_path):
@@ -1546,7 +1554,7 @@ def test_dotenv_extra_forbid(tmp_path):
 
     with pytest.raises(ValidationError) as exc_info:
         Settings()
-    assert exc_info.value.errors() == [
+    assert exc_info.value.errors(include_url=False) == [
         {'type': 'extra_forbidden', 'loc': ('x',), 'msg': 'Extra inputs are not permitted', 'input': 'y'}
     ]
 

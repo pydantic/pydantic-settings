@@ -6,9 +6,9 @@
 #
 annotated-types==0.4.0
     # via pydantic
-pydantic==v2.0a3
+pydantic==v2.0a4
     # via pydantic-settings (pyproject.toml)
-pydantic-core==0.25.0
+pydantic-core==0.30.0
     # via pydantic
 python-dotenv==0.21.0
     # via pydantic-settings (pyproject.toml)

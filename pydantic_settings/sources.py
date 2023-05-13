@@ -93,7 +93,8 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         super().__init__(settings_cls)
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
-        pass
+        # Nothing to do here. Only implement the return statement to make mypy happy
+        return None, '', False
 
     def __call__(self) -> dict[str, Any]:
         return self.init_kwargs
