@@ -2,3 +2,4 @@ coverage[toml]
 pytest
 pytest-mock
 pytest-sugar
+pytest-examples

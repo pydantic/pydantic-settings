@@ -23,18 +23,25 @@ pluggy==1.0.0
 pytest==7.3.1
     # via
     #   -r requirements/testing.in
+    #   pytest-examples
     #   pytest-mock
     #   pytest-sugar
+pytest-examples==0.0.9
+    # via -r requirements/testing.in
 pytest-mock==3.10.0
     # via -r requirements/testing.in
 pytest-sugar==0.9.7
     # via -r requirements/testing.in
+ruff==0.0.265
+    # via pytest-examples
 termcolor==2.3.0
     # via pytest-sugar
 tomli==2.0.1
     # via
     #   coverage
     #   pytest
+typed-ast==1.5.4
+    # via black
 typing-extensions==4.5.0
     # via importlib-metadata
 zipp==3.15.0
