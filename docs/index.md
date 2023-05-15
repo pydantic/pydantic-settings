@@ -12,6 +12,7 @@ This makes it easy to:
 For example:
 
 ```py
+import os
 from pprint import pprint
 from typing import Any, Callable, Set
 
@@ -34,8 +35,8 @@ class SubModel(BaseModel):
 
 
 class Settings(BaseSettings):
-    auth_key: str = Field('', validation_alias='my_auth_key')
-    api_key: str = Field('', validation_alias='my_api_key')
+    auth_key: str = Field(validation_alias='my_auth_key')
+    api_key: str = Field(validation_alias='my_api_key')
 
     redis_dsn: RedisDsn = Field(
         'redis://user:pass@localhost:6379/1',
@@ -57,6 +58,10 @@ class Settings(BaseSettings):
     model_config = ConfigDict(env_prefix='my_prefix_')  # defaults to no prefix, i.e. ""
 
 
+# Set environment variables
+os.environ['my_auth_key'] = 'xxx'
+os.environ['my_api_key'] = 'xxx'
+
 pprint(Settings().model_dump())
 """
 {
@@ -70,6 +75,9 @@ pprint(Settings().model_dump())
     'more_settings': {'foo': 'bar', 'apple': 1},
 }
 """
+
+os.environ.pop('my_auth_key')
+os.environ.pop('my_api_key')
 ```
 
 ## Environment variable names
@@ -474,7 +482,7 @@ class JsonConfigSettingsSource(PydanticBaseSettingsSource):
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> Tuple[Any, str, bool]:
         encoding = self.config.get('env_file_encoding')
-        file_content_json = json.loads(Path('config.json').read_text(encoding))
+        file_content_json = json.loads(Path('tests/example_test_config.json').read_text(encoding))
         fiel_value = file_content_json.get(field_name)
         return fiel_value, field_name, False
 
