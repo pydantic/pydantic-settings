@@ -59,13 +59,6 @@ filterwarnings = [
     'ignore:This is a placeholder until pydantic-settings.*:UserWarning',
 ]
 
-[tool.flake8]
-max_line_length = 120
-max_complexity = 14
-inline_quotes = 'single'
-multiline_quotes = 'double'
-ignore = ['E203', 'W503']
-
 [tool.coverage.run]
 source = ['pydantic_settings']
 branch = true
@@ -86,20 +79,19 @@ source = [
     'pydantic_settings/',
 ]
 
+[tool.ruff]
+line-length = 120
+extend-select = ['Q', 'RUF100', 'C90', 'UP', 'I']
+flake8-quotes = {inline-quotes = 'single', multiline-quotes = 'double'}
+mccabe = { max-complexity = 14 }
+isort = { known-first-party = ['pydantic_settings', 'tests'] }
+target-version = "py37"
+
 [tool.black]
 color = true
 line-length = 120
 target-version = ['py310']
 skip-string-normalization = true
-
-[tool.isort]
-line_length = 120
-known_first_party = 'pydantic_settings'
-known_third_party = 'pydantic'
-multi_line_output = 3
-include_trailing_comma = true
-force_grid_wrap = 0
-combine_as_imports = true
 
 [tool.mypy]
 python_version = '3.10'

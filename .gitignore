@@ -24,3 +24,4 @@ _build/
 /sandbox/
 /.ghtopdep_cache/
 /worktrees/
+/.ruff_cache/

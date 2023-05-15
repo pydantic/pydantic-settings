@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 from pytest_examples import CodeExample, EvalExample, find_examples
 
-INDEX_MAIN = None
 DOCS_ROOT = Path(__file__).parent.parent / 'docs'
 
 
@@ -50,17 +49,6 @@ def print_callback(print_statement: str) -> str:
 @pytest.mark.skipif(bool(skip_reason), reason=skip_reason or 'not skipping')
 @pytest.mark.parametrize('example', find_examples(str(DOCS_ROOT), skip=sys.platform == 'win32'), ids=str)
 def test_docs_examples(example: CodeExample, eval_example: EvalExample, tmp_path: Path, mocker):  # noqa: C901
-    global INDEX_MAIN
-    if example.path.name == 'index.md':
-        if INDEX_MAIN is None:
-            INDEX_MAIN = example.source
-        else:
-            (tmp_path / 'index_main.py').write_text(INDEX_MAIN)
-            sys.path.append(str(tmp_path))
-
-    if example.path.name == 'devtools.md':
-        pytest.skip('tested below')
-
     eval_example.print_callback = print_callback
 
     prefix_settings = example.prefix_settings()
@@ -82,7 +70,7 @@ def test_docs_examples(example: CodeExample, eval_example: EvalExample, tmp_path
     if group_name:
         eval_example.set_config(ruff_ignore=['F821'])
 
-    eval_example.set_config(line_length=120)
+    # eval_example.set_config(line_length=120)
     if lint_settings != 'skip':
         if eval_example.update_examples:
             eval_example.format(example)

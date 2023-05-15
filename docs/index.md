@@ -13,19 +13,19 @@ For example:
 
 ```py
 import os
-from pprint import pprint
 from typing import Any, Callable, Set
 
 from pydantic import (
     AliasChoices,
+    AmqpDsn,
     BaseModel,
     ConfigDict,
-    ImportString,
-    RedisDsn,
-    PostgresDsn,
-    AmqpDsn,
     Field,
+    ImportString,
+    PostgresDsn,
+    RedisDsn,
 )
+
 from pydantic_settings import BaseSettings
 
 
@@ -62,7 +62,7 @@ class Settings(BaseSettings):
 os.environ['my_auth_key'] = 'xxx'
 os.environ['my_api_key'] = 'xxx'
 
-pprint(Settings().model_dump())
+print(Settings().model_dump())
 """
 {
     'auth_key': '',
@@ -225,6 +225,7 @@ import os
 from typing import Any, List, Tuple, Type
 
 from pydantic.fields import FieldInfo
+
 from pydantic_settings import BaseSettings, EnvSettingsSource, PydanticBaseSettingsSource
 
 
@@ -431,7 +432,9 @@ The order of the returned callables decides the priority of inputs; first item i
 
 ```py
 from typing import Tuple, Type
+
 from pydantic import PostgresDsn
+
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
 
@@ -468,6 +471,7 @@ from typing import Any, Dict, Tuple, Type
 
 from pydantic import ConfigDict
 from pydantic.fields import FieldInfo
+
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
 
@@ -535,6 +539,7 @@ You might also want to disable a source:
 from typing import Tuple, Type
 
 from pydantic import ValidationError
+
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
 

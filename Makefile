@@ -9,14 +9,12 @@ install:
 
 .PHONY: format
 format:
-	pyupgrade --py37-plus --exit-zero-even-if-changed `find $(sources) -name "*.py" -type f`
-	isort $(sources)
 	black $(sources)
+	ruff --fix $(sources)
 
 .PHONY: lint
 lint:
-	flake8 $(sources)
-	isort $(sources) --check-only --df
+	ruff $(sources)
 	black $(sources) --check --diff
 
 .PHONY: mypy

@@ -470,7 +470,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
     def __call__(self) -> dict[str, Any]:
         data: dict[str, Any] = super().__call__()
 
-        data_lower_keys: List[str] = []
+        data_lower_keys: list[str] = []
         if not self.settings_cls.model_config.get('case_sensitive', False):
             data_lower_keys = [x.lower() for x in data.keys()]
 
