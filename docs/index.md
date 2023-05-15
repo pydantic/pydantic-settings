@@ -64,16 +64,7 @@ os.environ['my_api_key'] = 'xxx'
 
 print(Settings().model_dump())
 """
-{
-    'auth_key': '',
-    'api_key': '',
-    'redis_dsn': Url('redis://user:pass@localhost:6379/1'),
-    'pg_dsn': Url('postgres://user:pass@localhost:5432/foobar'),
-    'amqp_dsn': Url('amqp://user:pass@localhost:5672/'),
-    'special_function': <built-in function cos>,
-    'domains': set(),
-    'more_settings': {'foo': 'bar', 'apple': 1},
-}
+{'auth_key': 'xxx', 'api_key': 'xxx', 'redis_dsn': Url('redis://user:pass@localhost:6379/1'), 'pg_dsn': Url('postgres://user:pass@localhost:5432/foobar'), 'amqp_dsn': Url('amqp://user:pass@localhost:5672/'), 'special_function': <built-in function cos>, 'domains': set(), 'more_settings': {'foo': 'bar', 'apple': 1}}
 """
 
 os.environ.pop('my_auth_key')
@@ -226,11 +217,17 @@ from typing import Any, List, Tuple, Type
 
 from pydantic.fields import FieldInfo
 
-from pydantic_settings import BaseSettings, EnvSettingsSource, PydanticBaseSettingsSource
+from pydantic_settings import (
+    BaseSettings,
+    EnvSettingsSource,
+    PydanticBaseSettingsSource,
+)
 
 
 class MyCustomSource(EnvSettingsSource):
-    def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
+    def prepare_field_value(
+        self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool
+    ) -> Any:
         if field_name == 'numbers':
             return [int(x) for x in value.split(',')]
         return json.loads(value)
@@ -323,7 +320,10 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     ...
 
-    model_config = ConfigDict(env_file=('.env', '.env.prod'))  # `.env.prod` takes priority over `.env`
+    model_config = ConfigDict(
+        # `.env.prod` takes priority over `.env`
+        env_file=('.env', '.env.prod')
+    )
 ```
 
 You can also use the keyword argument override to tell Pydantic not to load any file at all (even if one is set in
@@ -484,21 +484,31 @@ class JsonConfigSettingsSource(PydanticBaseSettingsSource):
     when reading `config.json`
     """
 
-    def get_field_value(self, field: FieldInfo, field_name: str) -> Tuple[Any, str, bool]:
+    def get_field_value(
+        self, field: FieldInfo, field_name: str
+    ) -> Tuple[Any, str, bool]:
         encoding = self.config.get('env_file_encoding')
-        file_content_json = json.loads(Path('tests/example_test_config.json').read_text(encoding))
+        file_content_json = json.loads(
+            Path('tests/example_test_config.json').read_text(encoding)
+        )
         fiel_value = file_content_json.get(field_name)
         return fiel_value, field_name, False
 
-    def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
+    def prepare_field_value(
+        self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool
+    ) -> Any:
         return value
 
     def __call__(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {}
 
         for field_name, field in self.settings_cls.model_fields.items():
-            field_value, field_key, value_is_complex = self.get_field_value(field, field_name)
-            field_value = self.prepare_field_value(field_name, field, field_value, value_is_complex)
+            field_value, field_key, value_is_complex = self.get_field_value(
+                field, field_name
+            )
+            field_value = self.prepare_field_value(
+                field_name, field, field_value, value_is_complex
+            )
             if field_value is not None:
                 d[field_key] = field_value
 
