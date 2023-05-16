@@ -64,7 +64,16 @@ os.environ['my_api_key'] = 'xxx'
 
 print(Settings().model_dump())
 """
-{'auth_key': 'xxx', 'api_key': 'xxx', 'redis_dsn': Url('redis://user:pass@localhost:6379/1'), 'pg_dsn': Url('postgres://user:pass@localhost:5432/foobar'), 'amqp_dsn': Url('amqp://user:pass@localhost:5672/'), 'special_function': <built-in function cos>, 'domains': set(), 'more_settings': {'foo': 'bar', 'apple': 1}}
+{
+    'auth_key': 'xxx',
+    'api_key': 'xxx',
+    'redis_dsn': Url('redis://user:pass@localhost:6379/1'),
+    'pg_dsn': Url('postgres://user:pass@localhost:5432/foobar'),
+    'amqp_dsn': Url('amqp://user:pass@localhost:5672/'),
+    'special_function': math.cos,
+    'domains': set(),
+    'more_settings': {'foo': 'bar', 'apple': 1},
+}
 """
 
 os.environ.pop('my_auth_key')

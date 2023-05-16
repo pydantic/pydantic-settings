@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 from pytest_examples import CodeExample, EvalExample, find_examples
+from pytest_examples.config import ExamplesConfig
+from pytest_examples.lint import black_format
 
 DOCS_ROOT = Path(__file__).parent.parent / 'docs'
 
@@ -42,7 +44,15 @@ skip_reason = skip_docs_tests()
 
 
 def print_callback(print_statement: str) -> str:
-    return re.sub(r'(https://errors.pydantic.dev)/.+?/', r'\1/2/', print_statement)
+    # make error display uniform
+    s = re.sub(r'(https://errors.pydantic.dev)/.+?/', r'\1/2/', print_statement)
+    # hack until https://github.com/pydantic/pytest-examples/issues/11 is fixed
+    if '<built-in function cos>' in s:
+        # avoid function repr breaking black formatting
+        s = re.sub('<built-in function cos>', 'math.cos', s)
+        return black_format(s, ExamplesConfig()).rstrip('\n')
+    return s
+
 
 
 @pytest.mark.filterwarnings('ignore:(parse_obj_as|schema_json_of|schema_of) is deprecated.*:DeprecationWarning')
