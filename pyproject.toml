@@ -85,7 +85,7 @@ extend-select = ['Q', 'RUF100', 'C90', 'UP', 'I']
 flake8-quotes = {inline-quotes = 'single', multiline-quotes = 'double'}
 mccabe = { max-complexity = 14 }
 isort = { known-first-party = ['pydantic_settings', 'tests'] }
-target-version = "py37"
+target-version = 'py37'
 
 [tool.black]
 color = true

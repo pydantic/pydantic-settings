@@ -12,7 +12,6 @@ This makes it easy to:
 For example:
 
 ```py
-import os
 from typing import Any, Callable, Set
 
 from pydantic import (
@@ -58,10 +57,6 @@ class Settings(BaseSettings):
     model_config = ConfigDict(env_prefix='my_prefix_')  # defaults to no prefix, i.e. ""
 
 
-# Set environment variables
-os.environ['my_auth_key'] = 'xxx'
-os.environ['my_api_key'] = 'xxx'
-
 print(Settings().model_dump())
 """
 {
@@ -75,9 +70,6 @@ print(Settings().model_dump())
     'more_settings': {'foo': 'bar', 'apple': 1},
 }
 """
-
-os.environ.pop('my_auth_key')
-os.environ.pop('my_api_key')
 ```
 
 ## Environment variable names
@@ -154,9 +146,6 @@ export SUB_MODEL__DEEP__V4=v4
 You could load a settings module thus:
 
 ```py
-import os
-from pprint import pprint
-
 from pydantic import BaseModel, ConfigDict
 
 from pydantic_settings import BaseSettings
@@ -180,32 +169,13 @@ class Settings(BaseSettings):
     model_config = ConfigDict(env_nested_delimiter='__')
 
 
-# Set environment variables
-os.environ['V0'] = '0'
-os.environ['SUB_MODEL'] = '{"v1": "json-1", "v2": "json-2"}'
-os.environ['SUB_MODEL__V2'] = 'nested-2'
-os.environ['SUB_MODEL__V3'] = '3'
-os.environ['SUB_MODEL__DEEP__V4'] = 'v4'
-
-pprint(Settings().model_dump())
+print(Settings().model_dump())
 """
 {
     'v0': '0',
-    'sub_model': {
-        'v1': 'json-1',
-        'v2': b'nested-2',
-        'v3': 3,
-        'deep': {'v4': 'v4'},
-    },
+    'sub_model': {'v1': 'json-1', 'v2': b'nested-2', 'v3': 3, 'deep': {'v4': 'v4'}},
 }
 """
-
-# Unset environment variables
-os.environ.pop('V0')
-os.environ.pop('SUB_MODEL')
-os.environ.pop('SUB_MODEL__V2')
-os.environ.pop('SUB_MODEL__V3')
-os.environ.pop('SUB_MODEL__DEEP__V4')
 ```
 
 `env_nested_delimiter` can be configured via the `model_config` as shown above, or via the
