@@ -16,14 +16,15 @@ from typing import Any, Callable, Set
 
 from pydantic import (
     AliasChoices,
+    AmqpDsn,
     BaseModel,
     ConfigDict,
-    ImportString,
-    RedisDsn,
-    PostgresDsn,
-    AmqpDsn,
     Field,
+    ImportString,
+    PostgresDsn,
+    RedisDsn,
 )
+
 from pydantic_settings import BaseSettings
 
 
@@ -38,7 +39,7 @@ class Settings(BaseSettings):
 
     redis_dsn: RedisDsn = Field(
         'redis://user:pass@localhost:6379/1',
-        validation_alias=AliasChoices('service_redis_dsn', 'redis_url')
+        validation_alias=AliasChoices('service_redis_dsn', 'redis_url'),
     )
     pg_dsn: PostgresDsn = 'postgres://user:pass@localhost:5432/foobar'
     amqp_dsn: AmqpDsn = 'amqp://user:pass@localhost:5672/'
@@ -53,7 +54,8 @@ class Settings(BaseSettings):
     # export my_prefix_more_settings='{"foo": "x", "apple": 1}'
     more_settings: SubModel = SubModel()
 
-    model_config = ConfigDict(env_prefix = 'my_prefix_')  # defaults to no prefix, i.e. ""
+    model_config = ConfigDict(env_prefix='my_prefix_')  # defaults to no prefix, i.e. ""
+
 
 print(Settings().model_dump())
 """
@@ -63,7 +65,7 @@ print(Settings().model_dump())
     'redis_dsn': Url('redis://user:pass@localhost:6379/1'),
     'pg_dsn': Url('postgres://user:pass@localhost:5432/foobar'),
     'amqp_dsn': Url('amqp://user:pass@localhost:5672/'),
-    'special_function': <built-in function cos>,
+    'special_function': math.cos,
     'domains': set(),
     'more_settings': {'foo': 'bar', 'apple': 1},
 }
@@ -92,6 +94,7 @@ Case-sensitivity can be turned on through the `model_config`:
 
 ```py
 from pydantic import ConfigDict
+
 from pydantic_settings import BaseSettings
 
 
@@ -144,6 +147,7 @@ You could load a settings module thus:
 
 ```py
 from pydantic import BaseModel, ConfigDict
+
 from pydantic_settings import BaseSettings
 
 
@@ -169,12 +173,7 @@ print(Settings().model_dump())
 """
 {
     'v0': '0',
-    'sub_model': {
-        'v1': 'json-1',
-        'v2': b'nested-2',
-        'v3': 3,
-        'deep': {'v4': 'v4'},
-    },
+    'sub_model': {'v1': 'json-1', 'v2': b'nested-2', 'v3': 3, 'deep': {'v4': 'v4'}},
 }
 """
 ```
@@ -196,11 +195,18 @@ import os
 from typing import Any, List, Tuple, Type
 
 from pydantic.fields import FieldInfo
-from pydantic_settings import BaseSettings, EnvSettingsSource, PydanticBaseSettingsSource
+
+from pydantic_settings import (
+    BaseSettings,
+    EnvSettingsSource,
+    PydanticBaseSettingsSource,
+)
 
 
 class MyCustomSource(EnvSettingsSource):
-    def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
+    def prepare_field_value(
+        self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool
+    ) -> Any:
         if field_name == 'numbers':
             return [int(x) for x in value.split(',')]
         return json.loads(value)
@@ -251,7 +257,7 @@ Once you have your `.env` file filled with variables, *pydantic* supports loadin
 **1.** setting `env_file` (and `env_file_encoding` if you don't want the default encoding of your OS) on `model_config`
 in a `BaseSettings` class:
 
-```py
+```py test="skip" lint="skip"
 class Settings(BaseSettings):
     ...
 
@@ -261,7 +267,7 @@ class Settings(BaseSettings):
 **2.** instantiating a `BaseSettings` derived class with the `_env_file` keyword argument
 (and the `_env_file_encoding` if needed):
 
-```py
+```py test="skip" lint="skip"
 settings = Settings(_env_file='prod.env', _env_file_encoding='utf-8')
 ```
 
@@ -285,12 +291,18 @@ If you need to load multiple dotenv files, you can pass the file paths as a `lis
 Later files in the list/tuple will take priority over earlier files.
 
 ```py
-from pydantic import BaseSettings
+from pydantic import ConfigDict
+
+from pydantic_settings import BaseSettings
+
 
 class Settings(BaseSettings):
     ...
 
-    model_config = ConfigDict(env_file=('.env', '.env.prod'))  # `.env.prod` takes priority over `.env`
+    model_config = ConfigDict(
+        # `.env.prod` takes priority over `.env`
+        env_file=('.env', '.env.prod')
+    )
 ```
 
 You can also use the keyword argument override to tell Pydantic not to load any file at all (even if one is set in
@@ -320,7 +332,7 @@ Once you have your secret files, *pydantic* supports loading it in two ways:
 
 **1.** setting `secrets_dir` on `model_config` in a `BaseSettings` class to the directory where your secret files are stored:
 
-```py
+```py test="skip" lint="skip"
 class Settings(BaseSettings):
     ...
     database_password: str
@@ -330,7 +342,7 @@ class Settings(BaseSettings):
 
 **2.** instantiating a `BaseSettings` derived class with the `_secrets_dir` keyword argument:
 
-```py
+```py test="skip" lint="skip"
 settings = Settings(_secrets_dir='/var/run')
 ```
 
@@ -352,7 +364,7 @@ and using secrets in Docker see the official
 [Docker documentation](https://docs.docker.com/engine/reference/commandline/secret/).
 
 First, define your Settings
-```py
+```py test="skip" lint="skip"
 class Settings(BaseSettings):
     my_secret_data: str
 
@@ -399,7 +411,9 @@ The order of the returned callables decides the priority of inputs; first item i
 
 ```py
 from typing import Tuple, Type
+
 from pydantic import PostgresDsn
+
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
 
@@ -436,6 +450,7 @@ from typing import Any, Dict, Tuple, Type
 
 from pydantic import ConfigDict
 from pydantic.fields import FieldInfo
+
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
 
@@ -448,22 +463,31 @@ class JsonConfigSettingsSource(PydanticBaseSettingsSource):
     when reading `config.json`
     """
 
-    def get_field_value(self, field: FieldInfo, field_name: str) -> Tuple[Any, str, bool]:
+    def get_field_value(
+        self, field: FieldInfo, field_name: str
+    ) -> Tuple[Any, str, bool]:
         encoding = self.config.get('env_file_encoding')
-        file_content_json = json.loads(Path('config.json').read_text(encoding))
+        file_content_json = json.loads(
+            Path('tests/example_test_config.json').read_text(encoding)
+        )
         fiel_value = file_content_json.get(field_name)
         return fiel_value, field_name, False
 
-
-    def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
+    def prepare_field_value(
+        self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool
+    ) -> Any:
         return value
 
     def __call__(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {}
 
         for field_name, field in self.settings_cls.model_fields.items():
-            field_value, field_key, value_is_complex = self.get_field_value(field, field_name)
-            field_value = self.prepare_field_value(field_name, field, field_value, value_is_complex)
+            field_value, field_key, value_is_complex = self.get_field_value(
+                field, field_name
+            )
+            field_value = self.prepare_field_value(
+                field_name, field, field_value, value_is_complex
+            )
             if field_value is not None:
                 d[field_key] = field_value
 
@@ -493,7 +517,7 @@ class Settings(BaseSettings):
 
 
 print(Settings())
-#> foobar='spam'
+#> foobar='test'
 ```
 
 ### Removing sources
@@ -502,6 +526,8 @@ You might also want to disable a source:
 
 ```py
 from typing import Tuple, Type
+
+from pydantic import ValidationError
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
@@ -522,6 +548,14 @@ class Settings(BaseSettings):
         return env_settings, file_secret_settings
 
 
-print(Settings(my_api_key='this is ignored'))
-# requires: `MY_API_KEY` env variable to be set, e.g. `export MY_API_KEY=xxx`
+try:
+    Settings(my_api_key='this is ignored')
+except ValidationError as exc_info:
+    print(exc_info)
+    """
+    1 validation error for Settings
+    my_api_key
+      Field required [type=missing, input_value={}, input_type=dict]
+        For further information visit https://errors.pydantic.dev/2/v/missing
+    """
 ```
