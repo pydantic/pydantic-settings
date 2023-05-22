@@ -7,9 +7,9 @@ from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import is_dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, List, Mapping, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, List, Mapping, Sequence, Tuple, Union, cast
 
-from pydantic import BaseModel
+from pydantic import AliasChoices, AliasPath, BaseModel
 from pydantic._internal._typing_extra import origin_is_union
 from pydantic._internal._utils import deep_update, lenient_issubclass
 from pydantic.fields import FieldInfo
@@ -122,10 +122,13 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             field_name (str): The field name.
 
         Returns:
-            list[tuple[str, str, bool]]: List of tuples, each tuple contanis field_key, env_name, and value_is_complex.
+            list[tuple[str, str, bool]]: List of tuples, each tuple contains field_key, env_name, and value_is_complex.
         """
         field_info: list[tuple[str, str, bool]] = []
-        v_alias = field.validation_alias
+        if isinstance(field.validation_alias, (AliasChoices, AliasPath)):
+            v_alias: str | list[str | int] | list[list[str | int]] | None = field.validation_alias.convert_to_aliases()
+        else:
+            v_alias = field.validation_alias
 
         if v_alias:
             if isinstance(v_alias, list):  # AliasChoices, AliasPath
@@ -133,8 +136,9 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                     if isinstance(alias, str):  # AliasPath
                         field_info.append((alias, self._apply_case_sensitive(alias), True if len(alias) > 1 else False))
                     elif isinstance(alias, list):  # AliasChoices
+                        first_arg = cast(str, alias[0])  # first item of an AliasChoices must be a str
                         field_info.append(
-                            (alias[0], self._apply_case_sensitive(alias[0]), True if len(alias) > 1 else False)
+                            (first_arg, self._apply_case_sensitive(first_arg), True if len(alias) > 1 else False)
                         )
             else:  # string validation alias
                 field_info.append((v_alias, self._apply_case_sensitive(v_alias), False))
