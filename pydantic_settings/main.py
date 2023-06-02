@@ -127,4 +127,5 @@ class BaseSettings(BaseModel):
         env_file_encoding=None,
         env_nested_delimiter=None,
         secrets_dir=None,
+        protected_namespaces=('model_', 'settings_'),
     )

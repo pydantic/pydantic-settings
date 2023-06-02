@@ -1614,3 +1614,19 @@ def test_nested_bytes_field(env):
     assert s.v0 == 'v0'
     assert s.sub_model.v1 == 'v1'
     assert s.sub_model.v2 == b'v2'
+
+
+def test_protected_namespace_defaults():
+    # pydantic default
+    with pytest.raises(NameError, match='Field "model_prefixed_field" has conflict with protected namespace "model_"'):
+
+        class Model(BaseSettings):
+            model_prefixed_field: str
+
+    # pydantic-settings default
+    with pytest.raises(
+        NameError, match='Field "settings_prefixed_field" has conflict with protected namespace "settings_"'
+    ):
+
+        class Model1(BaseSettings):
+            settings_prefixed_field: str
