@@ -123,3 +123,8 @@ module = [
     'dotenv.*',
 ]
 ignore_missing_imports = true
+
+# configuring https://github.com/pydantic/hooky
+[tool.hooky]
+reviewers = ['samuelcolvin', 'dmontagu', 'hramezani']
+require_change_file = false
