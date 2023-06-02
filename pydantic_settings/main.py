@@ -114,7 +114,7 @@ class BaseSettings(BaseModel):
             file_secret_settings=file_secret_settings,
         )
         if sources:
-            _fields = copy.copy(self.__fields__)
+            _fields = copy.copy(self.model_fields)
             sources_values = []
             for source in sources:
                 source_values = source()
