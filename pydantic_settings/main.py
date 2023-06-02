@@ -2,6 +2,8 @@ from __future__ import annotations as _annotations
 
 from pathlib import Path
 from typing import Any
+import logging
+import copy
 
 from pydantic import ConfigDict
 from pydantic._internal._utils import deep_update
@@ -16,6 +18,7 @@ from .sources import (
     SecretsSettingsSource,
 )
 
+log = logging.getLogger('pydantic')
 env_file_sentinel: DotenvType = Path('')
 
 
@@ -111,7 +114,14 @@ class BaseSettings(BaseModel):
             file_secret_settings=file_secret_settings,
         )
         if sources:
-            return deep_update(*reversed([source() for source in sources]))
+            _fields = copy.copy(self.__fields__)
+            sources_values = []
+            for source in sources:
+                source_values = source()
+                sources_values.append(source_values)
+                cross_fields = set(_fields) & set(source_values.keys())
+                log.debug(f'{cross_fields} loaded from {source.__class__.__name__}')
+            return deep_update(*reversed(sources_values))
         else:
             # no one should mean to do this, but I think returning an empty dict is marginally preferable
             # to an informative error and much better than a confusing error
