@@ -114,12 +114,13 @@ class BaseSettings(BaseModel):
             file_secret_settings=file_secret_settings,
         )
         if sources:
-            _fields = copy.copy(self.model_fields)
+            _fields = copy.copy(self.__fields__)
             sources_values = []
             for source in sources:
                 source_values = source()
                 sources_values.append(source_values)
                 cross_fields = set(_fields) & set(source_values.keys())
+                _fields = set(_fields) - cross_fields
                 log.debug(f'{cross_fields} loaded from {source.__class__.__name__}')
             return deep_update(*reversed(sources_values))
         else:
