@@ -18,7 +18,7 @@ from .sources import (
     SecretsSettingsSource,
 )
 
-log = logging.getLogger('pydantic')
+log = logging.getLogger('pydantic.settings')
 env_file_sentinel: DotenvType = Path('')
 
 
@@ -40,12 +40,12 @@ class BaseSettings(BaseModel):
     """
 
     def __init__(
-        __pydantic_self__,
-        _env_file: DotenvType | None = env_file_sentinel,
-        _env_file_encoding: str | None = None,
-        _env_nested_delimiter: str | None = None,
-        _secrets_dir: str | Path | None = None,
-        **values: Any,
+            __pydantic_self__,
+            _env_file: DotenvType | None = env_file_sentinel,
+            _env_file_encoding: str | None = None,
+            _env_nested_delimiter: str | None = None,
+            _secrets_dir: str | Path | None = None,
+            **values: Any,
     ) -> None:
         # Uses something other than `self` the first arg to allow "self" as a settable attribute
         super().__init__(
@@ -60,22 +60,22 @@ class BaseSettings(BaseModel):
 
     @classmethod
     def settings_customise_sources(
-        cls,
-        settings_cls: type[BaseSettings],
-        init_settings: PydanticBaseSettingsSource,
-        env_settings: PydanticBaseSettingsSource,
-        dotenv_settings: PydanticBaseSettingsSource,
-        file_secret_settings: PydanticBaseSettingsSource,
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         return init_settings, env_settings, dotenv_settings, file_secret_settings
 
     def _settings_build_values(
-        self,
-        init_kwargs: dict[str, Any],
-        _env_file: DotenvType | None = None,
-        _env_file_encoding: str | None = None,
-        _env_nested_delimiter: str | None = None,
-        _secrets_dir: str | Path | None = None,
+            self,
+            init_kwargs: dict[str, Any],
+            _env_file: DotenvType | None = None,
+            _env_file_encoding: str | None = None,
+            _env_nested_delimiter: str | None = None,
+            _secrets_dir: str | Path | None = None,
     ) -> dict[str, Any]:
         # Configure built-in sources
         init_settings = InitSettingsSource(self.__class__, init_kwargs=init_kwargs)
