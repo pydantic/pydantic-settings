@@ -445,7 +445,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
         Args:
             field: The field.
-            key: The key(env name).
+            key: The key (env name).
 
         Returns:
             Field if it finds the next field otherwise `None`.
