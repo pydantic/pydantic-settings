@@ -356,7 +356,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
         Returns:
             A tuple contains the key, value if the file exists otherwise `None`, and
-            a flag to determine whether value is complex.
+                a flag to determine whether value is complex.
         """
 
         env_val: str | None = None
