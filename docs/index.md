@@ -99,9 +99,9 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    redis_host: str = 'localhost'
-
     model_config = ConfigDict(case_sensitive=True)
+
+    redis_host: str = 'localhost'
 ```
 
 When `case_sensitive` is `True`, the environment variable names must match field names (optionally with a prefix),
@@ -163,10 +163,10 @@ class SubModel(BaseModel):
 
 
 class Settings(BaseSettings):
+    model_config = ConfigDict(env_nested_delimiter='__')
+
     v0: str
     sub_model: SubModel
-
-    model_config = ConfigDict(env_nested_delimiter='__')
 
 
 print(Settings().model_dump())
@@ -259,9 +259,10 @@ in a `BaseSettings` class:
 
 ```py test="skip" lint="skip"
 class Settings(BaseSettings):
+    model_config = ConfigDict(env_file='.env', env_file_encoding = 'utf-8')
+
     ...
 
-    model_config = ConfigDict(env_file='.env', env_file_encoding = 'utf-8')
 ```
 
 **2.** instantiating a `BaseSettings` derived class with the `_env_file` keyword argument
@@ -297,12 +298,12 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    ...
-
     model_config = ConfigDict(
         # `.env.prod` takes priority over `.env`
         env_file=('.env', '.env.prod')
     )
+
+    ...
 ```
 
 You can also use the keyword argument override to tell Pydantic not to load any file at all (even if one is set in
@@ -334,10 +335,11 @@ Once you have your secret files, *pydantic* supports loading it in two ways:
 
 ```py test="skip" lint="skip"
 class Settings(BaseSettings):
+    model_config = ConfigDict(secrets_dir='/var/run')
+
     ...
     database_password: str
 
-    model_config = ConfigDict(secrets_dir='/var/run')
 ```
 
 **2.** instantiating a `BaseSettings` derived class with the `_secrets_dir` keyword argument:
@@ -366,9 +368,9 @@ and using secrets in Docker see the official
 First, define your Settings
 ```py test="skip" lint="skip"
 class Settings(BaseSettings):
-    my_secret_data: str
-
     model_config = ConfigDict(secrets_dir='/run/secrets')
+
+    my_secret_data: str
 ```
 !!! note
     By default Docker uses `/run/secrets` as the target mount point. If you want to use a different location, change
@@ -495,9 +497,9 @@ class JsonConfigSettingsSource(PydanticBaseSettingsSource):
 
 
 class Settings(BaseSettings):
-    foobar: str
-
     model_config = ConfigDict(env_file_encoding='utf-8')
+
+    foobar: str
 
     @classmethod
     def settings_customise_sources(
