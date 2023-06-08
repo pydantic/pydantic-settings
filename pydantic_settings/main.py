@@ -34,6 +34,14 @@ class BaseSettings(BaseModel):
 
     This is useful in production for secrets you do not wish to save in code, it plays nicely with docker(-compose),
     Heroku and any 12 factor app design.
+
+    All the bellow attributes can be set via `model_config`.
+
+    Args:
+        _env_file: The env file(s) to load settings values from. Defaults to `Path('')`.
+        _env_file_encoding: The env file encoding. e.g. `'latin-1'`. Defaults to `None`.
+        _env_nested_delimiter: The nested env values delimiter. Defaults to `None`.
+        _secrets_dir: The secret files directory. Defaults to `None`.
     """
 
     def __init__(
@@ -64,6 +72,19 @@ class BaseSettings(BaseModel):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """
+        Define the sources and their order for loading the settings values.
+
+        Args:
+            settings_cls: The Settings class.
+            init_settings: The `InitSettingsSource` instance.
+            env_settings: The `EnvSettingsSource` instance.
+            dotenv_settings: The `DotEnvSettingsSource` instance.
+            file_secret_settings: The `SecretsSettingsSource` instance.
+
+        Returns:
+            A tuple containing the sources and their order for loading the settings values.
+        """
         return init_settings, env_settings, dotenv_settings, file_secret_settings
 
     def _settings_build_values(

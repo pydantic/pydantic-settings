@@ -45,11 +45,11 @@ class PydanticBaseSettingsSource(ABC):
         This is an abstract method that should be overrided in every settings source classes.
 
         Args:
-            field (FieldInfo): The field.
-            field_name (str): The field name.
+            field: The field.
+            field_name: The field name.
 
         Returns:
-            tuple[str, Any, bool]: The key, value and a flag to determine whether value is complex.
+            A tuple contains the key, value and a flag to determine whether value is complex.
         """
         pass
 
@@ -58,10 +58,10 @@ class PydanticBaseSettingsSource(ABC):
         Checks whether a field is complex, in which case it will attempt to be parsed as JSON.
 
         Args:
-            field (FieldInfo): The field.
+            field: The field.
 
         Returns:
-            bool: Whether the field is complex.
+            Whether the field is complex.
         """
         return _annotation_is_complex(field.annotation)
 
@@ -70,13 +70,13 @@ class PydanticBaseSettingsSource(ABC):
         Prepares the value of a field.
 
         Args:
-            field_name (str): The field name.
-            field (FieldInfo): The field.
-            value (Any): The value of the field that has to be prepared.
+            field_name: The field name.
+            field: The field.
+            value: The value of the field that has to be prepared.
             value_is_complex: A flag to determine whether value is complex.
 
         Returns:
-            Any: The prepared value.
+            The prepared value.
         """
         if self.field_is_complex(field) or value_is_complex:
             return json.loads(value)
@@ -88,6 +88,10 @@ class PydanticBaseSettingsSource(ABC):
 
 
 class InitSettingsSource(PydanticBaseSettingsSource):
+    """
+    Source class for loading values provided during settings class initialization.
+    """
+
     def __init__(self, settings_cls: type[BaseSettings], init_kwargs: dict[str, Any]):
         self.init_kwargs = init_kwargs
         super().__init__(settings_cls)
@@ -236,6 +240,10 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
 
 class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
+    """
+    Source class for loading settings values from secret files.
+    """
+
     def __init__(self, settings_cls: type[BaseSettings], secrets_dir: str | Path | None):
         self.secrets_dir = secrets_dir
         super().__init__(settings_cls)
@@ -264,6 +272,14 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
     def find_case_path(cls, dir_path: Path, file_name: str, case_sensitive: bool) -> Path | None:
         """
         Find a file within path's directory matching filename, optionally ignoring case.
+
+        Args:
+            dir_path: Directory path.
+            file_name: File name.
+            case_sensitive: Whether to search for file name case sensitively.
+
+        Returns:
+            Whether file path or `None` if file does not exist in directory.
         """
         for f in dir_path.iterdir():
             if f.name == file_name:
@@ -273,6 +289,18 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         return None
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        """
+        Gets the value for field from secret file and a flag to determine whether value is complex.
+
+        Args:
+            field: The field.
+            field_name: The field name.
+
+        Returns:
+            A tuple contains the key, value if the file exists otherwise `None`, and
+                a flag to determine whether value is complex.
+        """
+
         for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
             path = self.find_case_path(
                 self.secrets_path, env_name, self.settings_cls.model_config.get('case_sensitive', False)
@@ -296,6 +324,10 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
 
 
 class EnvSettingsSource(PydanticBaseEnvSettingsSource):
+    """
+    Source class for loading settings values from environment variables.
+    """
+
     def __init__(
         self,
         settings_cls: type[BaseSettings],
@@ -315,6 +347,18 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         return {k.lower(): v for k, v in os.environ.items()}
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        """
+        Gets the value for field from environment variables and a flag to determine whether value is complex.
+
+        Args:
+            field: The field.
+            field_name: The field name.
+
+        Returns:
+            A tuple contains the key, value if the file exists otherwise `None`, and
+                a flag to determine whether value is complex.
+        """
+
         env_val: str | None = None
         for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
             env_val = self.env_vars.get(env_name)
@@ -324,6 +368,22 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         return env_val, field_key, value_is_complex
 
     def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
+        """
+        Prepare value for the field.
+
+        * Extract value for nested field.
+        * Deserialize value to python object for complex field.
+
+        Args:
+            field: The field.
+            field_name: The field name.
+
+        Returns:
+            A tuple contains prepared value for the field.
+
+        Raises:
+            ValuesError: When There is an error in deserializing value for complex field.
+        """
         is_complex, allow_parse_failure = self._field_is_complex(field)
         if is_complex or value_is_complex:
             if value is None:
@@ -382,6 +442,13 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         Then:
             next_field(sub_model, 'vals') Returns the `vals` field of `SubModel` class
             next_field(sub_model, 'sub_sub_model') Returns `sub_sub_model` field of `SubModel` class
+
+        Args:
+            field: The field.
+            key: The key (env name).
+
+        Returns:
+            Field if it finds the next field otherwise `None`.
         """
         if not field or origin_is_union(get_origin(field.annotation)):
             # no support for Unions of complex BaseSettings fields
@@ -396,6 +463,14 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         Process env_vars and extract the values of keys containing env_nested_delimiter into nested dictionaries.
 
         This is applied to a single field, hence filtering by env_var prefix.
+
+        Args:
+            field_name: The field name.
+            field: The field.
+            env_vars: Environment variables.
+
+        Returns:
+            A dictionaty contains extracted values from nested env values.
         """
         prefixes = [
             f'{env_name}{self.env_nested_delimiter}' for _, env_name, _ in self._extract_field_info(field, field_name)
@@ -437,6 +512,10 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
 
 class DotEnvSettingsSource(EnvSettingsSource):
+    """
+    Source class for loading settings values from env files.
+    """
+
     def __init__(
         self,
         settings_cls: type[BaseSettings],
@@ -512,18 +591,6 @@ def read_env_file(
         return {k.lower(): v for k, v in file_vars.items()}
     else:
         return file_vars
-
-
-def find_case_path(dir_path: Path, file_name: str, case_sensitive: bool) -> Path | None:
-    """
-    Find a file within path's directory matching filename, optionally ignoring case.
-    """
-    for f in dir_path.iterdir():
-        if f.name == file_name:
-            return f
-        elif not case_sensitive and f.name.lower() == file_name.lower():
-            return f
-    return None
 
 
 def _annotation_is_complex(annotation: type[Any] | None) -> bool:
