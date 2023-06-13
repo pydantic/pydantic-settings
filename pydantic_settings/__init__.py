@@ -1,4 +1,4 @@
-from .main import BaseSettings
+from .main import BaseSettings, SettingsConfigDict
 from .sources import (
     DotEnvSettingsSource,
     EnvSettingsSource,
@@ -10,11 +10,12 @@ from .version import VERSION
 
 __all__ = (
     'BaseSettings',
-    'PydanticBaseSettingsSource',
-    'InitSettingsSource',
-    'SecretsSettingsSource',
-    'EnvSettingsSource',
     'DotEnvSettingsSource',
+    'EnvSettingsSource',
+    'InitSettingsSource',
+    'PydanticBaseSettingsSource',
+    'SecretsSettingsSource',
+    'SettingsConfigDict',
     '__version__',
 )
 
