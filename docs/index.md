@@ -73,19 +73,19 @@ print(Settings().model_dump())
 1. The environment variable name is overridden using `validation_alias`. In this case, the environment variable
    `my_auth_key` will be read instead of `auth_key`.
 
-    Check [`Field`](TODO: Add link when available) for more information.
+    Check the [`Field` documentation](/usage/fields/) for more information.
 
 2. The `AliasChoices` class allows to have multiple environment variable names for a single field.
    The first environment variable that is found will be used.
 
-    Check [`AliasChoices`](TODO: Add link when available) for more information.
+    Check the [`AliasChoices`](TODO: Add link when available) for more information.
 
 3. The `ImportString` class allows to import an object from a string.
    In this case, the environment variable `special_function` will be read and the function `math.cos` will be imported.
 
 4. The `env_prefix` config setting allows to set a prefix for all environment variables.
 
-    Check [Environment variable names](#environment-variable-names) for more information.
+    Check the [Environment variable names documentation](#environment-variable-names) for more information.
 
 ## Environment variable names
 
@@ -112,11 +112,10 @@ If you want to change the environment variable name for a single field, you can 
 
 There are two ways to do this:
 
-* Use `Field(validation_alias=...)` (see `auth_key` above)
-* Use `Field(alias=...)` (see `api_key` above)
+* Using `Field(alias=...)` (see `api_key` above)
+* Using `Field(validation_alias=...)` (see `auth_key` above)
 
-TODO: Change the link below when available.
-Check [`Alias`] for more information about aliases.
+Check the [`Field` aliases documentation](/usage/fields#field-aliases) for more information about aliases.
 
 ### Case-sensitivity
 
