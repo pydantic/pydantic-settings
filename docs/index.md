@@ -141,7 +141,8 @@ all upper-case, you should name attribute all upper-case too. You can still name
 you like through `Field(validation_alias=...)`.
 
 !!! warning
-    In Pydantic **V1** `case_sensitive` is `False` by default and all variable names are converted to lower-case internally.
+    In Pydantic V1, when `BaseSettings` was provided by the Pydantic library, `case_sensitive` was `False`
+    by default, and all variable names were converted to lower-case internally.
     If you want to define upper-case variable names on nested models like `SubModel` you have to
     set `case_sensitive=True` to disable this behaviour.
 
