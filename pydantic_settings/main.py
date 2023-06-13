@@ -46,6 +46,8 @@ class BaseSettings(BaseModel):
 
     def __init__(
         __pydantic_self__,
+        _case_sensitive: bool | None = None,
+        _env_prefix: str | None = None,
         _env_file: DotenvType | None = env_file_sentinel,
         _env_file_encoding: str | None = None,
         _env_nested_delimiter: str | None = None,
@@ -56,6 +58,8 @@ class BaseSettings(BaseModel):
         super().__init__(
             **__pydantic_self__._settings_build_values(
                 values,
+                _case_sensitive=_case_sensitive,
+                _env_prefix=_env_prefix,
                 _env_file=_env_file,
                 _env_file_encoding=_env_file_encoding,
                 _env_nested_delimiter=_env_nested_delimiter,
@@ -90,38 +94,46 @@ class BaseSettings(BaseModel):
     def _settings_build_values(
         self,
         init_kwargs: dict[str, Any],
+        _case_sensitive: bool | None = None,
+        _env_prefix: str | None = None,
         _env_file: DotenvType | None = None,
         _env_file_encoding: str | None = None,
         _env_nested_delimiter: str | None = None,
         _secrets_dir: str | Path | None = None,
     ) -> dict[str, Any]:
+        # Determine settings config values
+        case_sensitive = _case_sensitive if _case_sensitive is not None else self.model_config.get('case_sensitive')
+        env_prefix = _env_prefix if _env_prefix is not None else self.model_config.get('env_prefix')
+        env_file = _env_file if _env_file != env_file_sentinel else self.model_config.get('env_file')
+        env_file_encoding = (
+            _env_file_encoding if _env_file_encoding is not None else self.model_config.get('env_file_encoding')
+        )
+        env_nested_delimiter = (
+            _env_nested_delimiter
+            if _env_nested_delimiter is not None
+            else self.model_config.get('env_nested_delimiter')
+        )
+        secrets_dir = _secrets_dir or self.model_config.get('secrets_dir')
+
         # Configure built-in sources
         init_settings = InitSettingsSource(self.__class__, init_kwargs=init_kwargs)
         env_settings = EnvSettingsSource(
             self.__class__,
-            env_nested_delimiter=(
-                _env_nested_delimiter
-                if _env_nested_delimiter is not None
-                else self.model_config.get('env_nested_delimiter')
-            ),
-            env_prefix_len=len(self.model_config.get('env_prefix', '')),
+            case_sensitive=case_sensitive,
+            env_prefix=env_prefix,
+            env_nested_delimiter=env_nested_delimiter,
         )
         dotenv_settings = DotEnvSettingsSource(
             self.__class__,
-            env_file=(_env_file if _env_file != env_file_sentinel else self.model_config.get('env_file')),
-            env_file_encoding=(
-                _env_file_encoding if _env_file_encoding is not None else self.model_config.get('env_file_encoding')
-            ),
-            env_nested_delimiter=(
-                _env_nested_delimiter
-                if _env_nested_delimiter is not None
-                else self.model_config.get('env_nested_delimiter')
-            ),
-            env_prefix_len=len(self.model_config.get('env_prefix', '')),
+            env_file=env_file,
+            env_file_encoding=env_file_encoding,
+            case_sensitive=case_sensitive,
+            env_prefix=env_prefix,
+            env_nested_delimiter=env_nested_delimiter,
         )
 
         file_secret_settings = SecretsSettingsSource(
-            self.__class__, secrets_dir=_secrets_dir or self.model_config.get('secrets_dir')
+            self.__class__, secrets_dir=secrets_dir, case_sensitive=case_sensitive, env_prefix=env_prefix
         )
         # Provide a hook to set built-in sources priority and add / remove sources
         sources = self.settings_customise_sources(
