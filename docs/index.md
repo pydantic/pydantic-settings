@@ -139,6 +139,7 @@ In case of nested models, the `case_sensitive` setting will be applied to all ne
 
 ```py
 import os
+
 from pydantic import ValidationError
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -154,14 +155,11 @@ class Settings(BaseSettings):
 
     redis: RedisSettings
 
+
 os.environ['redis'] = '{"host": "localhost", "port": 6379}'
 print(Settings().model_dump())
-"""
-{
-    'redis': {'host': 'localhost', 'port': 6379},
-}
-"""
-os.environ['redis'] = '{"HOST": "localhost", "port": 6379}'  # note the upper-case `HOST`
+#> {'redis': {'host': 'localhost', 'port': 6379}}
+os.environ['redis'] = '{"HOST": "localhost", "port": 6379}'  # (1)!
 try:
     Settings()
 except ValidationError as e:
@@ -169,11 +167,15 @@ except ValidationError as e:
     """
     2 validation errors for RedisSettings
     host
-    Field required [type=missing, input_value={'HOST': 'localhost', 'port': 6379}, input_type=dict]
+      Field required [type=missing, input_value={'HOST': 'localhost', 'port': 6379}, input_type=dict]
+        For further information visit https://errors.pydantic.dev/2/v/missing
     HOST
       Extra inputs are not permitted [type=extra_forbidden, input_value='localhost', input_type=str]
+        For further information visit https://errors.pydantic.dev/2/v/extra_forbidden
     """
 ```
+
+1. Note that the `host` field is not found because the environment variable name is `HOST` (all upper-case).
 
 !!! note
     On Windows, Python's `os` module always treats environment variables as case-insensitive, so the
@@ -207,6 +209,7 @@ You could load them into the following settings model:
 
 ```py
 from pydantic import BaseModel
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -232,12 +235,7 @@ print(Settings().model_dump())
 """
 {
     'v0': '0',
-    'sub_model': {
-        'v1': 'json-1',
-        'v2': b'nested-2',
-        'v3': 3,
-        'deep': {'v4': 'v4'},
-    },
+    'sub_model': {'v1': 'json-1', 'v2': b'nested-2', 'v3': 3, 'deep': {'v4': 'v4'}},
 }
 """
 ```
@@ -499,7 +497,11 @@ from typing import Any, Dict, Tuple, Type
 
 from pydantic.fields import FieldInfo
 
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 
 class JsonConfigSettingsSource(PydanticBaseSettingsSource):
