@@ -18,14 +18,13 @@ from pydantic import (
     AliasChoices,
     AmqpDsn,
     BaseModel,
-    ConfigDict,
     Field,
     ImportString,
     PostgresDsn,
     RedisDsn,
 )
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class SubModel(BaseModel):
@@ -34,17 +33,16 @@ class SubModel(BaseModel):
 
 
 class Settings(BaseSettings):
-    auth_key: str = Field(validation_alias='my_auth_key')
-    api_key: str = Field(validation_alias='my_api_key')
+    auth_key: str = Field(validation_alias='my_auth_key')  # (1)!
 
     redis_dsn: RedisDsn = Field(
         'redis://user:pass@localhost:6379/1',
-        validation_alias=AliasChoices('service_redis_dsn', 'redis_url'),
+        validation_alias=AliasChoices('service_redis_dsn', 'redis_url'),  # (2)!
     )
     pg_dsn: PostgresDsn = 'postgres://user:pass@localhost:5432/foobar'
     amqp_dsn: AmqpDsn = 'amqp://user:pass@localhost:5672/'
 
-    special_function: ImportString[Callable[[Any], Any]] = 'math.cos'
+    special_function: ImportString[Callable[[Any], Any]] = 'math.cos'  # (3)!
 
     # to override domains:
     # export my_prefix_domains='["foo.com", "bar.com"]'
@@ -54,14 +52,13 @@ class Settings(BaseSettings):
     # export my_prefix_more_settings='{"foo": "x", "apple": 1}'
     more_settings: SubModel = SubModel()
 
-    model_config = ConfigDict(env_prefix='my_prefix_')  # defaults to no prefix, i.e. ""
+    model_config = SettingsConfigDict(env_prefix='my_prefix_')  # (4)!
 
 
 print(Settings().model_dump())
 """
 {
     'auth_key': 'xxx',
-    'api_key': 'xxx',
     'redis_dsn': Url('redis://user:pass@localhost:6379/1'),
     'pg_dsn': Url('postgres://user:pass@localhost:5432/foobar'),
     'amqp_dsn': Url('amqp://user:pass@localhost:5672/'),
@@ -72,47 +69,113 @@ print(Settings().model_dump())
 """
 ```
 
+1. The environment variable name is overridden using `validation_alias`. In this case, the environment variable
+   `my_auth_key` will be read instead of `auth_key`.
+
+    Check the [`Field` documentation](/usage/fields/) for more information.
+
+2. The `AliasChoices` class allows to have multiple environment variable names for a single field.
+   The first environment variable that is found will be used.
+
+    Check the [`AliasChoices`](/usage/fields/#aliaspath-and-aliaschoices) for more information.
+
+3. The `ImportString` class allows to import an object from a string.
+   In this case, the environment variable `special_function` will be read and the function `math.cos` will be imported.
+
+4. The `env_prefix` config setting allows to set a prefix for all environment variables.
+
+    Check the [Environment variable names documentation](#environment-variable-names) for more information.
+
 ## Environment variable names
 
-The following rules are used to determine which environment variable(s) are read for a given field:
+By default, the environment variable name is the same as the field name.
 
-* By default, the environment variable name is built by concatenating the prefix and field name.
-  * For example, to override `special_function` above, you could use:
-
-          export my_prefix_special_function='foo.bar'
-
-  * Note : The default prefix is an empty string.
-
-* Custom environment variable names can be set like:
-  * `Field(validation_alias=...)` (see `api_key` and `redis_dsn` above)
-* When specifying custom environment variable names, either a string, `AliasChoices`, `AliasPath` my be provided.
-  * `env_prefix` is not considered.
-  * When specifying a `AliasChoices`, order matters: the first detected value is used.
-  * For example, for `redis_dsn` above, `service_redis_dsn` would take precedence over `redis_url`.
-
-Case-sensitivity can be turned on through the `model_config`:
+You can change the prefix for all environment variables by setting the `env_prefix` config setting:
 
 ```py
-from pydantic import ConfigDict
-
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = ConfigDict(case_sensitive=True)
+    model_config = SettingsConfigDict(env_prefix='my_prefix_')
+
+    auth_key: str = 'xxx'  # will be read from `my_prefix_auth_key`
+```
+
+!!! note
+    The default `env_prefix` is `''` (empty string).
+
+If you want to change the environment variable name for a single field, you can use an alias.
+
+There are two ways to do this:
+
+* Using `Field(alias=...)` (see `api_key` above)
+* Using `Field(validation_alias=...)` (see `auth_key` above)
+
+Check the [`Field` aliases documentation](/usage/fields#field-aliases) for more information about aliases.
+
+### Case-sensitivity
+
+By default, environment variable names are case-insensitive.
+
+If you want to make environment variable names case-sensitive, you can set the `case_sensitive` config setting:
+
+```py
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(case_sensitive=True)
 
     redis_host: str = 'localhost'
 ```
 
 When `case_sensitive` is `True`, the environment variable names must match field names (optionally with a prefix),
-so in this example
-`redis_host` could only be modified via `export redis_host`. If you want to name environment variables
+so in this example `redis_host` could only be modified via `export redis_host`. If you want to name environment variables
 all upper-case, you should name attribute all upper-case too. You can still name environment variables anything
 you like through `Field(validation_alias=...)`.
 
-In Pydantic **v1** `case_sensitive` is `False` by default and all variable names are converted to lower-case internally.
-If you want to define upper-case variable names on nested models like `SubModel` you have to
-set `case_sensitive=True` to disable this behaviour.
+In case of nested models, the `case_sensitive` setting will be applied to all nested models.
+
+```py
+import os
+
+from pydantic import ValidationError
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class RedisSettings(BaseSettings):
+    host: str
+    port: int
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(case_sensitive=True)
+
+    redis: RedisSettings
+
+
+os.environ['redis'] = '{"host": "localhost", "port": 6379}'
+print(Settings().model_dump())
+#> {'redis': {'host': 'localhost', 'port': 6379}}
+os.environ['redis'] = '{"HOST": "localhost", "port": 6379}'  # (1)!
+try:
+    Settings()
+except ValidationError as e:
+    print(e)
+    """
+    2 validation errors for RedisSettings
+    host
+      Field required [type=missing, input_value={'HOST': 'localhost', 'port': 6379}, input_type=dict]
+        For further information visit https://errors.pydantic.dev/2/v/missing
+    HOST
+      Extra inputs are not permitted [type=extra_forbidden, input_value='localhost', input_type=str]
+        For further information visit https://errors.pydantic.dev/2/v/extra_forbidden
+    """
+```
+
+1. Note that the `host` field is not found because the environment variable name is `HOST` (all upper-case).
 
 !!! note
     On Windows, Python's `os` module always treats environment variables as case-insensitive, so the
@@ -120,20 +183,19 @@ set `case_sensitive=True` to disable this behaviour.
 
 ## Parsing environment variable values
 
-For most simple field types (such as `int`, `float`, `str`, etc.),
-the environment variable value is parsed the same way it would
-be if passed directly to the initialiser (as a string).
+For most simple field types (such as `int`, `float`, `str`, etc.), the environment variable value is parsed
+the same way it would be if passed directly to the initialiser (as a string).
 
-Complex types like `list`, `set`, `dict`, and sub-models are populated from the environment
-by treating the environment variable's value as a JSON-encoded string.
+Complex types like `list`, `set`, `dict`, and sub-models are populated from the environment by treating the
+environment variable's value as a JSON-encoded string.
 
 Another way to populate nested complex variables is to configure your model with the `env_nested_delimiter`
-config setting, then use an env variable with a name pointing to the nested module fields.
+config setting, then use an environment variable with a name pointing to the nested module fields.
 What it does is simply explodes your variable into nested models or dicts.
 So if you define a variable `FOO__BAR__BAZ=123` it will convert it into `FOO={'BAR': {'BAZ': 123}}`
 If you have multiple variables with the same structure they will be merged.
 
-With the following environment variables:
+As an example, given the following environment variables:
 ```bash
 # your environment
 export V0=0
@@ -143,12 +205,12 @@ export SUB_MODEL__V3=3
 export SUB_MODEL__DEEP__V4=v4
 ```
 
-You could load a settings module thus:
+You could load them into the following settings model:
 
 ```py
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class DeepSubModel(BaseModel):
@@ -163,7 +225,7 @@ class SubModel(BaseModel):
 
 
 class Settings(BaseSettings):
-    model_config = ConfigDict(env_nested_delimiter='__')
+    model_config = SettingsConfigDict(env_nested_delimiter='__')
 
     v0: str
     sub_model: SubModel
@@ -234,17 +296,12 @@ print(Settings().model_dump())
 
 ## Dotenv (.env) support
 
-!!! note
-    dotenv file parsing requires [python-dotenv](https://pypi.org/project/python-dotenv/) to be installed.
-    This can be done with either `pip install python-dotenv` or `pip install pydantic[dotenv]`.
-
 Dotenv files (generally named `.env`) are a common pattern that make it easy to use environment variables in a
 platform-independent manner.
 
-A dotenv file follows the same general principles of all environment variables,
-and looks something like:
+A dotenv file follows the same general principles of all environment variables, and it looks like this:
 
-```bash
+```bash title=".env"
 # ignore comment
 ENVIRONMENT="production"
 REDIS_ADDRESS=localhost:6379
@@ -254,18 +311,15 @@ MY_VAR='Hello world'
 
 Once you have your `.env` file filled with variables, *pydantic* supports loading it in two ways:
 
-**1.** setting `env_file` (and `env_file_encoding` if you don't want the default encoding of your OS) on `model_config`
-in a `BaseSettings` class:
+1. Setting the `env_file` (and `env_file_encoding` if you don't want the default encoding of your OS) on `model_config`
+in the `BaseSettings` class:
 
 ```py test="skip" lint="skip"
 class Settings(BaseSettings):
-    model_config = ConfigDict(env_file='.env', env_file_encoding = 'utf-8')
-
-    ...
-
+    model_config = SettingsConfigDict(env_file='.env', env_file_encoding = 'utf-8')
 ```
 
-**2.** instantiating a `BaseSettings` derived class with the `_env_file` keyword argument
+2. Instantiating the `BaseSettings` derived class with the `_env_file` keyword argument
 (and the `_env_file_encoding` if needed):
 
 ```py test="skip" lint="skip"
@@ -287,23 +341,15 @@ Passing a file path via the `_env_file` keyword argument on instantiation (metho
 the value (if any) set on the `model_config` class. If the above snippets were used in conjunction, `prod.env` would be loaded
 while `.env` would be ignored.
 
-If you need to load multiple dotenv files, you can pass the file paths as a `list` or `tuple`.
+If you need to load multiple dotenv files, you can pass multiple file paths as a tuple or list. The files will be
+loaded in order, with each file overriding the previous one.
 
-Later files in the list/tuple will take priority over earlier files.
-
-```py
-from pydantic import ConfigDict
-
-from pydantic_settings import BaseSettings
-
-
+```py test="skip" lint="skip"
 class Settings(BaseSettings):
-    model_config = ConfigDict(
+    model_config = SettingsConfigDict(
         # `.env.prod` takes priority over `.env`
         env_file=('.env', '.env.prod')
     )
-
-    ...
 ```
 
 You can also use the keyword argument override to tell Pydantic not to load any file at all (even if one is set in
@@ -317,32 +363,29 @@ Pydantic settings consider `extra` config in case of dotenv file. It means if yo
 on `model_config` and your dotenv file contains an entry for a field that is not defined in settings model,
 it will raise `ValidationError` in settings construction.
 
-## Secret Support
+## Secrets
 
 Placing secret values in files is a common pattern to provide sensitive configuration to an application.
 
 A secret file follows the same principal as a dotenv file except it only contains a single value and the file name
 is used as the key. A secret file will look like the following:
 
-`/var/run/database_password`:
-```
+``` title="/var/run/database_password"
 super_secret_database_password
 ```
 
 Once you have your secret files, *pydantic* supports loading it in two ways:
 
-**1.** setting `secrets_dir` on `model_config` in a `BaseSettings` class to the directory where your secret files are stored:
+1. Setting the `secrets_dir` on `model_config` in a `BaseSettings` class to the directory where your secret files are stored.
 
 ```py test="skip" lint="skip"
 class Settings(BaseSettings):
-    model_config = ConfigDict(secrets_dir='/var/run')
+    model_config = SettingsConfigDict(secrets_dir='/var/run')
 
-    ...
     database_password: str
-
 ```
 
-**2.** instantiating a `BaseSettings` derived class with the `_secrets_dir` keyword argument:
+2. Instantiating the `BaseSettings` derived class with the `_secrets_dir` keyword argument:
 
 ```py test="skip" lint="skip"
 settings = Settings(_secrets_dir='/var/run')
@@ -365,16 +408,18 @@ To use these secrets in a *pydantic* application the process is simple. More inf
 and using secrets in Docker see the official
 [Docker documentation](https://docs.docker.com/engine/reference/commandline/secret/).
 
-First, define your Settings
+First, define your `Settings` class with a `SettingsConfigDict` that specifies the secrets directory.
+
 ```py test="skip" lint="skip"
 class Settings(BaseSettings):
-    model_config = ConfigDict(secrets_dir='/run/secrets')
+    model_config = SettingsConfigDict(secrets_dir='/run/secrets')
 
     my_secret_data: str
 ```
+
 !!! note
-    By default Docker uses `/run/secrets` as the target mount point. If you want to use a different location, change
-    `Config.secrets_dir` accordingly.
+    By default [Docker uses `/run/secrets`](https://docs.docker.com/engine/swarm/secrets/#how-docker-manages-secrets)
+    as the target mount point. If you want to use a different location, change `Config.secrets_dir` accordingly.
 
 Then, create your secret via the Docker CLI
 ```bash
@@ -450,10 +495,13 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Tuple, Type
 
-from pydantic import ConfigDict
 from pydantic.fields import FieldInfo
 
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 
 class JsonConfigSettingsSource(PydanticBaseSettingsSource):
@@ -497,7 +545,7 @@ class JsonConfigSettingsSource(PydanticBaseSettingsSource):
 
 
 class Settings(BaseSettings):
-    model_config = ConfigDict(env_file_encoding='utf-8')
+    model_config = SettingsConfigDict(env_file_encoding='utf-8')
 
     foobar: str
 
