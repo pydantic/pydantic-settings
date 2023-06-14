@@ -19,7 +19,7 @@ from .sources import (
 env_file_sentinel: DotenvType = Path('')
 
 
-class SettingsConfigDict(ConfigDict):
+class SettingsConfigDict(ConfigDict, total=False):
     case_sensitive: bool
     env_prefix: str
     env_file: DotenvType | None

@@ -18,14 +18,13 @@ from pydantic import (
     AliasChoices,
     AmqpDsn,
     BaseModel,
-    ConfigDict,
     Field,
     ImportString,
     PostgresDsn,
     RedisDsn,
 )
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class SubModel(BaseModel):
@@ -53,7 +52,7 @@ class Settings(BaseSettings):
     # export my_prefix_more_settings='{"foo": "x", "apple": 1}'
     more_settings: SubModel = SubModel()
 
-    model_config = ConfigDict(env_prefix='my_prefix_')  # (4)!
+    model_config = SettingsConfigDict(env_prefix='my_prefix_')  # (4)!
 
 
 print(Settings().model_dump())
@@ -78,7 +77,7 @@ print(Settings().model_dump())
 2. The `AliasChoices` class allows to have multiple environment variable names for a single field.
    The first environment variable that is found will be used.
 
-    Check the [`AliasChoices`](TODO: Add link when available) for more information.
+    Check the [`AliasChoices`](/usage/fields/#aliaspath-and-aliaschoices) for more information.
 
 3. The `ImportString` class allows to import an object from a string.
    In this case, the environment variable `special_function` will be read and the function `math.cos` will be imported.
@@ -94,13 +93,11 @@ By default, the environment variable name is the same as the field name.
 You can change the prefix for all environment variables by setting the `env_prefix` config setting:
 
 ```py
-from pydantic import ConfigDict
-
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = ConfigDict(env_prefix='my_prefix_')
+    model_config = SettingsConfigDict(env_prefix='my_prefix_')
 
     auth_key: str = 'xxx'  # will be read from `my_prefix_auth_key`
 ```
@@ -124,13 +121,11 @@ By default, environment variable names are case-insensitive.
 If you want to make environment variable names case-sensitive, you can set the `case_sensitive` config setting:
 
 ```py
-from pydantic import ConfigDict
-
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = ConfigDict(case_sensitive=True)
+    model_config = SettingsConfigDict(case_sensitive=True)
 
     redis_host: str = 'localhost'
 ```
@@ -140,11 +135,45 @@ so in this example `redis_host` could only be modified via `export redis_host`. 
 all upper-case, you should name attribute all upper-case too. You can still name environment variables anything
 you like through `Field(validation_alias=...)`.
 
-!!! warning
-    In Pydantic V1, when `BaseSettings` was provided by the Pydantic library, `case_sensitive` was `False`
-    by default, and all variable names were converted to lower-case internally.
-    If you want to define upper-case variable names on nested models like `SubModel` you have to
-    set `case_sensitive=True` to disable this behaviour.
+In case of nested models, the `case_sensitive` setting will be applied to all nested models.
+
+```py
+import os
+from pydantic import ValidationError
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class RedisSettings(BaseSettings):
+    host: str
+    port: int
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(case_sensitive=True)
+
+    redis: RedisSettings
+
+os.environ['redis'] = '{"host": "localhost", "port": 6379}'
+print(Settings().model_dump())
+"""
+{
+    'redis': {'host': 'localhost', 'port': 6379},
+}
+"""
+os.environ['redis'] = '{"HOST": "localhost", "port": 6379}'  # note the upper-case `HOST`
+try:
+    Settings()
+except ValidationError as e:
+    print(e)
+    """
+    2 validation errors for RedisSettings
+    host
+    Field required [type=missing, input_value={'HOST': 'localhost', 'port': 6379}, input_type=dict]
+    HOST
+      Extra inputs are not permitted [type=extra_forbidden, input_value='localhost', input_type=str]
+    """
+```
 
 !!! note
     On Windows, Python's `os` module always treats environment variables as case-insensitive, so the
@@ -177,9 +206,8 @@ export SUB_MODEL__DEEP__V4=v4
 You could load them into the following settings model:
 
 ```py
-from pydantic import BaseModel, ConfigDict
-
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class DeepSubModel(BaseModel):
@@ -194,7 +222,7 @@ class SubModel(BaseModel):
 
 
 class Settings(BaseSettings):
-    model_config = ConfigDict(env_nested_delimiter='__')
+    model_config = SettingsConfigDict(env_nested_delimiter='__')
 
     v0: str
     sub_model: SubModel
@@ -204,7 +232,12 @@ print(Settings().model_dump())
 """
 {
     'v0': '0',
-    'sub_model': {'v1': 'json-1', 'v2': b'nested-2', 'v3': 3, 'deep': {'v4': 'v4'}},
+    'sub_model': {
+        'v1': 'json-1',
+        'v2': b'nested-2',
+        'v3': 3,
+        'deep': {'v4': 'v4'},
+    },
 }
 """
 ```
@@ -285,7 +318,7 @@ in the `BaseSettings` class:
 
 ```py test="skip" lint="skip"
 class Settings(BaseSettings):
-    model_config = ConfigDict(env_file='.env', env_file_encoding = 'utf-8')
+    model_config = SettingsConfigDict(env_file='.env', env_file_encoding = 'utf-8')
 ```
 
 2. Instantiating the `BaseSettings` derived class with the `_env_file` keyword argument
@@ -315,7 +348,7 @@ loaded in order, with each file overriding the previous one.
 
 ```py test="skip" lint="skip"
 class Settings(BaseSettings):
-    model_config = ConfigDict(
+    model_config = SettingsConfigDict(
         # `.env.prod` takes priority over `.env`
         env_file=('.env', '.env.prod')
     )
@@ -349,7 +382,7 @@ Once you have your secret files, *pydantic* supports loading it in two ways:
 
 ```py test="skip" lint="skip"
 class Settings(BaseSettings):
-    model_config = ConfigDict(secrets_dir='/var/run')
+    model_config = SettingsConfigDict(secrets_dir='/var/run')
 
     database_password: str
 ```
@@ -377,11 +410,11 @@ To use these secrets in a *pydantic* application the process is simple. More inf
 and using secrets in Docker see the official
 [Docker documentation](https://docs.docker.com/engine/reference/commandline/secret/).
 
-First, define your `Settings` class with a `ConfigDict` that specifies the secrets directory.
+First, define your `Settings` class with a `SettingsConfigDict` that specifies the secrets directory.
 
 ```py test="skip" lint="skip"
 class Settings(BaseSettings):
-    model_config = ConfigDict(secrets_dir='/run/secrets')
+    model_config = SettingsConfigDict(secrets_dir='/run/secrets')
 
     my_secret_data: str
 ```
@@ -464,10 +497,9 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Tuple, Type
 
-from pydantic import ConfigDict
 from pydantic.fields import FieldInfo
 
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 
 class JsonConfigSettingsSource(PydanticBaseSettingsSource):
@@ -511,7 +543,7 @@ class JsonConfigSettingsSource(PydanticBaseSettingsSource):
 
 
 class Settings(BaseSettings):
-    model_config = ConfigDict(env_file_encoding='utf-8')
+    model_config = SettingsConfigDict(env_file_encoding='utf-8')
 
     foobar: str
 
