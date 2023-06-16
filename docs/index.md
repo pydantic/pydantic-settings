@@ -86,6 +86,37 @@ print(Settings().model_dump())
 
     Check the [Environment variable names documentation](#environment-variable-names) for more information.
 
+## Additionnal config values
+
+The following extra configuration values are available when using `BaseSettings`:
+
+* `case_sensitive`: Whether environment variables names should be read with case-sensitivity. Defaults to `False`.
+* `env_prefix`: Prefix for all environment variables. Defaults to `''`.
+* `env_file`: The env file(s) to load settings values from. Defaults to `None`.
+* `env_file_encoding`: The env file encoding, e.g. `'latin-1'`. Defaults to `None`.
+* `env_nested_delimiter`: The nested env values delimiter. Defaults to `None`.
+* `secrets_dir`: The secret files directory. Defaults to `None`.
+
+All of these values will be described in the following sections.
+
+!!! note
+    For better auto-completion, `SettingsConfigDict` can be used.
+
+All of these configuration options can be set during initialization:
+
+```py
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    v1: str = ''
+    model_config = SettingsConfigDict(env_prefix='my_prefix_')
+
+
+# Initialization values take priority over `model_config`.
+Settings(_env_prefix='other_prefix_')
+```
+
 ## Environment variable names
 
 By default, the environment variable name is the same as the field name.
@@ -316,7 +347,7 @@ in the `BaseSettings` class:
 
 ```py test="skip" lint="skip"
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding = 'utf-8')
+    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
 ```
 
 2. Instantiating the `BaseSettings` derived class with the `_env_file` keyword argument
