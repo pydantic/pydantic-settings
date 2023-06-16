@@ -1630,3 +1630,25 @@ def test_protected_namespace_defaults():
 
         class Model1(BaseSettings):
             settings_prefixed_field: str
+
+
+def test_case_sensitive_from_args(monkeypatch):
+    class Settings(BaseSettings):
+        foo: str
+
+    # Need to patch os.environ to get build to work on Windows, where os.environ is case insensitive
+    monkeypatch.setattr(os, 'environ', value={'Foo': 'foo'})
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(_case_sensitive=True)
+    assert exc_info.value.errors(include_url=False) == [
+        {'type': 'missing', 'loc': ('foo',), 'msg': 'Field required', 'input': {}}
+    ]
+
+
+def test_env_prefix_from_args(env):
+    class Settings(BaseSettings):
+        apple: str
+
+    env.set('foobar_apple', 'has_prefix')
+    s = Settings(_env_prefix='foobar_')
+    assert s.apple == 'has_prefix'
