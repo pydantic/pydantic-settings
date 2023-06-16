@@ -534,9 +534,9 @@ class DotEnvSettingsSource(EnvSettingsSource):
         env_prefix: str | None = None,
         env_nested_delimiter: str | None = None,
     ) -> None:
-        super().__init__(settings_cls, case_sensitive, env_prefix, env_nested_delimiter)
         self.env_file = env_file
         self.env_file_encoding = env_file_encoding
+        super().__init__(settings_cls, case_sensitive, env_prefix, env_nested_delimiter)
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
         return self._read_env_files(self.case_sensitive)
