@@ -19,7 +19,7 @@ from .sources import (
 env_file_sentinel: DotenvType = Path('')
 
 
-class SettingsConfigDict(ConfigDict):
+class SettingsConfigDict(ConfigDict, total=False):
     case_sensitive: bool
     env_prefix: str
     env_file: DotenvType | None
@@ -41,7 +41,6 @@ class BaseSettings(BaseModel):
         _case_sensitive: Whether environment variables names should be read with case-sensitivity. Defaults to `None`.
         _env_prefix: Prefix for all environment variables. Defaults to `None`.
         _env_file: The env file(s) to load settings values from. Defaults to `Path('')`.
-        _env_file_encoding: The env file encoding. e.g. `'latin-1'`. Defaults to `None`.
         _env_file_encoding: The env file encoding, e.g. `'latin-1'`. Defaults to `None`.
         _env_nested_delimiter: The nested env values delimiter. Defaults to `None`.
         _secrets_dir: The secret files directory. Defaults to `None`.
