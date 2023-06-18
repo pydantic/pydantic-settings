@@ -86,42 +86,12 @@ print(Settings().model_dump())
 
     Check the [Environment variable names documentation](#environment-variable-names) for more information.
 
-## Additionnal config values
-
-The following extra configuration values are available when using `BaseSettings`:
-
-* `case_sensitive`: Whether environment variables names should be read with case-sensitivity. Defaults to `False`.
-* `env_prefix`: Prefix for all environment variables. Defaults to `''`.
-* `env_file`: The env file(s) to load settings values from. Defaults to `None`.
-* `env_file_encoding`: The env file encoding, e.g. `'latin-1'`. Defaults to `None`.
-* `env_nested_delimiter`: The nested env values delimiter. Defaults to `None`.
-* `secrets_dir`: The secret files directory. Defaults to `None`.
-
-All of these values will be described in the following sections.
-
-!!! note
-    For better auto-completion, `SettingsConfigDict` can be used.
-
-All of these configuration options can be set during initialization:
-
-```py
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class Settings(BaseSettings):
-    v1: str = ''
-    model_config = SettingsConfigDict(env_prefix='my_prefix_')
-
-
-# Initialization values take priority over `model_config`.
-Settings(_env_prefix='other_prefix_')
-```
-
 ## Environment variable names
 
 By default, the environment variable name is the same as the field name.
 
-You can change the prefix for all environment variables by setting the `env_prefix` config setting:
+You can change the prefix for all environment variables by setting the `env_prefix` config setting, 
+or via the `_env_prefix` keyword argument on instantiation:
 
 ```py
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -165,6 +135,8 @@ When `case_sensitive` is `True`, the environment variable names must match field
 so in this example `redis_host` could only be modified via `export redis_host`. If you want to name environment variables
 all upper-case, you should name attribute all upper-case too. You can still name environment variables anything
 you like through `Field(validation_alias=...)`.
+
+Case-sensitivity can also be set via the `_case_sensitive` keyword argument on instantiation.
 
 In case of nested models, the `case_sensitive` setting will be applied to all nested models.
 

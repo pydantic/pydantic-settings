@@ -115,7 +115,7 @@ class BaseSettings(BaseModel):
             if _env_nested_delimiter is not None
             else self.model_config.get('env_nested_delimiter')
         )
-        secrets_dir = _secrets_dir or self.model_config.get('secrets_dir')
+        secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
         # Configure built-in sources
         init_settings = InitSettingsSource(self.__class__, init_kwargs=init_kwargs)
