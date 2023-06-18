@@ -90,7 +90,7 @@ print(Settings().model_dump())
 
 By default, the environment variable name is the same as the field name.
 
-You can change the prefix for all environment variables by setting the `env_prefix` config setting, 
+You can change the prefix for all environment variables by setting the `env_prefix` config setting,
 or via the `_env_prefix` keyword argument on instantiation:
 
 ```py
