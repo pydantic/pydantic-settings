@@ -90,7 +90,8 @@ print(Settings().model_dump())
 
 By default, the environment variable name is the same as the field name.
 
-You can change the prefix for all environment variables by setting the `env_prefix` config setting:
+You can change the prefix for all environment variables by setting the `env_prefix` config setting,
+or via the `_env_prefix` keyword argument on instantiation:
 
 ```py
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -134,6 +135,8 @@ When `case_sensitive` is `True`, the environment variable names must match field
 so in this example `redis_host` could only be modified via `export redis_host`. If you want to name environment variables
 all upper-case, you should name attribute all upper-case too. You can still name environment variables anything
 you like through `Field(validation_alias=...)`.
+
+Case-sensitivity can also be set via the `_case_sensitive` keyword argument on instantiation.
 
 In case of nested models, the `case_sensitive` setting will be applied to all nested models.
 
@@ -316,7 +319,7 @@ in the `BaseSettings` class:
 
 ```py test="skip" lint="skip"
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding = 'utf-8')
+    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
 ```
 
 2. Instantiating the `BaseSettings` derived class with the `_env_file` keyword argument

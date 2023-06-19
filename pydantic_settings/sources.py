@@ -108,8 +108,15 @@ class InitSettingsSource(PydanticBaseSettingsSource):
 
 
 class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
+    def __init__(
+        self, settings_cls: type[BaseSettings], case_sensitive: bool | None = None, env_prefix: str | None = None
+    ) -> None:
+        super().__init__(settings_cls)
+        self.case_sensitive = case_sensitive if case_sensitive is not None else False
+        self.env_prefix = env_prefix if env_prefix is not None else ''
+
     def _apply_case_sensitive(self, value: str) -> str:
-        return value.lower() if not self.config.get('case_sensitive') else value
+        return value.lower() if not self.case_sensitive else value
 
     def _extract_field_info(self, field: FieldInfo, field_name: str) -> list[tuple[str, str, bool]]:
         """
@@ -147,9 +154,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             else:  # string validation alias
                 field_info.append((v_alias, self._apply_case_sensitive(v_alias), False))
         else:
-            field_info.append(
-                (field_name, self._apply_case_sensitive(self.config.get('env_prefix', '') + field_name), False)
-            )
+            field_info.append((field_name, self._apply_case_sensitive(self.env_prefix + field_name), False))
 
         return field_info
 
@@ -231,7 +236,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                 ) from e
 
             if field_value is not None:
-                if not self.config.get('case_sensitive', False) and lenient_issubclass(field.annotation, BaseModel):
+                if not self.case_sensitive and lenient_issubclass(field.annotation, BaseModel):
                     data[field_key] = self._replace_field_names_case_insensitively(field, field_value)
                 else:
                     data[field_key] = field_value
@@ -244,9 +249,15 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
     Source class for loading settings values from secret files.
     """
 
-    def __init__(self, settings_cls: type[BaseSettings], secrets_dir: str | Path | None):
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        secrets_dir: str | Path | None,
+        case_sensitive: bool | None = None,
+        env_prefix: str | None = None,
+    ) -> None:
+        super().__init__(settings_cls, case_sensitive, env_prefix)
         self.secrets_dir = secrets_dir
-        super().__init__(settings_cls)
 
     def __call__(self) -> dict[str, Any]:
         """
@@ -302,9 +313,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         """
 
         for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
-            path = self.find_case_path(
-                self.secrets_path, env_name, self.settings_cls.model_config.get('case_sensitive', False)
-            )
+            path = self.find_case_path(self.secrets_path, env_name, self.case_sensitive)
             if not path:
                 # path does not exist, we curently don't return a warning for this
                 continue
@@ -331,18 +340,18 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
     def __init__(
         self,
         settings_cls: type[BaseSettings],
+        case_sensitive: bool | None = None,
+        env_prefix: str | None = None,
         env_nested_delimiter: str | None = None,
-        env_prefix_len: int = 0,
-    ):
-        super().__init__(settings_cls)
+    ) -> None:
+        super().__init__(settings_cls, case_sensitive, env_prefix)
+        self.env_nested_delimiter = env_nested_delimiter
+        self.env_prefix_len = len(self.env_prefix)
 
-        self.env_nested_delimiter: str | None = env_nested_delimiter
-        self.env_prefix_len: int = env_prefix_len
-
-        self.env_vars: Mapping[str, str | None] = self._load_env_vars()
+        self.env_vars = self._load_env_vars()
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
-        if self.settings_cls.model_config.get('case_sensitive'):
+        if self.case_sensitive:
             return os.environ
         return {k.lower(): v for k, v in os.environ.items()}
 
@@ -521,16 +530,16 @@ class DotEnvSettingsSource(EnvSettingsSource):
         settings_cls: type[BaseSettings],
         env_file: DotenvType | None,
         env_file_encoding: str | None,
+        case_sensitive: bool | None = None,
+        env_prefix: str | None = None,
         env_nested_delimiter: str | None = None,
-        env_prefix_len: int = 0,
-    ):
-        self.env_file: DotenvType | None = env_file
-        self.env_file_encoding: str | None = env_file_encoding
-
-        super().__init__(settings_cls, env_nested_delimiter, env_prefix_len)
+    ) -> None:
+        self.env_file = env_file
+        self.env_file_encoding = env_file_encoding
+        super().__init__(settings_cls, case_sensitive, env_prefix, env_nested_delimiter)
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
-        return self._read_env_files(self.settings_cls.model_config.get('case_sensitive', False))
+        return self._read_env_files(self.case_sensitive)
 
     def _read_env_files(self, case_sensitive: bool) -> Mapping[str, str | None]:
         env_files = self.env_file
@@ -554,7 +563,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
         data: dict[str, Any] = super().__call__()
 
         data_lower_keys: list[str] = []
-        if not self.settings_cls.model_config.get('case_sensitive', False):
+        if not self.case_sensitive:
             data_lower_keys = [x.lower() for x in data.keys()]
 
         # As `extra` config is allowed in dotenv settings source, We have to
