@@ -15,6 +15,7 @@ from pydantic import (
     ConfigDict,
     Field,
     HttpUrl,
+    Json,
     SecretStr,
     ValidationError,
 )
@@ -1652,3 +1653,48 @@ def test_env_prefix_from_args(env):
     env.set('foobar_apple', 'has_prefix')
     s = Settings(_env_prefix='foobar_')
     assert s.apple == 'has_prefix'
+
+
+def test_env_json_field(env):
+    class Settings(BaseSettings):
+        x: Json
+
+    env.set('x', '{"foo": "bar"}')
+
+    s = Settings()
+    assert s.x == {'foo': 'bar'}
+
+    env.set('x', 'test')
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert exc_info.value.errors(include_url=False) == [
+        {
+            'type': 'json_invalid',
+            'loc': ('x',),
+            'msg': 'Invalid JSON: expected ident at line 1 column 2',
+            'input': 'test',
+            'ctx': {'error': 'expected ident at line 1 column 2'},
+        }
+    ]
+
+
+def test_env_json_field_dict(env):
+    class Settings(BaseSettings):
+        x: Json[Dict[str, int]]
+
+    env.set('x', '{"foo": 1}')
+
+    s = Settings()
+    assert s.x == {'foo': 1}
+
+    env.set('x', '{"foo": "bar"}')
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert exc_info.value.errors(include_url=False) == [
+        {
+            'type': 'int_parsing',
+            'loc': ('x', 'foo'),
+            'msg': 'Input should be a valid integer, unable to parse string as an integer',
+            'input': 'bar',
+        }
+    ]

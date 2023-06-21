@@ -63,7 +63,7 @@ class PydanticBaseSettingsSource(ABC):
         Returns:
             Whether the field is complex.
         """
-        return _annotation_is_complex(field.annotation)
+        return _annotation_is_complex(field.annotation, field.metadata)
 
     def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
         """
@@ -602,7 +602,9 @@ def read_env_file(
         return file_vars
 
 
-def _annotation_is_complex(annotation: type[Any] | None) -> bool:
+def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
+    if any(str(md) == 'Json' for md in metadata):
+        return False
     origin = get_origin(annotation)
     return (
         _annotation_is_complex_inner(annotation)
