@@ -14,9 +14,8 @@ from .sources import (
     InitSettingsSource,
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
+    env_file_sentinel,
 )
-
-env_file_sentinel: DotenvType = Path('')
 
 
 class SettingsConfigDict(ConfigDict, total=False):
@@ -158,7 +157,7 @@ class BaseSettings(BaseModel):
         validate_default=True,
         case_sensitive=False,
         env_prefix='',
-        env_file=None,
+        env_file=env_file_sentinel,
         env_file_encoding=None,
         env_nested_delimiter=None,
         secrets_dir=None,
