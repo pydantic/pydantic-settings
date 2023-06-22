@@ -22,7 +22,12 @@ if TYPE_CHECKING:
 
 
 DotenvType = Union[Path, List[Path], Tuple[Path, ...]]
-env_file_sentinel: DotenvType = Path('')
+
+# This is used as default value for `_env_file` in `Settings` class and
+# `env_file` in `DotEnvSettingsSource`. Then passing `None` as `_env_file`
+# during initialization of `Settings` has a special meaning and it will
+# override the `env_file` specified in config.
+ENV_FILE_SENTINEL: DotenvType = Path('')
 
 
 class SettingsError(ValueError):
@@ -531,13 +536,13 @@ class DotEnvSettingsSource(EnvSettingsSource):
     def __init__(
         self,
         settings_cls: type[BaseSettings],
-        env_file: DotenvType | None = env_file_sentinel,
+        env_file: DotenvType | None = ENV_FILE_SENTINEL,
         env_file_encoding: str | None = None,
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
         env_nested_delimiter: str | None = None,
     ) -> None:
-        self.env_file = env_file if env_file != env_file_sentinel else settings_cls.model_config.get('env_file')
+        self.env_file = env_file if env_file != ENV_FILE_SENTINEL else settings_cls.model_config.get('env_file')
         self.env_file_encoding = (
             env_file_encoding if env_file_encoding is not None else settings_cls.model_config.get('env_file_encoding')
         )
