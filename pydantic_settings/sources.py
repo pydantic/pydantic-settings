@@ -23,10 +23,9 @@ if TYPE_CHECKING:
 
 DotenvType = Union[Path, List[Path], Tuple[Path, ...]]
 
-# This is used as default value for `_env_file` in `Settings` class and
-# `env_file` in `DotEnvSettingsSource`. Then passing `None` as `_env_file`
-# during initialization of `Settings` has a special meaning and it will
-# override the `env_file` specified in config.
+# This is used as default value for `_env_file` in the `BaseSettings` class and
+# `env_file` in `DotEnvSettingsSource` so the default can be distinguished from `None`.
+# See the docstring of `BaseSettings` for more details.
 ENV_FILE_SENTINEL: DotenvType = Path('')
 
 

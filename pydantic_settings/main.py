@@ -39,7 +39,9 @@ class BaseSettings(BaseModel):
     Args:
         _case_sensitive: Whether environment variables names should be read with case-sensitivity. Defaults to `None`.
         _env_prefix: Prefix for all environment variables. Defaults to `None`.
-        _env_file: The env file(s) to load settings values from. Defaults to `Path('')`.
+        _env_file: The env file(s) to load settings values from. Defaults to `Path('')`, which
+            means that the value from `model_config['env_file']` should be used. You can also pass
+            `None` to indicate that environment variables should not be loaded from an env file.
         _env_file_encoding: The env file encoding, e.g. `'latin-1'`. Defaults to `None`.
         _env_nested_delimiter: The nested env values delimiter. Defaults to `None`.
         _secrets_dir: The secret files directory. Defaults to `None`.
