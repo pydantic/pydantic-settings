@@ -8,6 +8,7 @@ from pydantic._internal._utils import deep_update
 from pydantic.main import BaseModel
 
 from .sources import (
+    ENV_FILE_SENTINEL,
     DotEnvSettingsSource,
     DotenvType,
     EnvSettingsSource,
@@ -15,8 +16,6 @@ from .sources import (
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
 )
-
-env_file_sentinel: DotenvType = Path('')
 
 
 class SettingsConfigDict(ConfigDict, total=False):
@@ -40,7 +39,9 @@ class BaseSettings(BaseModel):
     Args:
         _case_sensitive: Whether environment variables names should be read with case-sensitivity. Defaults to `None`.
         _env_prefix: Prefix for all environment variables. Defaults to `None`.
-        _env_file: The env file(s) to load settings values from. Defaults to `Path('')`.
+        _env_file: The env file(s) to load settings values from. Defaults to `Path('')`, which
+            means that the value from `model_config['env_file']` should be used. You can also pass
+            `None` to indicate that environment variables should not be loaded from an env file.
         _env_file_encoding: The env file encoding, e.g. `'latin-1'`. Defaults to `None`.
         _env_nested_delimiter: The nested env values delimiter. Defaults to `None`.
         _secrets_dir: The secret files directory. Defaults to `None`.
@@ -50,7 +51,7 @@ class BaseSettings(BaseModel):
         __pydantic_self__,
         _case_sensitive: bool | None = None,
         _env_prefix: str | None = None,
-        _env_file: DotenvType | None = env_file_sentinel,
+        _env_file: DotenvType | None = ENV_FILE_SENTINEL,
         _env_file_encoding: str | None = None,
         _env_nested_delimiter: str | None = None,
         _secrets_dir: str | Path | None = None,
@@ -106,7 +107,7 @@ class BaseSettings(BaseModel):
         # Determine settings config values
         case_sensitive = _case_sensitive if _case_sensitive is not None else self.model_config.get('case_sensitive')
         env_prefix = _env_prefix if _env_prefix is not None else self.model_config.get('env_prefix')
-        env_file = _env_file if _env_file != env_file_sentinel else self.model_config.get('env_file')
+        env_file = _env_file if _env_file != ENV_FILE_SENTINEL else self.model_config.get('env_file')
         env_file_encoding = (
             _env_file_encoding if _env_file_encoding is not None else self.model_config.get('env_file_encoding')
         )

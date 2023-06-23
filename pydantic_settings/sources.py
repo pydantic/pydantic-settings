@@ -23,6 +23,11 @@ if TYPE_CHECKING:
 
 DotenvType = Union[Path, List[Path], Tuple[Path, ...]]
 
+# This is used as default value for `_env_file` in the `BaseSettings` class and
+# `env_file` in `DotEnvSettingsSource` so the default can be distinguished from `None`.
+# See the docstring of `BaseSettings` for more details.
+ENV_FILE_SENTINEL: DotenvType = Path('')
+
 
 class SettingsError(ValueError):
     pass
@@ -252,12 +257,12 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
     def __init__(
         self,
         settings_cls: type[BaseSettings],
-        secrets_dir: str | Path | None,
+        secrets_dir: str | Path | None = None,
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
     ) -> None:
         super().__init__(settings_cls, case_sensitive, env_prefix)
-        self.secrets_dir = secrets_dir
+        self.secrets_dir = secrets_dir if secrets_dir is not None else self.config.get('secrets_dir')
 
     def __call__(self) -> dict[str, Any]:
         """
@@ -345,7 +350,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         env_nested_delimiter: str | None = None,
     ) -> None:
         super().__init__(settings_cls, case_sensitive, env_prefix)
-        self.env_nested_delimiter = env_nested_delimiter
+        self.env_nested_delimiter = (
+            env_nested_delimiter if env_nested_delimiter is not None else self.config.get('env_nested_delimiter')
+        )
         self.env_prefix_len = len(self.env_prefix)
 
         self.env_vars = self._load_env_vars()
@@ -528,14 +535,16 @@ class DotEnvSettingsSource(EnvSettingsSource):
     def __init__(
         self,
         settings_cls: type[BaseSettings],
-        env_file: DotenvType | None,
-        env_file_encoding: str | None,
+        env_file: DotenvType | None = ENV_FILE_SENTINEL,
+        env_file_encoding: str | None = None,
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
         env_nested_delimiter: str | None = None,
     ) -> None:
-        self.env_file = env_file
-        self.env_file_encoding = env_file_encoding
+        self.env_file = env_file if env_file != ENV_FILE_SENTINEL else settings_cls.model_config.get('env_file')
+        self.env_file_encoding = (
+            env_file_encoding if env_file_encoding is not None else settings_cls.model_config.get('env_file_encoding')
+        )
         super().__init__(settings_cls, case_sensitive, env_prefix, env_nested_delimiter)
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
