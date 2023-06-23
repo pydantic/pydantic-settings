@@ -9,7 +9,7 @@ from dataclasses import is_dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, List, Mapping, Sequence, Tuple, Union, cast
 
-from pydantic import AliasChoices, AliasPath, BaseModel
+from pydantic import AliasChoices, AliasPath, BaseModel, Json
 from pydantic._internal._typing_extra import origin_is_union
 from pydantic._internal._utils import deep_update, lenient_issubclass
 from pydantic.fields import FieldInfo
@@ -603,7 +603,7 @@ def read_env_file(
 
 
 def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
-    if any(str(md) == 'Json' for md in metadata):
+    if any(isinstance(md, Json) for md in metadata):  # type: ignore[misc]
         return False
     origin = get_origin(annotation)
     return (
