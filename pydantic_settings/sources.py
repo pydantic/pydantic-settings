@@ -9,7 +9,7 @@ from dataclasses import is_dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, List, Mapping, Sequence, Tuple, Union, cast
 
-from pydantic import AliasChoices, AliasPath, BaseModel
+from pydantic import AliasChoices, AliasPath, BaseModel, Json
 from pydantic._internal._typing_extra import origin_is_union
 from pydantic._internal._utils import deep_update, lenient_issubclass
 from pydantic.fields import FieldInfo
@@ -68,7 +68,7 @@ class PydanticBaseSettingsSource(ABC):
         Returns:
             Whether the field is complex.
         """
-        return _annotation_is_complex(field.annotation)
+        return _annotation_is_complex(field.annotation, field.metadata)
 
     def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
         """
@@ -611,7 +611,9 @@ def read_env_file(
         return file_vars
 
 
-def _annotation_is_complex(annotation: type[Any] | None) -> bool:
+def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
+    if any(isinstance(md, Json) for md in metadata):  # type: ignore[misc]
+        return False
     origin = get_origin(annotation)
     return (
         _annotation_is_complex_inner(annotation)
