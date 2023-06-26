@@ -317,7 +317,10 @@ Once you have your `.env` file filled with variables, *pydantic* supports loadin
 1. Setting the `env_file` (and `env_file_encoding` if you don't want the default encoding of your OS) on `model_config`
 in the `BaseSettings` class:
 
-```py test="skip" lint="skip"
+```py hl_lines="4 5"
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
 ```
@@ -325,7 +328,14 @@ class Settings(BaseSettings):
 2. Instantiating the `BaseSettings` derived class with the `_env_file` keyword argument
 (and the `_env_file_encoding` if needed):
 
-```py test="skip" lint="skip"
+```py hl_lines="8"
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
+
+
 settings = Settings(_env_file='prod.env', _env_file_encoding='utf-8')
 ```
 
@@ -347,7 +357,10 @@ while `.env` would be ignored.
 If you need to load multiple dotenv files, you can pass multiple file paths as a tuple or list. The files will be
 loaded in order, with each file overriding the previous one.
 
-```py test="skip" lint="skip"
+```py
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         # `.env.prod` takes priority over `.env`
@@ -381,7 +394,10 @@ Once you have your secret files, *pydantic* supports loading it in two ways:
 
 1. Setting the `secrets_dir` on `model_config` in a `BaseSettings` class to the directory where your secret files are stored.
 
-```py test="skip" lint="skip"
+```py hl_lines="4 5 6 7"
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(secrets_dir='/var/run')
 
@@ -390,7 +406,7 @@ class Settings(BaseSettings):
 
 2. Instantiating the `BaseSettings` derived class with the `_secrets_dir` keyword argument:
 
-```py test="skip" lint="skip"
+```
 settings = Settings(_secrets_dir='/var/run')
 ```
 
@@ -413,7 +429,10 @@ and using secrets in Docker see the official
 
 First, define your `Settings` class with a `SettingsConfigDict` that specifies the secrets directory.
 
-```py test="skip" lint="skip"
+```py hl_lines="4 5 6 7"
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(secrets_dir='/run/secrets')
 
