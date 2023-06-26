@@ -317,7 +317,7 @@ Once you have your `.env` file filled with variables, *pydantic* supports loadin
 1. Setting the `env_file` (and `env_file_encoding` if you don't want the default encoding of your OS) on `model_config`
 in the `BaseSettings` class:
 
-```py
+```py hl_lines="4 5"
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -328,7 +328,7 @@ class Settings(BaseSettings):
 2. Instantiating the `BaseSettings` derived class with the `_env_file` keyword argument
 (and the `_env_file_encoding` if needed):
 
-```py
+```py hl_lines="8"
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -394,7 +394,7 @@ Once you have your secret files, *pydantic* supports loading it in two ways:
 
 1. Setting the `secrets_dir` on `model_config` in a `BaseSettings` class to the directory where your secret files are stored.
 
-```py
+```py hl_lines="4 5 6 7"
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -429,7 +429,7 @@ and using secrets in Docker see the official
 
 First, define your `Settings` class with a `SettingsConfigDict` that specifies the secrets directory.
 
-```py
+```py hl_lines="4 5 6 7"
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
