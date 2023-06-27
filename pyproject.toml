@@ -126,5 +126,6 @@ ignore_missing_imports = true
 
 # configuring https://github.com/pydantic/hooky
 [tool.hooky]
+assignees = ['samuelcolvin', 'dmontagu', 'hramezani']
 reviewers = ['samuelcolvin', 'dmontagu', 'hramezani']
 require_change_file = false
