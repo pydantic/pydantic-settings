@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
 
 
-DotenvType = Union[Path, List[Path], Tuple[Path, ...]]
+DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
 
 # This is used as default value for `_env_file` in the `BaseSettings` class and
 # `env_file` in `DotEnvSettingsSource` so the default can be distinguished from `None`.
