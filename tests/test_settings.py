@@ -1714,6 +1714,6 @@ def test_custom_env_source_default_values_from_config():
     assert s.model_config['env_prefix'] == 'prefix_'
     assert s.model_config['case_sensitive'] is True
 
-    c = CustomEnvSettingsSource(s)
+    c = CustomEnvSettingsSource(Settings)
     assert c.env_prefix == 'prefix_'
     assert c.case_sensitive is True
