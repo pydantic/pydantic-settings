@@ -1,7 +1,7 @@
 from __future__ import annotations as _annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import ConfigDict
 from pydantic._internal._utils import deep_update
@@ -153,7 +153,7 @@ class BaseSettings(BaseModel):
             # to an informative error and much better than a confusing error
             return {}
 
-    model_config = SettingsConfigDict(
+    model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         extra='forbid',
         arbitrary_types_allowed=True,
         validate_default=True,
