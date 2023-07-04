@@ -32,6 +32,7 @@ from pydantic_settings import (
     InitSettingsSource,
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
+    SettingsConfigDict,
 )
 from pydantic_settings.sources import SettingsError, read_env_file
 
@@ -1698,3 +1699,21 @@ def test_env_json_field_dict(env):
             'input': 'bar',
         }
     ]
+
+
+def test_custom_env_source_default_values_from_config():
+    class CustomEnvSettingsSource(EnvSettingsSource):
+        pass
+
+    class Settings(BaseSettings):
+        foo: str = 'test'
+
+        model_config = SettingsConfigDict(env_prefix='prefix_', case_sensitive=True)
+
+    s = Settings()
+    assert s.model_config['env_prefix'] == 'prefix_'
+    assert s.model_config['case_sensitive'] is True
+
+    c = CustomEnvSettingsSource(s)
+    assert c.env_prefix == 'prefix_'
+    assert c.case_sensitive is True
