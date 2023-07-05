@@ -117,8 +117,8 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         self, settings_cls: type[BaseSettings], case_sensitive: bool | None = None, env_prefix: str | None = None
     ) -> None:
         super().__init__(settings_cls)
-        self.case_sensitive = case_sensitive if case_sensitive is not None else False
-        self.env_prefix = env_prefix if env_prefix is not None else ''
+        self.case_sensitive = case_sensitive if case_sensitive is not None else self.config.get('case_sensitive', False)
+        self.env_prefix = env_prefix if env_prefix is not None else self.config.get('env_prefix', '')
 
     def _apply_case_sensitive(self, value: str) -> str:
         return value.lower() if not self.case_sensitive else value
