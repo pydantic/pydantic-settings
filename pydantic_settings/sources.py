@@ -578,7 +578,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
         # As `extra` config is allowed in dotenv settings source, We have to
         # update data with extra env variabels from dotenv file.
         for env_name, env_value in self.env_vars.items():
-            if env_value is not None:
+            if env_name.startswith(self.env_prefix) and env_value is not None:
                 env_name_without_prefix = env_name[self.env_prefix_len :]
                 first_key, *_ = env_name_without_prefix.split(self.env_nested_delimiter)
 

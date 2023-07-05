@@ -680,6 +680,37 @@ def test_env_file_config(env, tmp_path):
     assert s.c == 'best string'
 
 
+prefix_test_env_file = """\
+# this is a comment
+prefix_A=good string
+# another one, followed by whitespace
+
+prefix_b='better string'
+prefix_c="best string"
+f="random value"
+"""
+
+
+@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
+def test_env_file_with_env_prefix(env, tmp_path):
+    p = tmp_path / '.env'
+    p.write_text(prefix_test_env_file)
+
+    class Settings(BaseSettings):
+        a: str
+        b: str
+        c: str
+
+        model_config = ConfigDict(env_file=p, env_prefix='prefix_')
+
+    env.set('prefix_A', 'overridden var')
+
+    s = Settings()
+    assert s.a == 'overridden var'
+    assert s.b == 'better string'
+    assert s.c == 'best string'
+
+
 @pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_env_file_config_case_sensitive(tmp_path):
     p = tmp_path / '.env'
