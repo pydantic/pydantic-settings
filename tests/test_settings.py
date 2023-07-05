@@ -1620,18 +1620,30 @@ def test_nested_bytes_field(env):
 
 def test_protected_namespace_defaults():
     # pydantic default
-    with pytest.raises(NameError, match='Field "model_prefixed_field" has conflict with protected namespace "model_"'):
+    with pytest.warns(UserWarning, match='Field "model_prefixed_field" has conflict with protected namespace "model_"'):
 
         class Model(BaseSettings):
             model_prefixed_field: str
 
     # pydantic-settings default
     with pytest.raises(
-        NameError, match='Field "settings_prefixed_field" has conflict with protected namespace "settings_"'
+        UserWarning, match='Field "settings_prefixed_field" has conflict with protected namespace "settings_"'
     ):
 
         class Model1(BaseSettings):
             settings_prefixed_field: str
+
+    with pytest.raises(
+        NameError,
+        match=(
+            'Field "settings_customise_sources" conflicts with member <bound method '
+            "BaseSettings.settings_customise_sources of <class 'pydantic_settings.main.BaseSettings'>> "
+            'of protected namespace "settings_".'
+        ),
+    ):
+
+        class Model2(BaseSettings):
+            settings_customise_sources: str
 
 
 def test_case_sensitive_from_args(monkeypatch):
