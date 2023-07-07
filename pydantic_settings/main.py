@@ -28,8 +28,12 @@ class SettingsConfigDict(ConfigDict, total=False):
     secrets_dir: str | Path | None
 
 
-# Extend config_keys by pydantic settings config keys to
+# Extend `config_keys` by pydantic settings config keys to
 # support setting config through class kwargs.
+# Pydantic uses `config_keys` in `pydantic._internal._config.ConfigWrapper.for_model`
+# to extract config keys from model kwargs, So, by adding pydantic settings keys to
+# `config_keys`, they will be considered as valid config keys and will be collected
+# by Pydantic.
 config_keys |= set(SettingsConfigDict.__annotations__.keys())
 
 
