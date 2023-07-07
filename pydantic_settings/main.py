@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from pydantic import ConfigDict
+from pydantic._internal._config import config_keys
 from pydantic._internal._utils import deep_update
 from pydantic.main import BaseModel
 
@@ -25,6 +26,11 @@ class SettingsConfigDict(ConfigDict, total=False):
     env_file_encoding: str | None
     env_nested_delimiter: str | None
     secrets_dir: str | Path | None
+
+
+# Extend config_keys by pydantic settings config keys to
+# support setting config through class kwargs.
+config_keys |= set(SettingsConfigDict.__annotations__.keys())
 
 
 class BaseSettings(BaseModel):
