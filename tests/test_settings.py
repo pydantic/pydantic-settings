@@ -1760,3 +1760,17 @@ def test_custom_env_source_default_values_from_config():
     c = CustomEnvSettingsSource(Settings)
     assert c.env_prefix == 'prefix_'
     assert c.case_sensitive is True
+
+
+def test_model_config_through_class_kwargs(env):
+    class Settings(BaseSettings, env_prefix='foobar_', title='Test Settings Model'):
+        apple: str
+
+    assert Settings.model_config['title'] == 'Test Settings Model'  # pydantic config
+    assert Settings.model_config['env_prefix'] == 'foobar_'  # pydantic-settings config
+
+    assert Settings.model_json_schema()['title'] == 'Test Settings Model'
+
+    env.set('foobar_apple', 'has_prefix')
+    s = Settings()
+    assert s.apple == 'has_prefix'

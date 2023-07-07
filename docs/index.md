@@ -155,7 +155,7 @@ import os
 
 from pydantic import ValidationError
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings
 
 
 class RedisSettings(BaseSettings):
@@ -163,9 +163,7 @@ class RedisSettings(BaseSettings):
     port: int
 
 
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(case_sensitive=True)
-
+class Settings(BaseSettings, case_sensitive=True):
     redis: RedisSettings
 
 
