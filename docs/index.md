@@ -1,4 +1,14 @@
 
+## Installation
+
+Installation is as simple as:
+
+```bash
+pip install pydantic-settings
+```
+
+## Usage
+
 If you create a model that inherits from `BaseSettings`, the model initialiser will attempt to determine
 the values of any fields not passed as keyword arguments by reading from the environment. (Default values
 will still be used if the matching environment variable is not set.)
