@@ -12,7 +12,6 @@ from pydantic import (
     AliasChoices,
     AliasPath,
     BaseModel,
-    ConfigDict,
     Field,
     HttpUrl,
     Json,
@@ -75,7 +74,7 @@ def test_with_prefix(env):
     class Settings(BaseSettings):
         apple: str
 
-        model_config = ConfigDict(env_prefix='foobar_')
+        model_config = SettingsConfigDict(env_prefix='foobar_')
 
     with pytest.raises(ValidationError):
         Settings()
@@ -131,7 +130,7 @@ def test_nested_env_delimiter(env):
         v0_union: Union[SubValue, int]
         top: TopValue
 
-        model_config = ConfigDict(env_nested_delimiter='__')
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
 
     env.set('top', '{"v1": "json-1", "v2": "json-2", "sub": {"v5": "xx"}}')
     env.set('top__sub__v5', '5')
@@ -161,7 +160,7 @@ def test_nested_env_delimiter_with_prefix(env):
     class Settings(BaseSettings):
         subsettings: Subsettings
 
-        model_config = ConfigDict(env_nested_delimiter='_', env_prefix='myprefix_')
+        model_config = SettingsConfigDict(env_nested_delimiter='_', env_prefix='myprefix_')
 
     env.set('myprefix_subsettings_banana', 'banana')
     s = Settings()
@@ -170,7 +169,7 @@ def test_nested_env_delimiter_with_prefix(env):
     class Settings(BaseSettings):
         subsettings: Subsettings
 
-        model_config = ConfigDict(env_nested_delimiter='_', env_prefix='myprefix__')
+        model_config = SettingsConfigDict(env_nested_delimiter='_', env_prefix='myprefix__')
 
     env.set('myprefix__subsettings_banana', 'banana')
     s = Settings()
@@ -181,7 +180,7 @@ def test_nested_env_delimiter_complex_required(env):
     class Cfg(BaseSettings):
         v: str = 'default'
 
-        model_config = ConfigDict(env_nested_delimiter='__')
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
 
     env.set('v__x', 'x')
     env.set('v__y', 'y')
@@ -197,7 +196,7 @@ def test_nested_env_delimiter_aliases(env):
     class Cfg(BaseSettings):
         sub_model: SubModel = Field(validation_alias=AliasChoices('foo', 'bar'))
 
-        model_config = ConfigDict(env_nested_delimiter='__')
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
 
     env.set('foo__v1', '-1-')
     env.set('bar__v2', '-2-')
@@ -430,10 +429,10 @@ def test_env_inheritance_config(env):
     class Parent(BaseSettings):
         foobar: str = Field(None, validation_alias='foobar_parent_from_field')
 
-        model_config = ConfigDict(env_prefix='p_')
+        model_config = SettingsConfigDict(env_prefix='p_')
 
     class Child(Parent):
-        model_config = ConfigDict(env_prefix='prefix_')
+        model_config = SettingsConfigDict(env_prefix='prefix_')
 
     assert Child().foobar == 'foobar_parent_from_field'
 
@@ -450,12 +449,12 @@ def test_env_inheritance_config(env):
     class Parent(BaseSettings):
         foobar: Optional[str]
 
-        model_config = ConfigDict(env_prefix='p_')
+        model_config = SettingsConfigDict(env_prefix='p_')
 
     class Child(Parent):
         foobar: str = Field(None, validation_alias='foobar_child_from_field')
 
-        model_config = ConfigDict(env_prefix='prefix_')
+        model_config = SettingsConfigDict(env_prefix='prefix_')
 
     assert Child().foobar == 'foobar_child_from_field'
 
@@ -508,7 +507,7 @@ def test_validation_alias_with_env_prefix(env):
     class Settings(BaseSettings):
         foobar: str = Field(validation_alias='foo')
 
-        model_config = ConfigDict(env_prefix='p_')
+        model_config = SettingsConfigDict(env_prefix='p_')
 
     env.set('p_foo', 'bar')
     with pytest.raises(ValidationError) as exc_info:
@@ -525,7 +524,7 @@ def test_case_sensitive(monkeypatch):
     class Settings(BaseSettings):
         foo: str
 
-        model_config = ConfigDict(case_sensitive=True)
+        model_config = SettingsConfigDict(case_sensitive=True)
 
     # Need to patch os.environ to get build to work on Windows, where os.environ is case insensitive
     monkeypatch.setattr(os, 'environ', value={'Foo': 'foo'})
@@ -670,7 +669,7 @@ def test_env_file_config(env, tmp_path):
         b: str
         c: str
 
-        model_config = ConfigDict(env_file=p)
+        model_config = SettingsConfigDict(env_file=p)
 
     env.set('A', 'overridden var')
 
@@ -701,7 +700,7 @@ def test_env_file_with_env_prefix(env, tmp_path):
         b: str
         c: str
 
-        model_config = ConfigDict(env_file=p, env_prefix='prefix_')
+        model_config = SettingsConfigDict(env_file=p, env_prefix='prefix_')
 
     env.set('prefix_A', 'overridden var')
 
@@ -721,7 +720,7 @@ def test_env_file_config_case_sensitive(tmp_path):
         b: str
         c: str
 
-        model_config = ConfigDict(env_file=p, case_sensitive=True, extra='ignore')
+        model_config = SettingsConfigDict(env_file=p, case_sensitive=True, extra='ignore')
 
     with pytest.raises(ValidationError) as exc_info:
         Settings()
@@ -751,7 +750,7 @@ export C="best string"
         b: str
         c: str
 
-        model_config = ConfigDict(env_file=p)
+        model_config = SettingsConfigDict(env_file=p)
 
     env.set('A', 'overridden var')
 
@@ -769,7 +768,7 @@ def test_env_file_export_validation_alias(env, tmp_path):
     class Settings(BaseSettings):
         a: str = Field(validation_alias=AliasChoices(AliasPath('a', 'b', 1)))
 
-        model_config = ConfigDict(env_file=p)
+        model_config = SettingsConfigDict(env_file=p)
 
     s = Settings()
     assert s.a == '2'
@@ -783,7 +782,7 @@ def test_env_file_config_custom_encoding(tmp_path):
     class Settings(BaseSettings):
         pika: str
 
-        model_config = ConfigDict(env_file=p, env_file_encoding='latin-1')
+        model_config = SettingsConfigDict(env_file=p, env_file_encoding='latin-1')
 
     s = Settings()
     assert s.pika == 'p!±@'
@@ -805,7 +804,7 @@ def test_env_file_home_directory(home_tmp):
     class Settings(BaseSettings):
         pika: str
 
-        model_config = ConfigDict(env_file=f'~/{tmp_filename}')
+        model_config = SettingsConfigDict(env_file=f'~/{tmp_filename}')
 
     assert Settings().pika == 'baz'
 
@@ -832,7 +831,7 @@ def test_env_file_override_file(tmp_path):
     class Settings(BaseSettings):
         a: str
 
-        model_config = ConfigDict(env_file=str(p1))
+        model_config = SettingsConfigDict(env_file=str(p1))
 
     s = Settings(_env_file=p2)
     assert s.a == 'new string'
@@ -846,7 +845,7 @@ def test_env_file_override_none(tmp_path):
     class Settings(BaseSettings):
         a: Optional[str] = None
 
-        model_config = ConfigDict(env_file=p)
+        model_config = SettingsConfigDict(env_file=p)
 
     s = Settings(_env_file=None)
     assert s.a is None
@@ -946,7 +945,7 @@ def test_multiple_env_file(tmp_path):
         host: str
         port: int
 
-        model_config = ConfigDict(env_file=[base_env, prod_env])
+        model_config = SettingsConfigDict(env_file=[base_env, prod_env])
 
     s = Settings()
     assert s.debug_mode is False
@@ -966,7 +965,7 @@ def test_model_env_file_override_model_config(tmp_path):
         host: str
         port: int
 
-        model_config = ConfigDict(env_file=prod_env)
+        model_config = SettingsConfigDict(env_file=prod_env)
 
     s = Settings(_env_file=base_env)
     assert s.debug_mode is True
@@ -1063,7 +1062,7 @@ def test_prefix_on_parent(env):
         var: str = 'old'
 
     class MySubSettings(MyBaseSettings):
-        model_config = ConfigDict(env_prefix='PREFIX_')
+        model_config = SettingsConfigDict(env_prefix='PREFIX_')
 
     assert MyBaseSettings().model_dump() == {'var': 'old'}
     assert MySubSettings().model_dump() == {'var': 'old'}
@@ -1079,7 +1078,7 @@ def test_secrets_path(tmp_path):
     class Settings(BaseSettings):
         foo: str
 
-        model_config = ConfigDict(secrets_dir=tmp_path)
+        model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
     assert Settings().model_dump() == {'foo': 'foo_secret_value_str'}
 
@@ -1091,7 +1090,7 @@ def test_secrets_path_with_validation_alias(tmp_path):
     class Settings(BaseSettings):
         foo: str = Field(validation_alias=AliasChoices(AliasPath('foo', 'bar', 0)))
 
-        model_config = ConfigDict(secrets_dir=tmp_path)
+        model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
     assert Settings().model_dump() == {'foo': 'test'}
 
@@ -1102,7 +1101,7 @@ def test_secrets_case_sensitive(tmp_path):
     class Settings(BaseSettings):
         secret_var: Optional[str] = None
 
-        model_config = ConfigDict(secrets_dir=tmp_path, case_sensitive=True)
+        model_config = SettingsConfigDict(secrets_dir=tmp_path, case_sensitive=True)
 
     assert Settings().model_dump() == {'secret_var': None}
 
@@ -1113,7 +1112,7 @@ def test_secrets_case_insensitive(tmp_path):
     class Settings(BaseSettings):
         secret_var: Optional[str]
 
-        model_config = ConfigDict(secrets_dir=tmp_path, case_sensitive=False)
+        model_config = SettingsConfigDict(secrets_dir=tmp_path, case_sensitive=False)
 
     settings = Settings().model_dump()
     assert settings == {'secret_var': 'foo_env_value_str'}
@@ -1127,7 +1126,7 @@ def test_secrets_path_url(tmp_path):
         foo: HttpUrl
         bar: SecretStr
 
-        model_config = ConfigDict(secrets_dir=tmp_path)
+        model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
     settings = Settings()
     assert str(settings.foo) == 'http://www.example.com/'
@@ -1141,7 +1140,7 @@ def test_secrets_path_json(tmp_path):
     class Settings(BaseSettings):
         foo: Dict[str, str]
 
-        model_config = ConfigDict(secrets_dir=tmp_path)
+        model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
     assert Settings().model_dump() == {'foo': {'a': 'b'}}
 
@@ -1153,7 +1152,7 @@ def test_secrets_path_invalid_json(tmp_path):
     class Settings(BaseSettings):
         foo: Dict[str, str]
 
-        model_config = ConfigDict(secrets_dir=tmp_path)
+        model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
     with pytest.raises(SettingsError, match='error parsing value for field "foo" from source "SecretsSettingsSource"'):
         Settings()
@@ -1163,7 +1162,7 @@ def test_secrets_missing(tmp_path):
     class Settings(BaseSettings):
         foo: str
 
-        model_config = ConfigDict(secrets_dir=tmp_path)
+        model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
     with pytest.raises(ValidationError) as exc_info:
         Settings()
@@ -1180,7 +1179,7 @@ def test_secrets_invalid_secrets_dir(tmp_path):
     class Settings(BaseSettings):
         foo: str
 
-        model_config = ConfigDict(secrets_dir=p1)
+        model_config = SettingsConfigDict(secrets_dir=p1)
 
     with pytest.raises(SettingsError, match='secrets_dir must reference a directory, not a file'):
         Settings()
@@ -1189,7 +1188,7 @@ def test_secrets_invalid_secrets_dir(tmp_path):
 @pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
 def test_secrets_missing_location(tmp_path):
     class Settings(BaseSettings):
-        model_config = ConfigDict(secrets_dir=tmp_path / 'does_not_exist')
+        model_config = SettingsConfigDict(secrets_dir=tmp_path / 'does_not_exist')
 
     with pytest.warns(UserWarning, match=f'directory "{tmp_path}/does_not_exist" does not exist'):
         Settings()
@@ -1203,7 +1202,7 @@ def test_secrets_file_is_a_directory(tmp_path):
     class Settings(BaseSettings):
         foo: Optional[str] = None
 
-        model_config = ConfigDict(secrets_dir=tmp_path)
+        model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
     with pytest.warns(UserWarning, match=f'attempted to load secret file "{tmp_path}/foo" but found a directory inste'):
         Settings()
@@ -1220,7 +1219,7 @@ def test_secrets_dotenv_precedence(tmp_path):
     class Settings(BaseSettings):
         foo: str
 
-        model_config = ConfigDict(secrets_dir=tmp_path)
+        model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
     assert Settings(_env_file=e).model_dump() == {'foo': 'foo_env_value_str'}
 
@@ -1417,7 +1416,7 @@ def test_secret_settings_source_custom_env_parse(tmp_path):
     class Settings(BaseSettings):
         top: Dict[int, str]
 
-        model_config = ConfigDict(secrets_dir=tmp_path)
+        model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
         def settings_customise_sources(
             cls,
@@ -1470,7 +1469,7 @@ def test_nested_env_complex_values(env):
     class Cfg(BaseSettings):
         sub_model: SubModel
 
-        model_config = ConfigDict(env_prefix='cfg_', env_nested_delimiter='__')
+        model_config = SettingsConfigDict(env_prefix='cfg_', env_nested_delimiter='__')
 
     env.set('cfg_sub_model__vals', '["one", "two"]')
     env.set('cfg_sub_model__sub_sub_model__dvals', '{"three": 4}')
@@ -1491,7 +1490,7 @@ def test_nested_env_nonexisting_field(env):
     class Cfg(BaseSettings):
         sub_model: SubModel
 
-        model_config = ConfigDict(env_prefix='cfg_', env_nested_delimiter='__')
+        model_config = SettingsConfigDict(env_prefix='cfg_', env_nested_delimiter='__')
 
     env.set('cfg_sub_model__foo_vals', '[]')
     with pytest.raises(ValidationError):
@@ -1505,7 +1504,7 @@ def test_nested_env_nonexisting_field_deep(env):
     class Cfg(BaseSettings):
         sub_model: SubModel
 
-        model_config = ConfigDict(env_prefix='cfg_', env_nested_delimiter='__')
+        model_config = SettingsConfigDict(env_prefix='cfg_', env_nested_delimiter='__')
 
     env.set('cfg_sub_model__vals__foo__bar__vals', '[]')
     with pytest.raises(ValidationError):
@@ -1519,7 +1518,7 @@ def test_nested_env_union_complex_values(env):
     class Cfg(BaseSettings):
         sub_model: SubModel
 
-        model_config = ConfigDict(env_prefix='cfg_', env_nested_delimiter='__')
+        model_config = SettingsConfigDict(env_prefix='cfg_', env_nested_delimiter='__')
 
     env.set('cfg_sub_model__vals', '["one", "two"]')
     assert Cfg().model_dump() == {'sub_model': {'vals': ['one', 'two']}}
@@ -1552,7 +1551,7 @@ def test_nested_model_case_insensitive(env):
     class Settings(BaseSettings):
         nested: Sub
 
-        model_config = ConfigDict(env_nested_delimiter='__')
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
 
     env.set('nested', '{"val1": "v1", "sub_SUB": {"VAL2": "v2", "sub_SUB_sUb": {"vAl3": "v3", "VAL4": "v4"}}}')
     s = Settings()
@@ -1570,7 +1569,7 @@ def test_dotenv_extra_allow(tmp_path):
     class Settings(BaseSettings):
         a: str
 
-        model_config = ConfigDict(env_file=p, extra='allow')
+        model_config = SettingsConfigDict(env_file=p, extra='allow')
 
     s = Settings()
     assert s.a == 'b'
@@ -1585,7 +1584,7 @@ def test_dotenv_extra_forbid(tmp_path):
     class Settings(BaseSettings):
         a: str
 
-        model_config = ConfigDict(env_file=p, extra='forbid')
+        model_config = SettingsConfigDict(env_file=p, extra='forbid')
 
     with pytest.raises(ValidationError) as exc_info:
         Settings()
@@ -1602,7 +1601,7 @@ def test_dotenv_extra_case_insensitive(tmp_path):
     class Settings(BaseSettings):
         A: str
 
-        model_config = ConfigDict(env_file=p, extra='forbid')
+        model_config = SettingsConfigDict(env_file=p, extra='forbid')
 
     s = Settings()
     assert s.A == 'b'
@@ -1620,7 +1619,7 @@ def test_dotenv_extra_sub_model_case_insensitive(tmp_path):
         A: str
         sub_MODEL: SubModel
 
-        model_config = ConfigDict(env_file=p, extra='forbid')
+        model_config = SettingsConfigDict(env_file=p, extra='forbid')
 
     s = Settings()
     assert s.A == 'b'
@@ -1636,7 +1635,7 @@ def test_nested_bytes_field(env):
         v0: str
         sub_model: SubModel
 
-        model_config = ConfigDict(env_nested_delimiter='__', env_prefix='TEST_')
+        model_config = SettingsConfigDict(env_nested_delimiter='__', env_prefix='TEST_')
 
     env.set('TEST_V0', 'v0')
     env.set('TEST_SUB_MODEL__V1', 'v1')
