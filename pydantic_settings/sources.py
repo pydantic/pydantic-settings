@@ -184,7 +184,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             class Settings(BaseSettings):
                 nested: Sub
 
-                model_config = ConfigDict(env_nested_delimiter='__')
+                model_config = SettingsConfigDict(env_nested_delimiter='__')
             ```
 
         Then:
@@ -241,7 +241,11 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                 ) from e
 
             if field_value is not None:
-                if not self.case_sensitive and lenient_issubclass(field.annotation, BaseModel):
+                if (
+                    not self.case_sensitive
+                    and lenient_issubclass(field.annotation, BaseModel)
+                    and isinstance(field_value, dict)
+                ):
                     data[field_key] = self._replace_field_names_case_insensitively(field, field_value)
                 else:
                     data[field_key] = field_value
