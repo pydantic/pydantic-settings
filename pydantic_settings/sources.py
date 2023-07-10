@@ -83,7 +83,7 @@ class PydanticBaseSettingsSource(ABC):
         Returns:
             The prepared value.
         """
-        if self.field_is_complex(field) or value_is_complex:
+        if value is not None and (self.field_is_complex(field) or value_is_complex):
             return json.loads(value)
         return value
 
