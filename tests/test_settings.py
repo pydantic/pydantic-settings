@@ -15,6 +15,7 @@ from pydantic import (
     Field,
     HttpUrl,
     Json,
+    RootModel,
     SecretStr,
     ValidationError,
 )
@@ -1775,3 +1776,18 @@ def test_model_config_through_class_kwargs(env):
     env.set('foobar_apple', 'has_prefix')
     s = Settings()
     assert s.apple == 'has_prefix'
+
+
+def test_root_model_as_field(env):
+    class Foo(BaseModel):
+        x: int
+        y: Dict[str, int]
+
+    FooRoot = RootModel[List[Foo]]
+
+    class Settings(BaseSettings):
+        z: FooRoot
+
+    env.set('z', '[{"x": 1, "y": {"foo": 1}}, {"x": 2, "y": {"foo": 2}}]')
+    s = Settings()
+    assert s.model_dump() == {'z': [{'x': 1, 'y': {'foo': 1}}, {'x': 2, 'y': {'foo': 2}}]}
