@@ -1161,6 +1161,7 @@ def test_secrets_path_invalid_json(tmp_path):
 def test_secrets_missing(tmp_path):
     class Settings(BaseSettings):
         foo: str
+        bar: List[str]
 
         model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
@@ -1168,7 +1169,8 @@ def test_secrets_missing(tmp_path):
         Settings()
 
     assert exc_info.value.errors(include_url=False) == [
-        {'type': 'missing', 'loc': ('foo',), 'msg': 'Field required', 'input': {}}
+        {'type': 'missing', 'loc': ('foo',), 'msg': 'Field required', 'input': {}},
+        {'input': {}, 'loc': ('bar',), 'msg': 'Field required', 'type': 'missing'},
     ]
 
 
