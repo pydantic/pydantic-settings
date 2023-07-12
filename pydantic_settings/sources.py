@@ -47,7 +47,7 @@ class PydanticBaseSettingsSource(ABC):
         """
         Gets the value, the key for model creation, and a flag to determine whether value is complex.
 
-        This is an abstract method that should be overrided in every settings source classes.
+        This is an abstract method that should be overridden in every settings source classes.
 
         Args:
             field: The field.
@@ -324,7 +324,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
             path = self.find_case_path(self.secrets_path, env_name, self.case_sensitive)
             if not path:
-                # path does not exist, we curently don't return a warning for this
+                # path does not exist, we currently don't return a warning for this
                 continue
 
             if path.is_file():

@@ -44,7 +44,7 @@ class BaseSettings(BaseModel):
     This is useful in production for secrets you do not wish to save in code, it plays nicely with docker(-compose),
     Heroku and any 12 factor app design.
 
-    All the bellow attributes can be set via `model_config`.
+    All the below attributes can be set via `model_config`.
 
     Args:
         _case_sensitive: Whether environment variables names should be read with case-sensitivity. Defaults to `None`.
