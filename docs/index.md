@@ -550,8 +550,8 @@ class JsonConfigSettingsSource(PydanticBaseSettingsSource):
         file_content_json = json.loads(
             Path('tests/example_test_config.json').read_text(encoding)
         )
-        fiel_value = file_content_json.get(field_name)
-        return fiel_value, field_name, False
+        field_value = file_content_json.get(field_name)
+        return field_value, field_name, False
 
     def prepare_field_value(
         self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool
