@@ -387,7 +387,7 @@ Pydantic settings consider `extra` config in case of dotenv file. It means if yo
 on `model_config` and your dotenv file contains an entry for a field that is not defined in settings model,
 it will raise `ValidationError` in settings construction.
 
-For compatibility with pydantic 1.x BaseSettings you should use `extra=ignore`: 
+For compatibility with pydantic 1.x BaseSettings you should use `extra=ignore`:
 ```py
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
