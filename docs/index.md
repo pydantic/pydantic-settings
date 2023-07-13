@@ -383,9 +383,19 @@ Because python-dotenv is used to parse the file, bash-like semantics such as `ex
 (depending on your OS and environment) may allow your dotenv file to also be used with `source`,
 see [python-dotenv's documentation](https://saurabh-kumar.com/python-dotenv/#usages) for more details.
 
-Pydantic settings consider `extra` config in case of dotenv file. It means if you set the `extra=forbid`
+Pydantic settings consider `extra` config in case of dotenv file. It means if you set the `extra=forbid` (*default*)
 on `model_config` and your dotenv file contains an entry for a field that is not defined in settings model,
 it will raise `ValidationError` in settings construction.
+
+For compatibility with pydantic 1.x BaseSettings you should use `extra=ignore`:
+```py
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file='.env', extra='ignore')
+```
+
 
 ## Secrets
 
