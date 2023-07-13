@@ -389,6 +389,8 @@ it will raise `ValidationError` in settings construction.
 
 For compatibility with pydantic 1.x BaseSettings you should use `extra=ignore`: 
 ```py
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file='.env',
