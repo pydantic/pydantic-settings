@@ -84,8 +84,22 @@ class PydanticBaseSettingsSource(ABC):
             The prepared value.
         """
         if value is not None and (self.field_is_complex(field) or value_is_complex):
-            return json.loads(value)
+            return self.decode_complex_value(field_name, field, value)
         return value
+
+    def decode_complex_value(self, field_name: str, field: FieldInfo, value: Any) -> Any:
+        """
+        Decode the value for a complex field
+
+        Args:
+            field_name: The field name.
+            field: The field.
+            value: The value of the field that has to be prepared.
+
+        Returns:
+            The decoded value for further preparation
+        """
+        return json.loads(value)
 
     @abstractmethod
     def __call__(self) -> dict[str, Any]:
@@ -414,7 +428,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             else:
                 # field is complex and there's a value, decode that as JSON, then add explode_env_vars
                 try:
-                    value = json.loads(value)
+                    value = self.decode_complex_value(field_name, field, value)
                 except ValueError as e:
                     if not allow_parse_failure:
                         raise e
@@ -516,7 +530,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                 is_complex, allow_json_failure = self._field_is_complex(target_field)
                 if is_complex:
                     try:
-                        env_val = json.loads(env_val)
+                        env_val = self.decode_complex_value(last_key, target_field, env_val)
                     except ValueError as e:
                         if not allow_json_failure:
                             raise e
