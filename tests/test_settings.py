@@ -1814,5 +1814,4 @@ def test_dotenv_optional_json_field(tmp_path):
         data: Optional[Json[Dict[str, str]]] = Field(default=None)
 
     s = Settings()
-    print(s.data)
     assert s.data == {'foo': 'bar'}
