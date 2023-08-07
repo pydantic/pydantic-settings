@@ -13,7 +13,7 @@ from pydantic import AliasChoices, AliasPath, BaseModel, Json
 from pydantic._internal._typing_extra import origin_is_union
 from pydantic._internal._utils import deep_update, lenient_issubclass
 from pydantic.fields import FieldInfo
-from typing_extensions import get_origin
+from typing_extensions import get_args, get_origin
 
 from pydantic_settings.utils import path_type_label
 
@@ -441,13 +441,22 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             # simplest case, field is not complex, we only need to add the value if it was found
             return value
 
+    def _union_is_complex(self, annotation: type[Any] | None, metadata: list[Any]) -> bool:
+        for arg in get_args(annotation):
+            if arg is type(None):  # Optional
+                continue
+            elif _annotation_is_complex(arg, metadata):
+                return True
+
+        return False
+
     def _field_is_complex(self, field: FieldInfo) -> tuple[bool, bool]:
         """
         Find out if a field is complex, and if so whether JSON errors should be ignored
         """
         if self.field_is_complex(field):
             allow_parse_failure = False
-        elif origin_is_union(get_origin(field.annotation)):
+        elif origin_is_union(get_origin(field.annotation)) and self._union_is_complex(field.annotation, field.metadata):
             allow_parse_failure = True
         else:
             return False, False
