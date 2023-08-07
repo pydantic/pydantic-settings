@@ -442,13 +442,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             return value
 
     def _union_is_complex(self, annotation: type[Any] | None, metadata: list[Any]) -> bool:
-        for arg in get_args(annotation):
-            if arg is type(None):  # Optional
-                continue
-            elif _annotation_is_complex(arg, metadata):
-                return True
-
-        return False
+        return any(_annotation_is_complex(arg, metadata) for arg in get_args(annotation))
 
     def _field_is_complex(self, field: FieldInfo) -> tuple[bool, bool]:
         """
