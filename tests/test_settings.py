@@ -1791,3 +1791,27 @@ def test_root_model_as_field(env):
     env.set('z', '[{"x": 1, "y": {"foo": 1}}, {"x": 2, "y": {"foo": 2}}]')
     s = Settings()
     assert s.model_dump() == {'z': [{'x': 1, 'y': {'foo': 1}}, {'x': 2, 'y': {'foo': 2}}]}
+
+
+def test_optional_field_from_env(env):
+    class Settings(BaseSettings):
+        x: Optional[str] = None
+
+    env.set('x', '123')
+
+    s = Settings()
+    assert s.x == '123'
+
+
+@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
+def test_dotenv_optional_json_field(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text("""DATA='{"foo":"bar"}'""")
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_file=p)
+
+        data: Optional[Json[Dict[str, str]]] = Field(default=None)
+
+    s = Settings()
+    assert s.data == {'foo': 'bar'}
