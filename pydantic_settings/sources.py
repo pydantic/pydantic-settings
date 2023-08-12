@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import is_dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, List, Mapping, Sequence, Tuple, Union, cast
+from typing import TYPE_CHECKING, Any, Iterator, List, Mapping, Sequence, Tuple, Union, cast
 
 from pydantic import AliasChoices, AliasPath, BaseModel, Json
 from pydantic._internal._typing_extra import origin_is_union
@@ -19,6 +19,7 @@ from pydantic_settings.utils import path_type_label
 
 try:
     import keyring
+    from keyring.backends.SecretService import Keyring as SecretServiceKeyring
 except ImportError:
     pass
 
@@ -661,9 +662,10 @@ class KeyringSettingsSource(EnvSettingsSource):
     def _read_keyring(self, case_sensitive: bool) -> Mapping[str, str | None]:
         keyring_backend = self.keyring_backend
         if keyring_backend is None:
-            kr = keyring.core.get_keyring()
+            kr = cast(SecretServiceKeyring, keyring.core.get_keyring())
         else:
-            all_keyrings = keyring.backend.get_all_keyring()
+            # Correct mis-cast annotation in source package: https://github.com/jaraco/keyring/issues/645
+            all_keyrings = cast(Iterator[SecretServiceKeyring], keyring.backend.get_all_keyring())
             try:
                 kr = next(be for be in all_keyrings if be.name == keyring_backend)
             except StopIteration:
@@ -671,7 +673,8 @@ class KeyringSettingsSource(EnvSettingsSource):
                 return {}
 
         keyring_vars: dict[str, str | None] = {}
-        kr_items = kr.get_preferred_collection().get_all_items()
+        kr_collection = kr.get_preferred_collection()  # type: ignore[no-untyped-call]
+        kr_items = kr_collection.get_all_items()
         keyring_vars.update({item.get_attributes()['service']: item.get_secret().decode() for item in kr_items})
         return keyring_vars
 
