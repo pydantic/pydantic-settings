@@ -672,7 +672,7 @@ class KeyringSettingsSource(EnvSettingsSource):
 
         keyring_vars: dict[str, str | None] = {}
         kr_items = kr.get_preferred_collection().get_all_items()
-        keyring_vars.update({item.get_attributes()["service"]: item.get_secret().decode() for item in kr_items})
+        keyring_vars.update({item.get_attributes()['service']: item.get_secret().decode() for item in kr_items})
         return keyring_vars
 
     def __call__(self) -> dict[str, Any]:
