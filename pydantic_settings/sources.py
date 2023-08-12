@@ -17,6 +17,11 @@ from typing_extensions import get_args, get_origin
 
 from pydantic_settings.utils import path_type_label
 
+try:
+    import keyring
+except ImportError:
+    pass
+
 if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
 
@@ -630,6 +635,72 @@ def read_env_file(
         return {k.lower(): v for k, v in file_vars.items()}
     else:
         return file_vars
+
+
+class KeyringSettingsSource(EnvSettingsSource):
+    """
+    Source class for loading settings values from keyrings.
+    """
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        keyring_backend: str | None = None,
+        case_sensitive: bool | None = None,
+        env_prefix: str | None = None,
+        env_nested_delimiter: str | None = None,
+    ) -> None:
+        self.keyring_backend = (
+            keyring_backend if keyring_backend is not None else settings_cls.model_config.get('keyring_backend')
+        )
+        super().__init__(settings_cls, case_sensitive, env_prefix, env_nested_delimiter)
+
+    def _load_env_vars(self) -> Mapping[str, str | None]:
+        return self._read_keyring(self.case_sensitive)
+
+    def _read_keyring(self, case_sensitive: bool) -> Mapping[str, str | None]:
+        keyring_backend = self.keyring_backend
+        if keyring_backend is None:
+            kr = keyring.core.get_keyring()
+        else:
+            all_keyrings = keyring.backend.get_all_keyring()
+            try:
+                kr = next(be for be in all_keyrings if be.name == keyring_backend)
+            except StopIteration:
+                # Same behaviour as when a named dotenv file is not found
+                return {}
+
+        keyring_vars: dict[str, str | None] = {}
+        kr_items = kr.get_preferred_collection().get_all_items()
+        keyring_vars.update({item.get_attributes()["service"]: item.get_secret().decode() for item in kr_items})
+        return keyring_vars
+
+    def __call__(self) -> dict[str, Any]:
+        data: dict[str, Any] = super().__call__()
+
+        data_lower_keys: list[str] = []
+        if not self.case_sensitive:
+            data_lower_keys = [x.lower() for x in data.keys()]
+
+        # As `extra` config is allowed in keyring settings source, We have to
+        # update data with extra env variables from keyring.
+        for env_name, env_value in self.env_vars.items():
+            if env_name.startswith(self.env_prefix) and env_value is not None:
+                env_name_without_prefix = env_name[self.env_prefix_len :]
+                first_key, *_ = env_name_without_prefix.split(self.env_nested_delimiter)
+
+                if (data_lower_keys and first_key not in data_lower_keys) or (
+                    not data_lower_keys and first_key not in data
+                ):
+                    data[first_key] = env_value
+
+        return data
+
+    def __repr__(self) -> str:
+        return (
+            f'KeyringSettingsSource(keyring_backend={self.keyring_backend!r}, '
+            f'env_nested_delimiter={self.env_nested_delimiter!r}, env_prefix_len={self.env_prefix_len!r})'
+        )
 
 
 def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
