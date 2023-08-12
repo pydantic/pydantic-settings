@@ -676,7 +676,10 @@ class KeyringSettingsSource(EnvSettingsSource):
         kr_collection = kr.get_preferred_collection()  # type: ignore[no-untyped-call]
         kr_items = kr_collection.get_all_items()
         keyring_vars.update({item.get_attributes()['service']: item.get_secret().decode() for item in kr_items})
-        return keyring_vars
+        if not case_sensitive:
+            return {k.lower(): v for k, v in keyring_vars.items()}
+        else:
+            return keyring_vars
 
     def __call__(self) -> dict[str, Any]:
         data: dict[str, Any] = super().__call__()
