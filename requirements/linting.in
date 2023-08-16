@@ -3,3 +3,4 @@ ruff
 pyupgrade
 mypy
 pre-commit
+keyring
