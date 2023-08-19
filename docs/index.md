@@ -71,7 +71,7 @@ print(Settings().model_dump())
 """
 {
     'auth_key': 'xxx',
-    'api_key': 'xxx,
+    'api_key': 'xxx',
     'redis_dsn': Url('redis://user:pass@localhost:6379/1'),
     'pg_dsn': MultiHostUrl('postgres://user:pass@localhost:5432/foobar'),
     'amqp_dsn': Url('amqp://user:pass@localhost:5672/'),
