@@ -45,7 +45,7 @@ class SubModel(BaseModel):
 class Settings(BaseSettings):
     auth_key: str = Field(validation_alias='my_auth_key')  # (1)!
 
-    api_key: str = Field(..., alias='my_api_key')  # (2)!
+    api_key: str = Field(alias='my_api_key')  # (2)!
 
     redis_dsn: RedisDsn = Field(
         'redis://user:pass@localhost:6379/1',
