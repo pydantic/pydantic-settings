@@ -45,14 +45,16 @@ class SubModel(BaseModel):
 class Settings(BaseSettings):
     auth_key: str = Field(validation_alias='my_auth_key')  # (1)!
 
+    api_key: str = Field(alias='my_api_key')  # (2)!
+
     redis_dsn: RedisDsn = Field(
         'redis://user:pass@localhost:6379/1',
-        validation_alias=AliasChoices('service_redis_dsn', 'redis_url'),  # (2)!
+        validation_alias=AliasChoices('service_redis_dsn', 'redis_url'),  # (3)!
     )
     pg_dsn: PostgresDsn = 'postgres://user:pass@localhost:5432/foobar'
     amqp_dsn: AmqpDsn = 'amqp://user:pass@localhost:5672/'
 
-    special_function: ImportString[Callable[[Any], Any]] = 'math.cos'  # (3)!
+    special_function: ImportString[Callable[[Any], Any]] = 'math.cos'  # (4)!
 
     # to override domains:
     # export my_prefix_domains='["foo.com", "bar.com"]'
@@ -62,13 +64,14 @@ class Settings(BaseSettings):
     # export my_prefix_more_settings='{"foo": "x", "apple": 1}'
     more_settings: SubModel = SubModel()
 
-    model_config = SettingsConfigDict(env_prefix='my_prefix_')  # (4)!
+    model_config = SettingsConfigDict(env_prefix='my_prefix_')  # (5)!
 
 
 print(Settings().model_dump())
 """
 {
     'auth_key': 'xxx',
+    'api_key': 'xxx',
     'redis_dsn': Url('redis://user:pass@localhost:6379/1'),
     'pg_dsn': MultiHostUrl('postgres://user:pass@localhost:5432/foobar'),
     'amqp_dsn': Url('amqp://user:pass@localhost:5672/'),
@@ -84,15 +87,20 @@ print(Settings().model_dump())
 
     Check the [`Field` documentation](../fields/) for more information.
 
-2. The `AliasChoices` class allows to have multiple environment variable names for a single field.
+2. The environment variable name is overridden using `alias`. In this case, the environment variable
+   `my_api_key` will be used for both validation and serialization instead of `api_key`.
+
+   Check the [`Field` documentation](../fields/#field-aliases) for more information.
+
+3. The `AliasChoices` class allows to have multiple environment variable names for a single field.
    The first environment variable that is found will be used.
 
     Check the [`AliasChoices`](../fields/#aliaspath-and-aliaschoices) for more information.
 
-3. The `ImportString` class allows to import an object from a string.
+4. The `ImportString` class allows to import an object from a string.
    In this case, the environment variable `special_function` will be read and the function `math.cos` will be imported.
 
-4. The `env_prefix` config setting allows to set a prefix for all environment variables.
+5. The `env_prefix` config setting allows to set a prefix for all environment variables.
 
     Check the [Environment variable names documentation](#environment-variable-names) for more information.
 
