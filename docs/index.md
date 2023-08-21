@@ -133,6 +133,23 @@ There are two ways to do this:
 
 Check the [`Field` aliases documentation](../fields#field-aliases) for more information about aliases.
 
+`env_prefix` does not apply to fields with alias. It means the environment variable name is the same
+as field alis:
+
+```py
+from pydantic import Field
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix='my_prefix_')
+
+    auth_key: str = Field('xxx', alias='AuthKey')  # (1)!
+```
+
+1. `env_prefix` will be ignored and the value will be read from `AuthKey` environment variable.
+
 ### Case-sensitivity
 
 By default, environment variable names are case-insensitive.
