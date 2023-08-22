@@ -145,10 +145,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix='my_prefix_')
 
-    auth_key: str = Field('xxx', alias='AuthKey')  # (1)!
+    foo: str = Field('xxx', alias='FooAlias')  # (1)!
 ```
 
-1. `env_prefix` will be ignored and the value will be read from `AuthKey` environment variable.
+1. `env_prefix` will be ignored and the value will be read from `FooAlias` environment variable.
 
 ### Case-sensitivity
 
