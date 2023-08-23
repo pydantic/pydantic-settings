@@ -626,7 +626,7 @@ def read_env_file(
     file_path: Path, *, encoding: str | None = None, case_sensitive: bool = False
 ) -> Mapping[str, str | None]:
     if dotenv is None:
-        raise ImportError('python-dotenv is not installed, run `pip install pydantic[dotenv]`')
+        raise ImportError('python-dotenv is not installed, run `pip install pydantic-settings[dotenv]`')
 
     file_vars: dict[str, str | None] = dotenv.dotenv_values(file_path, encoding=encoding or 'utf8')
     if not case_sensitive:
