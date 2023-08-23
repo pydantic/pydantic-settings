@@ -50,19 +50,11 @@ jobs:
 
     - run: pip install -r requirements/testing.txt -r requirements/pyproject.txt
 
-    - name: test with dotenv
+    - name: test
       run: make test
       env:
-        COVERAGE_FILE: .coverage.${{ runner.os }}-py${{ matrix.python }}-with-dotenv
-        CONTEXT: ${{ runner.os }}-py${{ matrix.python }}-with-dotenv
-
-    - run: pip uninstall -y python-dotenv
-
-    - name: test without dotenv
-      run: make test
-      env:
-        COVERAGE_FILE: .coverage.${{ runner.os }}-py${{ matrix.python }}-without-dotenv
-        CONTEXT: ${{ runner.os }}-py${{ matrix.python }}-without-dotenv
+        COVERAGE_FILE: .coverage.${{ runner.os }}-py${{ matrix.python }}
+        CONTEXT: ${{ runner.os }}-py${{ matrix.python }}
 
     - run: coverage combine
     - run: coverage xml
