@@ -7,6 +7,12 @@ Installation is as simple as:
 pip install pydantic-settings
 ```
 
+To install with the support of `.env` files (python-dotenv):
+
+```bash
+pip install pydantic-settings[dotenv]
+```
+
 ## Usage
 
 If you create a model that inherits from `BaseSettings`, the model initialiser will attempt to determine
