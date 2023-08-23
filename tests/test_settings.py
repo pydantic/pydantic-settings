@@ -1,6 +1,7 @@
 import dataclasses
 import os
 import sys
+import unittest.mock
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -994,7 +995,6 @@ def test_read_dotenv_vars_when_env_file_is_none():
     )
 
 
-@pytest.mark.skipif(dotenv, reason='python-dotenv is installed')
 def test_dotenv_not_installed(tmp_path):
     p = tmp_path / '.env'
     p.write_text('a=b')
@@ -1002,8 +1002,10 @@ def test_dotenv_not_installed(tmp_path):
     class Settings(BaseSettings):
         a: str
 
-    with pytest.raises(ImportError, match=r'^python-dotenv is not installed, run `pip install pydantic\[dotenv\]`$'):
-        Settings(_env_file=p)
+    regex = r'^python-dotenv is not installed, run `pip install pydantic-settings\[dotenv\]`$'
+    with unittest.mock.patch('pydantic_settings.sources.dotenv', None):
+        with pytest.raises(ImportError, match=regex):
+            Settings(_env_file=p)
 
 
 def test_alias_set(env):
