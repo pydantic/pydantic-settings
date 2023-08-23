@@ -19,7 +19,7 @@ from pydantic_settings.utils import path_type_label
 
 try:
     import dotenv
-except ImportError:
+except ImportError:  # pragma: no cover
     dotenv = None  # type: ignore[assignment]
 
 if TYPE_CHECKING:
