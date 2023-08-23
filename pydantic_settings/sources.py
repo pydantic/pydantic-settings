@@ -17,6 +17,11 @@ from typing_extensions import get_args, get_origin
 
 from pydantic_settings.utils import path_type_label
 
+try:
+    import dotenv
+except ImportError:
+    dotenv = None  # type: ignore[assignment]
+
 if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
 
@@ -620,12 +625,10 @@ class DotEnvSettingsSource(EnvSettingsSource):
 def read_env_file(
     file_path: Path, *, encoding: str | None = None, case_sensitive: bool = False
 ) -> Mapping[str, str | None]:
-    try:
-        from dotenv import dotenv_values
-    except ImportError as e:
-        raise ImportError('python-dotenv is not installed, run `pip install pydantic[dotenv]`') from e
+    if dotenv is None:
+        raise ImportError('python-dotenv is not installed, run `pip install pydantic[dotenv]`')
 
-    file_vars: dict[str, str | None] = dotenv_values(file_path, encoding=encoding or 'utf8')
+    file_vars: dict[str, str | None] = dotenv.dotenv_values(file_path, encoding=encoding or 'utf8')
     if not case_sensitive:
         return {k.lower(): v for k, v in file_vars.items()}
     else:
