@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     # export my_prefix_more_settings='{"foo": "x", "apple": 1}'
     more_settings: SubModel = SubModel()
 
-    model_config = SettingsConfigDict(env_prefix='my_prefix_')  # (5)!
+    model_config = SettingsConfigDict(env_prefix='my_prefix_', extra='ignore')  # (5)!
 
 
 print(Settings().model_dump())
@@ -273,7 +273,7 @@ You may also populate a complex type by providing your own source class.
 ```py
 import json
 import os
-from typing import Any, List, Tuple, Type
+from typing import Any, List, Mapping, Tuple, Type
 
 from pydantic.fields import FieldInfo
 
@@ -285,8 +285,15 @@ from pydantic_settings import (
 
 
 class MyCustomSource(EnvSettingsSource):
-    def prepare_field_value(
-        self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool
+    @classmethod
+    def prepare_field_value_from_env_vars(
+        cls,
+        field_name: str,
+        field: FieldInfo,
+        value: Any,
+        value_is_complex: bool,
+        env_vars: Mapping[str, str | None],
+        config: EnvSettingsSource._EnvSettingsSource__SourceConfig,
     ) -> Any:
         if field_name == 'numbers':
             return [int(x) for x in value.split(',')]

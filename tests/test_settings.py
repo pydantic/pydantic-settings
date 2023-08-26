@@ -1,10 +1,11 @@
+import warnings
 import dataclasses
 import os
 import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar, Union, Mapping
 
 import pytest
 from annotated_types import MinLen
@@ -44,6 +45,8 @@ except ImportError:
 
 class SimpleSettings(BaseSettings):
     apple: str
+
+    model_config: SettingsConfigDict(extra="ignore")
 
 
 def test_sub_env(env):
@@ -730,7 +733,7 @@ def test_env_file_config_case_sensitive(tmp_path):
             'type': 'missing',
             'loc': ('a',),
             'msg': 'Field required',
-            'input': {'b': 'better string', 'c': 'best string', 'A': 'good string'},
+            'input': {'b': 'better string', 'c': 'best string'},
         }
     ]
 
@@ -1331,10 +1334,12 @@ def test_builtins_settings_source_repr():
         "DotEnvSettingsSource(env_file='.env', env_file_encoding='utf-8', "
         'env_nested_delimiter=None, env_prefix_len=0)'
     )
-    assert (
-        repr(SecretsSettingsSource(BaseSettings, secrets_dir='/secrets'))
-        == "SecretsSettingsSource(secrets_dir='/secrets')"
-    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        assert (
+            repr(SecretsSettingsSource(BaseSettings, secrets_dir='/secrets'))
+            == "SecretsSettingsSource(secrets_dir='/secrets')"
+        )
 
 
 def _parse_custom_dict(value: str) -> Callable[[str], Dict[int, str]]:
@@ -1347,7 +1352,16 @@ def _parse_custom_dict(value: str) -> Callable[[str], Dict[int, str]]:
 
 
 class CustomEnvSettingsSource(EnvSettingsSource):
-    def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
+    @classmethod
+    def prepare_field_value_from_env_vars(
+        cls,
+        field_name: str,
+        field: FieldInfo,
+        value: Any,
+        value_is_complex: bool,
+        env_vars: Mapping[str, str | Any],
+        config: EnvSettingsSource._EnvSettingsSource__SourceConfig,
+    ) -> Any:
         if not value:
             return None
 
@@ -1405,7 +1419,16 @@ def test_env_settings_source_custom_env_parse_is_bad(env):
 
 
 class CustomSecretsSettingsSource(SecretsSettingsSource):
-    def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
+    @classmethod
+    def prepare_field_value_from_env_vars(
+        cls,
+        field_name: str,
+        field: FieldInfo,
+        value: Any,
+        value_is_complex: bool,
+        env_vars: Mapping[str, str | None],
+        config: SecretsSettingsSource._SecretsSettingsSource__SourceConfig,
+    ) -> Any:
         if not value:
             return None
 
@@ -1436,7 +1459,14 @@ def test_secret_settings_source_custom_env_parse(tmp_path):
 
 
 class BadCustomSettingsSource(EnvSettingsSource):
-    def get_field_value(self, field: FieldInfo, field_name: str) -> Any:
+    @classmethod
+    def get_field_value_from_env_vars(
+        cls,
+        field: FieldInfo,
+        field_name: str,
+        env_vars: Mapping[str, Any],
+        config: EnvSettingsSource._EnvSettingsSource__SourceConfig,
+    ) -> tuple[Any, str, bool]:
         raise ValueError('Error')
 
 
@@ -1760,8 +1790,8 @@ def test_custom_env_source_default_values_from_config():
     assert s.model_config['case_sensitive'] is True
 
     c = CustomEnvSettingsSource(Settings)
-    assert c.env_prefix == 'prefix_'
-    assert c.case_sensitive is True
+    assert c.source_config["env_prefix"] == 'prefix_'
+    assert c.source_config["case_sensitive"] is True
 
 
 def test_model_config_through_class_kwargs(env):
