@@ -804,28 +804,30 @@ class DotEnvSettingsSource(EnvSettingsSource):
 
         return dotenv_vars
 
-    def __call__(self) -> dict[str, Any]:
-        data: dict[str, Any] = super().__call__()
+    @classmethod
+    def read_model_fields(
+        cls, model_fields: Mapping[str, Any], env_vars: Mapping[str, str | None], config: Self.__SourceConfig
+    ) -> dict[str, Any]:
+        data: dict[str, Any] = super().read_model_fields(model_fields, env_vars, config)
+
+        if config["extra"] == "ignore":
+            return data
 
         data_lower_keys: list[str] = []
-        if not self.source_config["case_sensitive"]:
+        if not config["case_sensitive"]:
             data_lower_keys = [x.lower() for x in data.keys()]
-
-        if self.source_config["extra"] == "ignore":
-            return data
 
         # As `extra` config is allowed in dotenv settings source, We have to
         # update data with extra env variabels from dotenv file.
-        for env_name, env_value in self.env_vars.items():
-            if env_name.startswith(self.source_config["env_prefix"]) and env_value is not None:
-                env_name_without_prefix = env_name[len(self.source_config["env_prefix"]) :]
-                first_key, *_ = env_name_without_prefix.split(self.source_config["env_nested_delimiter"])
+        for env_name, env_value in env_vars.items():
+            if env_name.startswith(config["env_prefix"]) and env_value is not None:
+                env_name_without_prefix = env_name[len(config["env_prefix"]) :]
+                first_key, *_ = env_name_without_prefix.split(config["env_nested_delimiter"])
 
                 if (data_lower_keys and first_key not in data_lower_keys) or (
                     not data_lower_keys and first_key not in data
                 ):
                     data[first_key] = env_value
-
         return data
 
     def __repr__(self) -> str:
