@@ -9,6 +9,7 @@ from dataclasses import is_dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, List, Mapping, Sequence, Tuple, Union, cast
 
+from dotenv import dotenv_values
 from pydantic import AliasChoices, AliasPath, BaseModel, Json
 from pydantic._internal._typing_extra import origin_is_union
 from pydantic._internal._utils import deep_update, lenient_issubclass
@@ -620,11 +621,6 @@ class DotEnvSettingsSource(EnvSettingsSource):
 def read_env_file(
     file_path: Path, *, encoding: str | None = None, case_sensitive: bool = False
 ) -> Mapping[str, str | None]:
-    try:
-        from dotenv import dotenv_values
-    except ImportError as e:
-        raise ImportError('python-dotenv is not installed, run `pip install pydantic[dotenv]`') from e
-
     file_vars: dict[str, str | None] = dotenv_values(file_path, encoding=encoding or 'utf8')
     if not case_sensitive:
         return {k.lower(): v for k, v in file_vars.items()}
