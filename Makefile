@@ -28,12 +28,12 @@ testcov: test
 	@echo "building coverage html"
 	@pdm run coverage html
 
-.PHONY: all ## Execute commands lint, mypy and testcov
-all: lint mypy testcov
-
 .PHONY: help  ## Display this message
 help:
 	@grep -E \
 		'^.PHONY: .*?## .*$$' $(MAKEFILE_LIST) | \
 		sort | \
 		awk 'BEGIN {FS = ".PHONY: |## "}; {printf "\033[36m%-19s\033[0m %s\n", $$2, $$3}'
+
+.PHONY: all ## Execute commands lint, mypy and testcov
+all: lint mypy testcov
