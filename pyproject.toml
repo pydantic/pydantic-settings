@@ -5,6 +5,18 @@ build-backend = 'hatchling.build'
 [tool.hatch.version]
 path = 'pydantic_settings/version.py'
 
+[tool.pdm.dev-dependencies]
+dev = [
+    "black>=23.3.0",
+    "ruff>=0.0.286",
+    "coverage>=7.2.7",
+    "mypy>=1.4.1",
+    "pydantic>=2.3.0",
+    "pytest>=7.4.0",
+    "pytest-examples>=0.0.10",
+    "pytest-mock>=3.11.1",
+]
+
 [project]
 name = 'pydantic-settings'
 description = 'Settings management using Pydantic'
