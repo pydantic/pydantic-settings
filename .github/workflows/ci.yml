@@ -22,7 +22,7 @@ jobs:
 
     - uses: pdm-project/setup-pdm@v3
       with:
-        python-version: 3.10
+        python-version: '3.10'
         architecture: x64
         version: 2.7.4
         prerelease: false
@@ -61,7 +61,7 @@ jobs:
 
     - uses: pdm-project/setup-pdm@v3
       with:
-        python-version: '{{ matrix.python }}'        
+        python-version: {{ matrix.python }}
         architecture: x64
         version: 2.7.4
         prerelease: false
