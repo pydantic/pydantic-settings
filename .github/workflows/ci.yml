@@ -20,6 +20,15 @@ jobs:
       with:
         python-version: '3.10'
 
+    - uses: pdm-project/setup-pdm@v3
+      with:
+        python-version: ${{ matrix.python }}
+        cache: 'true'
+        cache-dependency-path: '**/pdm.lock'
+
+    - name: Install dependencies
+      run: pdm install
+
     - uses: pre-commit/action@v3.0.0
       with:
         extra_args: --all-files
