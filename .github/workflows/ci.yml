@@ -76,7 +76,7 @@ jobs:
         COVERAGE_FILE: .coverage.${{ runner.os }}-py${{ matrix.python }}-with-dotenv
         CONTEXT: ${{ runner.os }}-py${{ matrix.python }}-with-dotenv
 
-    - run: pdm remove python-dotenv
+    - run: pdm remove --dev python-dotenv
 
     - name: test without dotenv
       run: make install test
