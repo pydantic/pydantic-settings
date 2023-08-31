@@ -3,9 +3,7 @@ sources = pydantic_settings tests
 
 .PHONY: install
 install:
-	python -m pip install -U pip
-	pip install -r requirements/all.txt
-	pip install -e .
+	pdm install -d
 
 .PHONY: format
 format:

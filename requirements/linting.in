@@ -1,5 +1,0 @@
-black
-ruff
-pyupgrade
-mypy
-pre-commit
