@@ -84,7 +84,7 @@ jobs:
         COVERAGE_FILE: .coverage.${{ runner.os }}-py${{ matrix.python }}-without-dotenv
         CONTEXT: ${{ runner.os }}-py${{ matrix.python }}-without-dotenv
 
-    - run: coverage combine
+    - run: pdm run coverage combine
     - run: pdm run coverage xml
 
     - uses: codecov/codecov-action@v3
