@@ -24,7 +24,7 @@ jobs:
       with:
         python-version: '3.10'
         architecture: x64
-        version: 2.7.4
+        version: 2.9.0
         prerelease: false
         enable-pep582: false
         allow-python-prereleases: false
@@ -63,7 +63,7 @@ jobs:
       with:
         python-version: ${{ matrix.python }}
         architecture: x64
-        version: 2.7.4
+        version: 2.9.0
         prerelease: false
         enable-pep582: false
         allow-python-prereleases: false
