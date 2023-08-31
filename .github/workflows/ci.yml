@@ -23,11 +23,12 @@ jobs:
     - uses: pdm-project/setup-pdm@v3
       with:
         python-version: ${{ matrix.python }}
+        version: 2.7.4
         cache: 'true'
         cache-dependency-path: '**/pdm.lock'
 
     - name: Install dependencies
-      run: pdm install
+      run: make install
 
     - uses: pre-commit/action@v3.0.0
       with:
@@ -58,9 +59,10 @@ jobs:
     - uses: pdm-project/setup-pdm@v3
       with:
         python-version: ${{ matrix.python }}
+        version: 2.7.4
         cache: 'true'
         cache-dependency-path: '**/pdm.lock'
-        
+
     - name: test with dotenv
       run: make install test
       env:
