@@ -5,6 +5,7 @@ build-backend = 'hatchling.build'
 [tool.hatch.version]
 path = 'pydantic_settings/version.py'
 
+
 [tool.pdm.dev-dependencies]
 dev = [
     "black==23.3.0",
@@ -16,6 +17,7 @@ dev = [
     "pytest-examples==0.0.10",
     "pytest-mock==3.11.1",
     "pytest-pretty==1.2.0",
+    "python-dotenv>=0.21.1",
     "pyupgrade==3.3.2",
     "ruff==0.0.270"
 ]

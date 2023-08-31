@@ -20,8 +20,6 @@ jobs:
       with:
         python-version: '3.10'
 
-    - run: pip install -r requirements/linting.txt -r requirements/pyproject.txt
-
     - uses: pre-commit/action@v3.0.0
       with:
         extra_args: --all-files
@@ -48,24 +46,28 @@ jobs:
       with:
         python-version: ${{ matrix.python }}
 
-    - run: pip install -r requirements/testing.txt -r requirements/pyproject.txt
-
+    - uses: pdm-project/setup-pdm@v3
+      with:
+        python-version: ${{ matrix.python }}
+        cache: 'true'
+        cache-dependency-path: '**/pdm.lock'
+        
     - name: test with dotenv
-      run: make test
+      run: make install test
       env:
         COVERAGE_FILE: .coverage.${{ runner.os }}-py${{ matrix.python }}-with-dotenv
         CONTEXT: ${{ runner.os }}-py${{ matrix.python }}-with-dotenv
 
-    - run: pip uninstall -y python-dotenv
+    - run: pdm remove python-dotenv
 
     - name: test without dotenv
-      run: make test
+      run: make install test
       env:
         COVERAGE_FILE: .coverage.${{ runner.os }}-py${{ matrix.python }}-without-dotenv
         CONTEXT: ${{ runner.os }}-py${{ matrix.python }}-without-dotenv
 
     - run: coverage combine
-    - run: coverage xml
+    - run: pdm run coverage xml
 
     - uses: codecov/codecov-action@v3
       with:
