@@ -660,7 +660,6 @@ c="best string"
 """
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_env_file_config(env, tmp_path):
     p = tmp_path / '.env'
     p.write_text(test_env_file)
@@ -691,7 +690,6 @@ f="random value"
 """
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_env_file_with_env_prefix(env, tmp_path):
     p = tmp_path / '.env'
     p.write_text(prefix_test_env_file)
@@ -711,7 +709,6 @@ def test_env_file_with_env_prefix(env, tmp_path):
     assert s.c == 'best string'
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_env_file_config_case_sensitive(tmp_path):
     p = tmp_path / '.env'
     p.write_text(test_env_file)
@@ -735,7 +732,6 @@ def test_env_file_config_case_sensitive(tmp_path):
     ]
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_env_file_export(env, tmp_path):
     p = tmp_path / '.env'
     p.write_text(
@@ -761,7 +757,6 @@ export C="best string"
     assert s.c == 'best string'
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_env_file_export_validation_alias(env, tmp_path):
     p = tmp_path / '.env'
     p.write_text("""export a='{"b": ["1", "2"]}'""")
@@ -775,7 +770,6 @@ def test_env_file_export_validation_alias(env, tmp_path):
     assert s.a == '2'
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_env_file_config_custom_encoding(tmp_path):
     p = tmp_path / '.env'
     p.write_text('pika=p!±@', encoding='latin-1')
@@ -797,7 +791,6 @@ def home_tmp():
     home_tmp_path.unlink()
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_env_file_home_directory(home_tmp):
     home_tmp_path, tmp_filename = home_tmp
     home_tmp_path.write_text('pika=baz')
@@ -810,7 +803,6 @@ def test_env_file_home_directory(home_tmp):
     assert Settings().pika == 'baz'
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_env_file_none(tmp_path):
     p = tmp_path / '.env'
     p.write_text('a')
@@ -822,7 +814,6 @@ def test_env_file_none(tmp_path):
     assert s.a == 'xxx'
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_env_file_override_file(tmp_path):
     p1 = tmp_path / '.env'
     p1.write_text(test_env_file)
@@ -838,7 +829,6 @@ def test_env_file_override_file(tmp_path):
     assert s.a == 'new string'
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_env_file_override_none(tmp_path):
     p = tmp_path / '.env'
     p.write_text(test_env_file)
@@ -852,7 +842,6 @@ def test_env_file_override_none(tmp_path):
     assert s.a is None
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_env_file_not_a_file(env):
     class Settings(BaseSettings):
         a: str = None
@@ -862,7 +851,6 @@ def test_env_file_not_a_file(env):
     assert s.a == 'ignore non-file'
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_read_env_file_cast_sensitive(tmp_path):
     p = tmp_path / '.env'
     p.write_text('a="test"\nB=123')
@@ -871,7 +859,6 @@ def test_read_env_file_cast_sensitive(tmp_path):
     assert read_env_file(p, case_sensitive=True) == {'a': 'test', 'B': '123'}
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_read_env_file_syntax_wrong(tmp_path):
     p = tmp_path / '.env'
     p.write_text('NOT_AN_ASSIGNMENT')
@@ -879,7 +866,6 @@ def test_read_env_file_syntax_wrong(tmp_path):
     assert read_env_file(p, case_sensitive=True) == {'NOT_AN_ASSIGNMENT': None}
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_env_file_example(tmp_path):
     p = tmp_path / '.env'
     p.write_text(
@@ -907,7 +893,6 @@ MY_VAR='Hello world'
     }
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_env_file_custom_encoding(tmp_path):
     p = tmp_path / '.env'
     p.write_text('pika=p!±@', encoding='latin-1')
@@ -934,7 +919,6 @@ host=https://example.com/services
 """
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_multiple_env_file(tmp_path):
     base_env = tmp_path / '.env'
     base_env.write_text(test_default_env_file)
@@ -954,7 +938,6 @@ def test_multiple_env_file(tmp_path):
     assert s.port == 8000
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_model_env_file_override_model_config(tmp_path):
     base_env = tmp_path / '.env'
     base_env.write_text(test_default_env_file)
@@ -974,7 +957,6 @@ def test_model_env_file_override_model_config(tmp_path):
     assert s.port == 8000
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_multiple_env_file_encoding(tmp_path):
     base_env = tmp_path / '.env'
     base_env.write_text('pika=p!±@', encoding='latin-1')
@@ -988,7 +970,6 @@ def test_multiple_env_file_encoding(tmp_path):
     assert s.pika == 'chu!±@'
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_read_dotenv_vars(tmp_path):
     base_env = tmp_path / '.env'
     base_env.write_text(test_default_env_file)
@@ -1009,7 +990,6 @@ def test_read_dotenv_vars(tmp_path):
     }
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_read_dotenv_vars_when_env_file_is_none():
     assert (
         DotEnvSettingsSource(BaseSettings(), env_file=None, env_file_encoding=None)._read_env_files(
@@ -1211,7 +1191,6 @@ def test_secrets_file_is_a_directory(tmp_path):
         Settings()
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_secrets_dotenv_precedence(tmp_path):
     s = tmp_path / 'foo'
     s.write_text('foo_secret_value_str')
@@ -1564,7 +1543,6 @@ def test_nested_model_case_insensitive(env):
     assert s.nested.SUB_sub.SUB_sub_SuB.val4 == 'v4'
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_dotenv_extra_allow(tmp_path):
     p = tmp_path / '.env'
     p.write_text('a=b\nx=y')
@@ -1579,7 +1557,6 @@ def test_dotenv_extra_allow(tmp_path):
     assert s.x == 'y'
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_dotenv_extra_forbid(tmp_path):
     p = tmp_path / '.env'
     p.write_text('a=b\nx=y')
@@ -1596,7 +1573,6 @@ def test_dotenv_extra_forbid(tmp_path):
     ]
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_dotenv_extra_case_insensitive(tmp_path):
     p = tmp_path / '.env'
     p.write_text('a=b')
@@ -1610,7 +1586,6 @@ def test_dotenv_extra_case_insensitive(tmp_path):
     assert s.A == 'b'
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_dotenv_extra_sub_model_case_insensitive(tmp_path):
     p = tmp_path / '.env'
     p.write_text('a=b\nSUB_model={"v": "v1"}')
@@ -1803,7 +1778,6 @@ def test_optional_field_from_env(env):
     assert s.x == '123'
 
 
-@pytest.mark.skipif(not dotenv, reason='python-dotenv not installed')
 def test_dotenv_optional_json_field(tmp_path):
     p = tmp_path / '.env'
     p.write_text("""DATA='{"foo":"bar"}'""")
