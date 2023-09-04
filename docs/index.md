@@ -85,17 +85,17 @@ print(Settings().model_dump())
 1. The environment variable name is overridden using `validation_alias`. In this case, the environment variable
    `my_auth_key` will be read instead of `auth_key`.
 
-    Check the [`Field` documentation](../fields/) for more information.
+    Check the [`Field` documentation](fields.md) for more information.
 
 2. The environment variable name is overridden using `alias`. In this case, the environment variable
    `my_api_key` will be used for both validation and serialization instead of `api_key`.
 
-   Check the [`Field` documentation](../fields/#field-aliases) for more information.
+   Check the [`Field` documentation](fields.md#field-aliases) for more information.
 
 3. The `AliasChoices` class allows to have multiple environment variable names for a single field.
    The first environment variable that is found will be used.
 
-    Check the [`AliasChoices`](../fields/#aliaspath-and-aliaschoices) for more information.
+    Check the [`AliasChoices`](fields.md#aliaspath-and-aliaschoices) for more information.
 
 4. The `ImportString` class allows to import an object from a string.
    In this case, the environment variable `special_function` will be read and the function `math.cos` will be imported.
@@ -131,7 +131,7 @@ There are two ways to do this:
 * Using `Field(alias=...)` (see `api_key` above)
 * Using `Field(validation_alias=...)` (see `auth_key` above)
 
-Check the [`Field` aliases documentation](../fields#field-aliases) for more information about aliases.
+Check the [`Field` aliases documentation](fields.md#field-aliases) for more information about aliases.
 
 `env_prefix` does not apply to fields with alias. It means the environment variable name is the same
 as field alis:
