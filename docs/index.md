@@ -249,11 +249,11 @@ from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class DeepSubModel(BaseModel):
+class DeepSubModel(BaseModel):  # (1)!
     v4: str
 
 
-class SubModel(BaseModel):
+class SubModel(BaseModel):  # (2)!
     v1: str
     v2: bytes
     v3: int
@@ -275,6 +275,12 @@ print(Settings().model_dump())
 }
 """
 ```
+
+1. Sub model has to inherit from `pydantic.BaseModel`, Otherwise `pydantic-settings` will initialize sub model,
+   collects values for sub model fields separately, and you may get unexpected results.
+
+1. Sub model has to inherit from `pydantic.BaseModel`, Otherwise `pydantic-settings` will initialize sub model,
+   collects values for sub model fields separately, and you may get unexpected results.
 
 `env_nested_delimiter` can be configured via the `model_config` as shown above, or via the
 `_env_nested_delimiter` keyword argument on instantiation.
