@@ -104,6 +104,42 @@ print(Settings().model_dump())
 
     Check the [Environment variable names documentation](#environment-variable-names) for more information.
 
+## Validation of default values
+
+Unlike pydantic `BaseModel`, default values of `BaseSettings` fields are validated by default.
+You can disable this behaviour by setting `validate_default=False` either in `model_config`
+or on field-by-field basis:
+
+```py
+import datetime as dt
+
+from pydantic import Field
+from pydantic.functional_validators import BeforeValidator
+from typing_extensions import Annotated
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def str_to_date(v: str) -> dt.date:
+    return dt.date.fromisoformat(v)
+
+
+class GlobalSettings(BaseSettings):
+    model_config = SettingsConfigDict(validate_default=False)
+
+    # default won't be validated
+    date: Annotated[dt.date, BeforeValidator(str_to_date)] = dt.date(2000, 1, 1)
+
+
+class LocalSettings(BaseSettings):
+    # default won't be validated
+    date: Annotated[dt.date, BeforeValidator(str_to_date)] = Field(
+        default=dt.date(2000, 1, 1), validate_default=False
+    )
+```
+
+Check the [Validation of default values](validators.md#validation-of-default-values) for more information.
+
 ## Environment variable names
 
 By default, the environment variable name is the same as the field name.
