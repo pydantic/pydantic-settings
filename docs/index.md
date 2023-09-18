@@ -108,34 +108,32 @@ print(Settings().model_dump())
 
 Unlike pydantic `BaseModel`, default values of `BaseSettings` fields are validated by default.
 You can disable this behaviour by setting `validate_default=False` either in `model_config`
-or on field-by-field basis:
+or on field level by `Field(validate_default=False)`:
 
 ```py
-import datetime as dt
-
 from pydantic import Field
-from pydantic.functional_validators import BeforeValidator
-from typing_extensions import Annotated
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-def str_to_date(v: str) -> dt.date:
-    return dt.date.fromisoformat(v)
-
-
-class GlobalSettings(BaseSettings):
+class Settings(BaseSettings):
     model_config = SettingsConfigDict(validate_default=False)
 
     # default won't be validated
-    date: Annotated[dt.date, BeforeValidator(str_to_date)] = dt.date(2000, 1, 1)
+    foo: int = 'test'
 
 
-class LocalSettings(BaseSettings):
+print(Settings())
+#> foo='test'
+
+
+class Settings1(BaseSettings):
     # default won't be validated
-    date: Annotated[dt.date, BeforeValidator(str_to_date)] = Field(
-        default=dt.date(2000, 1, 1), validate_default=False
-    )
+    foo: int = Field('test', validate_default=False)
+
+
+print(Settings1())
+#> foo='test'
 ```
 
 Check the [Validation of default values](validators.md#validation-of-default-values) for more information.
