@@ -12,4 +12,4 @@ This package was kindly donated to the [Pydantic organisation](https://github.co
 For the old "Hipster-orgazmic tool to mange application settings" package, see [version 0.2.5](https://pypi.org/project/pydantic-settings/0.2.5/).
 
 
-See [documentation](https://docs.pydantic.dev/latest/usage/pydantic_settings/) for more details.
+See [documentation](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) for more details.
