@@ -50,7 +50,7 @@ Homepage = 'https://github.com/pydantic/pydantic-settings'
 Funding = 'https://github.com/sponsors/samuelcolvin'
 Source = 'https://github.com/pydantic/pydantic-settings'
 Changelog = 'https://github.com/pydantic/pydantic-settings/releases'
-Documentation = 'https://docs.pydantic.dev/dev-v2/usage/pydantic_settings/'
+Documentation = 'https://docs.pydantic.dev/dev-v2/concepts/pydantic_settings/'
 
 [tool.pytest.ini_options]
 testpaths = 'tests'
