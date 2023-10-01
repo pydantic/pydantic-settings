@@ -168,7 +168,7 @@ There are two ways to do this:
 Check the [`Field` aliases documentation](fields.md#field-aliases) for more information about aliases.
 
 `env_prefix` does not apply to fields with alias. It means the environment variable name is the same
-as field alis:
+as field alias:
 
 ```py
 from pydantic import Field
