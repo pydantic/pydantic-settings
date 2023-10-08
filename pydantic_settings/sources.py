@@ -647,3 +647,34 @@ def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:
     return lenient_issubclass(annotation, (BaseModel, Mapping, Sequence, tuple, set, frozenset, deque)) or is_dataclass(
         annotation
     )
+ 
+class AWSSecretManagerSettingsSource(PydanticBaseSettingsSource):
+    """
+    Supports the AWS Secret Manager
+
+    Args:
+        PydanticBaseSettingsSource (_type_): _description_
+    """
+    def __repr__(self) -> str:
+        return (
+            f'AWSSecretManagerSettingsSource'
+        )
+        
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        """
+        Gets the value, the key for model creation, and a flag to determine whether value is complex.
+
+        This is an abstract method that should be overridden in every settings source classes.
+
+        Args:
+            field: The field.
+            field_name: The field name.
+
+        Returns:
+            A tuple contains the key, value and a flag to determine whether value is complex.
+        """
+        pass
+    
+    @abstractmethod
+    def __call__(self) -> dict[str, Any]:
+        pass
