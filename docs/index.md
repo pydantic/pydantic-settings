@@ -3,9 +3,9 @@
 
 Installation is as simple as:
 
-```bash
+````bash
 pip install pydantic-settings
-```
+````
 
 ## Usage
 
@@ -21,7 +21,7 @@ This makes it easy to:
 
 For example:
 
-```py
+````py
 from typing import Any, Callable, Set
 
 from pydantic import (
@@ -80,7 +80,7 @@ print(Settings().model_dump())
     'more_settings': {'foo': 'bar', 'apple': 1},
 }
 """
-```
+````
 
 1. The environment variable name is overridden using `validation_alias`. In this case, the environment variable
    `my_auth_key` will be read instead of `auth_key`.
@@ -110,7 +110,7 @@ Unlike pydantic `BaseModel`, default values of `BaseSettings` fields are validat
 You can disable this behaviour by setting `validate_default=False` either in `model_config`
 or on field level by `Field(validate_default=False)`:
 
-```py
+````py
 from pydantic import Field
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -134,7 +134,7 @@ class Settings1(BaseSettings):
 
 print(Settings1())
 #> foo='test'
-```
+````
 
 Check the [Validation of default values](validators.md#validation-of-default-values) for more information.
 
@@ -145,7 +145,7 @@ By default, the environment variable name is the same as the field name.
 You can change the prefix for all environment variables by setting the `env_prefix` config setting,
 or via the `_env_prefix` keyword argument on instantiation:
 
-```py
+````py
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -153,7 +153,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix='my_prefix_')
 
     auth_key: str = 'xxx'  # will be read from `my_prefix_auth_key`
-```
+````
 
 !!! note
     The default `env_prefix` is `''` (empty string).
@@ -170,7 +170,7 @@ Check the [`Field` aliases documentation](fields.md#field-aliases) for more info
 `env_prefix` does not apply to fields with alias. It means the environment variable name is the same
 as field alias:
 
-```py
+````py
 from pydantic import Field
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -180,7 +180,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix='my_prefix_')
 
     foo: str = Field('xxx', alias='FooAlias')  # (1)!
-```
+````
 
 1. `env_prefix` will be ignored and the value will be read from `FooAlias` environment variable.
 
@@ -190,7 +190,7 @@ By default, environment variable names are case-insensitive.
 
 If you want to make environment variable names case-sensitive, you can set the `case_sensitive` config setting:
 
-```py
+````py
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -198,7 +198,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(case_sensitive=True)
 
     redis_host: str = 'localhost'
-```
+````
 
 When `case_sensitive` is `True`, the environment variable names must match field names (optionally with a prefix),
 so in this example `redis_host` could only be modified via `export redis_host`. If you want to name environment variables
@@ -209,7 +209,7 @@ Case-sensitivity can also be set via the `_case_sensitive` keyword argument on i
 
 In case of nested models, the `case_sensitive` setting will be applied to all nested models.
 
-```py
+````py
 import os
 
 from pydantic import ValidationError
@@ -243,7 +243,7 @@ except ValidationError as e:
       Extra inputs are not permitted [type=extra_forbidden, input_value='localhost', input_type=str]
         For further information visit https://errors.pydantic.dev/2/v/extra_forbidden
     """
-```
+````
 
 1. Note that the `host` field is not found because the environment variable name is `HOST` (all upper-case).
 
@@ -266,18 +266,18 @@ So if you define a variable `FOO__BAR__BAZ=123` it will convert it into `FOO={'B
 If you have multiple variables with the same structure they will be merged.
 
 As an example, given the following environment variables:
-```bash
+````bash
 # your environment
 export V0=0
 export SUB_MODEL='{"v1": "json-1", "v2": "json-2"}'
 export SUB_MODEL__V2=nested-2
 export SUB_MODEL__V3=3
 export SUB_MODEL__DEEP__V4=v4
-```
+````
 
 You could load them into the following settings model:
 
-```py
+````py
 from pydantic import BaseModel
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -308,10 +308,7 @@ print(Settings().model_dump())
     'sub_model': {'v1': 'json-1', 'v2': b'nested-2', 'v3': 3, 'deep': {'v4': 'v4'}},
 }
 """
-```
-
-1. Sub model has to inherit from `pydantic.BaseModel`, Otherwise `pydantic-settings` will initialize sub model,
-   collects values for sub model fields separately, and you may get unexpected results.
+````
 
 1. Sub model has to inherit from `pydantic.BaseModel`, Otherwise `pydantic-settings` will initialize sub model,
    collects values for sub model fields separately, and you may get unexpected results.
@@ -327,7 +324,7 @@ Nested environment variables take precedence over the top-level environment vari
 
 You may also populate a complex type by providing your own source class.
 
-```py
+````py
 import json
 import os
 from typing import Any, List, Tuple, Type
@@ -368,7 +365,7 @@ class Settings(BaseSettings):
 os.environ['numbers'] = '1,2,3'
 print(Settings().model_dump())
 #> {'numbers': [1, 2, 3]}
-```
+````
 
 ## Dotenv (.env) support
 
@@ -377,40 +374,40 @@ platform-independent manner.
 
 A dotenv file follows the same general principles of all environment variables, and it looks like this:
 
-```bash title=".env"
+````bash title=".env"
 # ignore comment
 ENVIRONMENT="production"
 REDIS_ADDRESS=localhost:6379
 MEANING_OF_LIFE=42
 MY_VAR='Hello world'
-```
+````
 
 Once you have your `.env` file filled with variables, *pydantic* supports loading it in two ways:
 
 1. Setting the `env_file` (and `env_file_encoding` if you don't want the default encoding of your OS) on `model_config`
 in the `BaseSettings` class:
 
-```py hl_lines="4 5"
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
-```
+   ````py hl_lines="4 5"
+   from pydantic_settings import BaseSettings, SettingsConfigDict
+    
+    
+   class Settings(BaseSettings):
+       model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
+   ````
 
 2. Instantiating the `BaseSettings` derived class with the `_env_file` keyword argument
 (and the `_env_file_encoding` if needed):
 
-```py hl_lines="8"
-from pydantic_settings import BaseSettings, SettingsConfigDict
+   ````py hl_lines="8"
+   from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
+   class Settings(BaseSettings):
+       model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
 
 
-settings = Settings(_env_file='prod.env', _env_file_encoding='utf-8')
-```
+   settings = Settings(_env_file='prod.env', _env_file_encoding='utf-8')
+   ````
 
 In either case, the value of the passed argument can be any valid path or filename, either absolute or relative to the
 current working directory. From there, *pydantic* will handle everything for you by loading in your variables and
@@ -430,7 +427,7 @@ while `.env` would be ignored.
 If you need to load multiple dotenv files, you can pass multiple file paths as a tuple or list. The files will be
 loaded in order, with each file overriding the previous one.
 
-```py
+````py
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -439,7 +436,7 @@ class Settings(BaseSettings):
         # `.env.prod` takes priority over `.env`
         env_file=('.env', '.env.prod')
     )
-```
+````
 
 You can also use the keyword argument override to tell Pydantic not to load any file at all (even if one is set in
 the `model_config` class) by passing `None` as the instantiation keyword argument, e.g. `settings = Settings(_env_file=None)`.
@@ -453,13 +450,13 @@ on `model_config` and your dotenv file contains an entry for a field that is not
 it will raise `ValidationError` in settings construction.
 
 For compatibility with pydantic 1.x BaseSettings you should use `extra=ignore`:
-```py
+````py
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
-```
+````
 
 
 ## Secrets
@@ -469,29 +466,29 @@ Placing secret values in files is a common pattern to provide sensitive configur
 A secret file follows the same principal as a dotenv file except it only contains a single value and the file name
 is used as the key. A secret file will look like the following:
 
-``` title="/var/run/database_password"
+```` title="/var/run/database_password"
 super_secret_database_password
-```
+````
 
 Once you have your secret files, *pydantic* supports loading it in two ways:
 
 1. Setting the `secrets_dir` on `model_config` in a `BaseSettings` class to the directory where your secret files are stored.
 
-```py hl_lines="4 5 6 7"
-from pydantic_settings import BaseSettings, SettingsConfigDict
+   ````py hl_lines="4 5 6 7"
+   from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(secrets_dir='/var/run')
+   class Settings(BaseSettings):
+       model_config = SettingsConfigDict(secrets_dir='/var/run')
 
-    database_password: str
-```
+       database_password: str
+   ````
 
 2. Instantiating the `BaseSettings` derived class with the `_secrets_dir` keyword argument:
 
-```
-settings = Settings(_secrets_dir='/var/run')
-```
+   ````
+   settings = Settings(_secrets_dir='/var/run')
+   ````
 
 In either case, the value of the passed argument can be any valid directory, either absolute or relative to the
 current working directory. **Note that a non existent directory will only generate a warning**.
@@ -512,7 +509,7 @@ and using secrets in Docker see the official
 
 First, define your `Settings` class with a `SettingsConfigDict` that specifies the secrets directory.
 
-```py hl_lines="4 5 6 7"
+````py hl_lines="4 5 6 7"
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -520,21 +517,21 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(secrets_dir='/run/secrets')
 
     my_secret_data: str
-```
+````
 
 !!! note
     By default [Docker uses `/run/secrets`](https://docs.docker.com/engine/swarm/secrets/#how-docker-manages-secrets)
     as the target mount point. If you want to use a different location, change `Config.secrets_dir` accordingly.
 
 Then, create your secret via the Docker CLI
-```bash
+````bash
 printf "This is a secret" | docker secret create my_secret_data -
-```
+````
 
 Last, run your application inside a Docker container and supply your newly created secret
-```bash
+````bash
 docker service create --name pydantic-with-secrets --secret my_secret_data pydantic-app:latest
-```
+````
 
 ## Field value priority
 
@@ -561,7 +558,7 @@ Each callable should take an instance of the settings class as its sole argument
 
 The order of the returned callables decides the priority of inputs; first item is the highest priority.
 
-```py
+````py
 from typing import Tuple, Type
 
 from pydantic import PostgresDsn
@@ -586,7 +583,7 @@ class Settings(BaseSettings):
 
 print(Settings(database_dsn='postgres://postgres@localhost:5432/kwargs_db'))
 #> database_dsn=MultiHostUrl('postgres://postgres@localhost:5432/kwargs_db')
-```
+````
 
 By flipping `env_settings` and `init_settings`, environment variables now have precedence over `__init__` kwargs.
 
@@ -595,7 +592,7 @@ By flipping `env_settings` and `init_settings`, environment variables now have p
 As explained earlier, *pydantic* ships with multiples built-in settings sources. However, you may occasionally
 need to add your own custom sources, `settings_customise_sources` makes this very easy:
 
-```py
+````py
 import json
 from pathlib import Path
 from typing import Any, Dict, Tuple, Type
@@ -673,13 +670,13 @@ class Settings(BaseSettings):
 
 print(Settings())
 #> foobar='test'
-```
+````
 
 ### Removing sources
 
 You might also want to disable a source:
 
-```py
+````py
 from typing import Tuple, Type
 
 from pydantic import ValidationError
@@ -713,4 +710,4 @@ except ValidationError as exc_info:
       Field required [type=missing, input_value={}, input_type=dict]
         For further information visit https://errors.pydantic.dev/2/v/missing
     """
-```
+````
