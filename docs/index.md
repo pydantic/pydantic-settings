@@ -3,9 +3,9 @@
 
 Installation is as simple as:
 
-````bash
+```bash
 pip install pydantic-settings
-````
+```
 
 ## Usage
 
@@ -311,6 +311,9 @@ print(Settings().model_dump())
 ````
 
 1. Sub model has to inherit from `pydantic.BaseModel`, Otherwise `pydantic-settings` will initialize sub model,
+   collects values for sub model fields separately, and you may get unexpected results.
+
+2. Sub model has to inherit from `pydantic.BaseModel`, Otherwise `pydantic-settings` will initialize sub model,
    collects values for sub model fields separately, and you may get unexpected results.
 
 `env_nested_delimiter` can be configured via the `model_config` as shown above, or via the
