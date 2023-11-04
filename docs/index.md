@@ -389,7 +389,6 @@ Once you have your `.env` file filled with variables, *pydantic* supports loadin
 
 1. Setting the `env_file` (and `env_file_encoding` if you don't want the default encoding of your OS) on `model_config`
 in the `BaseSettings` class:
-
    ````py hl_lines="4 5"
    from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -397,10 +396,8 @@ in the `BaseSettings` class:
    class Settings(BaseSettings):
        model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
    ````
-
 2. Instantiating the `BaseSettings` derived class with the `_env_file` keyword argument
 (and the `_env_file_encoding` if needed):
-
    ````py hl_lines="8"
    from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -411,7 +408,6 @@ in the `BaseSettings` class:
 
    settings = Settings(_env_file='prod.env', _env_file_encoding='utf-8')
    ````
-
 In either case, the value of the passed argument can be any valid path or filename, either absolute or relative to the
 current working directory. From there, *pydantic* will handle everything for you by loading in your variables and
 validating them.
@@ -486,7 +482,6 @@ Once you have your secret files, *pydantic* supports loading it in two ways:
 
        database_password: str
    ````
-
 2. Instantiating the `BaseSettings` derived class with the `_secrets_dir` keyword argument:
 
    ````
