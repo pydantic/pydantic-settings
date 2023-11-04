@@ -472,7 +472,6 @@ super_secret_database_password
 Once you have your secret files, *pydantic* supports loading it in two ways:
 
 1. Setting the `secrets_dir` on `model_config` in a `BaseSettings` class to the directory where your secret files are stored.
-
    ````py hl_lines="4 5 6 7"
    from pydantic_settings import BaseSettings, SettingsConfigDict
 
