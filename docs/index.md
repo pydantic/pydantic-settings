@@ -313,7 +313,7 @@ print(Settings().model_dump())
 1. Sub model has to inherit from `pydantic.BaseModel`, Otherwise `pydantic-settings` will initialize sub model,
    collects values for sub model fields separately, and you may get unexpected results.
 
-1. Sub model has to inherit from `pydantic.BaseModel`, Otherwise `pydantic-settings` will initialize sub model,
+2. Sub model has to inherit from `pydantic.BaseModel`, Otherwise `pydantic-settings` will initialize sub model,
    collects values for sub model fields separately, and you may get unexpected results.
 
 `env_nested_delimiter` can be configured via the `model_config` as shown above, or via the
@@ -389,29 +389,25 @@ Once you have your `.env` file filled with variables, *pydantic* supports loadin
 
 1. Setting the `env_file` (and `env_file_encoding` if you don't want the default encoding of your OS) on `model_config`
 in the `BaseSettings` class:
+   ````py hl_lines="4 5"
+   from pydantic_settings import BaseSettings, SettingsConfigDict
 
-```py hl_lines="4 5"
-from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
-```
-
+   class Settings(BaseSettings):
+       model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
+   ````
 2. Instantiating the `BaseSettings` derived class with the `_env_file` keyword argument
 (and the `_env_file_encoding` if needed):
-
-```py hl_lines="8"
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
+   ````py hl_lines="8"
+   from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-settings = Settings(_env_file='prod.env', _env_file_encoding='utf-8')
-```
+   class Settings(BaseSettings):
+       model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
 
+
+   settings = Settings(_env_file='prod.env', _env_file_encoding='utf-8')
+   ````
 In either case, the value of the passed argument can be any valid path or filename, either absolute or relative to the
 current working directory. From there, *pydantic* will handle everything for you by loading in your variables and
 validating them.
@@ -476,22 +472,19 @@ super_secret_database_password
 Once you have your secret files, *pydantic* supports loading it in two ways:
 
 1. Setting the `secrets_dir` on `model_config` in a `BaseSettings` class to the directory where your secret files are stored.
+   ````py hl_lines="4 5 6 7"
+   from pydantic_settings import BaseSettings, SettingsConfigDict
 
-```py hl_lines="4 5 6 7"
-from pydantic_settings import BaseSettings, SettingsConfigDict
 
+   class Settings(BaseSettings):
+       model_config = SettingsConfigDict(secrets_dir='/var/run')
 
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(secrets_dir='/var/run')
-
-    database_password: str
-```
-
+       database_password: str
+   ````
 2. Instantiating the `BaseSettings` derived class with the `_secrets_dir` keyword argument:
-
-```
-settings = Settings(_secrets_dir='/var/run')
-```
+   ````
+   settings = Settings(_secrets_dir='/var/run')
+   ````
 
 In either case, the value of the passed argument can be any valid directory, either absolute or relative to the
 current working directory. **Note that a non existent directory will only generate a warning**.
