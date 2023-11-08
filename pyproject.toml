@@ -20,7 +20,6 @@ classifiers = [
     'Programming Language :: Python',
     'Programming Language :: Python :: 3',
     'Programming Language :: Python :: 3 :: Only',
-    'Programming Language :: Python :: 3.7',
     'Programming Language :: Python :: 3.8',
     'Programming Language :: Python :: 3.9',
     'Programming Language :: Python :: 3.10',
@@ -39,7 +38,7 @@ classifiers = [
     'Topic :: Software Development :: Libraries :: Python Modules',
     'Topic :: Internet',
 ]
-requires-python = '>=3.7'
+requires-python = '>=3.8'
 dependencies = [
     'pydantic>=2.3.0',
     'python-dotenv>=0.21.0',
@@ -86,7 +85,7 @@ extend-select = ['Q', 'RUF100', 'C90', 'UP', 'I']
 flake8-quotes = {inline-quotes = 'single', multiline-quotes = 'double'}
 mccabe = { max-complexity = 14 }
 isort = { known-first-party = ['pydantic_settings', 'tests'] }
-target-version = 'py37'
+target-version = 'py38'
 
 [tool.black]
 color = true
