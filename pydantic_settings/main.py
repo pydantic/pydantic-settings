@@ -14,6 +14,7 @@ from .sources import (
     DotenvType,
     EnvSettingsSource,
     InitSettingsSource,
+    KeyringSettingsSource,
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
 )
@@ -25,6 +26,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     env_file: DotenvType | None
     env_file_encoding: str | None
     env_nested_delimiter: str | None
+    keyring_backend: str | None
     secrets_dir: str | Path | None
 
 
@@ -54,6 +56,7 @@ class BaseSettings(BaseModel):
             `None` to indicate that environment variables should not be loaded from an env file.
         _env_file_encoding: The env file encoding, e.g. `'latin-1'`. Defaults to `None`.
         _env_nested_delimiter: The nested env values delimiter. Defaults to `None`.
+        _keyring_backend: The keyring backend, e.g. `'SecretService Keyring'`. Defaults to `None`.
         _secrets_dir: The secret files directory. Defaults to `None`.
     """
 
@@ -64,6 +67,7 @@ class BaseSettings(BaseModel):
         _env_file: DotenvType | None = ENV_FILE_SENTINEL,
         _env_file_encoding: str | None = None,
         _env_nested_delimiter: str | None = None,
+        _keyring_backend: str | None = None,
         _secrets_dir: str | Path | None = None,
         **values: Any,
     ) -> None:
@@ -76,6 +80,7 @@ class BaseSettings(BaseModel):
                 _env_file=_env_file,
                 _env_file_encoding=_env_file_encoding,
                 _env_nested_delimiter=_env_nested_delimiter,
+                _keyring_backend=_keyring_backend,
                 _secrets_dir=_secrets_dir,
             )
         )
@@ -87,6 +92,7 @@ class BaseSettings(BaseModel):
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
+        keyring_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         """
@@ -97,12 +103,13 @@ class BaseSettings(BaseModel):
             init_settings: The `InitSettingsSource` instance.
             env_settings: The `EnvSettingsSource` instance.
             dotenv_settings: The `DotEnvSettingsSource` instance.
+            keyring_settings: The `KeyringSettingsSource` instance.
             file_secret_settings: The `SecretsSettingsSource` instance.
 
         Returns:
             A tuple containing the sources and their order for loading the settings values.
         """
-        return init_settings, env_settings, dotenv_settings, file_secret_settings
+        return init_settings, env_settings, dotenv_settings, keyring_settings, file_secret_settings
 
     def _settings_build_values(
         self,
@@ -112,6 +119,7 @@ class BaseSettings(BaseModel):
         _env_file: DotenvType | None = None,
         _env_file_encoding: str | None = None,
         _env_nested_delimiter: str | None = None,
+        _keyring_backend: str | None = None,
         _secrets_dir: str | Path | None = None,
     ) -> dict[str, Any]:
         # Determine settings config values
@@ -126,6 +134,7 @@ class BaseSettings(BaseModel):
             if _env_nested_delimiter is not None
             else self.model_config.get('env_nested_delimiter')
         )
+        keyring_backend = _keyring_backend if _keyring_backend is not None else self.model_config.get('keyring_backend')
         secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
         # Configure built-in sources
@@ -144,6 +153,13 @@ class BaseSettings(BaseModel):
             env_prefix=env_prefix,
             env_nested_delimiter=env_nested_delimiter,
         )
+        keyring_settings = KeyringSettingsSource(
+            self.__class__,
+            keyring_backend=keyring_backend,
+            case_sensitive=case_sensitive,
+            env_prefix=env_prefix,
+            env_nested_delimiter=env_nested_delimiter,
+        )
 
         file_secret_settings = SecretsSettingsSource(
             self.__class__, secrets_dir=secrets_dir, case_sensitive=case_sensitive, env_prefix=env_prefix
@@ -154,6 +170,7 @@ class BaseSettings(BaseModel):
             init_settings=init_settings,
             env_settings=env_settings,
             dotenv_settings=dotenv_settings,
+            keyring_settings=keyring_settings,
             file_secret_settings=file_secret_settings,
         )
         if sources:
@@ -172,6 +189,7 @@ class BaseSettings(BaseModel):
         env_file=None,
         env_file_encoding=None,
         env_nested_delimiter=None,
+        keyring_backend=None,
         secrets_dir=None,
         protected_namespaces=('model_', 'settings_'),
     )

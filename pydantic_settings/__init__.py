@@ -3,6 +3,7 @@ from .sources import (
     DotEnvSettingsSource,
     EnvSettingsSource,
     InitSettingsSource,
+    KeyringSettingsSource,
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
 )
@@ -13,6 +14,7 @@ __all__ = (
     'DotEnvSettingsSource',
     'EnvSettingsSource',
     'InitSettingsSource',
+    'KeyringSettingsSource',
     'PydanticBaseSettingsSource',
     'SecretsSettingsSource',
     'SettingsConfigDict',
