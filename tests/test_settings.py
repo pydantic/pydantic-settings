@@ -608,10 +608,10 @@ def test_config_file_settings_nornir(env):
 
 
 def test_env_union_with_complex_subfields_parses_json(env):
-    class A(BaseSettings):
+    class A(BaseModel):
         a: str
 
-    class B(BaseSettings):
+    class B(BaseModel):
         b: int
 
     class Settings(BaseSettings):
@@ -623,10 +623,10 @@ def test_env_union_with_complex_subfields_parses_json(env):
 
 
 def test_env_union_with_complex_subfields_parses_plain_if_json_fails(env):
-    class A(BaseSettings):
+    class A(BaseModel):
         a: str
 
-    class B(BaseSettings):
+    class B(BaseModel):
         b: int
 
     class Settings(BaseSettings):
