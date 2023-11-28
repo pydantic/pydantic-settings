@@ -9,7 +9,7 @@ Settings management using Pydantic, this is the new official home of Pydantic's 
 
 This package was kindly donated to the [Pydantic organisation](https://github.com/pydantic) by Daniel Daniels, see [pydantic/pydantic#4492](https://github.com/pydantic/pydantic/pull/4492) for discussion.
 
-For the old "Hipster-orgazmic tool to mange application settings" package, see [version 0.2.5](https://pypi.org/project/pydantic-settings/0.2.5/).
+For the old "Hipster-orgazmic tool to manage application settings" package, see [version 0.2.5](https://pypi.org/project/pydantic-settings/0.2.5/).
 
 
 See [documentation](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) for more details.
