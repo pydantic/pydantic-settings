@@ -235,11 +235,11 @@ try:
 except ValidationError as e:
     print(e)
     """
-    2 validation errors for RedisSettings
-    host
+    2 validation errors for Settings
+    redis.host
       Field required [type=missing, input_value={'HOST': 'localhost', 'port': 6379}, input_type=dict]
         For further information visit https://errors.pydantic.dev/2/v/missing
-    HOST
+    redis.HOST
       Extra inputs are not permitted [type=extra_forbidden, input_value='localhost', input_type=str]
         For further information visit https://errors.pydantic.dev/2/v/extra_forbidden
     """
