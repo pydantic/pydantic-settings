@@ -46,6 +46,12 @@ class SimpleSettings(BaseSettings):
     apple: str
 
 
+class SettingWithIgnoreEmpty(BaseSettings):
+    apple: str = "default"
+
+    model_config = SettingsConfigDict(env_ignore_empty=True)
+
+
 def test_sub_env(env):
     env.set('apple', 'hello')
     s = SimpleSettings()
@@ -70,6 +76,16 @@ def test_other_setting():
     with pytest.raises(ValidationError):
         SimpleSettings(apple='a', foobar=42)
 
+
+def test_ignore_empty_when_empty_uses_default(env):
+    env.set('apple', '')
+    s = SettingWithIgnoreEmpty()
+    assert s.apple == 'default'
+
+def test_ignore_empty_when_not_empty_uses_value(env):
+    env.set('apple', 'a')
+    s = SettingWithIgnoreEmpty()
+    assert s.apple == 'a'
 
 def test_with_prefix(env):
     class Settings(BaseSettings):
@@ -976,14 +992,15 @@ def test_read_dotenv_vars(tmp_path):
     prod_env = tmp_path / '.env.prod'
     prod_env.write_text(test_prod_env_file)
 
-    source = DotEnvSettingsSource(BaseSettings(), env_file=[base_env, prod_env], env_file_encoding='utf8')
-    assert source._read_env_files(case_sensitive=False) == {
+    source = DotEnvSettingsSource(BaseSettings(), env_file=[base_env, prod_env], env_file_encoding='utf8', case_sensitive=False)
+    assert source._read_env_files() == {
         'debug_mode': 'false',
         'host': 'https://example.com/services',
         'port': '8000',
     }
 
-    assert source._read_env_files(case_sensitive=True) == {
+    source = DotEnvSettingsSource(BaseSettings(), env_file=[base_env, prod_env], env_file_encoding='utf8', case_sensitive=True)
+    assert source._read_env_files() == {
         'debug_mode': 'false',
         'host': 'https://example.com/services',
         'Port': '8000',
@@ -992,10 +1009,8 @@ def test_read_dotenv_vars(tmp_path):
 
 def test_read_dotenv_vars_when_env_file_is_none():
     assert (
-        DotEnvSettingsSource(BaseSettings(), env_file=None, env_file_encoding=None)._read_env_files(
-            case_sensitive=False
-        )
-        == {}
+        DotEnvSettingsSource(BaseSettings(), env_file=None, env_file_encoding=None, case_sensitive=False)
+            ._read_env_files() == {}
     )
 
 
