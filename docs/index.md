@@ -253,9 +253,9 @@ except ValidationError as e:
 
 ## Parsing environment variable values
 
-By default environment variables are parsed verbatim, including if the value is empty. You can choose to 
-ignore empty environment variables by setting the `env_ignore_empty` config setting to `True`. This can be 
-useful if you would prefer to use the default value for a field rather than an empty value from the 
+By default environment variables are parsed verbatim, including if the value is empty. You can choose to
+ignore empty environment variables by setting the `env_ignore_empty` config setting to `True`. This can be
+useful if you would prefer to use the default value for a field rather than an empty value from the
 environment.
 
 For most simple field types (such as `int`, `float`, `str`, etc.), the environment variable value is parsed
