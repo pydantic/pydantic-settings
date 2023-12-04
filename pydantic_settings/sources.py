@@ -129,10 +129,10 @@ class InitSettingsSource(PydanticBaseSettingsSource):
 
 class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
     def __init__(
-        self, 
-        settings_cls: type[BaseSettings], 
-        case_sensitive: bool | None = None, 
-        env_prefix: str | None = None, 
+        self,
+        settings_cls: type[BaseSettings],
+        case_sensitive: bool | None = None,
+        env_prefix: str | None = None,
         env_ignore_empty: bool | None = None,
     ) -> None:
         super().__init__(settings_cls)
@@ -594,10 +594,10 @@ class DotEnvSettingsSource(EnvSettingsSource):
             if env_path.is_file():
                 dotenv_vars.update(
                     read_env_file(
-                        env_path, 
-                        encoding=self.env_file_encoding, 
-                        case_sensitive=self.case_sensitive, 
-                        ignore_empty=self.env_ignore_empty
+                        env_path,
+                        encoding=self.env_file_encoding,
+                        case_sensitive=self.case_sensitive,
+                        ignore_empty=self.env_ignore_empty,
                     )
                 )
 
@@ -642,10 +642,10 @@ def parse_env_vars(
 
 
 def read_env_file(
-    file_path: Path, 
-    *, 
-    encoding: str | None = None, 
-    case_sensitive: bool = False, 
+    file_path: Path,
+    *,
+    encoding: str | None = None,
+    case_sensitive: bool = False,
     ignore_empty: bool = False,
 ) -> Mapping[str, str | None]:
     file_vars: dict[str, str | None] = dotenv_values(file_path, encoding=encoding or 'utf8')
