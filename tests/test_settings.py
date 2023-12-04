@@ -47,7 +47,7 @@ class SimpleSettings(BaseSettings):
 
 
 class SettingWithIgnoreEmpty(BaseSettings):
-    apple: str = "default"
+    apple: str = 'default'
 
     model_config = SettingsConfigDict(env_ignore_empty=True)
 
@@ -82,34 +82,38 @@ def test_ignore_empty_when_empty_uses_default(env):
     s = SettingWithIgnoreEmpty()
     assert s.apple == 'default'
 
+
 def test_ignore_empty_when_not_empty_uses_value(env):
     env.set('apple', 'a')
     s = SettingWithIgnoreEmpty()
     assert s.apple == 'a'
+
 
 def test_ignore_empty_with_dotenv_when_empty_uses_default(tmp_path):
     p = tmp_path / '.env'
     p.write_text('a=')
 
     class Settings(BaseSettings):
-        a: str = "default"
+        a: str = 'default'
 
         model_config = SettingsConfigDict(env_file=p, env_ignore_empty=True)
 
     s = Settings()
-    assert s.a == "default"
+    assert s.a == 'default'
+
 
 def test_ignore_empty_with_dotenv_when_not_empty_uses_value(tmp_path):
     p = tmp_path / '.env'
     p.write_text('a=b')
 
     class Settings(BaseSettings):
-        a: str = "default"
+        a: str = 'default'
 
         model_config = SettingsConfigDict(env_file=p, env_ignore_empty=True)
 
     s = Settings()
-    assert s.a == "b"
+    assert s.a == 'b'
+
 
 def test_with_prefix(env):
     class Settings(BaseSettings):
@@ -1016,14 +1020,18 @@ def test_read_dotenv_vars(tmp_path):
     prod_env = tmp_path / '.env.prod'
     prod_env.write_text(test_prod_env_file)
 
-    source = DotEnvSettingsSource(BaseSettings(), env_file=[base_env, prod_env], env_file_encoding='utf8', case_sensitive=False)
+    source = DotEnvSettingsSource(
+        BaseSettings(), env_file=[base_env, prod_env], env_file_encoding='utf8', case_sensitive=False
+    )
     assert source._read_env_files() == {
         'debug_mode': 'false',
         'host': 'https://example.com/services',
         'port': '8000',
     }
 
-    source = DotEnvSettingsSource(BaseSettings(), env_file=[base_env, prod_env], env_file_encoding='utf8', case_sensitive=True)
+    source = DotEnvSettingsSource(
+        BaseSettings(), env_file=[base_env, prod_env], env_file_encoding='utf8', case_sensitive=True
+    )
     assert source._read_env_files() == {
         'debug_mode': 'false',
         'host': 'https://example.com/services',
@@ -1033,8 +1041,10 @@ def test_read_dotenv_vars(tmp_path):
 
 def test_read_dotenv_vars_when_env_file_is_none():
     assert (
-        DotEnvSettingsSource(BaseSettings(), env_file=None, env_file_encoding=None, case_sensitive=False)
-            ._read_env_files() == {}
+        DotEnvSettingsSource(
+            BaseSettings(), env_file=None, env_file_encoding=None, case_sensitive=False
+        )._read_env_files()
+        == {}
     )
 
 
