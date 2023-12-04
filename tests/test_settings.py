@@ -87,6 +87,30 @@ def test_ignore_empty_when_not_empty_uses_value(env):
     s = SettingWithIgnoreEmpty()
     assert s.apple == 'a'
 
+def test_ignore_empty_with_dotenv_when_empty_uses_default(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('a=')
+
+    class Settings(BaseSettings):
+        a: str = "default"
+
+        model_config = SettingsConfigDict(env_file=p, env_ignore_empty=True)
+
+    s = Settings()
+    assert s.a == "default"
+
+def test_ignore_empty_with_dotenv_when_not_empty_uses_value(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('a=b')
+
+    class Settings(BaseSettings):
+        a: str = "default"
+
+        model_config = SettingsConfigDict(env_file=p, env_ignore_empty=True)
+
+    s = Settings()
+    assert s.a == "b"
+
 def test_with_prefix(env):
     class Settings(BaseSettings):
         apple: str
@@ -867,7 +891,7 @@ def test_env_file_not_a_file(env):
     assert s.a == 'ignore non-file'
 
 
-def test_read_env_file_cast_sensitive(tmp_path):
+def test_read_env_file_case_sensitive(tmp_path):
     p = tmp_path / '.env'
     p.write_text('a="test"\nB=123')
 

@@ -593,7 +593,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
             env_path = Path(env_file).expanduser()
             if env_path.is_file():
                 dotenv_vars.update(
-                    read_env_file(env_path, encoding=self.env_file_encoding, case_sensitive=self.case_sensitive)
+                    read_env_file(env_path, encoding=self.env_file_encoding, case_sensitive=self.case_sensitive, ignore_empty=self.env_ignore_empty)
                 )
 
         return dotenv_vars
