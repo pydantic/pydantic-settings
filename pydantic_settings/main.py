@@ -24,6 +24,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     env_prefix: str
     env_file: DotenvType | None
     env_file_encoding: str | None
+    env_ignore_empty: bool
     env_nested_delimiter: str | None
     secrets_dir: str | Path | None
 
@@ -53,6 +54,7 @@ class BaseSettings(BaseModel):
             means that the value from `model_config['env_file']` should be used. You can also pass
             `None` to indicate that environment variables should not be loaded from an env file.
         _env_file_encoding: The env file encoding, e.g. `'latin-1'`. Defaults to `None`.
+        _env_ignore_empty: Ignore environment variables where the value is an empty string. Default to `False`.
         _env_nested_delimiter: The nested env values delimiter. Defaults to `None`.
         _secrets_dir: The secret files directory. Defaults to `None`.
     """
@@ -63,6 +65,7 @@ class BaseSettings(BaseModel):
         _env_prefix: str | None = None,
         _env_file: DotenvType | None = ENV_FILE_SENTINEL,
         _env_file_encoding: str | None = None,
+        _env_ignore_empty: bool | None = None,
         _env_nested_delimiter: str | None = None,
         _secrets_dir: str | Path | None = None,
         **values: Any,
@@ -75,6 +78,7 @@ class BaseSettings(BaseModel):
                 _env_prefix=_env_prefix,
                 _env_file=_env_file,
                 _env_file_encoding=_env_file_encoding,
+                _env_ignore_empty=_env_ignore_empty,
                 _env_nested_delimiter=_env_nested_delimiter,
                 _secrets_dir=_secrets_dir,
             )
@@ -111,6 +115,7 @@ class BaseSettings(BaseModel):
         _env_prefix: str | None = None,
         _env_file: DotenvType | None = None,
         _env_file_encoding: str | None = None,
+        _env_ignore_empty: bool | None = None,
         _env_nested_delimiter: str | None = None,
         _secrets_dir: str | Path | None = None,
     ) -> dict[str, Any]:
@@ -120,6 +125,9 @@ class BaseSettings(BaseModel):
         env_file = _env_file if _env_file != ENV_FILE_SENTINEL else self.model_config.get('env_file')
         env_file_encoding = (
             _env_file_encoding if _env_file_encoding is not None else self.model_config.get('env_file_encoding')
+        )
+        env_ignore_empty = (
+            _env_ignore_empty if _env_ignore_empty is not None else self.model_config.get('env_ignore_empty')
         )
         env_nested_delimiter = (
             _env_nested_delimiter
@@ -135,6 +143,7 @@ class BaseSettings(BaseModel):
             case_sensitive=case_sensitive,
             env_prefix=env_prefix,
             env_nested_delimiter=env_nested_delimiter,
+            env_ignore_empty=env_ignore_empty,
         )
         dotenv_settings = DotEnvSettingsSource(
             self.__class__,
@@ -143,6 +152,7 @@ class BaseSettings(BaseModel):
             case_sensitive=case_sensitive,
             env_prefix=env_prefix,
             env_nested_delimiter=env_nested_delimiter,
+            env_ignore_empty=env_ignore_empty,
         )
 
         file_secret_settings = SecretsSettingsSource(
@@ -171,6 +181,7 @@ class BaseSettings(BaseModel):
         env_prefix='',
         env_file=None,
         env_file_encoding=None,
+        env_ignore_empty=False,
         env_nested_delimiter=None,
         secrets_dir=None,
         protected_namespaces=('model_', 'settings_'),
