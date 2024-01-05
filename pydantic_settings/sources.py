@@ -134,6 +134,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
         env_ignore_empty: bool | None = None,
+        env_parse_none: bool | None = None,
     ) -> None:
         super().__init__(settings_cls)
         self.case_sensitive = case_sensitive if case_sensitive is not None else self.config.get('case_sensitive', False)
@@ -141,6 +142,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         self.env_ignore_empty = (
             env_ignore_empty if env_ignore_empty is not None else self.config.get('env_ignore_empty', False)
         )
+        self.env_parse_none = env_parse_none if env_parse_none is not None else self.config.get('env_parse_none', False)
 
     def _apply_case_sensitive(self, value: str) -> str:
         return value.lower() if not self.case_sensitive else value
@@ -244,6 +246,20 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
         return values
 
+    def _parse_none_values(self, field_value: dict[str, Any]) -> dict[str, Any]:
+        """
+        Recursively parse field values that are of "None" type(str) to `None` type(None).
+        """
+        values: dict[str, Any] = {}
+
+        for key, value in field_value.items():
+            if value != 'None':
+                values[key] = value if not isinstance(value, dict) else self._parse_none_values(value)
+            else:
+                values[key] = None
+
+        return values
+
     def __call__(self) -> dict[str, Any]:
         data: dict[str, Any] = {}
 
@@ -263,6 +279,11 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                 ) from e
 
             if field_value is not None:
+                if self.env_parse_none:
+                    if isinstance(field_value, dict):
+                        field_value = self._parse_none_values(field_value)
+                    else:
+                        field_value = field_value if not field_value == 'None' else None
                 if (
                     not self.case_sensitive
                     and lenient_issubclass(field.annotation, BaseModel)
@@ -287,8 +308,9 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
         env_ignore_empty: bool | None = None,
+        env_parse_none: bool | None = None,
     ) -> None:
-        super().__init__(settings_cls, case_sensitive, env_prefix, env_ignore_empty)
+        super().__init__(settings_cls, case_sensitive, env_prefix, env_ignore_empty, env_parse_none)
         self.secrets_dir = secrets_dir if secrets_dir is not None else self.config.get('secrets_dir')
 
     def __call__(self) -> dict[str, Any]:
@@ -376,8 +398,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         env_prefix: str | None = None,
         env_nested_delimiter: str | None = None,
         env_ignore_empty: bool | None = None,
+        env_parse_none: bool | None = None,
     ) -> None:
-        super().__init__(settings_cls, case_sensitive, env_prefix, env_ignore_empty)
+        super().__init__(settings_cls, case_sensitive, env_prefix, env_ignore_empty, env_parse_none)
         self.env_nested_delimiter = (
             env_nested_delimiter if env_nested_delimiter is not None else self.config.get('env_nested_delimiter')
         )
@@ -570,12 +593,15 @@ class DotEnvSettingsSource(EnvSettingsSource):
         env_prefix: str | None = None,
         env_nested_delimiter: str | None = None,
         env_ignore_empty: bool | None = None,
+        env_parse_none: bool | None = None,
     ) -> None:
         self.env_file = env_file if env_file != ENV_FILE_SENTINEL else settings_cls.model_config.get('env_file')
         self.env_file_encoding = (
             env_file_encoding if env_file_encoding is not None else settings_cls.model_config.get('env_file_encoding')
         )
-        super().__init__(settings_cls, case_sensitive, env_prefix, env_nested_delimiter, env_ignore_empty)
+        super().__init__(
+            settings_cls, case_sensitive, env_prefix, env_nested_delimiter, env_ignore_empty, env_parse_none
+        )
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
         return self._read_env_files()

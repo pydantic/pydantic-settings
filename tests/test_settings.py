@@ -1748,6 +1748,31 @@ def test_env_json_field(env):
     ]
 
 
+def test_env_parse_none(env):
+    env.set('x', 'None')
+
+    class Settings(BaseSettings):
+        x: Optional[str] = 'default'
+
+    s = Settings()
+    assert s.x == 'None'
+    s = Settings(_env_parse_none=True)
+    assert s.x is None
+
+    env.set('nested__x', 'None')
+
+    class NestedBaseModel(BaseModel):
+        x: Optional[str] = 'default'
+
+    class NestedSettings(BaseSettings, env_nested_delimiter='__'):
+        nested: Optional[NestedBaseModel] = NestedBaseModel()
+
+    s = NestedSettings()
+    assert s.nested.x == 'None'
+    s = NestedSettings(_env_parse_none=True)
+    assert s.nested.x is None
+
+
 def test_env_json_field_dict(env):
     class Settings(BaseSettings):
         x: Json[Dict[str, int]]
