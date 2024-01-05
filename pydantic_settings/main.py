@@ -26,7 +26,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     env_file_encoding: str | None
     env_ignore_empty: bool
     env_nested_delimiter: str | None
-    env_parse_none: bool
+    env_parse_none_str: str | None
     secrets_dir: str | Path | None
 
 
@@ -57,7 +57,8 @@ class BaseSettings(BaseModel):
         _env_file_encoding: The env file encoding, e.g. `'latin-1'`. Defaults to `None`.
         _env_ignore_empty: Ignore environment variables where the value is an empty string. Default to `False`.
         _env_nested_delimiter: The nested env values delimiter. Defaults to `None`.
-        _env_parse_none: Parse "None" env string values to `None`. Defaults to `False`.
+        _env_parse_none_str: The env string value that should be parsed (e.g. "null", "void", "None", etc.)
+            into `None` type(None). Defaults to `None` type(None), which means no parsing should occur.
         _secrets_dir: The secret files directory. Defaults to `None`.
     """
 
@@ -69,7 +70,7 @@ class BaseSettings(BaseModel):
         _env_file_encoding: str | None = None,
         _env_ignore_empty: bool | None = None,
         _env_nested_delimiter: str | None = None,
-        _env_parse_none: bool | None = None,
+        _env_parse_none_str: str | None = None,
         _secrets_dir: str | Path | None = None,
         **values: Any,
     ) -> None:
@@ -83,7 +84,7 @@ class BaseSettings(BaseModel):
                 _env_file_encoding=_env_file_encoding,
                 _env_ignore_empty=_env_ignore_empty,
                 _env_nested_delimiter=_env_nested_delimiter,
-                _env_parse_none=_env_parse_none,
+                _env_parse_none_str=_env_parse_none_str,
                 _secrets_dir=_secrets_dir,
             )
         )
@@ -121,7 +122,7 @@ class BaseSettings(BaseModel):
         _env_file_encoding: str | None = None,
         _env_ignore_empty: bool | None = None,
         _env_nested_delimiter: str | None = None,
-        _env_parse_none: bool | None = None,
+        _env_parse_none_str: str | None = None,
         _secrets_dir: str | Path | None = None,
     ) -> dict[str, Any]:
         # Determine settings config values
@@ -139,7 +140,9 @@ class BaseSettings(BaseModel):
             if _env_nested_delimiter is not None
             else self.model_config.get('env_nested_delimiter')
         )
-        env_parse_none = _env_parse_none if _env_parse_none is not None else self.model_config.get('env_parse_none')
+        env_parse_none_str = (
+            _env_parse_none_str if _env_parse_none_str is not None else self.model_config.get('env_parse_none_str')
+        )
         secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
         # Configure built-in sources
@@ -150,7 +153,7 @@ class BaseSettings(BaseModel):
             env_prefix=env_prefix,
             env_nested_delimiter=env_nested_delimiter,
             env_ignore_empty=env_ignore_empty,
-            env_parse_none=env_parse_none,
+            env_parse_none_str=env_parse_none_str,
         )
         dotenv_settings = DotEnvSettingsSource(
             self.__class__,
@@ -160,7 +163,7 @@ class BaseSettings(BaseModel):
             env_prefix=env_prefix,
             env_nested_delimiter=env_nested_delimiter,
             env_ignore_empty=env_ignore_empty,
-            env_parse_none=env_parse_none,
+            env_parse_none_str=env_parse_none_str,
         )
 
         file_secret_settings = SecretsSettingsSource(
@@ -191,7 +194,7 @@ class BaseSettings(BaseModel):
         env_file_encoding=None,
         env_ignore_empty=False,
         env_nested_delimiter=None,
-        env_parse_none=False,
+        env_parse_none_str=None,
         secrets_dir=None,
         protected_namespaces=('model_', 'settings_'),
     )

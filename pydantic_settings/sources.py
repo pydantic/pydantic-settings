@@ -138,7 +138,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
         env_ignore_empty: bool | None = None,
-        env_parse_none: bool | None = None,
+        env_parse_none_str: str | None = None,
     ) -> None:
         super().__init__(settings_cls)
         self.case_sensitive = case_sensitive if case_sensitive is not None else self.config.get('case_sensitive', False)
@@ -146,7 +146,9 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         self.env_ignore_empty = (
             env_ignore_empty if env_ignore_empty is not None else self.config.get('env_ignore_empty', False)
         )
-        self.env_parse_none = env_parse_none if env_parse_none is not None else self.config.get('env_parse_none', False)
+        self.env_parse_none_str = (
+            env_parse_none_str if env_parse_none_str is not None else self.config.get('env_parse_none_str')
+        )
 
     def _apply_case_sensitive(self, value: str) -> str:
         return value.lower() if not self.case_sensitive else value
@@ -283,7 +285,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                 ) from e
 
             if field_value is not None:
-                if self.env_parse_none:
+                if self.env_parse_none_str is not None:
                     if isinstance(field_value, dict):
                         field_value = self._replace_env_none_type_values(field_value)
                     elif isinstance(field_value, EnvNoneType):
@@ -312,9 +314,9 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
         env_ignore_empty: bool | None = None,
-        env_parse_none: bool | None = None,
+        env_parse_none_str: str | None = None,
     ) -> None:
-        super().__init__(settings_cls, case_sensitive, env_prefix, env_ignore_empty, env_parse_none)
+        super().__init__(settings_cls, case_sensitive, env_prefix, env_ignore_empty, env_parse_none_str)
         self.secrets_dir = secrets_dir if secrets_dir is not None else self.config.get('secrets_dir')
 
     def __call__(self) -> dict[str, Any]:
@@ -402,9 +404,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         env_prefix: str | None = None,
         env_nested_delimiter: str | None = None,
         env_ignore_empty: bool | None = None,
-        env_parse_none: bool | None = None,
+        env_parse_none_str: str | None = None,
     ) -> None:
-        super().__init__(settings_cls, case_sensitive, env_prefix, env_ignore_empty, env_parse_none)
+        super().__init__(settings_cls, case_sensitive, env_prefix, env_ignore_empty, env_parse_none_str)
         self.env_nested_delimiter = (
             env_nested_delimiter if env_nested_delimiter is not None else self.config.get('env_nested_delimiter')
         )
@@ -413,7 +415,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         self.env_vars = self._load_env_vars()
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
-        return parse_env_vars(os.environ, self.case_sensitive, self.env_ignore_empty, self.env_parse_none)
+        return parse_env_vars(os.environ, self.case_sensitive, self.env_ignore_empty, self.env_parse_none_str)
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         """
@@ -597,14 +599,14 @@ class DotEnvSettingsSource(EnvSettingsSource):
         env_prefix: str | None = None,
         env_nested_delimiter: str | None = None,
         env_ignore_empty: bool | None = None,
-        env_parse_none: bool | None = None,
+        env_parse_none_str: str | None = None,
     ) -> None:
         self.env_file = env_file if env_file != ENV_FILE_SENTINEL else settings_cls.model_config.get('env_file')
         self.env_file_encoding = (
             env_file_encoding if env_file_encoding is not None else settings_cls.model_config.get('env_file_encoding')
         )
         super().__init__(
-            settings_cls, case_sensitive, env_prefix, env_nested_delimiter, env_ignore_empty, env_parse_none
+            settings_cls, case_sensitive, env_prefix, env_nested_delimiter, env_ignore_empty, env_parse_none_str
         )
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
@@ -628,7 +630,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
                         encoding=self.env_file_encoding,
                         case_sensitive=self.case_sensitive,
                         ignore_empty=self.env_ignore_empty,
-                        parse_none=self.env_parse_none,
+                        parse_none_str=self.env_parse_none_str,
                     )
                 )
 
@@ -666,18 +668,18 @@ def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
     return key if case_sensitive else key.lower()
 
 
-def _parse_env_none_str(value: str | None, parse_none: bool = False) -> str | None | EnvNoneType:
-    return value if not (value == 'None' and parse_none) else EnvNoneType(value)
+def _parse_env_none_str(value: str | None, parse_none_str: str | None = None) -> str | None | EnvNoneType:
+    return value if not (value == parse_none_str and parse_none_str is not None) else EnvNoneType(value)
 
 
 def parse_env_vars(
     env_vars: Mapping[str, str | None],
     case_sensitive: bool = False,
     ignore_empty: bool = False,
-    parse_none: bool = False,
+    parse_none_str: str | None = None,
 ) -> Mapping[str, str | None]:
     return {
-        _get_env_var_key(k, case_sensitive): _parse_env_none_str(v, parse_none)
+        _get_env_var_key(k, case_sensitive): _parse_env_none_str(v, parse_none_str)
         for k, v in env_vars.items()
         if not (ignore_empty and v == '')
     }
@@ -689,10 +691,10 @@ def read_env_file(
     encoding: str | None = None,
     case_sensitive: bool = False,
     ignore_empty: bool = False,
-    parse_none: bool = False,
+    parse_none_str: str | None = None,
 ) -> Mapping[str, str | None]:
     file_vars: dict[str, str | None] = dotenv_values(file_path, encoding=encoding or 'utf8')
-    return parse_env_vars(file_vars, case_sensitive, ignore_empty, parse_none)
+    return parse_env_vars(file_vars, case_sensitive, ignore_empty, parse_none_str)
 
 
 def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
