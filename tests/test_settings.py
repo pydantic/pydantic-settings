@@ -1750,14 +1750,18 @@ def test_env_json_field(env):
 
 def test_env_parse_none(env):
     env.set('x', 'None')
+    env.set('y', 'y_override')
 
     class Settings(BaseSettings):
-        x: Optional[str] = 'default'
+        x: Optional[str] = 'x_default'
+        y: Optional[str] = 'y_default'
 
     s = Settings()
     assert s.x == 'None'
+    assert s.y == 'y_override'
     s = Settings(_env_parse_none=True)
     assert s.x is None
+    assert s.y == 'y_override'
 
     env.set('nested__x', 'None')
     env.set('nested__y', 'y_override')
