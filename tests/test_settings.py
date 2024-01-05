@@ -1760,17 +1760,28 @@ def test_env_parse_none(env):
     assert s.x is None
 
     env.set('nested__x', 'None')
+    env.set('nested__y', 'y_override')
+    env.set('nested__deep__z', 'None')
 
     class NestedBaseModel(BaseModel):
-        x: Optional[str] = 'default'
+        x: Optional[str] = 'x_default'
+        y: Optional[str] = 'y_default'
+        deep: Optional[dict] = {'z': 'z_default'}
+        keep: Optional[dict] = {'z': 'None'}
 
     class NestedSettings(BaseSettings, env_nested_delimiter='__'):
         nested: Optional[NestedBaseModel] = NestedBaseModel()
 
     s = NestedSettings()
     assert s.nested.x == 'None'
+    assert s.nested.y == 'y_override'
+    assert s.nested.deep['z'] == 'None'
+    assert s.nested.keep['z'] == 'None'
     s = NestedSettings(_env_parse_none=True)
     assert s.nested.x is None
+    assert s.nested.y == 'y_override'
+    assert s.nested.deep['z'] is None
+    assert s.nested.keep['z'] == 'None'
 
 
 def test_env_json_field_dict(env):
