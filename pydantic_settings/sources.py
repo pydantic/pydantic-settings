@@ -515,7 +515,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             env_vars: Environment variables.
 
         Returns:
-            A dictionaty contains extracted values from nested env values.
+            A dictionary contains extracted values from nested env values.
         """
         prefixes = [
             f'{env_name}{self.env_nested_delimiter}' for _, env_name, _ in self._extract_field_info(field, field_name)
