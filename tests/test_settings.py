@@ -619,6 +619,43 @@ def test_env_takes_precedence(env):
     assert s.bar == 'env setting'
 
 
+def test_env_deep_override(env):
+    class DeepSubModel(BaseModel):
+        v4: str
+
+    class SubModel(BaseModel):
+        v1: str
+        v2: bytes
+        v3: int
+        deep: DeepSubModel
+
+    class Settings(BaseSettings, env_nested_delimiter='__'):
+        v0: str
+        sub_model: SubModel
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            return env_settings, dotenv_settings, init_settings, file_secret_settings
+
+    env.set('SUB_MODEL__DEEP__V4', 'override-v4')
+
+    s_final = {'v0': '0', 'sub_model': {'v1': 'init-v1', 'v2': b'init-v2', 'v3': 3, 'deep': {'v4': 'override-v4'}}}
+
+    s = Settings(v0='0', sub_model={'v1': 'init-v1', 'v2': b'init-v2', 'v3': 3, 'deep': {'v4': 'init-v4'}})
+    assert s.model_dump() == s_final
+
+    s = Settings(v0='0', sub_model=SubModel(v1='init-v1', v2=b'init-v2', v3=3, deep=DeepSubModel(v4='init-v4')))
+    assert s.model_dump() == s_final
+
+    s = Settings(v0='0', sub_model=SubModel(v1='init-v1', v2=b'init-v2', v3=3, deep={'v4': 'init-v4'}))
+    assert s.model_dump() == s_final
+
+    s = Settings(v0='0', sub_model={'v1': 'init-v1', 'v2': b'init-v2', 'v3': 3, 'deep': DeepSubModel(v4='init-v4')})
+    assert s.model_dump() == s_final
+
+
 def test_config_file_settings_nornir(env):
     """
     See https://github.com/pydantic/pydantic/pull/341#issuecomment-450378771
