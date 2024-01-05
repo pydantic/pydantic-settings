@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import is_dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, List, Mapping, Sequence, Tuple, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Sequence, Tuple, Union, cast
 
 from dotenv import dotenv_values
 from pydantic import AliasChoices, AliasPath, BaseModel, Json, TypeAdapter
@@ -121,7 +121,7 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         return None, '', False
 
     def __call__(self) -> dict[str, Any]:
-        return TypeAdapter(dict[str, Any]).dump_python(self.init_kwargs)
+        return TypeAdapter(Dict[str, Any]).dump_python(self.init_kwargs)
 
     def __repr__(self) -> str:
         return f'InitSettingsSource(init_kwargs={self.init_kwargs!r})'
