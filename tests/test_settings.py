@@ -1785,6 +1785,46 @@ def test_env_json_field(env):
     ]
 
 
+def test_env_parse_none_str(env):
+    env.set('x', 'null')
+    env.set('y', 'y_override')
+
+    class Settings(BaseSettings):
+        x: Optional[str] = 'x_default'
+        y: Optional[str] = 'y_default'
+
+    s = Settings()
+    assert s.x == 'null'
+    assert s.y == 'y_override'
+    s = Settings(_env_parse_none_str='null')
+    assert s.x is None
+    assert s.y == 'y_override'
+
+    env.set('nested__x', 'None')
+    env.set('nested__y', 'y_override')
+    env.set('nested__deep__z', 'None')
+
+    class NestedBaseModel(BaseModel):
+        x: Optional[str] = 'x_default'
+        y: Optional[str] = 'y_default'
+        deep: Optional[dict] = {'z': 'z_default'}
+        keep: Optional[dict] = {'z': 'None'}
+
+    class NestedSettings(BaseSettings, env_nested_delimiter='__'):
+        nested: Optional[NestedBaseModel] = NestedBaseModel()
+
+    s = NestedSettings()
+    assert s.nested.x == 'None'
+    assert s.nested.y == 'y_override'
+    assert s.nested.deep['z'] == 'None'
+    assert s.nested.keep['z'] == 'None'
+    s = NestedSettings(_env_parse_none_str='None')
+    assert s.nested.x is None
+    assert s.nested.y == 'y_override'
+    assert s.nested.deep['z'] is None
+    assert s.nested.keep['z'] == 'None'
+
+
 def test_env_json_field_dict(env):
     class Settings(BaseSettings):
         x: Json[Dict[str, int]]
