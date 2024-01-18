@@ -606,6 +606,7 @@ def test_env_takes_precedence(env):
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
+            cli_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
@@ -635,7 +636,7 @@ def test_env_deep_override(env):
 
         @classmethod
         def settings_customise_sources(
-            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+            cls, settings_cls, init_settings, cli_settings, env_settings, dotenv_settings, file_secret_settings
         ):
             return env_settings, dotenv_settings, init_settings, file_secret_settings
 
@@ -674,6 +675,7 @@ def test_config_file_settings_nornir(env):
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
+            cli_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
@@ -1309,6 +1311,7 @@ def test_external_settings_sources_precedence(env):
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
+            cli_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
@@ -1355,6 +1358,7 @@ def test_external_settings_sources_filter_env_vars():
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
+            cli_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
@@ -1428,6 +1432,7 @@ def test_env_setting_source_custom_env_parse(env):
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
+            cli_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
@@ -1456,6 +1461,7 @@ def test_env_settings_source_custom_env_parse_is_bad(env):
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
+            cli_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
@@ -1490,6 +1496,7 @@ def test_secret_settings_source_custom_env_parse(tmp_path):
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
+            cli_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
@@ -1514,6 +1521,7 @@ def test_custom_source_get_field_value_error(env):
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
+            cli_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,

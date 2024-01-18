@@ -6,8 +6,9 @@ import warnings
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import is_dataclass
+from inspect import isclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Sequence, Tuple, Union, cast
+from typing import TYPE_CHECKING, Annotated, Any, Dict, List, Mapping, Sequence, Tuple, TypeVar, Union, cast
 
 from dotenv import dotenv_values
 from pydantic import AliasChoices, AliasPath, BaseModel, Json, TypeAdapter
@@ -21,6 +22,7 @@ from pydantic_settings.utils import path_type_label
 if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
 
+from argparse import SUPPRESS, ArgumentParser, _ArgumentGroup, _SubParsersAction
 
 DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
 
@@ -28,6 +30,14 @@ DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ..
 # `env_file` in `DotEnvSettingsSource` so the default can be distinguished from `None`.
 # See the docstring of `BaseSettings` for more details.
 ENV_FILE_SENTINEL: DotenvType = Path('')
+
+
+class _CliSubCommand:
+    pass
+
+
+T = TypeVar('T')
+CliSubCommand = Annotated[T, _CliSubCommand]
 
 
 class EnvNoneType(str):
@@ -457,7 +467,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         """
         is_complex, allow_parse_failure = self._field_is_complex(field)
         if is_complex or value_is_complex:
-            if value is None:
+            if isinstance(value, EnvNoneType):
+                return value
+            elif value is None:
                 # field is complex but no value found so far, try explode_env_vars
                 env_val_built = self.explode_env_vars(field_name, field, self.env_vars)
                 if env_val_built:
@@ -662,6 +674,131 @@ class DotEnvSettingsSource(EnvSettingsSource):
             f'DotEnvSettingsSource(env_file={self.env_file!r}, env_file_encoding={self.env_file_encoding!r}, '
             f'env_nested_delimiter={self.env_nested_delimiter!r}, env_prefix_len={self.env_prefix_len!r})'
         )
+
+
+class CliSettingsSource(EnvSettingsSource):
+    """
+    Source class for loading settings values from CLI.
+    """
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        env_parse_none_str: str | None = None,
+        cli_parse_args: bool | None = None,
+        cli_hide_none: bool | None = None,
+        cli_hide_json: bool | None = None,
+    ) -> None:
+        self._cli_arg_names: list = []
+        self.cli_parse_args = cli_parse_args if cli_parse_args is not None else self.config.get('cli_parse_args', False)
+        self.cli_hide_none = cli_hide_none if cli_hide_none is not None else self.config.get('cli_hide_none', False)
+        self.cli_hide_json = cli_hide_json if cli_hide_json is not None else self.config.get('cli_hide_json', False)
+        if env_parse_none_str is None:
+            env_parse_none_str = 'None' if cli_hide_json is True else 'null'
+        super().__init__(settings_cls, env_nested_delimiter='.', env_parse_none_str=env_parse_none_str)
+
+    def _load_env_vars(self) -> Mapping[str, str | None]:
+        if not self.cli_parse_args:
+            return {}
+
+        self._cli_arg_names = []
+        parser: ArgumentParser = self._add_fields_to_parser(ArgumentParser(), self.settings_cls)
+        return parse_env_vars(
+            vars(parser.parse_args()), self.case_sensitive, self.env_ignore_empty, self.env_parse_none_str
+        )
+
+    def _add_fields_to_parser(
+        self,
+        parser: ArgumentParser,
+        model: type[BaseModel],
+        _arg_prefix: str = '',
+        _dest_prefix: str = '',
+        _group: _ArgumentGroup | None = None,
+    ) -> ArgumentParser:
+        subparsers: _SubParsersAction | None = None
+        for field_name, field_info in model.model_fields.items():
+            field_types: tuple[Any, ...] = (
+                (field_info.annotation,) if not get_args(field_info.annotation) else get_args(field_info.annotation)
+            )
+
+            if self.cli_hide_none:
+                field_types = tuple([type_ for type_ in field_types if type_ is not type(None)])
+
+            arg_name = f'{_arg_prefix}{field_name}'
+            if _CliSubCommand in field_info.metadata:
+                if subparsers is not None:
+                    raise SettingsError(
+                        f'detected a second subcommand definition at {model.__name__}.{field_name}, '
+                        'only one per model is allowed'
+                    )
+                dest_name = f'{_dest_prefix}{arg_name}'
+                subparsers = parser.add_subparsers(title='subcommands', description='available subcommands')
+                for type_ in field_types:
+                    if get_origin(type_) is Annotated and _CliSubCommand in get_args(type_):
+                        raise SettingsError(f'subcommand is not outermost annotation for {model.__name__}.{field_name}')
+                    if not (isclass(type_) or issubclass(type_, BaseModel)):  # type: ignore
+                        raise SettingsError(
+                            'only BaseModel derived types can be subcommands, '
+                            f'found {type_.__name__} in {model.__name__}.{field_name}'
+                        )
+                    self._add_fields_to_parser(
+                        subparsers.add_parser(
+                            f'{type_.__name__.lower()}', help=type_.__doc__, formatter_class=parser.formatter_class
+                        ),
+                        type_,
+                        _dest_prefix=f'{dest_name}.',
+                    )
+            elif arg_name not in self._cli_arg_names:
+                dest_name = f'{_dest_prefix}{field_name}'
+                objects: list[type[BaseModel]] = [
+                    type_ for type_ in field_types if isclass(type_) and issubclass(type_, BaseModel)
+                ]
+
+                metavar: str = ','.join(
+                    (['JSON'] if objects else [])
+                    + [
+                        type_.__name__ if type_ is not type(None) else self.env_parse_none_str
+                        for type_ in field_types
+                        if type_ not in objects
+                    ]
+                )
+                metavar = f'{{{metavar}}}' if len(field_types) > 1 else metavar
+
+                if objects:
+                    object_group = (
+                        parser.add_argument_group(f'{arg_name} options', field_info.description)
+                        if _group is None
+                        else _group
+                    )
+                    if not self.cli_hide_json:
+                        self._cli_arg_names.append(arg_name)
+                        object_group.add_argument(
+                            f'--{arg_name}',
+                            help=f'set {arg_name} from JSON string',
+                            metavar=metavar,
+                            default=SUPPRESS,
+                            dest=dest_name,
+                        )
+                    for object_ in objects:
+                        self._add_fields_to_parser(
+                            parser,
+                            object_,
+                            _arg_prefix=f'{arg_name}.',
+                            _group=object_group,
+                            _dest_prefix=f'{dest_name}.',
+                        )
+                elif _group is not None:
+                    self._cli_arg_names.append(arg_name)
+                    _group.add_argument(
+                        f'--{arg_name}', help=field_info.description, metavar=metavar, default=SUPPRESS, dest=dest_name
+                    )
+                else:
+                    self._cli_arg_names.append(arg_name)
+                    parser.add_argument(
+                        f'--{arg_name}', help=field_info.description, metavar=metavar, default=SUPPRESS, dest=dest_name
+                    )
+
+        return parser
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:

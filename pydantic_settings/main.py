@@ -10,6 +10,7 @@ from pydantic.main import BaseModel
 
 from .sources import (
     ENV_FILE_SENTINEL,
+    CliSettingsSource,
     DotEnvSettingsSource,
     DotenvType,
     EnvSettingsSource,
@@ -27,6 +28,9 @@ class SettingsConfigDict(ConfigDict, total=False):
     env_ignore_empty: bool
     env_nested_delimiter: str | None
     env_parse_none_str: str | None
+    cli_parse_args: bool
+    cli_hide_none: bool
+    cli_hide_json: bool
     secrets_dir: str | Path | None
 
 
@@ -71,6 +75,9 @@ class BaseSettings(BaseModel):
         _env_ignore_empty: bool | None = None,
         _env_nested_delimiter: str | None = None,
         _env_parse_none_str: str | None = None,
+        _cli_parse_args: bool | None = None,
+        _cli_hide_none: bool | None = None,
+        _cli_hide_json: bool | None = None,
         _secrets_dir: str | Path | None = None,
         **values: Any,
     ) -> None:
@@ -85,6 +92,9 @@ class BaseSettings(BaseModel):
                 _env_ignore_empty=_env_ignore_empty,
                 _env_nested_delimiter=_env_nested_delimiter,
                 _env_parse_none_str=_env_parse_none_str,
+                _cli_parse_args=_cli_parse_args,
+                _cli_hide_none=_cli_hide_none,
+                _cli_hide_json=_cli_hide_json,
                 _secrets_dir=_secrets_dir,
             )
         )
@@ -94,6 +104,7 @@ class BaseSettings(BaseModel):
         cls,
         settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
+        cli_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
@@ -104,6 +115,7 @@ class BaseSettings(BaseModel):
         Args:
             settings_cls: The Settings class.
             init_settings: The `InitSettingsSource` instance.
+            cli_settings: The `CliSettingsSource` instance.
             env_settings: The `EnvSettingsSource` instance.
             dotenv_settings: The `DotEnvSettingsSource` instance.
             file_secret_settings: The `SecretsSettingsSource` instance.
@@ -111,7 +123,7 @@ class BaseSettings(BaseModel):
         Returns:
             A tuple containing the sources and their order for loading the settings values.
         """
-        return init_settings, env_settings, dotenv_settings, file_secret_settings
+        return init_settings, cli_settings, env_settings, dotenv_settings, file_secret_settings
 
     def _settings_build_values(
         self,
@@ -123,6 +135,9 @@ class BaseSettings(BaseModel):
         _env_ignore_empty: bool | None = None,
         _env_nested_delimiter: str | None = None,
         _env_parse_none_str: str | None = None,
+        _cli_parse_args: bool | None = None,
+        _cli_hide_none: bool | None = None,
+        _cli_hide_json: bool | None = None,
         _secrets_dir: str | Path | None = None,
     ) -> dict[str, Any]:
         # Determine settings config values
@@ -143,10 +158,22 @@ class BaseSettings(BaseModel):
         env_parse_none_str = (
             _env_parse_none_str if _env_parse_none_str is not None else self.model_config.get('env_parse_none_str')
         )
+
+        cli_parse_args = _cli_parse_args if _cli_parse_args is not None else self.model_config.get('cli_parse_args')
+        cli_hide_none = _cli_hide_none if _cli_hide_none is not None else self.model_config.get('cli_hide_none')
+        cli_hide_json = _cli_hide_json if _cli_hide_json is not None else self.model_config.get('cli_hide_json')
+
         secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
         # Configure built-in sources
         init_settings = InitSettingsSource(self.__class__, init_kwargs=init_kwargs)
+        cli_settings = CliSettingsSource(
+            self.__class__,
+            env_parse_none_str=env_parse_none_str,
+            cli_parse_args=cli_parse_args,
+            cli_hide_none=cli_hide_none,
+            cli_hide_json=cli_hide_json,
+        )
         env_settings = EnvSettingsSource(
             self.__class__,
             case_sensitive=case_sensitive,
@@ -173,6 +200,7 @@ class BaseSettings(BaseModel):
         sources = self.settings_customise_sources(
             self.__class__,
             init_settings=init_settings,
+            cli_settings=cli_settings,
             env_settings=env_settings,
             dotenv_settings=dotenv_settings,
             file_secret_settings=file_secret_settings,
@@ -195,6 +223,9 @@ class BaseSettings(BaseModel):
         env_ignore_empty=False,
         env_nested_delimiter=None,
         env_parse_none_str=None,
+        cli_parse_args=False,
+        cli_hide_none=False,
+        cli_hide_json=False,
         secrets_dir=None,
         protected_namespaces=('model_', 'settings_'),
     )
