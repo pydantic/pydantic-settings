@@ -1,5 +1,6 @@
 from __future__ import annotations as _annotations
 
+import sys
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -29,8 +30,8 @@ class SettingsConfigDict(ConfigDict, total=False):
     env_nested_delimiter: str | None
     env_parse_none_str: str | None
     cli_parse_args: bool
-    cli_hide_none: bool
-    cli_hide_json: bool
+    cli_hide_none_type: bool
+    cli_avoid_json: bool
     secrets_dir: str | Path | None
 
 
@@ -76,8 +77,8 @@ class BaseSettings(BaseModel):
         _env_nested_delimiter: str | None = None,
         _env_parse_none_str: str | None = None,
         _cli_parse_args: bool | None = None,
-        _cli_hide_none: bool | None = None,
-        _cli_hide_json: bool | None = None,
+        _cli_hide_none_type: bool | None = None,
+        _cli_avoid_json: bool | None = None,
         _secrets_dir: str | Path | None = None,
         **values: Any,
     ) -> None:
@@ -93,8 +94,8 @@ class BaseSettings(BaseModel):
                 _env_nested_delimiter=_env_nested_delimiter,
                 _env_parse_none_str=_env_parse_none_str,
                 _cli_parse_args=_cli_parse_args,
-                _cli_hide_none=_cli_hide_none,
-                _cli_hide_json=_cli_hide_json,
+                _cli_hide_none_type=_cli_hide_none_type,
+                _cli_avoid_json=_cli_avoid_json,
                 _secrets_dir=_secrets_dir,
             )
         )
@@ -136,8 +137,8 @@ class BaseSettings(BaseModel):
         _env_nested_delimiter: str | None = None,
         _env_parse_none_str: str | None = None,
         _cli_parse_args: bool | None = None,
-        _cli_hide_none: bool | None = None,
-        _cli_hide_json: bool | None = None,
+        _cli_hide_none_type: bool | None = None,
+        _cli_avoid_json: bool | None = None,
         _secrets_dir: str | Path | None = None,
     ) -> dict[str, Any]:
         # Determine settings config values
@@ -160,8 +161,10 @@ class BaseSettings(BaseModel):
         )
 
         cli_parse_args = _cli_parse_args if _cli_parse_args is not None else self.model_config.get('cli_parse_args')
-        cli_hide_none = _cli_hide_none if _cli_hide_none is not None else self.model_config.get('cli_hide_none')
-        cli_hide_json = _cli_hide_json if _cli_hide_json is not None else self.model_config.get('cli_hide_json')
+        cli_hide_none_type = (
+            _cli_hide_none_type if _cli_hide_none_type is not None else self.model_config.get('cli_hide_none_type')
+        )
+        cli_avoid_json = _cli_avoid_json if _cli_avoid_json is not None else self.model_config.get('cli_avoid_json')
 
         secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
@@ -169,10 +172,11 @@ class BaseSettings(BaseModel):
         init_settings = InitSettingsSource(self.__class__, init_kwargs=init_kwargs)
         cli_settings = CliSettingsSource(
             self.__class__,
-            env_parse_none_str=env_parse_none_str,
+            sys.argv[1:],
+            cli_parse_none_str=env_parse_none_str,
             cli_parse_args=cli_parse_args,
-            cli_hide_none=cli_hide_none,
-            cli_hide_json=cli_hide_json,
+            cli_hide_none_type=cli_hide_none_type,
+            cli_avoid_json=cli_avoid_json,
         )
         env_settings = EnvSettingsSource(
             self.__class__,
@@ -224,8 +228,8 @@ class BaseSettings(BaseModel):
         env_nested_delimiter=None,
         env_parse_none_str=None,
         cli_parse_args=False,
-        cli_hide_none=False,
-        cli_hide_json=False,
+        cli_hide_none_type=False,
+        cli_avoid_json=False,
         secrets_dir=None,
         protected_namespaces=('model_', 'settings_'),
     )

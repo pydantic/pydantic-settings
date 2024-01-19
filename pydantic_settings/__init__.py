@@ -1,5 +1,6 @@
 from .main import BaseSettings, SettingsConfigDict
 from .sources import (
+    CliPositionalArg,
     CliSettingsSource,
     CliSubCommand,
     DotEnvSettingsSource,
@@ -16,6 +17,7 @@ __all__ = (
     'EnvSettingsSource',
     'CliSettingsSource',
     'CliSubCommand',
+    'CliPositionalArg',
     'InitSettingsSource',
     'PydanticBaseSettingsSource',
     'SecretsSettingsSource',

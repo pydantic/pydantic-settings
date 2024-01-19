@@ -8,14 +8,16 @@ from collections import deque
 from dataclasses import is_dataclass
 from inspect import isclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, Dict, List, Mapping, Sequence, Tuple, TypeVar, Union, cast
+from types import FunctionType
+from typing import TYPE_CHECKING, Annotated, Any, Dict, List, Literal, Mapping, Sequence, Tuple, TypeVar, Union, cast
 
 from dotenv import dotenv_values
 from pydantic import AliasChoices, AliasPath, BaseModel, Json, TypeAdapter
-from pydantic._internal._typing_extra import origin_is_union
+from pydantic._internal._repr import Representation
+from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union, typing_base
 from pydantic._internal._utils import deep_update, lenient_issubclass
 from pydantic.fields import FieldInfo
-from typing_extensions import get_args, get_origin
+from typing_extensions import TypeAliasType, get_args, get_origin
 
 from pydantic_settings.utils import path_type_label
 
@@ -36,8 +38,13 @@ class _CliSubCommand:
     pass
 
 
+class _CliPositionalArg:
+    pass
+
+
 T = TypeVar('T')
 CliSubCommand = Annotated[T, _CliSubCommand]
+CliPositionalArg = Annotated[T, _CliPositionalArg]
 
 
 class EnvNoneType(str):
@@ -684,28 +691,111 @@ class CliSettingsSource(EnvSettingsSource):
     def __init__(
         self,
         settings_cls: type[BaseSettings],
-        env_parse_none_str: str | None = None,
+        args: list[str],
+        cli_parse_none_str: str | None = None,
         cli_parse_args: bool | None = None,
-        cli_hide_none: bool | None = None,
-        cli_hide_json: bool | None = None,
+        cli_hide_none_type: bool | None = None,
+        cli_avoid_json: bool | None = None,
     ) -> None:
-        self._cli_arg_names: list = []
+        self.args = args
         self.cli_parse_args = cli_parse_args if cli_parse_args is not None else self.config.get('cli_parse_args', False)
-        self.cli_hide_none = cli_hide_none if cli_hide_none is not None else self.config.get('cli_hide_none', False)
-        self.cli_hide_json = cli_hide_json if cli_hide_json is not None else self.config.get('cli_hide_json', False)
-        if env_parse_none_str is None:
-            env_parse_none_str = 'None' if cli_hide_json is True else 'null'
-        super().__init__(settings_cls, env_nested_delimiter='.', env_parse_none_str=env_parse_none_str)
+        self.cli_hide_none_type = (
+            cli_hide_none_type if cli_hide_none_type is not None else self.config.get('cli_hide_none_type', False)
+        )
+        self.cli_avoid_json = cli_avoid_json if cli_avoid_json is not None else self.config.get('cli_avoid_json', False)
+        if cli_parse_none_str is None:
+            cli_parse_none_str = 'None' if self.cli_avoid_json is True else 'null'
+        super().__init__(settings_cls, env_nested_delimiter='.', env_parse_none_str=cli_parse_none_str)
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
         if not self.cli_parse_args:
             return {}
 
-        self._cli_arg_names = []
+        self._cli_arg_names: list[str] = []
+        self._cli_dict_arg_names: list[str] = []
         parser: ArgumentParser = self._add_fields_to_parser(ArgumentParser(), self.settings_cls)
+        parsed_args: dict[str, list[str] | str] = vars(parser.parse_args(self.args))
+        for field, val in parsed_args.items():
+            if isinstance(val, list):
+                merge_list = []
+                for sub_val in val:
+                    if sub_val.startswith('[') and sub_val.endswith(']'):
+                        sub_val = sub_val[1:-1]
+                    merge_list.append(sub_val)
+                parsed_args[field] = (
+                    f'[{",".join(merge_list)}]'
+                    if field not in self._cli_dict_arg_names
+                    else self._merge_json_key_val_list_str(f'[{",".join(merge_list)}]')
+                )
+
         return parse_env_vars(
-            vars(parser.parse_args()), self.case_sensitive, self.env_ignore_empty, self.env_parse_none_str
+            parsed_args, self.case_sensitive, self.env_ignore_empty, self.env_parse_none_str  # type: ignore
         )
+
+    def _merge_json_key_val_list_str(self, key_val_list_str: str) -> str:
+        orig_key_val_list_str, key_val_list_str = key_val_list_str, key_val_list_str[1:-1]
+        key_val_dict: dict[str, str] = {}
+        obj_count = 0
+        while key_val_list_str:
+            if obj_count != 0:
+                raise SettingsError(f'Parsing error encountered on JSON object {orig_key_val_list_str}')
+            for i in range(len(key_val_list_str)):
+                if key_val_list_str[i] == '{':
+                    obj_count += 1
+                elif key_val_list_str[i] == '}':
+                    obj_count -= 1
+                    if obj_count == 0:
+                        key_val_dict |= json.loads(key_val_list_str[: i + 1])
+                        key_val_list_str = key_val_list_str[i + 1 :].lstrip(',')
+                        break
+                elif obj_count == 0:
+                    val, quote_count = '', 0
+                    key, key_val_list_str = key_val_list_str.split('=', 1)
+                    for i in range(len(key_val_list_str)):
+                        if key_val_list_str[i] in ('"', "'"):
+                            quote_count += 1
+                        if key_val_list_str[i] == ',' and quote_count % 2 == 0:
+                            val, key_val_list_str = key_val_list_str[:i], key_val_list_str[i:].lstrip(',')
+                            break
+                    if not val:
+                        val, key_val_list_str = key_val_list_str, ''
+                    key_val_dict |= {key.strip('\'"'): val.strip('\'"')}
+                    break
+        return json.dumps(key_val_dict)
+
+    def _get_sub_models(
+        self, model: type[BaseModel], field_name: str, field_info: FieldInfo, subparsers: _SubParsersAction[Any] | None
+    ) -> list[type[BaseModel]]:
+        field_types: tuple[Any, ...] = (
+            (field_info.annotation,) if not get_args(field_info.annotation) else get_args(field_info.annotation)
+        )
+        if self.cli_hide_none_type:
+            field_types = tuple([type_ for type_ in field_types if type_ is not type(None)])
+
+        sub_models: list[type[BaseModel]] = []
+        for type_ in field_types:
+            if get_origin(type_) is Annotated:
+                if _CliSubCommand in get_args(type_):
+                    raise SettingsError(f'CliSubCommand is not outermost annotation for {model.__name__}.{field_name}')
+                elif _CliPositionalArg in get_args(type_):
+                    raise SettingsError(
+                        f'CliPositionalArg is not outermost annotation for {model.__name__}.{field_name}'
+                    )
+            if isclass(type_) and issubclass(type_, BaseModel):
+                sub_models.append(type_)
+            elif _CliSubCommand in field_info.metadata and subparsers is not None:
+                raise SettingsError(
+                    f'detected a second subcommand definition at {model.__name__}.{field_name}, '
+                    'only one per model is allowed'
+                )
+        if _CliPositionalArg in field_info.metadata:
+            if not field_info.is_required():
+                raise SettingsError(f'positional argument {model.__name__}.{field_name} has a default value')
+            elif subparsers is not None:
+                raise SettingsError(
+                    f'positional argument {model.__name__}.{field_name} ' 'is speficied after a subcommand definition'
+                )
+        return sub_models
 
     def _add_fields_to_parser(
         self,
@@ -715,90 +805,96 @@ class CliSettingsSource(EnvSettingsSource):
         _dest_prefix: str = '',
         _group: _ArgumentGroup | None = None,
     ) -> ArgumentParser:
-        subparsers: _SubParsersAction | None = None
+        subparsers: _SubParsersAction[Any] | None = None
         for field_name, field_info in model.model_fields.items():
-            field_types: tuple[Any, ...] = (
-                (field_info.annotation,) if not get_args(field_info.annotation) else get_args(field_info.annotation)
-            )
-
-            if self.cli_hide_none:
-                field_types = tuple([type_ for type_ in field_types if type_ is not type(None)])
-
             arg_name = f'{_arg_prefix}{field_name}'
+            sub_models: list[type[BaseModel]] = self._get_sub_models(model, field_name, field_info, subparsers)
             if _CliSubCommand in field_info.metadata:
-                if subparsers is not None:
-                    raise SettingsError(
-                        f'detected a second subcommand definition at {model.__name__}.{field_name}, '
-                        'only one per model is allowed'
-                    )
-                dest_name = f'{_dest_prefix}{arg_name}'
                 subparsers = parser.add_subparsers(title='subcommands', description='available subcommands')
-                for type_ in field_types:
-                    if get_origin(type_) is Annotated and _CliSubCommand in get_args(type_):
-                        raise SettingsError(f'subcommand is not outermost annotation for {model.__name__}.{field_name}')
-                    if not (isclass(type_) or issubclass(type_, BaseModel)):  # type: ignore
-                        raise SettingsError(
-                            'only BaseModel derived types can be subcommands, '
-                            f'found {type_.__name__} in {model.__name__}.{field_name}'
-                        )
+                for model in sub_models:
                     self._add_fields_to_parser(
                         subparsers.add_parser(
-                            f'{type_.__name__.lower()}', help=type_.__doc__, formatter_class=parser.formatter_class
+                            f'{model.__name__.lower()}', help=model.__doc__, formatter_class=parser.formatter_class
                         ),
-                        type_,
-                        _dest_prefix=f'{dest_name}.',
+                        model,
+                        _dest_prefix=f'{_dest_prefix}{arg_name}',
                     )
             elif arg_name not in self._cli_arg_names:
-                dest_name = f'{_dest_prefix}{field_name}'
-                objects: list[type[BaseModel]] = [
-                    type_ for type_ in field_types if isclass(type_) and issubclass(type_, BaseModel)
-                ]
+                arg_flag: str = '--'
+                kwargs: dict[str, Any] = {}
+                kwargs['default'] = SUPPRESS
+                kwargs['help'] = field_info.description
+                kwargs['dest'] = f'{_dest_prefix}{field_name}'
+                kwargs['metavar'] = self._format_metavar(field_info.annotation)
+                if get_origin(field_info.annotation) in (list, set, dict, Sequence):
+                    kwargs['action'] = 'append'
+                    if get_origin(field_info.annotation) is dict:
+                        self._cli_dict_arg_names.append(arg_name)
+                if _CliPositionalArg in field_info.metadata:
+                    del kwargs['dest']
+                    arg_flag = ''
 
-                metavar: str = ','.join(
-                    (['JSON'] if objects else [])
-                    + [
-                        type_.__name__ if type_ is not type(None) else self.env_parse_none_str
-                        for type_ in field_types
-                        if type_ not in objects
-                    ]
-                )
-                metavar = f'{{{metavar}}}' if len(field_types) > 1 else metavar
-
-                if objects:
-                    object_group = (
-                        parser.add_argument_group(f'{arg_name} options', field_info.description)
-                        if _group is None
-                        else _group
-                    )
-                    if not self.cli_hide_json:
+                if sub_models and kwargs.get('action') != 'append':
+                    model_group = parser.add_argument_group(f'{arg_name} options', field_info.description)
+                    if not self.cli_avoid_json:
                         self._cli_arg_names.append(arg_name)
-                        object_group.add_argument(
-                            f'--{arg_name}',
-                            help=f'set {arg_name} from JSON string',
-                            metavar=metavar,
-                            default=SUPPRESS,
-                            dest=dest_name,
-                        )
-                    for object_ in objects:
+                        kwargs['help'] = f'set {arg_name} from JSON string'
+                        model_group.add_argument(f'{arg_flag}{arg_name}', **kwargs)
+                    for model in sub_models:
                         self._add_fields_to_parser(
                             parser,
-                            object_,
+                            model,
                             _arg_prefix=f'{arg_name}.',
-                            _group=object_group,
-                            _dest_prefix=f'{dest_name}.',
+                            _group=model_group,
+                            _dest_prefix=f"{kwargs['dest']}.",
                         )
                 elif _group is not None:
                     self._cli_arg_names.append(arg_name)
-                    _group.add_argument(
-                        f'--{arg_name}', help=field_info.description, metavar=metavar, default=SUPPRESS, dest=dest_name
-                    )
+                    _group.add_argument(f'{arg_flag}{arg_name}', **kwargs)
                 else:
                     self._cli_arg_names.append(arg_name)
-                    parser.add_argument(
-                        f'--{arg_name}', help=field_info.description, metavar=metavar, default=SUPPRESS, dest=dest_name
-                    )
-
+                    parser.add_argument(f'{arg_flag}{arg_name}', **kwargs)
         return parser
+
+    def _get_modified_args(self, obj: Any) -> tuple[str, ...]:
+        if not self.cli_hide_none_type:
+            return get_args(obj)
+        else:
+            return tuple([type_ for type_ in get_args(obj) if type_ is not type(None)])
+
+    def _format_metavar(self, obj: Any) -> str:
+        """Pretty metavar representation of a type. Adapts logic from `pydantic._repr.display_as_type`."""
+        if isinstance(obj, FunctionType):
+            return obj.__name__
+        elif obj is ...:
+            return '...'
+        elif isinstance(obj, Representation):
+            return repr(obj)
+        elif isinstance(obj, TypeAliasType):
+            return str(obj)
+
+        if not isinstance(obj, (typing_base, WithArgsTypes, type)):
+            obj = obj.__class__
+
+        if origin_is_union(get_origin(obj)):
+            args = ','.join(map(self._format_metavar, self._get_modified_args(obj)))
+            return f'{{{args}}}' if ',' in args else args
+        elif isinstance(obj, WithArgsTypes):
+            if get_origin(obj) == Literal:
+                args = ','.join(map(repr, self._get_modified_args(obj)))
+                return f'{{{args}}}' if ',' in args else args
+            else:
+                args = ','.join(map(self._format_metavar, self._get_modified_args(obj)))
+            try:
+                return f'{obj.__qualname__}[{args}]'
+            except AttributeError:
+                return str(obj)  # handles TypeAliasType in 3.12
+        elif obj is type(None):
+            return self.env_parse_none_str
+        elif isinstance(obj, type):
+            return obj.__qualname__
+        else:
+            return repr(obj).replace('typing.', '').replace('typing_extensions.', '')
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
