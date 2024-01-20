@@ -2,6 +2,7 @@ from __future__ import annotations as _annotations
 
 import json
 import os
+import sys
 import warnings
 from abc import ABC, abstractmethod
 from collections import deque
@@ -19,11 +20,16 @@ from typing_extensions import get_args, get_origin
 from pydantic_settings.utils import path_type_label
 
 if TYPE_CHECKING:
+    if sys.version_info.minor >= 11:
+        import tomllib  # type: ignore
+    import tomlkit
     import yaml
 
     from pydantic_settings.main import BaseSettings
 else:
     yaml = None
+    tomllib = None
+    tomlkit = None
 
 
 def import_yaml() -> None:
@@ -34,6 +40,22 @@ def import_yaml() -> None:
         import yaml
     except ImportError as e:
         raise ImportError('pyyaml is not installed, run `pip install pydantic-settings[yaml]`') from e
+
+
+def import_toml() -> None:
+    global tomlkit
+    global tomllib
+    minor_version = sys.version_info.minor
+    if minor_version < 11:
+        if tomlkit is not None:
+            return
+        try:
+            import tomlkit
+        except ImportError as e:
+            raise ImportError('tomlkit is not installed, run `pip install pydantic-settings[toml]`') from e
+    else:
+        if tomllib is not None:
+            import tomllib
 
 
 DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
@@ -721,6 +743,27 @@ class JsonConfigSettingsSource(MappingConfigSource):
     def _read_json(self) -> Mapping[str, str | None]:
         with open(self.json_file_path, encoding=self.json_file_encoding) as json_file:
             return json.load(json_file)
+
+
+class TomlConfigSettingsSource(MappingConfigSource):
+    """
+    A source class that loads variables from a JSON file
+    """
+
+    def __init__(self, settings_cls: type[BaseSettings], toml_file_path: str, toml_file_encoding: str | None = None):
+        self.toml_file_path = toml_file_path
+        self.toml_file_encoding = toml_file_encoding
+        super().__init__(settings_cls)
+
+    def _read_toml(self) -> Mapping[str, str | None]:
+        import_toml()
+        with open(self.toml_file_path, encoding=self.toml_file_encoding) as toml_file:
+            if sys.version_info.minor < 11:
+                return tomlkit.load(toml_file)
+            return tomllib.load(toml_file)
+
+    def _load_values(self) -> Mapping[str, str | None]:
+        return self._read_toml()
 
 
 class YamlConfigSettingsSource(MappingConfigSource):

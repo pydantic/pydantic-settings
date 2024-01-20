@@ -6,6 +6,7 @@ from .sources import (
     JsonConfigSettingsSource,
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
+    TomlConfigSettingsSource,
     YamlConfigSettingsSource,
 )
 from .version import VERSION
@@ -19,6 +20,7 @@ __all__ = (
     'PydanticBaseSettingsSource',
     'SecretsSettingsSource',
     'SettingsConfigDict',
+    'TomlConfigSettingsSource',
     'YamlConfigSettingsSource',
     '__version__',
 )

@@ -3,4 +3,5 @@ ruff
 pyupgrade
 mypy
 types-PyYAML
+tomllib
 pre-commit
