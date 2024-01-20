@@ -55,7 +55,8 @@ def import_toml() -> None:
             raise ImportError('tomlkit is not installed, run `pip install pydantic-settings[toml]`') from e
     else:
         if tomllib is not None:
-            import tomllib
+            return
+        import tomllib
 
 
 DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
@@ -757,7 +758,7 @@ class TomlConfigSettingsSource(MappingConfigSource):
 
     def _read_toml(self) -> Mapping[str, str | None]:
         import_toml()
-        with open(self.toml_file_path, encoding=self.toml_file_encoding) as toml_file:
+        with open(self.toml_file_path, 'rb', encoding=self.toml_file_encoding) as toml_file:
             if sys.version_info.minor < 11:
                 return tomlkit.load(toml_file)
             return tomllib.load(toml_file)
