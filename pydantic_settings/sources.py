@@ -18,11 +18,19 @@ from typing_extensions import get_args, get_origin
 
 from pydantic_settings.utils import path_type_label
 
+try:
+    import tomllib  # type:ignore
+except ImportError:
+    import tomli as tomllib
+
 if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
 
 
 DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
+PathType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
+
+DEFAULT_PATH: PathType = Path('')
 
 # This is used as default value for `_env_file` in the `BaseSettings` class and
 # `env_file` in `DotEnvSettingsSource` so the default can be distinguished from `None`.
@@ -716,3 +724,42 @@ def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:
     return lenient_issubclass(annotation, (BaseModel, Mapping, Sequence, tuple, set, frozenset, deque)) or is_dataclass(
         annotation
     )
+
+
+class TomlSettingsSource(InitSettingsSource):
+    """
+    Source class for loading values provided through TOML files.
+    """
+
+    def __init__(self, settings_cls: type[BaseSettings], toml_file: PathType | None = DEFAULT_PATH):
+        self.toml_file = toml_file if toml_file != DEFAULT_PATH else settings_cls.model_config.get('toml_file')
+        self.toml_data = self._load_toml_data()
+        super().__init__(settings_cls, self.toml_data)
+
+    def _load_toml_data(self) -> dict[str, Any | None]:
+        return self._read_toml_files()
+
+    def _read_toml_files(self) -> dict[str, Any | None]:
+        toml_files = self.toml_file
+        if toml_files is None:
+            return {}
+        if isinstance(toml_files, (str, os.PathLike)):
+            toml_files = [toml_files]
+        toml_vars: dict[str, Any | None] = {}
+        for toml_file in toml_files:  # type: ignore[attr-defined]
+            toml_path = Path(toml_file).expanduser()
+            if toml_path.is_file():
+                toml_vars.update(self._read_toml_file(toml_path))
+        return toml_vars
+
+    def _read_toml_file(self, toml_path: Path) -> dict[str, Any | None]:
+        toml_data = {}
+        with open(toml_path, mode='rb') as fp:
+            try:
+                toml_data = tomllib.load(fp)
+            except Exception as e:
+                warnings.warn(f'Failed to load "{toml_path} - {e}"')
+        return toml_data
+
+    def __repr__(self) -> str:
+        return f'TomlSettingsSource(toml_file={self.toml_file!r})'

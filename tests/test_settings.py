@@ -33,6 +33,7 @@ from pydantic_settings import (
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
     SettingsConfigDict,
+    TomlSettingsSource,
 )
 from pydantic_settings.sources import SettingsError, read_env_file
 
@@ -1910,8 +1911,41 @@ def test_dotenv_optional_json_field(tmp_path):
 
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(env_file=p)
-
         data: Optional[Json[Dict[str, str]]] = Field(default=None)
 
     s = Settings()
     assert s.data == {'foo': 'bar'}
+
+
+def test_toml_file(tmp_path):
+    p = tmp_path / 'settings.toml'
+    toml_content = '''
+foobar = "foobarval"
+
+[foo]
+bar = "nested-foo-bar"'''
+    p.write_text(toml_content)
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(toml_file=p)
+
+        class Foo(BaseSettings):
+            bar: str
+
+        foobar: str
+        foo: Foo
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return init_settings, env_settings, dotenv_settings, file_secret_settings, TomlSettingsSource(settings_cls)
+
+    s = Settings()
+    assert s.foobar == 'foobarval'
+    assert s.foo.bar == 'nested-foo-bar'
