@@ -33,7 +33,7 @@ def import_yaml() -> None:
     try:
         import yaml
     except ImportError as e:
-        raise ImportError('yaml is not installed, run `pip install pydantic-settings[yaml]`') from e
+        raise ImportError('pyyaml is not installed, run `pip install pydantic-settings[yaml]`') from e
 
 
 DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
