@@ -46,6 +46,8 @@ tomli==2.0.1
     # via
     #   black
     #   mypy
+types-pyyaml==6.0.12.12
+    # via -r requirements/linting.in
 typing-extensions==4.6.2
     # via mypy
 virtualenv==20.23.0

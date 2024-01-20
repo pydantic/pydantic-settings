@@ -3,8 +3,10 @@ from .sources import (
     DotEnvSettingsSource,
     EnvSettingsSource,
     InitSettingsSource,
+    JsonConfigSettingsSource,
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
+    YamlConfigSettingsSource,
 )
 from .version import VERSION
 
@@ -13,9 +15,11 @@ __all__ = (
     'DotEnvSettingsSource',
     'EnvSettingsSource',
     'InitSettingsSource',
+    'JsonConfigSettingsSource',
     'PydanticBaseSettingsSource',
     'SecretsSettingsSource',
     'SettingsConfigDict',
+    'YamlConfigSettingsSource',
     '__version__',
 )
 

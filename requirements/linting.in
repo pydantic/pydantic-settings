@@ -2,4 +2,5 @@ black
 ruff
 pyupgrade
 mypy
+types-PyYAML
 pre-commit

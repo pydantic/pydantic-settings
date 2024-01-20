@@ -19,7 +19,21 @@ from typing_extensions import get_args, get_origin
 from pydantic_settings.utils import path_type_label
 
 if TYPE_CHECKING:
+    import yaml
+
     from pydantic_settings.main import BaseSettings
+else:
+    yaml = None
+
+
+def import_yaml() -> None:
+    global yaml
+    if yaml is not None:
+        return
+    try:
+        import yaml
+    except ImportError as e:
+        raise ImportError('yaml is not installed, run `pip install pydantic-settings[yaml]`') from e
 
 
 DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
@@ -662,6 +676,75 @@ class DotEnvSettingsSource(EnvSettingsSource):
             f'DotEnvSettingsSource(env_file={self.env_file!r}, env_file_encoding={self.env_file_encoding!r}, '
             f'env_nested_delimiter={self.env_nested_delimiter!r}, env_prefix_len={self.env_prefix_len!r})'
         )
+
+
+class MappingConfigSource(PydanticBaseSettingsSource):
+    def __init__(self, settings_cls: type[BaseSettings]):
+        super().__init__(settings_cls)
+        self.mapping_values = self._load_values()
+
+    @abstractmethod
+    def _load_values(self) -> Mapping[str, str | None]:
+        pass
+
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        field_value = self.mapping_values.get(field_name)
+        return field_value, field_name, False
+
+    def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
+        return value
+
+    def __call__(self) -> dict[str, Any]:
+        d: dict[str, Any] = {}
+
+        for field_name, field in self.settings_cls.model_fields.items():
+            field_value, field_key, value_is_complex = self.get_field_value(field, field_name)
+            field_value = self.prepare_field_value(field_name, field, field_value, value_is_complex)
+            if field_value is not None:
+                d[field_key] = field_value
+        return d
+
+
+class JsonConfigSettingsSource(MappingConfigSource):
+    """
+    A source class that loads variables from a JSON file
+    """
+
+    def __init__(self, settings_cls: type[BaseSettings], json_file_path: str, json_file_encoding: str | None = None):
+        self.json_file_path = json_file_path
+        self.json_file_encoding = json_file_encoding
+        super().__init__(settings_cls)
+
+    def _load_values(self) -> Mapping[str, str | None]:
+        return self._read_json()
+
+    def _read_json(self) -> Mapping[str, str | None]:
+        with open(self.json_file_path, encoding=self.json_file_encoding) as json_file:
+            return json.load(json_file)
+
+
+class YamlConfigSettingsSource(MappingConfigSource):
+    """
+    A source class that loads variables from a yaml file
+    """
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        yaml_file_path: str,
+        yaml_file_encoding: str | None = None,
+    ):
+        self.yaml_file_path = yaml_file_path
+        self.yaml_file_encoding = 'utf-8' if yaml_file_encoding is None else yaml_file_encoding
+        super().__init__(settings_cls)
+
+    def _load_values(self) -> Mapping[str, str | None]:
+        return self._read_yaml()
+
+    def _read_yaml(self) -> Mapping[str, str | None]:
+        with open(self.yaml_file_path, encoding=self.yaml_file_encoding) as yaml_file:
+            import_yaml()
+            return yaml.safe_load(yaml_file)
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
