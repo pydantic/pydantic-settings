@@ -1,6 +1,5 @@
 from __future__ import annotations as _annotations
 
-import sys
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -29,7 +28,8 @@ class SettingsConfigDict(ConfigDict, total=False):
     env_ignore_empty: bool
     env_nested_delimiter: str | None
     env_parse_none_str: str | None
-    cli_parse_args: bool
+    cli_prog_name: str | None
+    cli_parse_args: bool | list[str] | None
     cli_hide_none_type: bool
     cli_avoid_json: bool
     secrets_dir: str | Path | None
@@ -64,6 +64,12 @@ class BaseSettings(BaseModel):
         _env_nested_delimiter: The nested env values delimiter. Defaults to `None`.
         _env_parse_none_str: The env string value that should be parsed (e.g. "null", "void", "None", etc.)
             into `None` type(None). Defaults to `None` type(None), which means no parsing should occur.
+        _cli_prog_name: The CLI program name to display in help text. Defaults to `None` if _cli_parse_args is `None`.
+            Otherwse, defaults to sys.argv[0].
+        _cli_parse_args: The list of CLI arguments to parse. Defaults to None.
+            If set to `True`, defaults to sys.argv[1:].
+        _cli_hide_none_type: Hide NoneType values in CLI help text. Defaults to `False`.
+        _cli_avoid_json: Avoid complex JSON objects in CLI help text. Defaults to `False`.
         _secrets_dir: The secret files directory. Defaults to `None`.
     """
 
@@ -76,7 +82,8 @@ class BaseSettings(BaseModel):
         _env_ignore_empty: bool | None = None,
         _env_nested_delimiter: str | None = None,
         _env_parse_none_str: str | None = None,
-        _cli_parse_args: bool | None = None,
+        _cli_prog_name: str | None = None,
+        _cli_parse_args: bool | list[str] | None = None,
         _cli_hide_none_type: bool | None = None,
         _cli_avoid_json: bool | None = None,
         _secrets_dir: str | Path | None = None,
@@ -93,6 +100,7 @@ class BaseSettings(BaseModel):
                 _env_ignore_empty=_env_ignore_empty,
                 _env_nested_delimiter=_env_nested_delimiter,
                 _env_parse_none_str=_env_parse_none_str,
+                _cli_prog_name=_cli_prog_name,
                 _cli_parse_args=_cli_parse_args,
                 _cli_hide_none_type=_cli_hide_none_type,
                 _cli_avoid_json=_cli_avoid_json,
@@ -136,7 +144,8 @@ class BaseSettings(BaseModel):
         _env_ignore_empty: bool | None = None,
         _env_nested_delimiter: str | None = None,
         _env_parse_none_str: str | None = None,
-        _cli_parse_args: bool | None = None,
+        _cli_prog_name: str | None = None,
+        _cli_parse_args: bool | list[str] | None = None,
         _cli_hide_none_type: bool | None = None,
         _cli_avoid_json: bool | None = None,
         _secrets_dir: str | Path | None = None,
@@ -160,6 +169,7 @@ class BaseSettings(BaseModel):
             _env_parse_none_str if _env_parse_none_str is not None else self.model_config.get('env_parse_none_str')
         )
 
+        cli_prog_name = _cli_prog_name if _cli_prog_name is not None else self.model_config.get('cli_prog_name')
         cli_parse_args = _cli_parse_args if _cli_parse_args is not None else self.model_config.get('cli_parse_args')
         cli_hide_none_type = (
             _cli_hide_none_type if _cli_hide_none_type is not None else self.model_config.get('cli_hide_none_type')
@@ -172,9 +182,9 @@ class BaseSettings(BaseModel):
         init_settings = InitSettingsSource(self.__class__, init_kwargs=init_kwargs)
         cli_settings = CliSettingsSource(
             self.__class__,
-            sys.argv[1:],
-            cli_parse_none_str=env_parse_none_str,
+            cli_prog_name=cli_prog_name,
             cli_parse_args=cli_parse_args,
+            cli_parse_none_str=env_parse_none_str,
             cli_hide_none_type=cli_hide_none_type,
             cli_avoid_json=cli_avoid_json,
         )
@@ -227,7 +237,8 @@ class BaseSettings(BaseModel):
         env_ignore_empty=False,
         env_nested_delimiter=None,
         env_parse_none_str=None,
-        cli_parse_args=False,
+        cli_prog_name=None,
+        cli_parse_args=None,
         cli_hide_none_type=False,
         cli_avoid_json=False,
         secrets_dir=None,

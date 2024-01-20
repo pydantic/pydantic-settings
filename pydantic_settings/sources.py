@@ -2,6 +2,7 @@ from __future__ import annotations as _annotations
 
 import json
 import os
+import sys
 import warnings
 from abc import ABC, abstractmethod
 from collections import deque
@@ -691,14 +692,19 @@ class CliSettingsSource(EnvSettingsSource):
     def __init__(
         self,
         settings_cls: type[BaseSettings],
-        args: list[str],
+        cli_prog_name: str | None = None,
+        cli_parse_args: bool | list[str] | None = None,
         cli_parse_none_str: str | None = None,
-        cli_parse_args: bool | None = None,
         cli_hide_none_type: bool | None = None,
         cli_avoid_json: bool | None = None,
     ) -> None:
-        self.args = args
-        self.cli_parse_args = cli_parse_args if cli_parse_args is not None else self.config.get('cli_parse_args', False)
+        self.cli_prog_name = sys.argv[0] if cli_prog_name is None else cli_prog_name
+        self.cli_parse_args = cli_parse_args
+        if self.cli_parse_args not in (None, False):
+            if self.cli_parse_args is True:
+                self.cli_parse_args = sys.argv[1:]
+            elif not isinstance(self.cli_parse_args, list):
+                raise SettingsError(f'cli_parse_args must be List[str], recieved {type(self.cli_parse_args)}')
         self.cli_hide_none_type = (
             cli_hide_none_type if cli_hide_none_type is not None else self.config.get('cli_hide_none_type', False)
         )
@@ -708,13 +714,14 @@ class CliSettingsSource(EnvSettingsSource):
         super().__init__(settings_cls, env_nested_delimiter='.', env_parse_none_str=cli_parse_none_str)
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
-        if not self.cli_parse_args:
+        if self.cli_parse_args in (None, False):
             return {}
 
-        self._cli_arg_names: list[str] = []
         self._cli_dict_arg_names: list[str] = []
-        parser: ArgumentParser = self._add_fields_to_parser(ArgumentParser(), self.settings_cls)
-        parsed_args: dict[str, list[str] | str] = vars(parser.parse_args(self.args))
+        parser: ArgumentParser = self._add_fields_to_parser(
+            ArgumentParser(prog=self.cli_prog_name, description=self.settings_cls.__doc__), self.settings_cls
+        )
+        parsed_args: dict[str, list[str] | str] = vars(parser.parse_args(self.cli_parse_args))  # type: ignore
         for field, val in parsed_args.items():
             if isinstance(val, list):
                 merge_list = []
@@ -801,58 +808,71 @@ class CliSettingsSource(EnvSettingsSource):
         self,
         parser: ArgumentParser,
         model: type[BaseModel],
+        _added_args: list[str] = [],
         _arg_prefix: str = '',
-        _dest_prefix: str = '',
+        _subcommand_prefix: str = '',
         _group: _ArgumentGroup | None = None,
     ) -> ArgumentParser:
         subparsers: _SubParsersAction[Any] | None = None
         for field_name, field_info in model.model_fields.items():
-            arg_name = f'{_arg_prefix}{field_name}'
             sub_models: list[type[BaseModel]] = self._get_sub_models(model, field_name, field_info, subparsers)
             if _CliSubCommand in field_info.metadata:
-                subparsers = parser.add_subparsers(title='subcommands', description='available subcommands')
+                subparsers = parser.add_subparsers(title='subcommands', description=field_info.description)
                 for model in sub_models:
                     self._add_fields_to_parser(
                         subparsers.add_parser(
-                            f'{model.__name__.lower()}', help=model.__doc__, formatter_class=parser.formatter_class
+                            f'{model.__name__.lower()}',
+                            help=model.__doc__,
+                            formatter_class=parser.formatter_class,
+                            description=model.__doc__,
                         ),
                         model,
-                        _dest_prefix=f'{_dest_prefix}{arg_name}',
+                        _added_args=[],
+                        _arg_prefix=f'{_arg_prefix}{field_name}.',
+                        _subcommand_prefix=f'{_subcommand_prefix}{field_name}.',
                     )
-            elif arg_name not in self._cli_arg_names:
+            else:
                 arg_flag: str = '--'
                 kwargs: dict[str, Any] = {}
+                kwargs['dest'] = f'{_arg_prefix}{field_name}'
+                if kwargs['dest'] in _added_args:
+                    continue
+
                 kwargs['default'] = SUPPRESS
                 kwargs['help'] = field_info.description
-                kwargs['dest'] = f'{_dest_prefix}{field_name}'
                 kwargs['metavar'] = self._format_metavar(field_info.annotation)
                 if get_origin(field_info.annotation) in (list, set, dict, Sequence):
                     kwargs['action'] = 'append'
                     if get_origin(field_info.annotation) is dict:
-                        self._cli_dict_arg_names.append(arg_name)
+                        self._cli_dict_arg_names.append(kwargs['dest'])
+                arg_name = f'{_arg_prefix.replace(_subcommand_prefix, "", 1)}{field_name}'
+                print((arg_name, kwargs['dest']))
                 if _CliPositionalArg in field_info.metadata:
+                    kwargs['metavar'] = field_name.upper()
+                    arg_name = kwargs['dest']
                     del kwargs['dest']
                     arg_flag = ''
 
                 if sub_models and kwargs.get('action') != 'append':
                     model_group = parser.add_argument_group(f'{arg_name} options', field_info.description)
                     if not self.cli_avoid_json:
-                        self._cli_arg_names.append(arg_name)
+                        _added_args.append(arg_name)
                         kwargs['help'] = f'set {arg_name} from JSON string'
                         model_group.add_argument(f'{arg_flag}{arg_name}', **kwargs)
                     for model in sub_models:
                         self._add_fields_to_parser(
                             parser,
                             model,
-                            _arg_prefix=f'{arg_name}.',
+                            _added_args=_added_args,
+                            _arg_prefix=f'{_arg_prefix}{field_name}.',
+                            _subcommand_prefix=_subcommand_prefix,
                             _group=model_group,
-                            _dest_prefix=f"{kwargs['dest']}.",
                         )
                 elif _group is not None:
-                    self._cli_arg_names.append(arg_name)
+                    _added_args.append(arg_name)
                     _group.add_argument(f'{arg_flag}{arg_name}', **kwargs)
                 else:
-                    self._cli_arg_names.append(arg_name)
+                    _added_args.append(arg_name)
                     parser.add_argument(f'{arg_flag}{arg_name}', **kwargs)
         return parser
 

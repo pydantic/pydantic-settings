@@ -34,7 +34,7 @@ from pydantic_settings import (
     SecretsSettingsSource,
     SettingsConfigDict,
 )
-from pydantic_settings.sources import SettingsError, read_env_file
+from pydantic_settings.sources import CliPositionalArg, CliSubCommand, SettingsError, read_env_file
 
 try:
     import dotenv
@@ -1923,3 +1923,114 @@ def test_dotenv_optional_json_field(tmp_path):
 
     s = Settings()
     assert s.data == {'foo': 'bar'}
+
+
+def test_cli_nested_arg():
+    class SubSubValue(BaseModel):
+        v6: str
+
+    class SubValue(BaseModel):
+        v4: str
+        v5: int
+        sub_sub: SubSubValue
+
+    class TopValue(BaseModel):
+        v1: str
+        v2: str
+        v3: str
+        sub: SubValue
+
+    class Cfg(BaseSettings):
+        v0: str
+        v0_union: Union[SubValue, int]
+        top: TopValue
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            cli_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return cli_settings, init_settings
+
+    argv: list[str] = []
+    argv += ['--top', '{"v1": "json-1", "v2": "json-2", "sub": {"v5": "xx"}}']
+    argv += ['--top.sub.v5', '5']
+    argv += ['--v0', '0']
+    argv += ['--top.v2', '2']
+    argv += ['--top.v3', '3']
+    argv += ['--v0_union', '0']
+    argv += ['--top.sub.sub_sub.v6', '6']
+    argv += ['--top.sub.v4', '4']
+    cfg = Cfg(_cli_parse_args=argv)
+    assert cfg.model_dump() == {
+        'v0': '0',
+        'v0_union': 0,
+        'top': {
+            'v1': 'json-1',
+            'v2': '2',
+            'v3': '3',
+            'sub': {'v4': '4', 'v5': 5, 'sub_sub': {'v6': '6'}},
+        },
+    }
+
+
+def test_cli_list_arg():
+    pass
+
+
+def test_cli_dict_arg():
+    pass
+
+
+def test_cli_literal():
+    pass
+
+
+def test_cli_positional_arg():
+    pass
+
+
+def test_cli_subcommand_with_positionals():
+    class Clone(BaseModel, use_attribute_docstrings=True):
+        local: bool = False
+        shared: bool = False
+        repository: CliPositionalArg[str]
+        directory: CliPositionalArg[str]
+
+    class Init(BaseModel, use_attribute_docstrings=True):
+        quiet: bool = False
+        bare: bool = False
+        directory: CliPositionalArg[str]
+
+    class Git(BaseSettings, use_attribute_docstrings=True):
+        subcommand: CliSubCommand[Clone | Init]
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            cli_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return cli_settings, init_settings
+
+    git = Git(_cli_parse_args=['init', '--quiet', 'true', 'dir/path'])
+    assert git.model_dump() == {'subcommand': {'quiet': True, 'bare': False, 'directory': 'dir/path'}}
+
+    git = Git(_cli_parse_args=['clone', 'repo', '.', '--shared', 'true'])
+    assert git.model_dump() == {'subcommand': {'local': False, 'shared': True, 'repository': 'repo', 'directory': '.'}}
+
+def test_cli_avoid_json():
+    pass
+
+
+def test_cli_hide_none_type():
+    pass
