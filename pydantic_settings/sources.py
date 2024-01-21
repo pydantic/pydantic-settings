@@ -720,8 +720,14 @@ class CliSettingsSource(EnvSettingsSource):
         self._cli_dict_arg_names: list[str] = []
         self._cli_subcommands: dict[str, list[str]] = {}
         parser: ArgumentParser = self._add_fields_to_parser(
-            ArgumentParser(prog=self.cli_prog_name, description=self.settings_cls.__doc__), self.settings_cls
+            ArgumentParser(prog=self.cli_prog_name, description=self.settings_cls.__doc__),
+            model=self.settings_cls,
+            added_args=[],
+            arg_prefix='',
+            subcommand_prefix='',
+            group=None,
         )
+
         parsed_args: dict[str, list[str] | str] = vars(parser.parse_args(self.cli_parse_args))  # type: ignore
         if any(key for key in parsed_args.keys() if not key.endswith(':subcommand')):
             for field, val in parsed_args.items():
@@ -825,20 +831,20 @@ class CliSettingsSource(EnvSettingsSource):
         self,
         parser: ArgumentParser,
         model: type[BaseModel],
-        _added_args: list[str] = [],
-        _arg_prefix: str = '',
-        _subcommand_prefix: str = '',
-        _group: _ArgumentGroup | None = None,
+        added_args: list[str],
+        arg_prefix: str,
+        subcommand_prefix: str,
+        group: _ArgumentGroup | None,
     ) -> ArgumentParser:
         subparsers: _SubParsersAction[Any] | None = None
         for field_name, field_info in self._sort_arg_fields(model):
             sub_models: list[type[BaseModel]] = self._get_sub_models(model, field_name, field_info)
             if _CliSubCommand in field_info.metadata:
                 if subparsers is None:
-                    subparsers = parser.add_subparsers(title='subcommands', dest=f'{_arg_prefix}:subcommand')
-                    self._cli_subcommands[f'{_arg_prefix}:subcommand'] = [f'{_arg_prefix}{field_name}']
+                    subparsers = parser.add_subparsers(title='subcommands', dest=f'{arg_prefix}:subcommand')
+                    self._cli_subcommands[f'{arg_prefix}:subcommand'] = [f'{arg_prefix}{field_name}']
                 else:
-                    self._cli_subcommands[f'{_arg_prefix}:subcommand'].append(f'{_arg_prefix}{field_name}')
+                    self._cli_subcommands[f'{arg_prefix}:subcommand'].append(f'{arg_prefix}{field_name}')
 
                 model = sub_models[0]
                 self._add_fields_to_parser(
@@ -849,24 +855,26 @@ class CliSettingsSource(EnvSettingsSource):
                         description=model.__doc__,
                     ),
                     model,
-                    _added_args=[],
-                    _arg_prefix=f'{_arg_prefix}{field_name}.',
-                    _subcommand_prefix=f'{_subcommand_prefix}{field_name}.',
+                    added_args=[],
+                    arg_prefix=f'{arg_prefix}{field_name}.',
+                    subcommand_prefix=f'{subcommand_prefix}{field_name}.',
+                    group=None,
                 )
             else:
                 arg_flag: str = '--'
                 kwargs: dict[str, Any] = {}
-                kwargs['dest'] = f'{_arg_prefix}{field_name}'
-                if kwargs['dest'] in _added_args:
-                    continue
                 kwargs['default'] = SUPPRESS
                 kwargs['help'] = field_info.description
+                kwargs['dest'] = f'{arg_prefix}{field_name}'
                 kwargs['metavar'] = self._format_metavar(field_info.annotation)
-                if get_origin(field_info.annotation) in (list, set, dict, Sequence, Mapping):
+                if kwargs['dest'] in added_args:
+                    continue
+                if _annotation_contains_types(field_info.annotation, (list, set, dict, Sequence, Mapping)):
                     kwargs['action'] = 'append'
-                    if get_origin(field_info.annotation) in (dict, Mapping):
+                    if _annotation_contains_types(field_info.annotation, (dict, Mapping)):
                         self._cli_dict_arg_names.append(kwargs['dest'])
-                arg_name = f'{_arg_prefix.replace(_subcommand_prefix, "", 1)}{field_name}'
+
+                arg_name = f'{arg_prefix.replace(subcommand_prefix, "", 1)}{field_name}'
                 if _CliPositionalArg in field_info.metadata:
                     kwargs['metavar'] = field_name.upper()
                     arg_name = kwargs['dest']
@@ -876,23 +884,23 @@ class CliSettingsSource(EnvSettingsSource):
                 if sub_models and kwargs.get('action') != 'append':
                     model_group = parser.add_argument_group(f'{arg_name} options', field_info.description)
                     if not self.cli_avoid_json:
-                        _added_args.append(arg_name)
+                        added_args.append(arg_name)
                         kwargs['help'] = f'set {arg_name} from JSON string'
                         model_group.add_argument(f'{arg_flag}{arg_name}', **kwargs)
                     for model in sub_models:
                         self._add_fields_to_parser(
                             parser,
                             model,
-                            _added_args=_added_args,
-                            _arg_prefix=f'{_arg_prefix}{field_name}.',
-                            _subcommand_prefix=_subcommand_prefix,
-                            _group=model_group,
+                            added_args=added_args,
+                            arg_prefix=f'{arg_prefix}{field_name}.',
+                            subcommand_prefix=subcommand_prefix,
+                            group=model_group,
                         )
-                elif _group is not None:
-                    _added_args.append(arg_name)
-                    _group.add_argument(f'{arg_flag}{arg_name}', **kwargs)
+                elif group is not None:
+                    added_args.append(arg_name)
+                    group.add_argument(f'{arg_flag}{arg_name}', **kwargs)
                 else:
-                    _added_args.append(arg_name)
+                    added_args.append(arg_name)
                     parser.add_argument(f'{arg_flag}{arg_name}', **kwargs)
         return parser
 
@@ -989,3 +997,13 @@ def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:
     return lenient_issubclass(annotation, (BaseModel, Mapping, Sequence, tuple, set, frozenset, deque)) or is_dataclass(
         annotation
     )
+
+
+def _annotation_contains_types(annotation: type[Any] | None, types: tuple[Any, ...]) -> bool:
+    if origin_is_union(get_origin(annotation)) or isinstance(annotation, WithArgsTypes):
+        if get_origin(annotation) in types:
+            return True
+        for type_ in get_args(annotation):
+            if _annotation_contains_types(type_, types):
+                return True
+    return annotation in types
