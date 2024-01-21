@@ -60,6 +60,8 @@ def import_toml() -> None:
 
 
 DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
+PathType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
+DEFAULT_PATH: PathType = Path('')
 
 # This is used as default value for `_env_file` in the `BaseSettings` class and
 # `env_file` in `DotEnvSettingsSource` so the default can be distinguished from `None`.
@@ -701,73 +703,84 @@ class DotEnvSettingsSource(EnvSettingsSource):
         )
 
 
-class MappingConfigSource(PydanticBaseSettingsSource):
-    def __init__(self, settings_cls: type[BaseSettings]):
-        super().__init__(settings_cls)
-        self.mapping_values = self._load_values()
+class ConfigFileSourceMixin(ABC):
+    def _read_files(self, files: PathType) -> dict[str, Any | None]:
+        if files is None:
+            return {}
+        if isinstance(files, (str, os.PathLike)):
+            files = [files]
+        vars: dict[str, Any | None] = {}
+        for json_file in files:
+            json_path = Path(json_file).expanduser()
+            if json_path.is_file():
+                vars.update(self._read_file(json_path))
+        return vars
 
     @abstractmethod
-    def _load_values(self) -> Mapping[str, str | None]:
+    def _read_file(self, path: Path) -> dict[str, Any | None]:
         pass
 
-    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
-        field_value = self.mapping_values.get(field_name)
-        return field_value, field_name, False
 
-    def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
-        return value
-
-    def __call__(self) -> dict[str, Any]:
-        d: dict[str, Any] = {}
-
-        for field_name, field in self.settings_cls.model_fields.items():
-            field_value, field_key, value_is_complex = self.get_field_value(field, field_name)
-            field_value = self.prepare_field_value(field_name, field, field_value, value_is_complex)
-            if field_value is not None:
-                d[field_key] = field_value
-        return d
-
-
-class JsonConfigSettingsSource(MappingConfigSource):
+class JsonConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
     """
     A source class that loads variables from a JSON file
     """
 
-    def __init__(self, settings_cls: type[BaseSettings], json_file_path: str, json_file_encoding: str | None = None):
-        self.json_file_path = json_file_path
-        self.json_file_encoding = json_file_encoding
-        super().__init__(settings_cls)
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        json_file: PathType | None = DEFAULT_PATH,
+        json_file_encoding: str | None = None,
+    ):
+        self.json_file_path: PathType = cast(
+            PathType, json_file if json_file != DEFAULT_PATH else settings_cls.model_config.get('json_file')
+        )
+        self.json_file_encoding: str | None = cast(
+            str | None,
+            json_file_encoding
+            if json_file_encoding is not None
+            else settings_cls.model_config.get('json_file_encoding'),
+        )
+        self.json_data = self._read_files(self.json_file_path)
+        super().__init__(settings_cls, self.json_data)
 
-    def _load_values(self) -> Mapping[str, str | None]:
-        return self._read_json()
-
-    def _read_json(self) -> Mapping[str, str | None]:
-        with open(self.json_file_path, encoding=self.json_file_encoding) as json_file:
+    def _read_file(self, file_path: Path) -> dict[str, Any | None]:
+        with open(file_path, encoding=self.json_file_encoding) as json_file:
             return json.load(json_file)
 
 
-class TomlConfigSettingsSource(MappingConfigSource):
+class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
     """
     A source class that loads variables from a JSON file
     """
 
-    def __init__(self, settings_cls: type[BaseSettings], toml_file_path: str, toml_file_encoding: str | None = None):
-        self.toml_file_path = toml_file_path
-        self.toml_file_encoding = toml_file_encoding
-        super().__init__(settings_cls)
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        toml_file: PathType | None = DEFAULT_PATH,
+        toml_file_encoding: str | None = None,
+    ):
+        self.toml_file_path: PathType = cast(
+            PathType, toml_file if toml_file != DEFAULT_PATH else settings_cls.model_config.get('toml_file')
+        )
+        self.toml_file_encoding: str | None = cast(
+            str | None,
+            toml_file_encoding
+            if toml_file_encoding is not None
+            else settings_cls.model_config.get('toml_file_encoding'),
+        )
+        self.toml_data = self._read_files(self.toml_file_path)
+        super().__init__(settings_cls, self.toml_data)
 
-    def _read_toml(self) -> Mapping[str, str | None]:
+    def _read_file(self, file_path: Path) -> dict[str, Any | None]:
         import_toml()
-        with open(self.toml_file_path, 'rb', encoding=self.toml_file_encoding) as toml_file:
+        with open(file_path, 'rb', encoding=self.toml_file_encoding) as toml_file:
             if sys.version_info.minor < 11:
                 return tomlkit.load(toml_file)
             return tomllib.load(toml_file)
 
-    def _load_values(self) -> Mapping[str, str | None]:
-        return self._read_toml()
 
-
-class YamlConfigSettingsSource(MappingConfigSource):
+class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
     """
     A source class that loads variables from a yaml file
     """
@@ -775,18 +788,23 @@ class YamlConfigSettingsSource(MappingConfigSource):
     def __init__(
         self,
         settings_cls: type[BaseSettings],
-        yaml_file_path: str,
+        yaml_file: PathType | None = DEFAULT_PATH,
         yaml_file_encoding: str | None = None,
     ):
-        self.yaml_file_path = yaml_file_path
-        self.yaml_file_encoding = 'utf-8' if yaml_file_encoding is None else yaml_file_encoding
-        super().__init__(settings_cls)
+        self.yaml_file_path: PathType = cast(
+            PathType, yaml_file if yaml_file != DEFAULT_PATH else settings_cls.model_config.get('yaml_file')
+        )
+        self.yaml_file_encoding: str | None = cast(
+            str | None,
+            yaml_file_encoding
+            if yaml_file_encoding is not None
+            else settings_cls.model_config.get('yaml_file_encoding'),
+        )
+        self.yaml_data = self._read_files(self.yaml_file_path)
+        super().__init__(settings_cls, self.yaml_data)
 
-    def _load_values(self) -> Mapping[str, str | None]:
-        return self._read_yaml()
-
-    def _read_yaml(self) -> Mapping[str, str | None]:
-        with open(self.yaml_file_path, encoding=self.yaml_file_encoding) as yaml_file:
+    def _read_file(self, file_path: Path) -> dict[str, Any | None]:
+        with open(file_path, encoding=self.yaml_file_encoding) as yaml_file:
             import_yaml()
             return yaml.safe_load(yaml_file)
 

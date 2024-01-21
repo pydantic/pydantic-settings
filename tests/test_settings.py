@@ -1934,6 +1934,7 @@ def test_json_file(tmp_path):
     class Settings(BaseSettings):
         foobar: str
         nested: Nested
+        model_config = SettingsConfigDict(json_file=p)
 
         @classmethod
         def settings_customise_sources(
@@ -1944,7 +1945,7 @@ def test_json_file(tmp_path):
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
         ) -> Tuple[PydanticBaseSettingsSource, ...]:
-            return (JsonConfigSettingsSource(settings_cls, p),)
+            return (JsonConfigSettingsSource(settings_cls),)
 
     s = Settings()
     assert s.foobar == 'Hello'
@@ -1967,6 +1968,7 @@ def test_yaml_file(tmp_path):
     class Settings(BaseSettings):
         foobar: str
         nested: Nested
+        model_config = SettingsConfigDict(yaml_file=p)
 
         @classmethod
         def settings_customise_sources(
@@ -1977,7 +1979,7 @@ def test_yaml_file(tmp_path):
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
         ) -> Tuple[PydanticBaseSettingsSource, ...]:
-            return (YamlConfigSettingsSource(settings_cls, p),)
+            return (YamlConfigSettingsSource(settings_cls),)
 
     s = Settings()
     assert s.foobar == 'Hello'
@@ -2001,6 +2003,7 @@ def test_toml_file(tmp_path):
     class Settings(BaseSettings):
         foobar: str
         nested: Nested
+        model_config = SettingsConfigDict(toml_file=p)
 
         @classmethod
         def settings_customise_sources(
@@ -2011,7 +2014,7 @@ def test_toml_file(tmp_path):
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
         ) -> Tuple[PydanticBaseSettingsSource, ...]:
-            return (TomlConfigSettingsSource(settings_cls, p),)
+            return (TomlConfigSettingsSource(settings_cls),)
 
     s = Settings()
     assert s.foobar == 'Hello'
