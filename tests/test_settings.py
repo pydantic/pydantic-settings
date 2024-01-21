@@ -1952,6 +1952,25 @@ def test_json_file(tmp_path):
     assert s.nested.nested_field == 'world!'
 
 
+def test_json_no_file():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(json_file=None)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (JsonConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.model_dump() == {}
+
+
 def test_yaml_file(tmp_path):
     p = tmp_path / '.env'
     p.write_text(
@@ -1984,6 +2003,25 @@ def test_yaml_file(tmp_path):
     s = Settings()
     assert s.foobar == 'Hello'
     assert s.nested.nested_field == 'world!'
+
+
+def test_yaml_no_file():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(yaml_file=None)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.model_dump() == {}
 
 
 def test_toml_file(tmp_path):
@@ -2019,3 +2057,22 @@ def test_toml_file(tmp_path):
     s = Settings()
     assert s.foobar == 'Hello'
     assert s.nested.nested_field == 'world!'
+
+
+def test_toml_no_file():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(toml_file=None)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.model_dump() == {}
