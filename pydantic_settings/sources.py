@@ -704,16 +704,16 @@ class DotEnvSettingsSource(EnvSettingsSource):
 
 
 class ConfigFileSourceMixin(ABC):
-    def _read_files(self, files: PathType) -> dict[str, Any | None]:
+    def _read_files(self, files: PathType | None) -> dict[str, Any | None]:
         if files is None:
             return {}
         if isinstance(files, (str, os.PathLike)):
             files = [files]
         vars: dict[str, Any | None] = {}
-        for json_file in files:
-            json_path = Path(json_file).expanduser()
-            if json_path.is_file():
-                vars.update(self._read_file(json_path))
+        for file in files:
+            file_path = Path(file).expanduser()
+            if file_path.is_file():
+                vars.update(self._read_file(file_path))
         return vars
 
     @abstractmethod
@@ -732,14 +732,11 @@ class JsonConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         json_file: PathType | None = DEFAULT_PATH,
         json_file_encoding: str | None = None,
     ):
-        self.json_file_path: PathType = cast(
-            PathType, json_file if json_file != DEFAULT_PATH else settings_cls.model_config.get('json_file')
-        )
-        self.json_file_encoding: str | None = cast(
-            str | None,
+        self.json_file_path = json_file if json_file != DEFAULT_PATH else settings_cls.model_config.get('json_file')
+        self.json_file_encoding = (
             json_file_encoding
             if json_file_encoding is not None
-            else settings_cls.model_config.get('json_file_encoding'),
+            else settings_cls.model_config.get('json_file_encoding')
         )
         self.json_data = self._read_files(self.json_file_path)
         super().__init__(settings_cls, self.json_data)
@@ -760,21 +757,18 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         toml_file: PathType | None = DEFAULT_PATH,
         toml_file_encoding: str | None = None,
     ):
-        self.toml_file_path: PathType = cast(
-            PathType, toml_file if toml_file != DEFAULT_PATH else settings_cls.model_config.get('toml_file')
-        )
-        self.toml_file_encoding: str | None = cast(
-            str | None,
+        self.toml_file_path = toml_file if toml_file != DEFAULT_PATH else settings_cls.model_config.get('toml_file')
+        self.toml_file_encoding = (
             toml_file_encoding
             if toml_file_encoding is not None
-            else settings_cls.model_config.get('toml_file_encoding'),
+            else settings_cls.model_config.get('toml_file_encoding')
         )
         self.toml_data = self._read_files(self.toml_file_path)
         super().__init__(settings_cls, self.toml_data)
 
     def _read_file(self, file_path: Path) -> dict[str, Any | None]:
         import_toml()
-        with open(file_path, 'rb', encoding=self.toml_file_encoding) as toml_file:
+        with open(file_path, mode='rb', encoding=self.toml_file_encoding) as toml_file:
             if sys.version_info.minor < 11:
                 return tomlkit.load(toml_file)
             return tomllib.load(toml_file)
@@ -791,14 +785,11 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         yaml_file: PathType | None = DEFAULT_PATH,
         yaml_file_encoding: str | None = None,
     ):
-        self.yaml_file_path: PathType = cast(
-            PathType, yaml_file if yaml_file != DEFAULT_PATH else settings_cls.model_config.get('yaml_file')
-        )
-        self.yaml_file_encoding: str | None = cast(
-            str | None,
+        self.yaml_file_path = yaml_file if yaml_file != DEFAULT_PATH else settings_cls.model_config.get('yaml_file')
+        self.yaml_file_encoding = (
             yaml_file_encoding
             if yaml_file_encoding is not None
-            else settings_cls.model_config.get('yaml_file_encoding'),
+            else settings_cls.model_config.get('yaml_file_encoding')
         )
         self.yaml_data = self._read_files(self.yaml_file_path)
         super().__init__(settings_cls, self.yaml_data)
