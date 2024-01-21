@@ -1996,19 +1996,31 @@ def test_cli_positional_arg():
 
 
 def test_cli_subcommand_with_positionals():
+    class FooPlugin(BaseModel, use_attribute_docstrings=True):
+        my_feature: bool = False
+
+    class BarPlugin(BaseModel, use_attribute_docstrings=True):
+        my_feature: bool = False
+
+    class Plugins(BaseModel, use_attribute_docstrings=True):
+        foo: CliSubCommand[FooPlugin]
+        bar: CliSubCommand[BarPlugin]
+
     class Clone(BaseModel, use_attribute_docstrings=True):
-        local: bool = False
-        shared: bool = False
         repository: CliPositionalArg[str]
         directory: CliPositionalArg[str]
+        local: bool = False
+        shared: bool = False
 
     class Init(BaseModel, use_attribute_docstrings=True):
+        directory: CliPositionalArg[str]
         quiet: bool = False
         bare: bool = False
-        directory: CliPositionalArg[str]
 
     class Git(BaseSettings, use_attribute_docstrings=True):
-        subcommand: CliSubCommand[Clone | Init]
+        clone: CliSubCommand[Clone]
+        init: CliSubCommand[Init]
+        plugins: CliSubCommand[Plugins]
 
         @classmethod
         def settings_customise_sources(
@@ -2023,10 +2035,19 @@ def test_cli_subcommand_with_positionals():
             return cli_settings, init_settings
 
     git = Git(_cli_parse_args=['init', '--quiet', 'true', 'dir/path'])
-    assert git.model_dump() == {'subcommand': {'quiet': True, 'bare': False, 'directory': 'dir/path'}}
+    assert git.model_dump() == {
+        'clone': None,
+        'init': {'directory': 'dir/path', 'quiet': True, 'bare': False},
+        'plugins': None,
+    }
 
     git = Git(_cli_parse_args=['clone', 'repo', '.', '--shared', 'true'])
-    assert git.model_dump() == {'subcommand': {'local': False, 'shared': True, 'repository': 'repo', 'directory': '.'}}
+    assert git.model_dump() == {
+        'clone': {'repository': 'repo', 'directory': '.', 'local': False, 'shared': True},
+        'init': None,
+        'plugins': None,
+    }
+
 
 def test_cli_avoid_json():
     pass

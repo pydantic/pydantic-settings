@@ -44,7 +44,7 @@ class _CliPositionalArg:
 
 
 T = TypeVar('T')
-CliSubCommand = Annotated[T, _CliSubCommand]
+CliSubCommand = Annotated[T | None, _CliSubCommand]
 CliPositionalArg = Annotated[T, _CliPositionalArg]
 
 
@@ -718,22 +718,30 @@ class CliSettingsSource(EnvSettingsSource):
             return {}
 
         self._cli_dict_arg_names: list[str] = []
+        self._cli_subcommands: dict[str, list[str]] = {}
         parser: ArgumentParser = self._add_fields_to_parser(
             ArgumentParser(prog=self.cli_prog_name, description=self.settings_cls.__doc__), self.settings_cls
         )
         parsed_args: dict[str, list[str] | str] = vars(parser.parse_args(self.cli_parse_args))  # type: ignore
-        for field, val in parsed_args.items():
-            if isinstance(val, list):
-                merge_list = []
-                for sub_val in val:
-                    if sub_val.startswith('[') and sub_val.endswith(']'):
-                        sub_val = sub_val[1:-1]
-                    merge_list.append(sub_val)
-                parsed_args[field] = (
-                    f'[{",".join(merge_list)}]'
-                    if field not in self._cli_dict_arg_names
-                    else self._merge_json_key_val_list_str(f'[{",".join(merge_list)}]')
-                )
+        if any(key for key in parsed_args.keys() if not key.endswith(':subcommand')):
+            for field, val in parsed_args.items():
+                if isinstance(val, list):
+                    merge_list = []
+                    for sub_val in val:
+                        if sub_val.startswith('[') and sub_val.endswith(']'):
+                            sub_val = sub_val[1:-1]
+                        merge_list.append(sub_val)
+                    parsed_args[field] = (
+                        f'[{",".join(merge_list)}]'
+                        if field not in self._cli_dict_arg_names
+                        else self._merge_json_key_val_list_str(f'[{",".join(merge_list)}]')
+                    )
+                elif field.endswith(':subcommand'):
+                    self._cli_subcommands[field].remove(field.split(':')[0] + val)
+
+        for subcommands in self._cli_subcommands.values():
+            for subcommand in subcommands:
+                parsed_args[subcommand] = self.env_parse_none_str  # type: ignore
 
         return parse_env_vars(
             parsed_args, self.case_sensitive, self.env_ignore_empty, self.env_parse_none_str  # type: ignore
@@ -770,9 +778,7 @@ class CliSettingsSource(EnvSettingsSource):
                     break
         return json.dumps(key_val_dict)
 
-    def _get_sub_models(
-        self, model: type[BaseModel], field_name: str, field_info: FieldInfo, subparsers: _SubParsersAction[Any] | None
-    ) -> list[type[BaseModel]]:
+    def _get_sub_models(self, model: type[BaseModel], field_name: str, field_info: FieldInfo) -> list[type[BaseModel]]:
         field_types: tuple[Any, ...] = (
             (field_info.annotation,) if not get_args(field_info.annotation) else get_args(field_info.annotation)
         )
@@ -790,19 +796,30 @@ class CliSettingsSource(EnvSettingsSource):
                     )
             if isclass(type_) and issubclass(type_, BaseModel):
                 sub_models.append(type_)
-            elif _CliSubCommand in field_info.metadata and subparsers is not None:
-                raise SettingsError(
-                    f'detected a second subcommand definition at {model.__name__}.{field_name}, '
-                    'only one per model is allowed'
-                )
-        if _CliPositionalArg in field_info.metadata:
-            if not field_info.is_required():
-                raise SettingsError(f'positional argument {model.__name__}.{field_name} has a default value')
-            elif subparsers is not None:
-                raise SettingsError(
-                    f'positional argument {model.__name__}.{field_name} ' 'is speficied after a subcommand definition'
-                )
         return sub_models
+
+    def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, FieldInfo]]:
+        positional_args, subcommand_args, optional_args = [], [], []
+        for field_name, field_info in model.model_fields.items():
+            if _CliSubCommand in field_info.metadata:
+                if not field_info.is_required():
+                    raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has a default value')
+                else:
+                    field_types = [type_ for type_ in get_args(field_info.annotation) if type_ is not type(None)]
+                    if len(field_types) != 1:
+                        raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has multiple types')
+                    elif not (isclass(field_types[0]) and issubclass(field_types[0], BaseModel)):
+                        raise SettingsError(
+                            f'subcommand argument {model.__name__}.{field_name} is not derived from BaseModel'
+                        )
+                subcommand_args.append((field_name, field_info))
+            elif _CliPositionalArg in field_info.metadata:
+                if not field_info.is_required():
+                    raise SettingsError(f'positional argument {model.__name__}.{field_name} has a default value')
+                positional_args.append((field_name, field_info))
+            else:
+                optional_args.append((field_name, field_info))
+        return positional_args + subcommand_args + optional_args
 
     def _add_fields_to_parser(
         self,
@@ -814,39 +831,42 @@ class CliSettingsSource(EnvSettingsSource):
         _group: _ArgumentGroup | None = None,
     ) -> ArgumentParser:
         subparsers: _SubParsersAction[Any] | None = None
-        for field_name, field_info in model.model_fields.items():
-            sub_models: list[type[BaseModel]] = self._get_sub_models(model, field_name, field_info, subparsers)
+        for field_name, field_info in self._sort_arg_fields(model):
+            sub_models: list[type[BaseModel]] = self._get_sub_models(model, field_name, field_info)
             if _CliSubCommand in field_info.metadata:
-                subparsers = parser.add_subparsers(title='subcommands', description=field_info.description)
-                for model in sub_models:
-                    self._add_fields_to_parser(
-                        subparsers.add_parser(
-                            f'{model.__name__.lower()}',
-                            help=model.__doc__,
-                            formatter_class=parser.formatter_class,
-                            description=model.__doc__,
-                        ),
-                        model,
-                        _added_args=[],
-                        _arg_prefix=f'{_arg_prefix}{field_name}.',
-                        _subcommand_prefix=f'{_subcommand_prefix}{field_name}.',
-                    )
+                if subparsers is None:
+                    subparsers = parser.add_subparsers(title='subcommands', dest=f'{_arg_prefix}:subcommand')
+                    self._cli_subcommands[f'{_arg_prefix}:subcommand'] = [f'{_arg_prefix}{field_name}']
+                else:
+                    self._cli_subcommands[f'{_arg_prefix}:subcommand'].append(f'{_arg_prefix}{field_name}')
+
+                model = sub_models[0]
+                self._add_fields_to_parser(
+                    subparsers.add_parser(
+                        field_name,
+                        help=field_info.description,
+                        formatter_class=parser.formatter_class,
+                        description=model.__doc__,
+                    ),
+                    model,
+                    _added_args=[],
+                    _arg_prefix=f'{_arg_prefix}{field_name}.',
+                    _subcommand_prefix=f'{_subcommand_prefix}{field_name}.',
+                )
             else:
                 arg_flag: str = '--'
                 kwargs: dict[str, Any] = {}
                 kwargs['dest'] = f'{_arg_prefix}{field_name}'
                 if kwargs['dest'] in _added_args:
                     continue
-
                 kwargs['default'] = SUPPRESS
                 kwargs['help'] = field_info.description
                 kwargs['metavar'] = self._format_metavar(field_info.annotation)
-                if get_origin(field_info.annotation) in (list, set, dict, Sequence):
+                if get_origin(field_info.annotation) in (list, set, dict, Sequence, Mapping):
                     kwargs['action'] = 'append'
-                    if get_origin(field_info.annotation) is dict:
+                    if get_origin(field_info.annotation) in (dict, Mapping):
                         self._cli_dict_arg_names.append(kwargs['dest'])
                 arg_name = f'{_arg_prefix.replace(_subcommand_prefix, "", 1)}{field_name}'
-                print((arg_name, kwargs['dest']))
                 if _CliPositionalArg in field_info.metadata:
                     kwargs['metavar'] = field_name.upper()
                     arg_name = kwargs['dest']
