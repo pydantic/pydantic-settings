@@ -2133,28 +2133,28 @@ def test_cli_dict_arg():
 
 
 def test_cli_subcommand_with_positionals():
-    class FooPlugin(BaseModel, use_attribute_docstrings=True):
+    class FooPlugin(BaseModel):
         my_feature: bool = False
 
-    class BarPlugin(BaseModel, use_attribute_docstrings=True):
+    class BarPlugin(BaseModel):
         my_feature: bool = False
 
-    class Plugins(BaseModel, use_attribute_docstrings=True):
+    class Plugins(BaseModel):
         foo: CliSubCommand[FooPlugin]
         bar: CliSubCommand[BarPlugin]
 
-    class Clone(BaseModel, use_attribute_docstrings=True):
+    class Clone(BaseModel):
         repository: CliPositionalArg[str]
         directory: CliPositionalArg[str]
         local: bool = False
         shared: bool = False
 
-    class Init(BaseModel, use_attribute_docstrings=True):
+    class Init(BaseModel):
         directory: CliPositionalArg[str]
         quiet: bool = False
         bare: bool = False
 
-    class Git(BaseSettings, use_attribute_docstrings=True):
+    class Git(BaseSettings):
         clone: CliSubCommand[Clone]
         init: CliSubCommand[Init]
         plugins: CliSubCommand[Plugins]

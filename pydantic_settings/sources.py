@@ -10,7 +10,7 @@ from dataclasses import is_dataclass
 from inspect import isclass
 from pathlib import Path
 from types import FunctionType
-from typing import TYPE_CHECKING, Annotated, Any, Dict, List, Literal, Mapping, Sequence, Tuple, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Mapping, Sequence, Tuple, TypeVar, Union, cast
 
 from dotenv import dotenv_values
 from pydantic import AliasChoices, AliasPath, BaseModel, Json, TypeAdapter
@@ -18,7 +18,7 @@ from pydantic._internal._repr import Representation
 from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union, typing_base
 from pydantic._internal._utils import deep_update, lenient_issubclass
 from pydantic.fields import FieldInfo
-from typing_extensions import TypeAliasType, get_args, get_origin
+from typing_extensions import Annotated, TypeAliasType, get_args, get_origin
 
 from pydantic_settings.utils import path_type_label
 
