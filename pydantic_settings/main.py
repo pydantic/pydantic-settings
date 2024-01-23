@@ -32,6 +32,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_parse_args: bool | list[str] | None
     cli_hide_none_type: bool
     cli_avoid_json: bool
+    cli_enforce_required: bool
     secrets_dir: str | Path | None
 
 
@@ -70,6 +71,7 @@ class BaseSettings(BaseModel):
             If set to `True`, defaults to sys.argv[1:].
         _cli_hide_none_type: Hide NoneType values in CLI help text. Defaults to `False`.
         _cli_avoid_json: Avoid complex JSON objects in CLI help text. Defaults to `False`.
+        _cli_enforce_required: Enforce required fields at the CLI. Defaults to `False`.
         _secrets_dir: The secret files directory. Defaults to `None`.
     """
 
@@ -86,6 +88,7 @@ class BaseSettings(BaseModel):
         _cli_parse_args: bool | list[str] | None = None,
         _cli_hide_none_type: bool | None = None,
         _cli_avoid_json: bool | None = None,
+        _cli_enforce_required: bool | None = None,
         _secrets_dir: str | Path | None = None,
         **values: Any,
     ) -> None:
@@ -104,6 +107,7 @@ class BaseSettings(BaseModel):
                 _cli_parse_args=_cli_parse_args,
                 _cli_hide_none_type=_cli_hide_none_type,
                 _cli_avoid_json=_cli_avoid_json,
+                _cli_enforce_required=_cli_enforce_required,
                 _secrets_dir=_secrets_dir,
             )
         )
@@ -113,7 +117,6 @@ class BaseSettings(BaseModel):
         cls,
         settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
-        cli_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
@@ -124,7 +127,6 @@ class BaseSettings(BaseModel):
         Args:
             settings_cls: The Settings class.
             init_settings: The `InitSettingsSource` instance.
-            cli_settings: The `CliSettingsSource` instance.
             env_settings: The `EnvSettingsSource` instance.
             dotenv_settings: The `DotEnvSettingsSource` instance.
             file_secret_settings: The `SecretsSettingsSource` instance.
@@ -132,7 +134,7 @@ class BaseSettings(BaseModel):
         Returns:
             A tuple containing the sources and their order for loading the settings values.
         """
-        return init_settings, cli_settings, env_settings, dotenv_settings, file_secret_settings
+        return init_settings, env_settings, dotenv_settings, file_secret_settings
 
     def _settings_build_values(
         self,
@@ -148,6 +150,7 @@ class BaseSettings(BaseModel):
         _cli_parse_args: bool | list[str] | None = None,
         _cli_hide_none_type: bool | None = None,
         _cli_avoid_json: bool | None = None,
+        _cli_enforce_required: bool | None = None,
         _secrets_dir: str | Path | None = None,
     ) -> dict[str, Any]:
         # Determine settings config values
@@ -175,6 +178,11 @@ class BaseSettings(BaseModel):
             _cli_hide_none_type if _cli_hide_none_type is not None else self.model_config.get('cli_hide_none_type')
         )
         cli_avoid_json = _cli_avoid_json if _cli_avoid_json is not None else self.model_config.get('cli_avoid_json')
+        cli_enforce_required = (
+            _cli_enforce_required
+            if _cli_enforce_required is not None
+            else self.model_config.get('cli_enforce_required')
+        )
 
         secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
@@ -187,6 +195,7 @@ class BaseSettings(BaseModel):
             cli_parse_none_str=env_parse_none_str,
             cli_hide_none_type=cli_hide_none_type,
             cli_avoid_json=cli_avoid_json,
+            cli_enforce_required=cli_enforce_required,
         )
         env_settings = EnvSettingsSource(
             self.__class__,
@@ -214,11 +223,12 @@ class BaseSettings(BaseModel):
         sources = self.settings_customise_sources(
             self.__class__,
             init_settings=init_settings,
-            cli_settings=cli_settings,
             env_settings=env_settings,
             dotenv_settings=dotenv_settings,
             file_secret_settings=file_secret_settings,
         )
+        if _cli_parse_args:
+            sources = (cli_settings,) + sources
         if sources:
             return deep_update(*reversed([source() for source in sources]))
         else:
@@ -241,6 +251,7 @@ class BaseSettings(BaseModel):
         cli_parse_args=None,
         cli_hide_none_type=False,
         cli_avoid_json=False,
+        cli_enforce_required=False,
         secrets_dir=None,
         protected_namespaces=('model_', 'settings_'),
     )

@@ -7,7 +7,6 @@ import warnings
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import is_dataclass
-from inspect import isclass
 from pathlib import Path
 from types import FunctionType
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Mapping, Sequence, Tuple, TypeVar, Union, cast
@@ -16,7 +15,7 @@ from dotenv import dotenv_values
 from pydantic import AliasChoices, AliasPath, BaseModel, Json, TypeAdapter
 from pydantic._internal._repr import Representation
 from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union, typing_base
-from pydantic._internal._utils import deep_update, lenient_issubclass
+from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
 from pydantic.fields import FieldInfo
 from typing_extensions import Annotated, TypeAliasType, get_args, get_origin
 
@@ -515,7 +514,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         return True, allow_parse_failure
 
     @staticmethod
-    def next_field(field: FieldInfo | None, key: str) -> FieldInfo | None:
+    def next_field(field: FieldInfo | Any | None, key: str) -> FieldInfo | None:
         """
         Find the field in a sub model by key(env name)
 
@@ -544,11 +543,25 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         Returns:
             Field if it finds the next field otherwise `None`.
         """
-        if not field or origin_is_union(get_origin(field.annotation)):
-            # no support for Unions of complex BaseSettings fields
+        if not field:
             return None
-        elif field.annotation and hasattr(field.annotation, 'model_fields') and field.annotation.model_fields.get(key):
-            return field.annotation.model_fields[key]
+        if isinstance(field, FieldInfo):
+            if not hasattr(field, 'annotation'):
+                return None
+            annotation = field.annotation
+        else:
+            annotation = field
+
+        if origin_is_union(get_origin(annotation)) or isinstance(annotation, WithArgsTypes):
+            type_ = get_origin(annotation)
+            if is_model_class(type_) and type_.model_fields.get(key):
+                return type_.model_fields.get(key)
+            for type_ in get_args(annotation):
+                type_has_key = EnvSettingsSource.next_field(type_, key)
+                if type_has_key:
+                    return type_has_key
+        elif is_model_class(annotation) and annotation.model_fields.get(key):
+            return annotation.model_fields[key]
 
         return None
 
@@ -697,6 +710,7 @@ class CliSettingsSource(EnvSettingsSource):
         cli_parse_none_str: str | None = None,
         cli_hide_none_type: bool | None = None,
         cli_avoid_json: bool | None = None,
+        cli_enforce_required: bool | None = None,
     ) -> None:
         self.cli_prog_name = sys.argv[0] if cli_prog_name is None else cli_prog_name
         self.cli_parse_args = cli_parse_args
@@ -711,6 +725,9 @@ class CliSettingsSource(EnvSettingsSource):
         self.cli_avoid_json = cli_avoid_json if cli_avoid_json is not None else self.config.get('cli_avoid_json', False)
         if cli_parse_none_str is None:
             cli_parse_none_str = 'None' if self.cli_avoid_json is True else 'null'
+        self.cli_enforce_required = (
+            cli_enforce_required if cli_enforce_required is not None else self.config.get('cli_enforce_required', False)
+        )
         super().__init__(settings_cls, env_nested_delimiter='.', env_parse_none_str=cli_parse_none_str)
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
@@ -729,25 +746,32 @@ class CliSettingsSource(EnvSettingsSource):
         )
 
         parsed_args: dict[str, list[str] | str] = vars(parser.parse_args(self.cli_parse_args))  # type: ignore
-        if any(key for key in parsed_args.keys() if not key.endswith(':subcommand')):
-            for field, val in parsed_args.items():
-                if isinstance(val, list):
-                    merge_list = []
-                    for sub_val in val:
-                        if sub_val.startswith('[') and sub_val.endswith(']'):
-                            sub_val = sub_val[1:-1]
-                        merge_list.append(sub_val)
-                    parsed_args[field] = (
-                        f'[{",".join(merge_list)}]'
-                        if field not in self._cli_dict_arg_names
-                        else self._merge_json_key_val_list_str(f'[{",".join(merge_list)}]')
-                    )
-                elif field.endswith(':subcommand'):
-                    self._cli_subcommands[field].remove(field.split(':')[0] + val)
+        selected_subcommands: list[str] = []
+        for field_name, val in parsed_args.items():
+            if isinstance(val, list):
+                merge_list = []
+                for sub_val in val:
+                    if sub_val.startswith('[') and sub_val.endswith(']'):
+                        sub_val = sub_val[1:-1]
+                    merge_list.append(sub_val)
+                parsed_args[field_name] = (
+                    f'[{",".join(merge_list)}]'
+                    if field_name not in self._cli_dict_arg_names
+                    else self._merge_json_key_val_list_str(f'[{",".join(merge_list)}]')
+                )
+            elif field_name.endswith(':subcommand'):
+                selected_subcommands.append(field_name.split(':')[0] + val)
 
         for subcommands in self._cli_subcommands.values():
             for subcommand in subcommands:
-                parsed_args[subcommand] = self.env_parse_none_str  # type: ignore
+                if subcommand not in selected_subcommands:
+                    parsed_args[subcommand] = self.env_parse_none_str  # type: ignore
+
+        parsed_args = {key: val for key, val in parsed_args.items() if not key.endswith(':subcommand')}
+        if selected_subcommands:
+            last_selected_subcommand = max(selected_subcommands, key=len)
+            if not any(field_name for field_name in parsed_args.keys() if f'{last_selected_subcommand}.' in field_name):
+                parsed_args[last_selected_subcommand] = '{}'
 
         return parse_env_vars(
             parsed_args, self.case_sensitive, self.env_ignore_empty, self.env_parse_none_str  # type: ignore
@@ -800,7 +824,7 @@ class CliSettingsSource(EnvSettingsSource):
                     raise SettingsError(
                         f'CliPositionalArg is not outermost annotation for {model.__name__}.{field_name}'
                     )
-            if isclass(type_) and issubclass(type_, BaseModel):
+            if is_model_class(type_):
                 sub_models.append(type_)
         return sub_models
 
@@ -814,7 +838,7 @@ class CliSettingsSource(EnvSettingsSource):
                     field_types = [type_ for type_ in get_args(field_info.annotation) if type_ is not type(None)]
                     if len(field_types) != 1:
                         raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has multiple types')
-                    elif not (isclass(field_types[0]) and issubclass(field_types[0], BaseModel)):
+                    elif not is_model_class(field_types[0]):
                         raise SettingsError(
                             f'subcommand argument {model.__name__}.{field_name} is not derived from BaseModel'
                         )
@@ -867,6 +891,7 @@ class CliSettingsSource(EnvSettingsSource):
                 kwargs['help'] = field_info.description
                 kwargs['dest'] = f'{arg_prefix}{field_name}'
                 kwargs['metavar'] = self._format_metavar(field_info.annotation)
+                kwargs['required'] = self.cli_enforce_required and field_info.is_required()
                 if kwargs['dest'] in added_args:
                     continue
                 if _annotation_contains_types(field_info.annotation, (list, set, dict, Sequence, Mapping)):
@@ -879,6 +904,7 @@ class CliSettingsSource(EnvSettingsSource):
                     kwargs['metavar'] = field_name.upper()
                     arg_name = kwargs['dest']
                     del kwargs['dest']
+                    del kwargs['required']
                     arg_flag = ''
 
                 if sub_models and kwargs.get('action') != 'append':

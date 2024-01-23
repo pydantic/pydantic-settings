@@ -606,7 +606,6 @@ def test_env_takes_precedence(env):
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
-            cli_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
@@ -636,7 +635,7 @@ def test_env_deep_override(env):
 
         @classmethod
         def settings_customise_sources(
-            cls, settings_cls, init_settings, cli_settings, env_settings, dotenv_settings, file_secret_settings
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
         ):
             return env_settings, dotenv_settings, init_settings, file_secret_settings
 
@@ -675,7 +674,6 @@ def test_config_file_settings_nornir(env):
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
-            cli_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
@@ -1311,7 +1309,6 @@ def test_external_settings_sources_precedence(env):
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
-            cli_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
@@ -1358,7 +1355,6 @@ def test_external_settings_sources_filter_env_vars():
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
-            cli_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
@@ -1432,7 +1428,6 @@ def test_env_setting_source_custom_env_parse(env):
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
-            cli_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
@@ -1461,7 +1456,6 @@ def test_env_settings_source_custom_env_parse_is_bad(env):
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
-            cli_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
@@ -1496,7 +1490,6 @@ def test_secret_settings_source_custom_env_parse(tmp_path):
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
-            cli_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
@@ -1521,7 +1514,6 @@ def test_custom_source_get_field_value_error(env):
             cls,
             settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
-            cli_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
@@ -1945,18 +1937,6 @@ def test_cli_nested_arg():
         v0_union: Union[SubValue, int]
         top: TopValue
 
-        @classmethod
-        def settings_customise_sources(
-            cls,
-            settings_cls: Type[BaseSettings],
-            init_settings: PydanticBaseSettingsSource,
-            cli_settings: PydanticBaseSettingsSource,
-            env_settings: PydanticBaseSettingsSource,
-            dotenv_settings: PydanticBaseSettingsSource,
-            file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
-            return cli_settings, init_settings
-
     args: list[str] = []
     args += ['--top', '{"v1": "json-1", "v2": "json-2", "sub": {"v5": "xx"}}']
     args += ['--top.sub.v5', '5']
@@ -1996,66 +1976,68 @@ def test_cli_list_arg():
         str_list: Optional[List[str]] = None
         child: Optional[Child] = None
 
-        @classmethod
-        def settings_customise_sources(
-            cls,
-            settings_cls: Type[BaseSettings],
-            init_settings: PydanticBaseSettingsSource,
-            cli_settings: PydanticBaseSettingsSource,
-            env_settings: PydanticBaseSettingsSource,
-            dotenv_settings: PydanticBaseSettingsSource,
-            file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
-            return cli_settings, init_settings
+    def check_answer(cfg, prefix, expected):
+        if prefix:
+            assert cfg.model_dump() == {
+                'num_list': None,
+                'obj_list': None,
+                'union_list': None,
+                'str_list': None,
+                'child': expected,
+            }
+        else:
+            expected['child'] = None
+            assert cfg.model_dump() == expected
 
     args: list[str] = []
-    args = ['--num_list', '[1,2]']
-    args += ['--num_list', '3,4']
-    args += ['--num_list', '5', '--num_list', '6']
-    cfg = Cfg(_cli_parse_args=args)
-    assert cfg.model_dump() == {
-        'num_list': [1, 2, 3, 4, 5, 6],
-        'obj_list': None,
-        'union_list': None,
-        'str_list': None,
-        'child': None,
-    }
+    for prefix in ('', 'child.'):
+        args = [f'--{prefix}num_list', '[1,2]']
+        args += [f'--{prefix}num_list', '3,4']
+        args += [f'--{prefix}num_list', '5', f'--{prefix}num_list', '6']
+        cfg = Cfg(_cli_parse_args=args)
+        expected= {
+            'num_list': [1, 2, 3, 4, 5, 6],
+            'obj_list': None,
+            'union_list': None,
+            'str_list': None,
+        }
+        check_answer(cfg, prefix, expected)
 
-    args = ['--obj_list', '[{"val":1},{"val":2}]']
-    args += ['--obj_list', '{"val":3},{"val":4}']
-    args += ['--obj_list', '{"val":5}', '--obj_list', '{"val":6}']
-    cfg = Cfg(_cli_parse_args=args)
-    assert cfg.model_dump() == {
-        'num_list': None,
-        'obj_list': [{'val': 1}, {'val': 2}, {'val': 3}, {'val': 4}, {'val': 5}, {'val': 6}],
-        'union_list': None,
-        'str_list': None,
-        'child': None,
-    }
+        args = [f'--{prefix}obj_list', '[{"val":1},{"val":2}]']
+        args += [f'--{prefix}obj_list', '{"val":3},{"val":4}']
+        args += [f'--{prefix}obj_list', '{"val":5}', f'--{prefix}obj_list', '{"val":6}']
+        cfg = Cfg(_cli_parse_args=args)
+        expected= {
+            'num_list': None,
+            'obj_list': [{'val': 1}, {'val': 2}, {'val': 3}, {'val': 4}, {'val': 5}, {'val': 6}],
+            'union_list': None,
+            'str_list': None,
+        }
+        check_answer(cfg, prefix, expected)
 
-    args = ['--union_list', '[{"val":1},2]', '--union_list', '[3,{"val":4}]']
-    args += ['--union_list', '{"val":5},6', '--union_list', '7,{"val":8}']
-    args += ['--union_list', '{"val":9}', '--union_list', '10']
-    cfg = Cfg(_cli_parse_args=args)
-    assert cfg.model_dump() == {
-        'num_list': None,
-        'obj_list': None,
-        'union_list': [{'val': 1}, 2, 3, {'val': 4}, {'val': 5}, 6, 7, {'val': 8}, {'val': 9}, 10],
-        'str_list': None,
-        'child': None,
-    }
+        args = [f'--{prefix}union_list', '[{"val":1},2]', f'--{prefix}union_list', '[3,{"val":4}]']
+        args += [f'--{prefix}union_list', '{"val":5},6', f'--{prefix}union_list', '7,{"val":8}']
+        args += [f'--{prefix}union_list', '{"val":9}', f'--{prefix}union_list', '10']
+        cfg = Cfg(_cli_parse_args=args)
+        expected= {
+            'num_list': None,
+            'obj_list': None,
+            'union_list': [{'val': 1}, 2, 3, {'val': 4}, {'val': 5}, 6, 7, {'val': 8}, {'val': 9}, 10],
+            'str_list': None,
+        }
+        check_answer(cfg, prefix, expected)
 
-    args = ['--str_list', '["0,0","1,1"]']
-    args += ['--str_list', '"2,2","3,3"']
-    args += ['--str_list', '"4,4"', '--str_list', '"5,5"']
-    cfg = Cfg(_cli_parse_args=args)
-    assert cfg.model_dump() == {
-        'num_list': None,
-        'obj_list': None,
-        'union_list': None,
-        'str_list': ['0,0', '1,1', '2,2', '3,3', '4,4', '5,5'],
-        'child': None,
-    }
+        args = [f'--{prefix}str_list', '["0,0","1,1"]']
+        args += [f'--{prefix}str_list', '"2,2","3,3"']
+        args += [f'--{prefix}str_list', '"4,4"', f'--{prefix}str_list', '"5,5"']
+        cfg = Cfg(_cli_parse_args=args)
+        expected= {
+            'num_list': None,
+            'obj_list': None,
+            'union_list': None,
+            'str_list': ['0,0', '1,1', '2,2', '3,3', '4,4', '5,5'],
+        }
+        check_answer(cfg, prefix, expected)
 
 
 def test_cli_dict_arg():
@@ -2066,70 +2048,63 @@ def test_cli_dict_arg():
         check_dict: Optional[Dict[str, str]] = None
         child: Optional[Child] = None
 
-        @classmethod
-        def settings_customise_sources(
-            cls,
-            settings_cls: Type[BaseSettings],
-            init_settings: PydanticBaseSettingsSource,
-            cli_settings: PydanticBaseSettingsSource,
-            env_settings: PydanticBaseSettingsSource,
-            dotenv_settings: PydanticBaseSettingsSource,
-            file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
-            return cli_settings, init_settings
-
     args: list[str] = []
-    args = ['--check_dict', '{"k1":"a","k2":"b"}']
-    args += ['--check_dict', '{"k3":"c"},{"k4":"d"}']
-    args += ['--check_dict', '{"k5":"e"}', '--check_dict', '{"k6":"f"}']
-    args += ['--check_dict', '[k7=g,k8=h]']
-    args += ['--check_dict', 'k9=i,k10=j']
-    args += ['--check_dict', 'k11=k', '--check_dict', 'k12=l']
-    args += ['--check_dict', '[{"k13":"m"},k14=n]', '--check_dict', '[k15=o,{"k16":"p"}]']
-    args += ['--check_dict', '{"k17":"q"},k18=r', '--check_dict', 'k19=s,{"k20":"t"}']
-    args += ['--check_dict', '{"k21":"u"},k22=v,{"k23":"w"}']
-    args += ['--check_dict', 'k24=x,{"k25":"y"},k26=z']
-    args += ['--check_dict', '[k27="x,y",k28="x,y"]']
-    args += ['--check_dict', 'k29="x,y",k30="x,y"']
-    args += ['--check_dict', 'k31="x,y"', '--check_dict', 'k32="x,y"']
-    cfg = Cfg(_cli_parse_args=args)
-    assert cfg.model_dump() == {
-        'check_dict': {
-            'k1': 'a',
-            'k2': 'b',
-            'k3': 'c',
-            'k4': 'd',
-            'k5': 'e',
-            'k6': 'f',
-            'k7': 'g',
-            'k8': 'h',
-            'k9': 'i',
-            'k10': 'j',
-            'k11': 'k',
-            'k12': 'l',
-            'k13': 'm',
-            'k14': 'n',
-            'k15': 'o',
-            'k16': 'p',
-            'k17': 'q',
-            'k18': 'r',
-            'k19': 's',
-            'k20': 't',
-            'k21': 'u',
-            'k22': 'v',
-            'k23': 'w',
-            'k24': 'x',
-            'k25': 'y',
-            'k26': 'z',
-            'k27': 'x,y',
-            'k28': 'x,y',
-            'k29': 'x,y',
-            'k30': 'x,y',
-            'k31': 'x,y',
-            'k32': 'x,y',
-        },
-        'child': None,
-    }
+    for prefix in ('', 'child.'):
+        args = [f'--{prefix}check_dict', '{"k1":"a","k2":"b"}']
+        args += [f'--{prefix}check_dict', '{"k3":"c"},{"k4":"d"}']
+        args += [f'--{prefix}check_dict', '{"k5":"e"}', f'--{prefix}check_dict', '{"k6":"f"}']
+        args += [f'--{prefix}check_dict', '[k7=g,k8=h]']
+        args += [f'--{prefix}check_dict', 'k9=i,k10=j']
+        args += [f'--{prefix}check_dict', 'k11=k', f'--{prefix}check_dict', 'k12=l']
+        args += [f'--{prefix}check_dict', '[{"k13":"m"},k14=n]', f'--{prefix}check_dict', '[k15=o,{"k16":"p"}]']
+        args += [f'--{prefix}check_dict', '{"k17":"q"},k18=r', f'--{prefix}check_dict', 'k19=s,{"k20":"t"}']
+        args += [f'--{prefix}check_dict', '{"k21":"u"},k22=v,{"k23":"w"}']
+        args += [f'--{prefix}check_dict', 'k24=x,{"k25":"y"},k26=z']
+        args += [f'--{prefix}check_dict', '[k27="x,y",k28="x,y"]']
+        args += [f'--{prefix}check_dict', 'k29="x,y",k30="x,y"']
+        args += [f'--{prefix}check_dict', 'k31="x,y"', f'--{prefix}check_dict', 'k32="x,y"']
+        cfg = Cfg(_cli_parse_args=args)
+        expected: dict[str, Any] = {
+            'check_dict': {
+                'k1': 'a',
+                'k2': 'b',
+                'k3': 'c',
+                'k4': 'd',
+                'k5': 'e',
+                'k6': 'f',
+                'k7': 'g',
+                'k8': 'h',
+                'k9': 'i',
+                'k10': 'j',
+                'k11': 'k',
+                'k12': 'l',
+                'k13': 'm',
+                'k14': 'n',
+                'k15': 'o',
+                'k16': 'p',
+                'k17': 'q',
+                'k18': 'r',
+                'k19': 's',
+                'k20': 't',
+                'k21': 'u',
+                'k22': 'v',
+                'k23': 'w',
+                'k24': 'x',
+                'k25': 'y',
+                'k26': 'z',
+                'k27': 'x,y',
+                'k28': 'x,y',
+                'k29': 'x,y',
+                'k30': 'x,y',
+                'k31': 'x,y',
+                'k32': 'x,y',
+            }
+        }
+        if prefix:
+            expected = {'check_dict': None, 'child': expected}
+        else:
+            expected['child'] = None
+        assert cfg.model_dump() == expected
 
 
 def test_cli_subcommand_with_positionals():
@@ -2159,18 +2134,6 @@ def test_cli_subcommand_with_positionals():
         init: CliSubCommand[Init]
         plugins: CliSubCommand[Plugins]
 
-        @classmethod
-        def settings_customise_sources(
-            cls,
-            settings_cls: Type[BaseSettings],
-            init_settings: PydanticBaseSettingsSource,
-            cli_settings: PydanticBaseSettingsSource,
-            env_settings: PydanticBaseSettingsSource,
-            dotenv_settings: PydanticBaseSettingsSource,
-            file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
-            return cli_settings, init_settings
-
     git = Git(_cli_parse_args=['init', '--quiet', 'true', 'dir/path'])
     assert git.model_dump() == {
         'clone': None,
@@ -2197,18 +2160,6 @@ def test_cli_union_similar_sub_models():
 
     class Cfg(BaseSettings):
         child: Union[ChildA, ChildB]
-
-        @classmethod
-        def settings_customise_sources(
-            cls,
-            settings_cls: Type[BaseSettings],
-            init_settings: PydanticBaseSettingsSource,
-            cli_settings: PydanticBaseSettingsSource,
-            env_settings: PydanticBaseSettingsSource,
-            dotenv_settings: PydanticBaseSettingsSource,
-            file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
-            return cli_settings, init_settings
 
     cfg = Cfg(_cli_parse_args=['--child.name', 'new name a', '--child.diff_a', 'new diff a'])
     assert cfg.model_dump() == {'child': {'name': 'new name a', 'diff_a': 'new diff a'}}
