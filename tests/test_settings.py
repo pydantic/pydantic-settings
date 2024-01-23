@@ -1,4 +1,5 @@
 import dataclasses
+import json
 import os
 import sys
 import uuid
@@ -1932,9 +1933,9 @@ def test_json_file(tmp_path):
         nested_field: str
 
     class Settings(BaseSettings):
+        model_config = SettingsConfigDict(json_file=p)
         foobar: str
         nested: Nested
-        model_config = SettingsConfigDict(json_file=p)
 
         @classmethod
         def settings_customise_sources(
@@ -2076,3 +2077,65 @@ def test_toml_no_file():
 
     s = Settings()
     assert s.model_dump() == {}
+
+
+def test_multiple_file(tmp_path):
+    p1 = tmp_path / '.env.toml1'
+    p2 = tmp_path / '.env.toml2'
+    p3 = tmp_path / '.env.yaml3'
+    p4 = tmp_path / '.env.yaml4'
+    p5 = tmp_path / '.env.json5'
+    p6 = tmp_path / '.env.json6'
+    p1.write_text(
+        """
+    toml1=1
+    """
+    )
+    p2.write_text(
+        """
+    toml2=2
+    """
+    )
+    p3.write_text(
+        """
+    yaml3: 3
+    """
+    )
+    p4.write_text(
+        """
+    yaml4: 4
+    """
+    )
+    with open(p5, 'w') as f5:
+        json.dump({'json5': 5}, f5)
+    with open(p6, 'w') as f6:
+        json.dump({'json6': 6}, f6)
+
+    class Nested(BaseModel):
+        nested_field: str
+
+    class Settings(BaseSettings):
+        toml1: int
+        toml2: int
+        yaml3: int
+        yaml4: int
+        json5: int
+        json6: int
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (
+                TomlConfigSettingsSource(settings_cls, toml_file=[p1, p2]),
+                YamlConfigSettingsSource(settings_cls, yaml_file=[p3, p4]),
+                JsonConfigSettingsSource(settings_cls, json_file=[p5, p6]),
+            )
+
+    s = Settings()
+    assert s.model_dump() == {'toml1': 1, 'toml2': 2, 'yaml3': 3, 'yaml4': 4, 'json5': 5, 'json6': 6}

@@ -20,8 +20,10 @@ from typing_extensions import get_args, get_origin
 from pydantic_settings.utils import path_type_label
 
 if TYPE_CHECKING:
-    if sys.version_info.minor >= 11:
-        import tomllib  # type: ignore
+    if sys.version_info >= (3, 11):
+        import tomllib
+    else:
+        tomllib = None
     import tomlkit
     import yaml
 
@@ -45,8 +47,7 @@ def import_yaml() -> None:
 def import_toml() -> None:
     global tomlkit
     global tomllib
-    minor_version = sys.version_info.minor
-    if minor_version < 11:
+    if sys.version_info < (3, 11):
         if tomlkit is not None:
             return
         try:
@@ -769,7 +770,7 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
     def _read_file(self, file_path: Path) -> dict[str, Any | None]:
         import_toml()
         with open(file_path, mode='rb', encoding=self.toml_file_encoding) as toml_file:
-            if sys.version_info.minor < 11:
+            if sys.version_info < (3, 11):
                 return tomlkit.load(toml_file)
             return tomllib.load(toml_file)
 

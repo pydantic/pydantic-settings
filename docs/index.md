@@ -534,6 +534,64 @@ Last, run your application inside a Docker container and supply your newly creat
 docker service create --name pydantic-with-secrets --secret my_secret_data pydantic-app:latest
 ```
 
+## Other settings source
+
+Other settings sources are available for common configuration files:
+
+- `TomlConfigSettingsSource` using `toml_file` and toml_file_encoding arguments
+- `YamlConfigSettingsSource` using `yaml_file` and yaml_file_encoding arguments
+- `JsonConfigSettingsSource` using `json_file` and `json_file_encoding` arguments
+
+You can also provide multiple files by providing a list of path:
+```py
+toml_file = ['config.default.toml', 'config.custom.toml']
+```
+To use them, you can use the same mechanism described [here](#customise-settings-sources)
+
+
+```py
+from typing import Tuple, Type
+from pydantic import BaseModel
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    TomlConfigSettingsSource,
+    SettingsConfigDict,
+)
+
+
+class Nested(BaseModel):
+    nested_field: str
+
+
+class Settings(BaseSettings):
+    foobar: str
+    nested: Nested
+    model_config = SettingsConfigDict(
+        toml_file='config.toml', toml_file_encoding='utf-8'
+    )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        return (TomlConfigSettingsSource(settings_cls),)
+```
+
+This will be able to read the following "config.toml" file, located in your working directory:
+
+```toml
+foobar = "Hello"
+[nested]
+nested_field = "world!"
+"""
+```
+
 ## Field value priority
 
 In the case where a value is specified for the same `Settings` field in multiple ways,
