@@ -569,7 +569,9 @@ class Nested(BaseModel):
 class Settings(BaseSettings):
     foobar: str
     nested: Nested
-    model_config = SettingsConfigDict(toml_file='config.toml', toml_file_encoding='utf-8')
+    model_config = SettingsConfigDict(
+        toml_file='config.toml', toml_file_encoding='utf-8'
+    )
 
     @classmethod
     def settings_customise_sources(
@@ -581,7 +583,6 @@ class Settings(BaseSettings):
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> Tuple[PydanticBaseSettingsSource, ...]:
         return (TomlConfigSettingsSource(settings_cls),)
-
 ```
 
 This will be able to read the following "config.toml" file, located in your working directory:
