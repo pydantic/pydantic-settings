@@ -526,13 +526,8 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         """
         if not field:
             return None
-        if isinstance(field, FieldInfo):
-            if not hasattr(field, 'annotation'):
-                return None
-            annotation = field.annotation
-        else:
-            annotation = field
 
+        annotation = field.annotation if isinstance(field, FieldInfo) else field
         if origin_is_union(get_origin(annotation)) or isinstance(annotation, WithArgsTypes):
             for type_ in get_args(annotation):
                 type_has_key = EnvSettingsSource.next_field(type_, key)

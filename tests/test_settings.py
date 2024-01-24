@@ -198,6 +198,22 @@ def test_nested_env_delimiter(env):
     }
 
 
+def test_nested_optional_json(env):
+    class Child(BaseModel):
+        num_list: Optional[List[int]] = None
+
+    class Cfg(BaseSettings, env_nested_delimiter='__'):
+        child: Optional[Child] = None
+
+    env.set('CHILD__NUM_LIST', '[1,2,3]')
+    cfg = Cfg()
+    assert cfg.model_dump() == {
+        'child': {
+            'num_list': [1, 2, 3],
+        },
+    }
+
+
 def test_nested_env_delimiter_with_prefix(env):
     class Subsettings(BaseSettings):
         banana: str
