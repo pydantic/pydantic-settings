@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Sequence, Tuple, Uni
 
 from dotenv import dotenv_values
 from pydantic import AliasChoices, AliasPath, BaseModel, Json, TypeAdapter
-from pydantic._internal._typing_extra import origin_is_union
-from pydantic._internal._utils import deep_update, lenient_issubclass
+from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union
+from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
 from pydantic.fields import FieldInfo
 from typing_extensions import get_args, get_origin
 
@@ -534,9 +534,6 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             annotation = field
 
         if origin_is_union(get_origin(annotation)) or isinstance(annotation, WithArgsTypes):
-            type_ = get_origin(annotation)
-            if is_model_class(type_) and type_.model_fields.get(key):
-                return type_.model_fields.get(key)
             for type_ in get_args(annotation):
                 type_has_key = EnvSettingsSource.next_field(type_, key)
                 if type_has_key:
