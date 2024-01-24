@@ -495,7 +495,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         return True, allow_parse_failure
 
     @staticmethod
-    def next_field(field: FieldInfo | None, key: str) -> FieldInfo | None:
+    def next_field(field: FieldInfo | Any | None, key: str) -> FieldInfo | None:
         """
         Find the field in a sub model by key(env name)
 
@@ -524,11 +524,25 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         Returns:
             Field if it finds the next field otherwise `None`.
         """
-        if not field or origin_is_union(get_origin(field.annotation)):
-            # no support for Unions of complex BaseSettings fields
+        if not field:
             return None
-        elif field.annotation and hasattr(field.annotation, 'model_fields') and field.annotation.model_fields.get(key):
-            return field.annotation.model_fields[key]
+        if isinstance(field, FieldInfo):
+            if not hasattr(field, 'annotation'):
+                return None
+            annotation = field.annotation
+        else:
+            annotation = field
+
+        if origin_is_union(get_origin(annotation)) or isinstance(annotation, WithArgsTypes):
+            type_ = get_origin(annotation)
+            if is_model_class(type_) and type_.model_fields.get(key):
+                return type_.model_fields.get(key)
+            for type_ in get_args(annotation):
+                type_has_key = EnvSettingsSource.next_field(type_, key)
+                if type_has_key:
+                    return type_has_key
+        elif is_model_class(annotation) and annotation.model_fields.get(key):
+            return annotation.model_fields[key]
 
         return None
 
