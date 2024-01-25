@@ -648,7 +648,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
         for env_name, env_value in self.env_vars.items():
             if not is_extra_allowed and not env_name.startswith(self.env_prefix):
                 raise SettingsError(
-                    f"unable to load environment variables from '{self.env_file}' file "
+                    "unable to load environment variables from dotenv file "
                     f"due to the presence of variables without the specified prefix - '{self.env_prefix}'"
                 )
             if env_name.startswith(self.env_prefix) and env_value is not None:

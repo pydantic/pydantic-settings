@@ -812,8 +812,8 @@ def test_env_file_with_env_prefix_invalid(tmp_path):
         model_config = SettingsConfigDict(env_file=p, env_prefix='prefix_')
 
     err_msg = (
-        f"unable to load environment variables from '{p}' file "
-        f"due to the presence of variables without the specified prefix - 'prefix_'"
+        "unable to load environment variables from dotenv file "
+        "due to the presence of variables without the specified prefix - 'prefix_'"
     )
     with pytest.raises(SettingsError, match=err_msg):
         Settings()
