@@ -198,7 +198,7 @@ def test_nested_env_delimiter(env):
     }
 
 
-def test_nested_optional_json(env):
+def test_nested_env_optional_json(env):
     class Child(BaseModel):
         num_list: Optional[List[int]] = None
 
@@ -1226,6 +1226,19 @@ def test_secrets_path_json(tmp_path):
         model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
     assert Settings().model_dump() == {'foo': {'a': 'b'}}
+
+
+def test_secrets_nested_optional_json(tmp_path):
+    class Foo(BaseModel):
+        a: int
+
+    class Settings(BaseSettings):
+        foo: Foo | None = None
+
+    p = tmp_path / 'foo'
+    p.write_text('{"a": 10}')
+
+    assert Settings(_secrets_dir=tmp_path).model_dump() == {'foo': {'a': 10}}
 
 
 def test_secrets_path_invalid_json(tmp_path):
