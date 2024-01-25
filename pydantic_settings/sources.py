@@ -640,12 +640,14 @@ class DotEnvSettingsSource(EnvSettingsSource):
         data: dict[str, Any] = super().__call__()
 
         data_lower_keys: list[str] = []
+        is_extra_allowed = self.config.get('extra') != 'forbid'
         if not self.case_sensitive:
             data_lower_keys = [x.lower() for x in data.keys()]
-
         # As `extra` config is allowed in dotenv settings source, We have to
         # update data with extra env variabels from dotenv file.
         for env_name, env_value in self.env_vars.items():
+            if not is_extra_allowed and not env_name.startswith(self.env_prefix):
+                raise SettingsError(f'unable to load environment variables from \'{self.env_file}\' file due to the presence of variables without the specified prefix - \'{self.env_prefix}\'')
             if env_name.startswith(self.env_prefix) and env_value is not None:
                 env_name_without_prefix = env_name[self.env_prefix_len :]
                 first_key, *_ = env_name_without_prefix.split(self.env_nested_delimiter)
