@@ -767,7 +767,6 @@ prefix_A=good string
 
 prefix_b='better string'
 prefix_c="best string"
-f="random value"
 """
 
 
@@ -786,6 +785,54 @@ def test_env_file_with_env_prefix(env, tmp_path):
 
     s = Settings()
     assert s.a == 'overridden var'
+    assert s.b == 'better string'
+    assert s.c == 'best string'
+
+
+prefix_test_env_invalid_file = """\
+# this is a comment
+prefix_A=good string
+# another one, followed by whitespace
+
+prefix_b='better string'
+prefix_c="best string"
+f="random value"
+"""
+
+
+def test_env_file_with_env_prefix_invalid(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text(prefix_test_env_invalid_file)
+
+    class Settings(BaseSettings):
+        a: str
+        b: str
+        c: str
+
+        model_config = SettingsConfigDict(env_file=p, env_prefix='prefix_')
+
+    err_msg = (
+        "unable to load environment variables from dotenv file "
+        "due to the presence of variables without the specified prefix - 'prefix_'"
+    )
+    with pytest.raises(SettingsError, match=err_msg):
+        Settings()
+
+
+def test_ignore_env_file_with_env_prefix_invalid(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text(prefix_test_env_invalid_file)
+
+    class Settings(BaseSettings):
+        a: str
+        b: str
+        c: str
+
+        model_config = SettingsConfigDict(env_file=p, env_prefix='prefix_', extra='ignore')
+
+    s = Settings()
+
+    assert s.a == 'good string'
     assert s.b == 'better string'
     assert s.c == 'best string'
 
