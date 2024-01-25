@@ -1233,7 +1233,7 @@ def test_secrets_nested_optional_json(tmp_path):
         a: int
 
     class Settings(BaseSettings):
-        foo: Foo | None = None
+        foo: Optional[Foo] = None
 
     p = tmp_path / 'foo'
     p.write_text('{"a": 10}')
