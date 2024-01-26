@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Sequence, Tuple, Uni
 
 from dotenv import dotenv_values
 from pydantic import AliasChoices, AliasPath, BaseModel, Json, TypeAdapter
-from pydantic._internal._typing_extra import origin_is_union
-from pydantic._internal._utils import deep_update, lenient_issubclass
+from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union
+from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
 from pydantic.fields import FieldInfo
 from typing_extensions import get_args, get_origin
 
@@ -188,6 +188,8 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                         )
             else:  # string validation alias
                 field_info.append((v_alias, self._apply_case_sensitive(v_alias), False))
+        elif origin_is_union(get_origin(field.annotation)) and _union_is_complex(field.annotation, field.metadata):
+            field_info.append((field_name, self._apply_case_sensitive(self.env_prefix + field_name), True))
         else:
             field_info.append((field_name, self._apply_case_sensitive(self.env_prefix + field_name), False))
 
@@ -478,16 +480,13 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             # simplest case, field is not complex, we only need to add the value if it was found
             return value
 
-    def _union_is_complex(self, annotation: type[Any] | None, metadata: list[Any]) -> bool:
-        return any(_annotation_is_complex(arg, metadata) for arg in get_args(annotation))
-
     def _field_is_complex(self, field: FieldInfo) -> tuple[bool, bool]:
         """
         Find out if a field is complex, and if so whether JSON errors should be ignored
         """
         if self.field_is_complex(field):
             allow_parse_failure = False
-        elif origin_is_union(get_origin(field.annotation)) and self._union_is_complex(field.annotation, field.metadata):
+        elif origin_is_union(get_origin(field.annotation)) and _union_is_complex(field.annotation, field.metadata):
             allow_parse_failure = True
         else:
             return False, False
@@ -495,7 +494,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         return True, allow_parse_failure
 
     @staticmethod
-    def next_field(field: FieldInfo | None, key: str) -> FieldInfo | None:
+    def next_field(field: FieldInfo | Any | None, key: str) -> FieldInfo | None:
         """
         Find the field in a sub model by key(env name)
 
@@ -524,11 +523,17 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         Returns:
             Field if it finds the next field otherwise `None`.
         """
-        if not field or origin_is_union(get_origin(field.annotation)):
-            # no support for Unions of complex BaseSettings fields
+        if not field:
             return None
-        elif field.annotation and hasattr(field.annotation, 'model_fields') and field.annotation.model_fields.get(key):
-            return field.annotation.model_fields[key]
+
+        annotation = field.annotation if isinstance(field, FieldInfo) else field
+        if origin_is_union(get_origin(annotation)) or isinstance(annotation, WithArgsTypes):
+            for type_ in get_args(annotation):
+                type_has_key = EnvSettingsSource.next_field(type_, key)
+                if type_has_key:
+                    return type_has_key
+        elif is_model_class(annotation) and annotation.model_fields.get(key):
+            return annotation.model_fields[key]
 
         return None
 
@@ -721,3 +726,7 @@ def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:
     return lenient_issubclass(annotation, (BaseModel, Mapping, Sequence, tuple, set, frozenset, deque)) or is_dataclass(
         annotation
     )
+
+
+def _union_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
+    return any(_annotation_is_complex(arg, metadata) for arg in get_args(annotation))
