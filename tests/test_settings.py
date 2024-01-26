@@ -839,12 +839,11 @@ def test_env_file_with_env_prefix_invalid(tmp_path):
 
         model_config = SettingsConfigDict(env_file=p, env_prefix='prefix_')
 
-    err_msg = (
-        "unable to load environment variables from dotenv file "
-        "due to the presence of variables without the specified prefix - 'prefix_'"
-    )
-    with pytest.raises(SettingsError, match=err_msg):
+    with pytest.raises(ValidationError) as exc_info:
         Settings()
+    assert exc_info.value.errors(include_url=False) == [
+        {'type': 'extra_forbidden', 'loc': ('f',), 'msg': 'Extra inputs are not permitted', 'input': 'random value'}
+    ]
 
 
 def test_ignore_env_file_with_env_prefix_invalid(tmp_path):
@@ -2310,3 +2309,29 @@ def test_multiple_file_json(tmp_path):
 
     s = Settings()
     assert s.model_dump() == {'json5': 5, 'json6': 6}
+
+
+def test_dotenv_with_alias_and_env_prefix(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text("""xxx__foo=1\nxxx__bar=2""")
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_file=p, env_prefix='xxx__')
+
+        foo: str = ''
+        bar_alias: str = Field('', validation_alias='xxx__bar')
+
+    s = Settings()
+    assert s.model_dump() == {'foo': '1', 'bar_alias': '2'}
+
+    class Settings1(BaseSettings):
+        model_config = SettingsConfigDict(env_file=p, env_prefix='xxx__')
+
+        foo: str = ''
+        bar_alias: str = Field('', alias='bar')
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings1()
+    assert exc_info.value.errors(include_url=False) == [
+        {'type': 'extra_forbidden', 'loc': ('xxx__bar',), 'msg': 'Extra inputs are not permitted', 'input': '2'}
+    ]

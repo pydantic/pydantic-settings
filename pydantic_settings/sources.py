@@ -684,27 +684,19 @@ class DotEnvSettingsSource(EnvSettingsSource):
     def __call__(self) -> dict[str, Any]:
         data: dict[str, Any] = super().__call__()
 
-        data_lower_keys: list[str] = []
-        is_extra_allowed = self.config.get('extra') != 'forbid'
-        if not self.case_sensitive:
-            data_lower_keys = [x.lower() for x in data.keys()]
         # As `extra` config is allowed in dotenv settings source, We have to
         # update data with extra env variabels from dotenv file.
         for env_name, env_value in self.env_vars.items():
-            if not is_extra_allowed and not env_name.startswith(self.env_prefix):
-                raise SettingsError(
-                    "unable to load environment variables from dotenv file "
-                    f"due to the presence of variables without the specified prefix - '{self.env_prefix}'"
-                )
-            if env_name.startswith(self.env_prefix) and env_value is not None:
-                env_name_without_prefix = env_name[self.env_prefix_len :]
-                first_key, *_ = env_name_without_prefix.split(self.env_nested_delimiter)
-
-                if (data_lower_keys and first_key not in data_lower_keys) or (
-                    not data_lower_keys and first_key not in data
-                ):
-                    data[first_key] = env_value
-
+            if not env_value:
+                continue
+            env_used = False
+            for field_name, field in self.settings_cls.model_fields.items():
+                for _, field_env_name, _ in self._extract_field_info(field, field_name):
+                    if field_env_name == env_name:
+                        env_used = True
+                        break
+            if not env_used:
+                data[env_name] = env_value
         return data
 
     def __repr__(self) -> str:
