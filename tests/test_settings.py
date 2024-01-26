@@ -1229,16 +1229,18 @@ def test_secrets_path_json(tmp_path):
 
 
 def test_secrets_nested_optional_json(tmp_path):
+    p = tmp_path / 'foo'
+    p.write_text('{"a": 10}')
+
     class Foo(BaseModel):
         a: int
 
     class Settings(BaseSettings):
         foo: Optional[Foo] = None
 
-    p = tmp_path / 'foo'
-    p.write_text('{"a": 10}')
+        model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
-    assert Settings(_secrets_dir=tmp_path).model_dump() == {'foo': {'a': 10}}
+    assert Settings().model_dump() == {'foo': {'a': 10}}
 
 
 def test_secrets_path_invalid_json(tmp_path):
