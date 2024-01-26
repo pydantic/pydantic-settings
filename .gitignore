@@ -25,3 +25,4 @@ _build/
 /.ghtopdep_cache/
 /worktrees/
 /.ruff_cache/
+.pdm-python
