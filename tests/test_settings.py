@@ -2313,7 +2313,7 @@ def test_multiple_file_json(tmp_path):
 
 def test_dotenv_with_alias_and_env_prefix(tmp_path):
     p = tmp_path / '.env'
-    p.write_text("""xxx__foo=1\nxxx__bar=2""")
+    p.write_text('xxx__foo=1\nxxx__bar=2')
 
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(env_file=p, env_prefix='xxx__')
@@ -2335,3 +2335,22 @@ def test_dotenv_with_alias_and_env_prefix(tmp_path):
     assert exc_info.value.errors(include_url=False) == [
         {'type': 'extra_forbidden', 'loc': ('xxx__bar',), 'msg': 'Extra inputs are not permitted', 'input': '2'}
     ]
+
+
+def test_dotenv_with_alias_and_env_prefix_nested(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('xxx__bar=0\nxxx__nested__a=1\nxxx__nested__b=2')
+
+    class NestedSettings(BaseModel):
+        a: str = 'a'
+        b: str = 'b'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='xxx__', env_nested_delimiter='__', env_file=p)
+
+        foo: str = ''
+        bar_alias: str = Field('', alias='xxx__bar')
+        nested_alias: NestedSettings = Field(default_factory=NestedSettings, alias='xxx__nested')
+
+    s = Settings()
+    assert s.model_dump() == {'foo': '', 'bar_alias': '0', 'nested_alias': {'a': '1', 'b': '2'}}
