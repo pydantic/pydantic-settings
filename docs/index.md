@@ -324,9 +324,6 @@ print(Settings().model_dump())
 `env_nested_delimiter` can be configured via the `model_config` as shown above, or via the
 `_env_nested_delimiter` keyword argument on instantiation.
 
-JSON is only parsed in top-level fields, if you need to parse JSON in sub-models, you will need to implement
-validators on those models.
-
 Nested environment variables take precedence over the top-level environment variable JSON
 (e.g. in the example above, `SUB_MODEL__V2` trumps `SUB_MODEL`).
 
