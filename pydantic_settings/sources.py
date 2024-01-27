@@ -107,7 +107,7 @@ class PydanticBaseSettingsSource(ABC):
         return json.loads(value)
 
     @abstractmethod
-    def __call__(self) -> dict[str, Any]:
+    def __call__(self, current_state: dict[Any, str] = {}) -> dict[str, Any]:
         pass
 
 
@@ -124,7 +124,7 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         # Nothing to do here. Only implement the return statement to make mypy happy
         return None, '', False
 
-    def __call__(self) -> dict[str, Any]:
+    def __call__(self, current_state: dict[Any, str] = {}) -> dict[str, Any]:
         return TypeAdapter(Dict[str, Any]).dump_python(self.init_kwargs)
 
     def __repr__(self) -> str:
@@ -268,7 +268,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
         return values
 
-    def __call__(self) -> dict[str, Any]:
+    def __call__(self, current_state: dict[str, Any] = {}) -> dict[str, Any]:
         data: dict[str, Any] = {}
 
         for field_name, field in self.settings_cls.model_fields.items():
@@ -321,7 +321,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         super().__init__(settings_cls, case_sensitive, env_prefix, env_ignore_empty, env_parse_none_str)
         self.secrets_dir = secrets_dir if secrets_dir is not None else self.config.get('secrets_dir')
 
-    def __call__(self) -> dict[str, Any]:
+    def __call__(self, current_state: dict[str, Any] = {}) -> dict[str, Any]:
         """
         Build fields from "secrets" files.
         """
@@ -339,7 +339,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         if not self.secrets_path.is_dir():
             raise SettingsError(f'secrets_dir must reference a directory, not a {path_type_label(self.secrets_path)}')
 
-        return super().__call__()
+        return super().__call__(current_state)
 
     @classmethod
     def find_case_path(cls, dir_path: Path, file_name: str, case_sensitive: bool) -> Path | None:
@@ -641,8 +641,8 @@ class DotEnvSettingsSource(EnvSettingsSource):
 
         return dotenv_vars
 
-    def __call__(self) -> dict[str, Any]:
-        data: dict[str, Any] = super().__call__()
+    def __call__(self, current_state: dict[str, Any] = {}) -> dict[str, Any]:
+        data: dict[str, Any] = super().__call__(current_state)
 
         data_lower_keys: list[str] = []
         is_extra_allowed = self.config.get('extra') != 'forbid'
