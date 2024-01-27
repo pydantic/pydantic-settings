@@ -205,6 +205,8 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                         )
             else:  # string validation alias
                 field_info.append((v_alias, self._apply_case_sensitive(v_alias), False))
+        elif origin_is_union(get_origin(field.annotation)) and _union_is_complex(field.annotation, field.metadata):
+            field_info.append((field_name, self._apply_case_sensitive(self.env_prefix + field_name), True))
         else:
             field_info.append((field_name, self._apply_case_sensitive(self.env_prefix + field_name), False))
 
@@ -497,16 +499,13 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             # simplest case, field is not complex, we only need to add the value if it was found
             return value
 
-    def _union_is_complex(self, annotation: type[Any] | None, metadata: list[Any]) -> bool:
-        return any(_annotation_is_complex(arg, metadata) for arg in get_args(annotation))
-
     def _field_is_complex(self, field: FieldInfo) -> tuple[bool, bool]:
         """
         Find out if a field is complex, and if so whether JSON errors should be ignored
         """
         if self.field_is_complex(field):
             allow_parse_failure = False
-        elif origin_is_union(get_origin(field.annotation)) and self._union_is_complex(field.annotation, field.metadata):
+        elif origin_is_union(get_origin(field.annotation)) and _union_is_complex(field.annotation, field.metadata):
             allow_parse_failure = True
         else:
             return False, False
@@ -545,17 +544,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         """
         if not field:
             return None
-        if isinstance(field, FieldInfo):
-            if not hasattr(field, 'annotation'):
-                return None
-            annotation = field.annotation
-        else:
-            annotation = field
 
+        annotation = field.annotation if isinstance(field, FieldInfo) else field
         if origin_is_union(get_origin(annotation)) or isinstance(annotation, WithArgsTypes):
-            type_ = get_origin(annotation)
-            if is_model_class(type_) and type_.model_fields.get(key):
-                return type_.model_fields.get(key)
             for type_ in get_args(annotation):
                 type_has_key = EnvSettingsSource.next_field(type_, key)
                 if type_has_key:
@@ -673,12 +664,17 @@ class DotEnvSettingsSource(EnvSettingsSource):
         data: dict[str, Any] = super().__call__()
 
         data_lower_keys: list[str] = []
+        is_extra_allowed = self.config.get('extra') != 'forbid'
         if not self.case_sensitive:
             data_lower_keys = [x.lower() for x in data.keys()]
-
         # As `extra` config is allowed in dotenv settings source, We have to
         # update data with extra env variabels from dotenv file.
         for env_name, env_value in self.env_vars.items():
+            if not is_extra_allowed and not env_name.startswith(self.env_prefix):
+                raise SettingsError(
+                    "unable to load environment variables from dotenv file "
+                    f"due to the presence of variables without the specified prefix - '{self.env_prefix}'"
+                )
             if env_name.startswith(self.env_prefix) and env_value is not None:
                 env_name_without_prefix = env_name[self.env_prefix_len :]
                 first_key, *_ = env_name_without_prefix.split(self.env_nested_delimiter)
@@ -1023,6 +1019,10 @@ def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:
     return lenient_issubclass(annotation, (BaseModel, Mapping, Sequence, tuple, set, frozenset, deque)) or is_dataclass(
         annotation
     )
+
+
+def _union_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
+    return any(_annotation_is_complex(arg, metadata) for arg in get_args(annotation))
 
 
 def _annotation_contains_types(annotation: type[Any] | None, types: tuple[Any, ...]) -> bool:
