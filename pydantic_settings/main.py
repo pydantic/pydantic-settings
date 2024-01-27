@@ -179,7 +179,7 @@ class BaseSettings(BaseModel):
         )
         if sources:
             # iterate through sources in priority order
-            state = {}
+            state: dict[str, Any] = {}
             for source in reversed(sources):
                 state = deep_update(state, source(state))
             return state

@@ -628,7 +628,7 @@ class JsonConfigSettingsSource(PydanticBaseSettingsSource):
     ) -> Any:
         return value
 
-    def __call__(self) -> Dict[str, Any]:
+    def __call__(self, current_state: dict[Any, str] = {}) -> Dict[str, Any]:
         d: Dict[str, Any] = {}
 
         for field_name, field in self.settings_cls.model_fields.items():
