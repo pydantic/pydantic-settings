@@ -563,7 +563,7 @@ its priority](#changing-priority).
 
 #### Enable CLI Argument Parsing
 
-`cli_parse_args: Optional[list[str] | bool] = None`
+`cli_parse_args: Optional[Union[list[str], bool]] = None`
 
 * Default = `None`
 * If `True`, parse from `sys.argv[1:]`

@@ -2045,12 +2045,12 @@ def test_cli_list_arg():
         num_list: Optional[List[int]] = None
         obj_list: Optional[List[Obj]] = None
         str_list: Optional[List[str]] = None
-        union_list: Optional[List[Obj | int]] = None
+        union_list: Optional[List[Union[Obj, int]]] = None
 
     class Cfg(BaseSettings):
         num_list: Optional[List[int]] = None
         obj_list: Optional[List[Obj]] = None
-        union_list: Optional[List[Obj | int]] = None
+        union_list: Optional[List[Union[Obj, int]]] = None
         str_list: Optional[List[str]] = None
         child: Optional[Child] = None
 
@@ -2267,7 +2267,7 @@ def test_cli_annotation_exceptions():
     with pytest.raises(SettingsError):
 
         class SubCommandMultipleTypes(BaseSettings):
-            subcmd: CliSubCommand[SubCmd | SubCmdAlt]
+            subcmd: CliSubCommand[Union[SubCmd, SubCmdAlt]]
 
         SubCommandMultipleTypes(_cli_parse_args=['--help'])
 
