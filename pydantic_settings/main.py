@@ -33,6 +33,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_hide_none_type: bool
     cli_avoid_json: bool
     cli_enforce_required: bool
+    cli_use_class_docs_for_groups: bool
     secrets_dir: str | Path | None
 
 
@@ -72,6 +73,8 @@ class BaseSettings(BaseModel):
         _cli_hide_none_type: Hide NoneType values in CLI help text. Defaults to `False`.
         _cli_avoid_json: Avoid complex JSON objects in CLI help text. Defaults to `False`.
         _cli_enforce_required: Enforce required fields at the CLI. Defaults to `False`.
+        _cli_use_class_docs_for_groups: Use class docstrings in CLI group help text instead of field descriptions.
+            Defaults to `False`.
         _secrets_dir: The secret files directory. Defaults to `None`.
     """
 
@@ -89,6 +92,7 @@ class BaseSettings(BaseModel):
         _cli_hide_none_type: bool | None = None,
         _cli_avoid_json: bool | None = None,
         _cli_enforce_required: bool | None = None,
+        _cli_use_class_docs_for_groups: bool | None = None,
         _secrets_dir: str | Path | None = None,
         **values: Any,
     ) -> None:
@@ -108,6 +112,7 @@ class BaseSettings(BaseModel):
                 _cli_hide_none_type=_cli_hide_none_type,
                 _cli_avoid_json=_cli_avoid_json,
                 _cli_enforce_required=_cli_enforce_required,
+                _cli_use_class_docs_for_groups=_cli_use_class_docs_for_groups,
                 _secrets_dir=_secrets_dir,
             )
         )
@@ -151,6 +156,7 @@ class BaseSettings(BaseModel):
         _cli_hide_none_type: bool | None = None,
         _cli_avoid_json: bool | None = None,
         _cli_enforce_required: bool | None = None,
+        _cli_use_class_docs_for_groups: bool | None = None,
         _secrets_dir: str | Path | None = None,
     ) -> dict[str, Any]:
         # Determine settings config values
@@ -183,6 +189,11 @@ class BaseSettings(BaseModel):
             if _cli_enforce_required is not None
             else self.model_config.get('cli_enforce_required')
         )
+        cli_use_class_docs_for_groups = (
+            _cli_use_class_docs_for_groups
+            if _cli_use_class_docs_for_groups is not None
+            else self.model_config.get('cli_use_class_docs_for_groups')
+        )
 
         secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
@@ -196,6 +207,7 @@ class BaseSettings(BaseModel):
             cli_hide_none_type=cli_hide_none_type,
             cli_avoid_json=cli_avoid_json,
             cli_enforce_required=cli_enforce_required,
+            cli_use_class_docs_for_groups=cli_use_class_docs_for_groups,
         )
         env_settings = EnvSettingsSource(
             self.__class__,
@@ -252,6 +264,7 @@ class BaseSettings(BaseModel):
         cli_hide_none_type=False,
         cli_avoid_json=False,
         cli_enforce_required=False,
+        cli_use_class_docs_for_groups=False,
         secrets_dir=None,
         protected_namespaces=('model_', 'settings_'),
     )

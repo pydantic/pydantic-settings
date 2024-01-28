@@ -2073,7 +2073,7 @@ def test_cli_list_arg():
         args += [f'--{prefix}num_list', '3,4']
         args += [f'--{prefix}num_list', '5', f'--{prefix}num_list', '6']
         cfg = Cfg(_cli_parse_args=args)
-        expected= {
+        expected = {
             'num_list': [1, 2, 3, 4, 5, 6],
             'obj_list': None,
             'union_list': None,
@@ -2085,7 +2085,7 @@ def test_cli_list_arg():
         args += [f'--{prefix}obj_list', '{"val":3},{"val":4}']
         args += [f'--{prefix}obj_list', '{"val":5}', f'--{prefix}obj_list', '{"val":6}']
         cfg = Cfg(_cli_parse_args=args)
-        expected= {
+        expected = {
             'num_list': None,
             'obj_list': [{'val': 1}, {'val': 2}, {'val': 3}, {'val': 4}, {'val': 5}, {'val': 6}],
             'union_list': None,
@@ -2097,7 +2097,7 @@ def test_cli_list_arg():
         args += [f'--{prefix}union_list', '{"val":5},6', f'--{prefix}union_list', '7,{"val":8}']
         args += [f'--{prefix}union_list', '{"val":9}', f'--{prefix}union_list', '10']
         cfg = Cfg(_cli_parse_args=args)
-        expected= {
+        expected = {
             'num_list': None,
             'obj_list': None,
             'union_list': [{'val': 1}, 2, 3, {'val': 4}, {'val': 5}, 6, 7, {'val': 8}, {'val': 9}, 10],
@@ -2109,7 +2109,7 @@ def test_cli_list_arg():
         args += [f'--{prefix}str_list', '"2,2","3,3"']
         args += [f'--{prefix}str_list', '"4,4"', f'--{prefix}str_list', '"5,5"']
         cfg = Cfg(_cli_parse_args=args)
-        expected= {
+        expected = {
             'num_list': None,
             'obj_list': None,
             'union_list': None,

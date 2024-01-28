@@ -43,7 +43,7 @@ class _CliPositionalArg:
 
 
 T = TypeVar('T')
-CliSubCommand = Annotated[T | None, _CliSubCommand]
+CliSubCommand = Annotated[Union[T, None], _CliSubCommand]
 CliPositionalArg = Annotated[T, _CliPositionalArg]
 
 
@@ -707,6 +707,7 @@ class CliSettingsSource(EnvSettingsSource):
         cli_hide_none_type: bool | None = None,
         cli_avoid_json: bool | None = None,
         cli_enforce_required: bool | None = None,
+        cli_use_class_docs_for_groups: bool | None = None,
     ) -> None:
         self.cli_prog_name = sys.argv[0] if cli_prog_name is None else cli_prog_name
         self.cli_parse_args = cli_parse_args
@@ -723,6 +724,11 @@ class CliSettingsSource(EnvSettingsSource):
             cli_parse_none_str = 'None' if self.cli_avoid_json is True else 'null'
         self.cli_enforce_required = (
             cli_enforce_required if cli_enforce_required is not None else self.config.get('cli_enforce_required', False)
+        )
+        self.cli_use_class_docs_for_groups = (
+            cli_use_class_docs_for_groups
+            if cli_use_class_docs_for_groups is not None
+            else self.config.get('cli_use_class_docs_for_groups', False)
         )
         super().__init__(settings_cls, env_nested_delimiter='.', env_parse_none_str=cli_parse_none_str)
 
@@ -755,7 +761,7 @@ class CliSettingsSource(EnvSettingsSource):
                     if field_name not in self._cli_dict_arg_names
                     else self._merge_json_key_val_list_str(f'[{",".join(merge_list)}]')
                 )
-            elif field_name.endswith(':subcommand'):
+            elif field_name.endswith(':subcommand') and val is not None:
                 selected_subcommands.append(field_name.split(':')[0] + val)
 
         for subcommands in self._cli_subcommands.values():
@@ -861,10 +867,14 @@ class CliSettingsSource(EnvSettingsSource):
             sub_models: list[type[BaseModel]] = self._get_sub_models(model, field_name, field_info)
             if _CliSubCommand in field_info.metadata:
                 if subparsers is None:
-                    subparsers = parser.add_subparsers(title='subcommands', dest=f'{arg_prefix}:subcommand')
+                    subparsers = parser.add_subparsers(
+                        title='subcommands', dest=f'{arg_prefix}:subcommand', required=self.cli_enforce_required
+                    )
                     self._cli_subcommands[f'{arg_prefix}:subcommand'] = [f'{arg_prefix}{field_name}']
                 else:
                     self._cli_subcommands[f'{arg_prefix}:subcommand'].append(f'{arg_prefix}{field_name}')
+                metavar = ','.join(self._cli_subcommands[f'{arg_prefix}:subcommand'])
+                subparsers.metavar = f'{{{metavar}}}'
 
                 model = sub_models[0]
                 self._add_fields_to_parser(
@@ -886,7 +896,7 @@ class CliSettingsSource(EnvSettingsSource):
                 kwargs['default'] = SUPPRESS
                 kwargs['help'] = field_info.description
                 kwargs['dest'] = f'{arg_prefix}{field_name}'
-                kwargs['metavar'] = self._format_metavar(field_info.annotation)
+                kwargs['metavar'] = self._metavar_format(field_info.annotation)
                 kwargs['required'] = self.cli_enforce_required and field_info.is_required()
                 if kwargs['dest'] in added_args:
                     continue
@@ -904,7 +914,12 @@ class CliSettingsSource(EnvSettingsSource):
                     arg_flag = ''
 
                 if sub_models and kwargs.get('action') != 'append':
-                    model_group = parser.add_argument_group(f'{arg_name} options', field_info.description)
+                    group_help_text = (
+                        sub_models[0].__doc__
+                        if self.cli_use_class_docs_for_groups and len(sub_models) == 1
+                        else field_info.description
+                    )
+                    model_group = parser.add_argument_group(f'{arg_name} options', group_help_text)
                     if not self.cli_avoid_json:
                         added_args.append(arg_name)
                         kwargs['help'] = f'set {arg_name} from JSON string'
@@ -932,7 +947,11 @@ class CliSettingsSource(EnvSettingsSource):
         else:
             return tuple([type_ for type_ in get_args(obj) if type_ is not type(None)])
 
-    def _format_metavar(self, obj: Any) -> str:
+    def _metavar_format_list(self, args: list[str]) -> str:
+        args = args if 'JSON' not in args else [arg for arg in args[args.index('JSON') + 1 :] if arg != 'JSON']
+        return ','.join(args)
+
+    def _metavar_format(self, obj: Any) -> str:
         """Pretty metavar representation of a type. Adapts logic from `pydantic._repr.display_as_type`."""
         if isinstance(obj, FunctionType):
             return obj.__name__
@@ -947,20 +966,22 @@ class CliSettingsSource(EnvSettingsSource):
             obj = obj.__class__
 
         if origin_is_union(get_origin(obj)):
-            args = ','.join(map(self._format_metavar, self._get_modified_args(obj)))
+            args = self._metavar_format_list(list(map(self._metavar_format, self._get_modified_args(obj))))
             return f'{{{args}}}' if ',' in args else args
         elif isinstance(obj, WithArgsTypes):
             if get_origin(obj) == Literal:
-                args = ','.join(map(repr, self._get_modified_args(obj)))
+                args = self._metavar_format_list(list(map(repr, self._get_modified_args(obj))))
                 return f'{{{args}}}' if ',' in args else args
             else:
-                args = ','.join(map(self._format_metavar, self._get_modified_args(obj)))
+                args = self._metavar_format_list(list(map(self._metavar_format, self._get_modified_args(obj))))
             try:
                 return f'{obj.__qualname__}[{args}]'
             except AttributeError:
                 return str(obj)  # handles TypeAliasType in 3.12
         elif obj is type(None):
             return self.env_parse_none_str
+        elif is_model_class(obj):
+            return 'JSON'
         elif isinstance(obj, type):
             return obj.__qualname__
         else:
