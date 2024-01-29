@@ -792,7 +792,7 @@ class CliSettingsSource(EnvSettingsSource):
                 elif key_val_list_str[i] == '}':
                     obj_count -= 1
                     if obj_count == 0:
-                        key_val_dict |= json.loads(key_val_list_str[: i + 1])
+                        key_val_dict.update(json.loads(key_val_list_str[: i + 1]))
                         key_val_list_str = key_val_list_str[i + 1 :].lstrip(',')
                         break
                 elif obj_count == 0:
@@ -806,7 +806,7 @@ class CliSettingsSource(EnvSettingsSource):
                             break
                     if not val:
                         val, key_val_list_str = key_val_list_str, ''
-                    key_val_dict |= {key.strip('\'"'): val.strip('\'"')}
+                    key_val_dict.update({key.strip('\'"'): val.strip('\'"')})
                     break
         return json.dumps(key_val_dict)
 
