@@ -2292,6 +2292,13 @@ def test_cli_annotation_exceptions():
 
         PositionalArgHasDefault(_cli_parse_args=['--help'])
 
+    with pytest.raises(SettingsError):
+
+        class InvalidCliParseArgsType(BaseSettings):
+            val: int
+
+        PositionalArgHasDefault(_cli_parse_args='invalid type')
+
 
 def test_cli_avoid_json(capsys):
     class SubModel(BaseModel):
@@ -2300,7 +2307,7 @@ def test_cli_avoid_json(capsys):
     class Settings(BaseSettings):
         sub_model: SubModel
 
-    argparse_options_text = 'options' if sys.version_info > (3, 9) else 'optional arguments'
+    argparse_options_text = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
 
     with pytest.raises(SystemExit):
         Settings(_cli_prog_name='example.py', _cli_parse_args=['--help'], _cli_avoid_json=False)
@@ -2338,7 +2345,7 @@ def test_cli_hide_none_type(capsys):
     class Settings(BaseSettings):
         v0: Optional[str]
 
-    argparse_options_text = 'options' if sys.version_info > (3, 9) else 'optional arguments'
+    argparse_options_text = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
 
     with pytest.raises(SystemExit):
         Settings(_cli_prog_name='example.py', _cli_parse_args=['--help'], _cli_hide_none_type=False)
@@ -2378,7 +2385,7 @@ def test_cli_use_class_docs_for_groups(capsys):
 
         sub_model: SubModel = Field(description='The help text from the field description')
 
-    argparse_options_text = 'options' if sys.version_info > (3, 9) else 'optional arguments'
+    argparse_options_text = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
 
     with pytest.raises(SystemExit):
         Settings(_cli_prog_name='example.py', _cli_parse_args=['--help'], _cli_use_class_docs_for_groups=False)

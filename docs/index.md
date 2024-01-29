@@ -476,6 +476,8 @@ to enable [enforcing required arguments at the CLI](#enforce-required-arguments-
 To get started, let's look at a basic example for defining a Pydantic settings CLI:
 
 ```py test="skip"
+from typing import List
+
 from pydantic import BaseModel
 
 from pydantic_settings import BaseSettings
@@ -484,7 +486,7 @@ from pydantic_settings import BaseSettings
 class DeepSubModel(BaseModel, use_attribute_docstrings=True):
     """DeepSubModel class documentation."""
 
-    v4: list[int]
+    v4: List[int]
     """the deeply nested sub model v4 option"""
 
 
@@ -511,7 +513,7 @@ class Settings(BaseSettings, use_attribute_docstrings=True):
 Settings(_cli_prog_name='app', _cli_parse_args=['--help'])  # (1)!
 """
 usage: app [-h] [--v0 str] [--sub_model JSON] [--sub_model.v1 int] [--sub_model.deep JSON]
-           [--sub_model.deep.v4 list[int]]
+           [--sub_model.deep.v4 List[int]]
 
 The Settings class documentation will show in top level help text.  # (2)!
 
@@ -531,7 +533,7 @@ sub_model.deep options:
 
   --sub_model.deep JSON  # (7)!
                         set sub_model.deep from JSON string
-  --sub_model.deep.v4 list[int]
+  --sub_model.deep.v4 List[int]
                         the deeply nested sub model v4 option
 """
 ```
@@ -563,11 +565,11 @@ its priority](#changing-priority).
 
 #### Enable CLI Argument Parsing
 
-`cli_parse_args: Optional[Union[list[str], bool]] = None`
+`cli_parse_args: Optional[Union[List[str], bool]] = None`
 
 * Default = `None`
 * If `True`, parse from `sys.argv[1:]`
-* If `list[str]`, parse from `list[str]`
+* If `List[str]`, parse from `List[str]`
 * If `False` or `None`, do not parse CLI arguments
 
 #### Lists
@@ -578,12 +580,14 @@ CLI argument parsing of lists supports intermixing of any of the below three sty
   * Argparse style `--field 1 --field 2`
   * Lazy style `--field=1,2`
 
-```python
+```py
+from typing import List
+
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    my_list: list[int]
+    my_list: List[int]
 
 
 print(Settings(_cli_parse_args=['--my_list', '[1,2]']).model_dump())
@@ -607,12 +611,14 @@ These can be used in conjunction with list forms as well, e.g:
 
   * `--field k1=1,k2=2 --field k3=3 --field '{"k4: 4}'` etc.
 
-```python
+```py
+from typing import Dict
+
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    my_dict: dict[str, int]
+    my_dict: Dict[str, int]
 
 
 print(Settings(_cli_parse_args=['--my_dict', '{"k1":1,"k2":2}']).model_dump())
