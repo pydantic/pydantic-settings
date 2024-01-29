@@ -1047,10 +1047,9 @@ def _union_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool
 
 
 def _annotation_contains_types(annotation: type[Any] | None, types: tuple[Any, ...]) -> bool:
-    if origin_is_union(get_origin(annotation)) or isinstance(annotation, WithArgsTypes):
-        if get_origin(annotation) in types:
+    if get_origin(annotation) in types:
+        return True
+    for type_ in get_args(annotation):
+        if _annotation_contains_types(type_, types):
             return True
-        for type_ in get_args(annotation):
-            if _annotation_contains_types(type_, types):
-                return True
     return annotation in types

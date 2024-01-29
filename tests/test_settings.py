@@ -2015,7 +2015,7 @@ def test_cli_nested_arg():
         v0_union: Union[SubValue, int]
         top: TopValue
 
-    args: list[str] = []
+    args: List[str] = []
     args += ['--top', '{"v1": "json-1", "v2": "json-2", "sub": {"v5": "xx"}}']
     args += ['--top.sub.v5', '5']
     args += ['--v0', '0']
@@ -2067,7 +2067,7 @@ def test_cli_list_arg():
             expected['child'] = None
             assert cfg.model_dump() == expected
 
-    args: list[str] = []
+    args: List[str] = []
     for prefix in ('', 'child.'):
         args = [f'--{prefix}num_list', '[1,2]']
         args += [f'--{prefix}num_list', '3,4']
@@ -2126,7 +2126,7 @@ def test_cli_dict_arg():
         check_dict: Optional[Dict[str, str]] = None
         child: Optional[Child] = None
 
-    args: list[str] = []
+    args: List[str] = []
     for prefix in ('', 'child.'):
         args = [f'--{prefix}check_dict', '{"k1":"a","k2":"b"}']
         args += [f'--{prefix}check_dict', '{"k3":"c"},{"k4":"d"}']
@@ -2142,7 +2142,7 @@ def test_cli_dict_arg():
         args += [f'--{prefix}check_dict', 'k29="x,y",k30="x,y"']
         args += [f'--{prefix}check_dict', 'k31="x,y"', f'--{prefix}check_dict', 'k32="x,y"']
         cfg = Cfg(_cli_parse_args=args)
-        expected: dict[str, Any] = {
+        expected: Dict[str, Any] = {
             'check_dict': {
                 'k1': 'a',
                 'k2': 'b',
