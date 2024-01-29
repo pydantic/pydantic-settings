@@ -2293,9 +2293,137 @@ def test_cli_annotation_exceptions():
         PositionalArgHasDefault(_cli_parse_args=['--help'])
 
 
-def test_cli_avoid_json():
-    pass
+def test_cli_avoid_json(capsys):
+    class SubModel(BaseModel):
+        v1: int
+
+    class Settings(BaseSettings):
+        sub_model: SubModel
+
+    with pytest.raises(SystemExit):
+        Settings(_cli_prog_name='example.py', _cli_parse_args=['--help'], _cli_avoid_json=False)
+
+    assert (
+        capsys.readouterr().out
+        == """usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
+
+options:
+  -h, --help          show this help message and exit
+
+sub_model options:
+  --sub_model JSON    set sub_model from JSON string
+  --sub_model.v1 int
+"""
+    )
+
+    with pytest.raises(SystemExit):
+        Settings(_cli_prog_name='example.py', _cli_parse_args=['--help'], _cli_avoid_json=True)
+
+    assert (
+        capsys.readouterr().out
+        == """usage: example.py [-h] [--sub_model.v1 int]
+
+options:
+  -h, --help          show this help message and exit
+
+sub_model options:
+  --sub_model.v1 int
+"""
+    )
 
 
-def test_cli_hide_none_type():
-    pass
+def test_cli_hide_none_type(capsys):
+    class Settings(BaseSettings):
+        v0: Optional[str]
+
+    with pytest.raises(SystemExit):
+        Settings(_cli_prog_name='example.py', _cli_parse_args=['--help'], _cli_hide_none_type=False)
+
+    assert (
+        capsys.readouterr().out
+        == """usage: example.py [-h] [--v0 {str,null}]
+
+options:
+  -h, --help       show this help message and exit
+  --v0 {str,null}
+"""
+    )
+
+    with pytest.raises(SystemExit):
+        Settings(_cli_prog_name='example.py', _cli_parse_args=['--help'], _cli_hide_none_type=True)
+
+    assert (
+        capsys.readouterr().out
+        == """usage: example.py [-h] [--v0 str]
+
+options:
+  -h, --help  show this help message and exit
+  --v0 str
+"""
+    )
+
+
+def test_cli_use_class_docs_for_groups(capsys):
+    class SubModel(BaseModel):
+        """The help text from the class docstring"""
+
+        v1: int
+
+    class Settings(BaseSettings):
+        """My application help text."""
+
+        sub_model: SubModel = Field(description='The help text from the field description')
+
+    with pytest.raises(SystemExit):
+        Settings(_cli_prog_name='example.py', _cli_parse_args=['--help'], _cli_use_class_docs_for_groups=False)
+
+    assert (
+        capsys.readouterr().out
+        == """usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
+
+My application help text.
+
+options:
+  -h, --help          show this help message and exit
+
+sub_model options:
+  The help text from the field description
+
+  --sub_model JSON    set sub_model from JSON string
+  --sub_model.v1 int
+"""
+    )
+
+    with pytest.raises(SystemExit):
+        Settings(_cli_prog_name='example.py', _cli_parse_args=['--help'], _cli_use_class_docs_for_groups=True)
+
+    assert (
+        capsys.readouterr().out
+        == """usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
+
+My application help text.
+
+options:
+  -h, --help          show this help message and exit
+
+sub_model options:
+  The help text from the class docstring
+
+  --sub_model JSON    set sub_model from JSON string
+  --sub_model.v1 int
+"""
+    )
+
+
+def test_cli_enforce_required(env):
+    class Settings(BaseSettings, use_attribute_docstrings=True):
+        my_required_field: str
+
+    env.set('MY_REQUIRED_FIELD', 'hello from environment')
+
+    assert Settings(_cli_parse_args=[], _cli_enforce_required=False).model_dump() == {
+        'my_required_field': 'hello from environment'
+    }
+
+    with pytest.raises(SystemExit):
+        Settings(_cli_parse_args=[], _cli_enforce_required=True).model_dump()
