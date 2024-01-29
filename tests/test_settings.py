@@ -2300,14 +2300,16 @@ def test_cli_avoid_json(capsys):
     class Settings(BaseSettings):
         sub_model: SubModel
 
+    argparse_options_text = 'options' if sys.version_info > (3, 9) else 'optional arguments'
+
     with pytest.raises(SystemExit):
         Settings(_cli_prog_name='example.py', _cli_parse_args=['--help'], _cli_avoid_json=False)
 
     assert (
         capsys.readouterr().out
-        == """usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
+        == f"""usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
 
-options:
+{argparse_options_text}:
   -h, --help          show this help message and exit
 
 sub_model options:
@@ -2321,9 +2323,9 @@ sub_model options:
 
     assert (
         capsys.readouterr().out
-        == """usage: example.py [-h] [--sub_model.v1 int]
+        == f"""usage: example.py [-h] [--sub_model.v1 int]
 
-options:
+{argparse_options_text}:
   -h, --help          show this help message and exit
 
 sub_model options:
@@ -2336,16 +2338,18 @@ def test_cli_hide_none_type(capsys):
     class Settings(BaseSettings):
         v0: Optional[str]
 
+    argparse_options_text = 'options' if sys.version_info > (3, 9) else 'optional arguments'
+
     with pytest.raises(SystemExit):
         Settings(_cli_prog_name='example.py', _cli_parse_args=['--help'], _cli_hide_none_type=False)
 
     assert (
         capsys.readouterr().out
-        == """usage: example.py [-h] [--v0 {str,null}]
+        == f"""usage: example.py [-h] [--v0 {{str,null}}]
 
-options:
+{argparse_options_text}:
   -h, --help       show this help message and exit
-  --v0 {str,null}
+  --v0 {{str,null}}
 """
     )
 
@@ -2354,9 +2358,9 @@ options:
 
     assert (
         capsys.readouterr().out
-        == """usage: example.py [-h] [--v0 str]
+        == f"""usage: example.py [-h] [--v0 str]
 
-options:
+{argparse_options_text}:
   -h, --help  show this help message and exit
   --v0 str
 """
@@ -2374,16 +2378,18 @@ def test_cli_use_class_docs_for_groups(capsys):
 
         sub_model: SubModel = Field(description='The help text from the field description')
 
+    argparse_options_text = 'options' if sys.version_info > (3, 9) else 'optional arguments'
+
     with pytest.raises(SystemExit):
         Settings(_cli_prog_name='example.py', _cli_parse_args=['--help'], _cli_use_class_docs_for_groups=False)
 
     assert (
         capsys.readouterr().out
-        == """usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
+        == f"""usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
 
 My application help text.
 
-options:
+{argparse_options_text}:
   -h, --help          show this help message and exit
 
 sub_model options:
@@ -2399,11 +2405,11 @@ sub_model options:
 
     assert (
         capsys.readouterr().out
-        == """usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
+        == f"""usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
 
 My application help text.
 
-options:
+{argparse_options_text}:
   -h, --help          show this help message and exit
 
 sub_model options:
@@ -2416,7 +2422,7 @@ sub_model options:
 
 
 def test_cli_enforce_required(env):
-    class Settings(BaseSettings, use_attribute_docstrings=True):
+    class Settings(BaseSettings):
         my_required_field: str
 
     env.set('MY_REQUIRED_FIELD', 'hello from environment')
