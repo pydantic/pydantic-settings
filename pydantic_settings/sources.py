@@ -9,7 +9,7 @@ from collections import deque
 from dataclasses import is_dataclass
 from pathlib import Path
 from types import FunctionType
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Mapping, Sequence, Tuple, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Sequence, Tuple, TypeVar, Union, cast
 
 import typing_extensions
 from dotenv import dotenv_values
@@ -961,7 +961,7 @@ class CliSettingsSource(EnvSettingsSource):
             args = args[: args.index('JSON') + 1] + [arg for arg in args[args.index('JSON') + 1 :] if arg != 'JSON']
         return ','.join(args)
 
-    def _metavar_format(self, obj: Any) -> str:
+    def _metavar_format_recurse(self, obj: Any) -> str:
         """Pretty metavar representation of a type. Adapts logic from `pydantic._repr.display_as_type`."""
         if isinstance(obj, FunctionType):
             return obj.__name__
@@ -976,15 +976,14 @@ class CliSettingsSource(EnvSettingsSource):
             obj = obj.__class__
 
         if origin_is_union(get_origin(obj)):
-            args = self._metavar_format_list(list(map(self._metavar_format, self._get_modified_args(obj))))
+            args = self._metavar_format_list(list(map(self._metavar_format_recurse, self._get_modified_args(obj))))
+            return f'{{{args}}}' if ',' in args else args
+        elif get_origin(obj) == typing_extensions.Literal:
+            args = self._metavar_format_list(list(map(repr, self._get_modified_args(obj))))
             return f'{{{args}}}' if ',' in args else args
         elif isinstance(obj, WithArgsTypes):
-            if get_origin(obj) == Literal:
-                args = self._metavar_format_list(list(map(repr, self._get_modified_args(obj))))
-                return f'{{{args}}}' if ',' in args else args
-            else:
-                args = self._metavar_format_list(list(map(self._metavar_format, self._get_modified_args(obj))))
-                return f'{obj.__qualname__}[{args}]'
+            args = self._metavar_format_list(list(map(self._metavar_format_recurse, self._get_modified_args(obj))))
+            return f'{obj.__qualname__}[{args}]'
         elif obj is type(None):
             return self.env_parse_none_str
         elif is_model_class(obj):
@@ -993,6 +992,9 @@ class CliSettingsSource(EnvSettingsSource):
             return obj.__qualname__
         else:
             return repr(obj).replace('typing.', '').replace('typing_extensions.', '')
+
+    def _metavar_format(self, args: list[str]) -> str:
+        return self._metavar_format_recurse(args).replace(', ', ',')
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
