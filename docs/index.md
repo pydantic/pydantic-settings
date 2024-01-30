@@ -270,6 +270,10 @@ What it does is simply explodes your variable into nested models or dicts.
 So if you define a variable `FOO__BAR__BAZ=123` it will convert it into `FOO={'BAR': {'BAZ': 123}}`
 If you have multiple variables with the same structure they will be merged.
 
+!!! note
+    Sub model has to inherit from `pydantic.BaseModel`, Otherwise `pydantic-settings` will initialize sub model,
+    collects values for sub model fields separately, and you may get unexpected results.
+
 As an example, given the following environment variables:
 ```bash
 # your environment
@@ -315,11 +319,9 @@ print(Settings().model_dump())
 """
 ```
 
-1. Sub model has to inherit from `pydantic.BaseModel`, Otherwise `pydantic-settings` will initialize sub model,
-   collects values for sub model fields separately, and you may get unexpected results.
+1. Sub model has to inherit from `pydantic.BaseModel`.
 
-2. Sub model has to inherit from `pydantic.BaseModel`, Otherwise `pydantic-settings` will initialize sub model,
-   collects values for sub model fields separately, and you may get unexpected results.
+2. Sub model has to inherit from `pydantic.BaseModel`.
 
 `env_nested_delimiter` can be configured via the `model_config` as shown above, or via the
 `_env_nested_delimiter` keyword argument on instantiation.
@@ -459,6 +461,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
 ```
 
+
+!!! note
+    Pydantic settings loads all the values from dotenv file and passes it to the model. So, `ValidationError` will raise
+    if you provide extra values in a dotenv file.
 
 ## Secrets
 
