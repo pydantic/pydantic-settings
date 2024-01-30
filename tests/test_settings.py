@@ -1,12 +1,14 @@
 import dataclasses
 import os
 import sys
+import typing
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Generic, List, Literal, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 import pytest
+import typing_extensions
 from annotated_types import MinLen
 from pydantic import (
     AliasChoices,
@@ -2510,7 +2512,8 @@ def test_cli_enforce_required(env):
         (LoggedVar, 'LoggedVar'),
         (LoggedVar(), 'LoggedVar'),
         (Representation(), 'Representation()'),
-        (Literal[1, 2, 3], '{1,2,3}'),
+        (typing.Literal[1, 2, 3], '{1,2,3}'),
+        (typing_extensions.Literal[1, 2, 3], '{1,2,3}'),
         (SimpleSettings, 'JSON'),
         (Union[SimpleSettings, SettingWithIgnoreEmpty], 'JSON'),
         (Union[SimpleSettings, str, SettingWithIgnoreEmpty], '{JSON,str}'),
