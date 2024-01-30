@@ -2185,6 +2185,23 @@ def test_cli_dict_arg():
         assert cfg.model_dump() == expected
 
 
+def test_cli_nested_dict_arg():
+    class Cfg(BaseSettings):
+        check_dict: Dict[str, Any]
+
+    args = ['--check_dict', '{"k1":{"a": 1}},{"k2":{"b": 2}}']
+    cfg = Cfg(_cli_parse_args=args)
+    assert cfg.model_dump() == {'check_dict': {'k1': {'a': 1}, 'k2': {'b': 2}}}
+
+    with pytest.raises(SettingsError):
+        args = ['--check_dict', '{"k1":{"a": 1}},"k2":{"b": 2}}']
+        cfg = Cfg(_cli_parse_args=args)
+
+    with pytest.raises(SettingsError):
+        args = ['--check_dict', '{"k1":{"a": 1}},{"k2":{"b": 2}']
+        cfg = Cfg(_cli_parse_args=args)
+
+
 def test_cli_subcommand_with_positionals():
     class FooPlugin(BaseModel):
         my_feature: bool = False
@@ -2224,6 +2241,13 @@ def test_cli_subcommand_with_positionals():
         'clone': {'repository': 'repo', 'directory': '.', 'local': False, 'shared': True},
         'init': None,
         'plugins': None,
+    }
+
+    git = Git(_cli_parse_args=['plugins', 'bar'])
+    assert git.model_dump() == {
+        'clone': None,
+        'init': None,
+        'plugins': {'foo': None, 'bar': {'my_feature': False}},
     }
 
 

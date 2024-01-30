@@ -784,31 +784,34 @@ class CliSettingsSource(EnvSettingsSource):
         orig_key_val_list_str, key_val_list_str = key_val_list_str, key_val_list_str[1:-1]
         key_val_dict: dict[str, str] = {}
         obj_count = 0
-        while key_val_list_str:
-            if obj_count != 0:
-                raise SettingsError(f'Parsing error encountered on JSON object {orig_key_val_list_str}')
-            for i in range(len(key_val_list_str)):
-                if key_val_list_str[i] == '{':
-                    obj_count += 1
-                elif key_val_list_str[i] == '}':
-                    obj_count -= 1
-                    if obj_count == 0:
-                        key_val_dict.update(json.loads(key_val_list_str[: i + 1]))
-                        key_val_list_str = key_val_list_str[i + 1 :].lstrip(',')
-                        break
-                elif obj_count == 0:
-                    val, quote_count = '', 0
-                    key, key_val_list_str = key_val_list_str.split('=', 1)
-                    for i in range(len(key_val_list_str)):
-                        if key_val_list_str[i] in ('"', "'"):
-                            quote_count += 1
-                        if key_val_list_str[i] == ',' and quote_count % 2 == 0:
-                            val, key_val_list_str = key_val_list_str[:i], key_val_list_str[i:].lstrip(',')
+        try:
+            while key_val_list_str:
+                assert obj_count == 0
+                for i in range(len(key_val_list_str)):
+                    if key_val_list_str[i] == '{':
+                        obj_count += 1
+                    elif key_val_list_str[i] == '}':
+                        obj_count -= 1
+                        if obj_count == 0:
+                            key_val_dict.update(json.loads(key_val_list_str[: i + 1]))
+                            key_val_list_str = key_val_list_str[i + 1 :].lstrip(',')
                             break
-                    if not val:
-                        val, key_val_list_str = key_val_list_str, ''
-                    key_val_dict.update({key.strip('\'"'): val.strip('\'"')})
-                    break
+                    elif obj_count == 0:
+                        val, quote_count = '', 0
+                        key, key_val_list_str = key_val_list_str.split('=', 1)
+                        for i in range(len(key_val_list_str)):
+                            if key_val_list_str[i] in ('"', "'"):
+                                quote_count += 1
+                            if key_val_list_str[i] == ',' and quote_count % 2 == 0:
+                                val, key_val_list_str = key_val_list_str[:i], key_val_list_str[i:].lstrip(',')
+                                break
+                        if not val:
+                            val, key_val_list_str = key_val_list_str, ''
+                        key_val_dict.update({key.strip('\'"'): val.strip('\'"')})
+                        break
+        except Exception:
+            raise SettingsError(f'Parsing error encountered on JSON object {orig_key_val_list_str}')
+
         return json.dumps(key_val_dict)
 
     def _get_sub_models(self, model: type[BaseModel], field_name: str, field_info: FieldInfo) -> list[type[BaseModel]]:
@@ -820,13 +823,10 @@ class CliSettingsSource(EnvSettingsSource):
 
         sub_models: list[type[BaseModel]] = []
         for type_ in field_types:
-            if get_origin(type_) is Annotated:
-                if _CliSubCommand in get_args(type_):
-                    raise SettingsError(f'CliSubCommand is not outermost annotation for {model.__name__}.{field_name}')
-                elif _CliPositionalArg in get_args(type_):
-                    raise SettingsError(
-                        f'CliPositionalArg is not outermost annotation for {model.__name__}.{field_name}'
-                    )
+            if _annotation_contains_types(type_, (_CliSubCommand,), is_include_origin=False):
+                raise SettingsError(f'CliSubCommand is not outermost annotation for {model.__name__}.{field_name}')
+            elif _annotation_contains_types(type_, (_CliPositionalArg,), is_include_origin=False):
+                raise SettingsError(f'CliPositionalArg is not outermost annotation for {model.__name__}.{field_name}')
             if is_model_class(type_):
                 sub_models.append(type_)
         return sub_models
@@ -901,9 +901,11 @@ class CliSettingsSource(EnvSettingsSource):
                 kwargs['required'] = self.cli_enforce_required and field_info.is_required()
                 if kwargs['dest'] in added_args:
                     continue
-                if _annotation_contains_types(field_info.annotation, (list, set, dict, Sequence, Mapping)):
+                if _annotation_contains_types(
+                    field_info.annotation, (list, set, dict, Sequence, Mapping), is_include_origin=True
+                ):
                     kwargs['action'] = 'append'
-                    if _annotation_contains_types(field_info.annotation, (dict, Mapping)):
+                    if _annotation_contains_types(field_info.annotation, (dict, Mapping), is_include_origin=True):
                         self._cli_dict_arg_names.append(kwargs['dest'])
 
                 arg_name = f'{arg_prefix.replace(subcommand_prefix, "", 1)}{field_name}'
@@ -1047,10 +1049,10 @@ def _union_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool
     return any(_annotation_is_complex(arg, metadata) for arg in get_args(annotation))
 
 
-def _annotation_contains_types(annotation: type[Any] | None, types: tuple[Any, ...]) -> bool:
-    if get_origin(annotation) in types:
+def _annotation_contains_types(annotation: type[Any] | None, types: tuple[Any, ...], is_include_origin: bool) -> bool:
+    if is_include_origin is True and get_origin(annotation) in types:
         return True
     for type_ in get_args(annotation):
-        if _annotation_contains_types(type_, types):
+        if _annotation_contains_types(type_, types, is_include_origin=True):
             return True
     return annotation in types
