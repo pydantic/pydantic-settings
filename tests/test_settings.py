@@ -677,7 +677,7 @@ def test_config_file_settings_nornir(env):
     See https://github.com/pydantic/pydantic/pull/341#issuecomment-450378771
     """
 
-    def nornir_settings_source() -> Dict[str, Any]:
+    def nornir_settings_source(current_state: dict[str, Any] = {}) -> Dict[str, Any]:
         return {'param_a': 'config a', 'param_b': 'config b', 'param_c': 'config c'}
 
     class Settings(BaseSettings):
@@ -1371,10 +1371,10 @@ def test_secrets_dotenv_precedence(tmp_path):
 
 
 def test_external_settings_sources_precedence(env):
-    def external_source_0() -> Dict[str, str]:
+    def external_source_0(current_state: dict[str, Any] = {}) -> Dict[str, str]:
         return {'apple': 'value 0', 'banana': 'value 2'}
 
-    def external_source_1() -> Dict[str, str]:
+    def external_source_1(current_state: dict[str, Any] = {}) -> Dict[str, str]:
         return {'apple': 'value 1', 'raspberry': 'value 3'}
 
     class Settings(BaseSettings):
@@ -1416,7 +1416,7 @@ def test_external_settings_sources_filter_env_vars():
         def get_field_value(self, field: FieldInfo, field_name: str) -> Any:
             pass
 
-        def __call__(self) -> Dict[str, str]:
+        def __call__(self, current_state: dict[str, Any] = {}) -> Dict[str, str]:
             vault_vars = vault_storage[f'{self.user}:{self.password}']
             return {
                 field_name: vault_vars[field_name]
