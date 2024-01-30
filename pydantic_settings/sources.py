@@ -3,6 +3,7 @@ from __future__ import annotations as _annotations
 import json
 import os
 import sys
+import typing
 import warnings
 from abc import ABC, abstractmethod
 from collections import deque
@@ -978,7 +979,7 @@ class CliSettingsSource(EnvSettingsSource):
         if origin_is_union(get_origin(obj)):
             args = self._metavar_format_list(list(map(self._metavar_format_recurse, self._get_modified_args(obj))))
             return f'{{{args}}}' if ',' in args else args
-        elif get_origin(obj) == typing_extensions.Literal:
+        elif get_origin(obj) in (typing_extensions.Literal, typing.Literal):
             args = self._metavar_format_list(list(map(repr, self._get_modified_args(obj))))
             return f'{{{args}}}' if ',' in args else args
         elif isinstance(obj, WithArgsTypes):
