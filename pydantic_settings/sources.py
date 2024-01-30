@@ -14,10 +14,10 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Mapping, Sequence, T
 import typing_extensions
 from dotenv import dotenv_values
 from pydantic import AliasChoices, AliasPath, BaseModel, Json, TypeAdapter
-from pydantic._internal._repr import Representation
 from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union, typing_base
 from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
 from pydantic.fields import FieldInfo
+from pydantic.v1.utils import Representation
 from typing_extensions import Annotated, get_args, get_origin
 
 from pydantic_settings.utils import path_type_label
@@ -718,18 +718,24 @@ class CliSettingsSource(EnvSettingsSource):
             elif not isinstance(self.cli_parse_args, list):
                 raise SettingsError(f'cli_parse_args must be List[str], recieved {type(self.cli_parse_args)}')
         self.cli_hide_none_type = (
-            cli_hide_none_type if cli_hide_none_type is not None else self.config.get('cli_hide_none_type', False)
+            cli_hide_none_type
+            if cli_hide_none_type is not None
+            else settings_cls.model_config.get('cli_hide_none_type', False)
         )
-        self.cli_avoid_json = cli_avoid_json if cli_avoid_json is not None else self.config.get('cli_avoid_json', False)
+        self.cli_avoid_json = (
+            cli_avoid_json if cli_avoid_json is not None else settings_cls.model_config.get('cli_avoid_json', False)
+        )
         if cli_parse_none_str is None:
             cli_parse_none_str = 'None' if self.cli_avoid_json is True else 'null'
         self.cli_enforce_required = (
-            cli_enforce_required if cli_enforce_required is not None else self.config.get('cli_enforce_required', False)
+            cli_enforce_required
+            if cli_enforce_required is not None
+            else settings_cls.model_config.get('cli_enforce_required', False)
         )
         self.cli_use_class_docs_for_groups = (
             cli_use_class_docs_for_groups
             if cli_use_class_docs_for_groups is not None
-            else self.config.get('cli_use_class_docs_for_groups', False)
+            else settings_cls.model_config.get('cli_use_class_docs_for_groups', False)
         )
         super().__init__(settings_cls, env_nested_delimiter='.', env_parse_none_str=cli_parse_none_str)
 
@@ -951,7 +957,8 @@ class CliSettingsSource(EnvSettingsSource):
             return tuple([type_ for type_ in get_args(obj) if type_ is not type(None)])
 
     def _metavar_format_list(self, args: list[str]) -> str:
-        args = args if 'JSON' not in args else [arg for arg in args[args.index('JSON') + 1 :] if arg != 'JSON']
+        if 'JSON' in args:
+            args = args[: args.index('JSON') + 1] + [arg for arg in args[args.index('JSON') + 1 :] if arg != 'JSON']
         return ','.join(args)
 
     def _metavar_format(self, obj: Any) -> str:
@@ -977,10 +984,7 @@ class CliSettingsSource(EnvSettingsSource):
                 return f'{{{args}}}' if ',' in args else args
             else:
                 args = self._metavar_format_list(list(map(self._metavar_format, self._get_modified_args(obj))))
-            try:
                 return f'{obj.__qualname__}[{args}]'
-            except AttributeError:
-                return str(obj)  # handles TypeAliasType in 3.12
         elif obj is type(None):
             return self.env_parse_none_str
         elif is_model_class(obj):
