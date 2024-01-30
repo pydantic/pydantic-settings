@@ -212,12 +212,12 @@ In case of nested models, the `case_sensitive` setting will be applied to all ne
 ```py
 import os
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from pydantic_settings import BaseSettings
 
 
-class RedisSettings(BaseSettings):
+class RedisSettings(BaseModel):
     host: str
     port: int
 
@@ -235,13 +235,10 @@ try:
 except ValidationError as e:
     print(e)
     """
-    2 validation errors for Settings
+    1 validation error for Settings
     redis.host
       Field required [type=missing, input_value={'HOST': 'localhost', 'port': 6379}, input_type=dict]
         For further information visit https://errors.pydantic.dev/2/v/missing
-    redis.HOST
-      Extra inputs are not permitted [type=extra_forbidden, input_value='localhost', input_type=str]
-        For further information visit https://errors.pydantic.dev/2/v/extra_forbidden
     """
 ```
 
@@ -463,8 +460,9 @@ class Settings(BaseSettings):
 
 
 !!! note
-    Pydantic settings loads all the values from dotenv file and passes it to the model. So, `ValidationError` will raise
-    if you provide extra values in a dotenv file.
+    Pydantic settings loads all the values from dotenv file and passes it to the model, regardless of the model's `env_prefix`.
+    So if you provide extra values in a dotenv file, whether they start with `env_prefix` or not,
+    a `ValidationError` will be raised.
 
 ## Secrets
 
