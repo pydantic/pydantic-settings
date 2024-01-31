@@ -1097,18 +1097,6 @@ def test_read_dotenv_vars_when_env_file_is_none():
     )
 
 
-@pytest.mark.skipif(dotenv, reason='python-dotenv is installed')
-def test_dotenv_not_installed(tmp_path):
-    p = tmp_path / '.env'
-    p.write_text('a=b')
-
-    class Settings(BaseSettings):
-        a: str
-
-    with pytest.raises(ImportError, match=r'^python-dotenv is not installed, run `pip install pydantic\[dotenv\]`$'):
-        Settings(_env_file=p)
-
-
 @pytest.mark.skipif(yaml, reason='PyYAML is installed')
 def test_yaml_not_installed(tmp_path):
     p = tmp_path / '.env'
@@ -2037,6 +2025,7 @@ def test_json_no_file():
     assert s.model_dump() == {}
 
 
+@pytest.mark.skipif(yaml is None, reason='pyYaml is not installed')
 def test_yaml_file(tmp_path):
     p = tmp_path / '.env'
     p.write_text(
@@ -2073,6 +2062,7 @@ def test_yaml_file(tmp_path):
     assert s.nested.nested_field == 'world!'
 
 
+@pytest.mark.skipif(yaml is None, reason='pyYaml is not installed')
 def test_yaml_no_file():
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(yaml_file=None)
@@ -2092,6 +2082,7 @@ def test_yaml_no_file():
     assert s.model_dump() == {}
 
 
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomlkit is None, reason='tomlkit/tomllib is not installed')
 def test_toml_file(tmp_path):
     p = tmp_path / '.env'
     p.write_text(
@@ -2127,6 +2118,7 @@ def test_toml_file(tmp_path):
     assert s.nested.nested_field == 'world!'
 
 
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomlkit is None, reason='tomlkit/tomllib is not installed')
 def test_toml_no_file():
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(toml_file=None)
@@ -2146,13 +2138,10 @@ def test_toml_no_file():
     assert s.model_dump() == {}
 
 
-def test_multiple_file(tmp_path):
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomlkit is None, reason='tomlkit/tomllib is not installed')
+def test_multiple_file_toml(tmp_path):
     p1 = tmp_path / '.env.toml1'
     p2 = tmp_path / '.env.toml2'
-    p3 = tmp_path / '.env.yaml3'
-    p4 = tmp_path / '.env.yaml4'
-    p5 = tmp_path / '.env.json5'
-    p6 = tmp_path / '.env.json6'
     p1.write_text(
         """
     toml1=1
@@ -2163,6 +2152,30 @@ def test_multiple_file(tmp_path):
     toml2=2
     """
     )
+
+    class Settings(BaseSettings):
+        toml1: int
+        toml2: int
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls, toml_file=[p1, p2]),)
+
+    s = Settings()
+    assert s.model_dump() == {'toml1': 1, 'toml2': 2}
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
+def test_multiple_file_yaml(tmp_path):
+    p3 = tmp_path / '.env.yaml3'
+    p4 = tmp_path / '.env.yaml4'
     p3.write_text(
         """
     yaml3: 3
@@ -2173,19 +2186,36 @@ def test_multiple_file(tmp_path):
     yaml4: 4
     """
     )
+
+    class Settings(BaseSettings):
+        yaml3: int
+        yaml4: int
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls, yaml_file=[p3, p4]),)
+
+    s = Settings()
+    assert s.model_dump() == {'yaml3': 3, 'yaml4': 4}
+
+
+def test_multiple_file_json(tmp_path):
+    p5 = tmp_path / '.env.json5'
+    p6 = tmp_path / '.env.json6'
+
     with open(p5, 'w') as f5:
         json.dump({'json5': 5}, f5)
     with open(p6, 'w') as f6:
         json.dump({'json6': 6}, f6)
 
-    class Nested(BaseModel):
-        nested_field: str
-
     class Settings(BaseSettings):
-        toml1: int
-        toml2: int
-        yaml3: int
-        yaml4: int
         json5: int
         json6: int
 
@@ -2198,11 +2228,7 @@ def test_multiple_file(tmp_path):
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
         ) -> Tuple[PydanticBaseSettingsSource, ...]:
-            return (
-                TomlConfigSettingsSource(settings_cls, toml_file=[p1, p2]),
-                YamlConfigSettingsSource(settings_cls, yaml_file=[p3, p4]),
-                JsonConfigSettingsSource(settings_cls, json_file=[p5, p6]),
-            )
+            return (JsonConfigSettingsSource(settings_cls, json_file=[p5, p6]),)
 
     s = Settings()
-    assert s.model_dump() == {'toml1': 1, 'toml2': 2, 'yaml3': 3, 'yaml4': 4, 'json5': 5, 'json6': 6}
+    assert s.model_dump() == {'json5': 5, 'json6': 6}
