@@ -12,13 +12,14 @@ from pathlib import Path
 from types import FunctionType
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Sequence, Tuple, TypeVar, Union, cast
 
+import pydantic._internal._repr
+import pydantic.v1.utils
 import typing_extensions
 from dotenv import dotenv_values
 from pydantic import AliasChoices, AliasPath, BaseModel, Json, TypeAdapter
 from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union, typing_base
 from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
 from pydantic.fields import FieldInfo
-from pydantic.v1.utils import Representation
 from typing_extensions import Annotated, get_args, get_origin
 
 from pydantic_settings.utils import path_type_label
@@ -968,7 +969,7 @@ class CliSettingsSource(EnvSettingsSource):
             return obj.__name__
         elif obj is ...:
             return '...'
-        elif isinstance(obj, Representation):
+        elif isinstance(obj, (pydantic._internal._repr.Representation, pydantic.v1.utils.Representation)):
             return repr(obj)
         elif isinstance(obj, typing_extensions.TypeAliasType):  # type: ignore
             return str(obj)
