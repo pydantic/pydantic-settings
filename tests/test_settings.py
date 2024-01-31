@@ -1925,7 +1925,7 @@ def test_json_file(tmp_path):
     p = tmp_path / '.env'
     p.write_text(
         """
-    {"foobar": "Hello", "nested": {"nested_field": "world!"}}
+    {"foobar": "Hello", "nested": {"nested_field": "world!"}, "null_field": null}
     """
     )
 
@@ -1936,6 +1936,7 @@ def test_json_file(tmp_path):
         model_config = SettingsConfigDict(json_file=p)
         foobar: str
         nested: Nested
+        null_field: Union[str, None]
 
         @classmethod
         def settings_customise_sources(
@@ -1977,6 +1978,7 @@ def test_yaml_file(tmp_path):
     p.write_text(
         """
     foobar: "Hello"
+    null_field:
     nested:
         nested_field: "world!"
     """
@@ -1988,6 +1990,7 @@ def test_yaml_file(tmp_path):
     class Settings(BaseSettings):
         foobar: str
         nested: Nested
+        null_field: Union[str, None]
         model_config = SettingsConfigDict(yaml_file=p)
 
         @classmethod

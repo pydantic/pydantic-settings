@@ -705,12 +705,12 @@ class DotEnvSettingsSource(EnvSettingsSource):
 
 
 class ConfigFileSourceMixin(ABC):
-    def _read_files(self, files: PathType | None) -> dict[str, Any | None]:
+    def _read_files(self, files: PathType | None) -> dict[str, Any]:
         if files is None:
             return {}
         if isinstance(files, (str, os.PathLike)):
             files = [files]
-        vars: dict[str, Any | None] = {}
+        vars: dict[str, Any] = {}
         for file in files:
             file_path = Path(file).expanduser()
             if file_path.is_file():
@@ -718,7 +718,7 @@ class ConfigFileSourceMixin(ABC):
         return vars
 
     @abstractmethod
-    def _read_file(self, path: Path) -> dict[str, Any | None]:
+    def _read_file(self, path: Path) -> dict[str, Any]:
         pass
 
 
@@ -742,7 +742,7 @@ class JsonConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         self.json_data = self._read_files(self.json_file_path)
         super().__init__(settings_cls, self.json_data)
 
-    def _read_file(self, file_path: Path) -> dict[str, Any | None]:
+    def _read_file(self, file_path: Path) -> dict[str, Any]:
         with open(file_path, encoding=self.json_file_encoding) as json_file:
             return json.load(json_file)
 
@@ -767,7 +767,7 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         self.toml_data = self._read_files(self.toml_file_path)
         super().__init__(settings_cls, self.toml_data)
 
-    def _read_file(self, file_path: Path) -> dict[str, Any | None]:
+    def _read_file(self, file_path: Path) -> dict[str, Any]:
         import_toml()
         with open(file_path, mode='rb', encoding=self.toml_file_encoding) as toml_file:
             if sys.version_info < (3, 11):
@@ -795,9 +795,9 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         self.yaml_data = self._read_files(self.yaml_file_path)
         super().__init__(settings_cls, self.yaml_data)
 
-    def _read_file(self, file_path: Path) -> dict[str, Any | None]:
+    def _read_file(self, file_path: Path) -> dict[str, Any]:
+        import_yaml()
         with open(file_path, encoding=self.yaml_file_encoding) as yaml_file:
-            import_yaml()
             return yaml.safe_load(yaml_file)
 
 
