@@ -57,7 +57,7 @@ jobs:
         CONTEXT: ${{ runner.os }}-py${{ matrix.python }}
 
     - name: uninstall deps
-      run: pip uninstall -y tomlkit PyYAML python-dotenv
+      run: pip uninstall -y tomlkit PyYAML
 
     - name: test without deps
       run: make test
