@@ -1137,7 +1137,7 @@ def test_yaml_not_installed(tmp_path):
         Settings()
 
 
-@pytest.mark.skipif(sys.version_info >= (3, 11) and tomlkit, reason='tomlkit/tomllib is installed')
+@pytest.mark.skipif(sys.version_info >= (3, 11) or tomlkit, reason='tomlkit/tomllib is installed')
 def test_toml_not_installed(tmp_path):
     p = tmp_path / '.env'
     p.write_text(
