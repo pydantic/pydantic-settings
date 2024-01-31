@@ -41,7 +41,7 @@ def import_yaml() -> None:
     try:
         import yaml
     except ImportError as e:
-        raise ImportError('pyyaml is not installed, run `pip install pydantic-settings[yaml]`') from e
+        raise ImportError('PyYAML is not installed, run `pip install pydantic-settings[yaml]`') from e
 
 
 def import_toml() -> None:

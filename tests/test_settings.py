@@ -44,6 +44,14 @@ try:
     import dotenv
 except ImportError:
     dotenv = None
+try:
+    import yaml
+except ImportError:
+    yaml = None
+try:
+    import tomlkit
+except ImportError:
+    tomlkit = None
 
 
 class SimpleSettings(BaseSettings):
@@ -1099,6 +1107,62 @@ def test_dotenv_not_installed(tmp_path):
 
     with pytest.raises(ImportError, match=r'^python-dotenv is not installed, run `pip install pydantic\[dotenv\]`$'):
         Settings(_env_file=p)
+
+
+@pytest.mark.skipif(yaml, reason='PyYAML is installed')
+def test_yaml_not_installed(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text(
+        """
+    foobar: "Hello"
+    """
+    )
+
+    class Settings(BaseSettings):
+        foobar: str
+        model_config = SettingsConfigDict(yaml_file=p)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls),)
+
+    with pytest.raises(ImportError, match=r'^PyYAML is not installed, run `pip install pydantic-settings\[yaml\]`$'):
+        Settings()
+
+
+@pytest.mark.skipif(sys.version_info >= (3, 11) and tomlkit, reason='tomlkit/tomllib is installed')
+def test_toml_not_installed(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text(
+        """
+    foobar = "Hello"
+    """
+    )
+
+    class Settings(BaseSettings):
+        foobar: str
+        model_config = SettingsConfigDict(toml_file=p)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls),)
+
+    with pytest.raises(ImportError, match=r'^tomlkit is not installed, run `pip install pydantic-settings\[toml\]`$'):
+        Settings()
 
 
 def test_alias_set(env):
