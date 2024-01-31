@@ -239,7 +239,7 @@ class BaseSettings(BaseModel):
             dotenv_settings=dotenv_settings,
             file_secret_settings=file_secret_settings,
         )
-        if _cli_parse_args:
+        if cli_parse_args:
             sources = (cli_settings,) + sources
         if sources:
             return deep_update(*reversed([source() for source in sources]))

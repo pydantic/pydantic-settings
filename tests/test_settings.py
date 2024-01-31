@@ -2294,52 +2294,52 @@ def test_cli_annotation_exceptions(monkeypatch):
 
         with pytest.raises(SettingsError):
 
-            class SubCommandNotOutermost(BaseSettings):
+            class SubCommandNotOutermost(BaseSettings, cli_parse_args=True):
                 subcmd: Union[int, CliSubCommand[SubCmd]]
 
-            SubCommandNotOutermost(_cli_parse_args=True)
+            SubCommandNotOutermost()
 
         with pytest.raises(SettingsError):
 
-            class SubCommandHasDefault(BaseSettings):
+            class SubCommandHasDefault(BaseSettings, cli_parse_args=True):
                 subcmd: CliSubCommand[SubCmd] = SubCmd()
 
-            SubCommandHasDefault(_cli_parse_args=True)
+            SubCommandHasDefault()
 
         with pytest.raises(SettingsError):
 
-            class SubCommandMultipleTypes(BaseSettings):
+            class SubCommandMultipleTypes(BaseSettings, cli_parse_args=True):
                 subcmd: CliSubCommand[Union[SubCmd, SubCmdAlt]]
 
-            SubCommandMultipleTypes(_cli_parse_args=True)
+            SubCommandMultipleTypes()
 
         with pytest.raises(SettingsError):
 
-            class SubCommandNotModel(BaseSettings):
+            class SubCommandNotModel(BaseSettings, cli_parse_args=True):
                 subcmd: CliSubCommand[str]
 
-            SubCommandNotModel(_cli_parse_args=True)
+            SubCommandNotModel()
 
         with pytest.raises(SettingsError):
 
-            class PositionalArgNotOutermost(BaseSettings):
+            class PositionalArgNotOutermost(BaseSettings, cli_parse_args=True):
                 pos_arg: Union[int, CliPositionalArg[str]]
 
-            PositionalArgNotOutermost(_cli_parse_args=True)
+            PositionalArgNotOutermost()
 
         with pytest.raises(SettingsError):
 
-            class PositionalArgHasDefault(BaseSettings):
+            class PositionalArgHasDefault(BaseSettings, cli_parse_args=True):
                 pos_arg: CliPositionalArg[str] = 'bad'
 
-            PositionalArgHasDefault(_cli_parse_args=True)
+            PositionalArgHasDefault()
 
     with pytest.raises(SettingsError):
 
-        class InvalidCliParseArgsType(BaseSettings):
+        class InvalidCliParseArgsType(BaseSettings, cli_parse_args='invalid type'):
             val: int
 
-        PositionalArgHasDefault(_cli_parse_args='invalid type')
+        InvalidCliParseArgsType()
 
 
 def test_cli_avoid_json(capsys, monkeypatch):
@@ -2349,13 +2349,15 @@ def test_cli_avoid_json(capsys, monkeypatch):
     class Settings(BaseSettings):
         sub_model: SubModel
 
+        model_config = SettingsConfigDict(cli_parse_args=True)
+
     argparse_options_text = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
 
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
 
         with pytest.raises(SystemExit):
-            Settings(_cli_parse_args=True, _cli_avoid_json=False)
+            Settings(_cli_avoid_json=False)
 
         assert (
             capsys.readouterr().out
@@ -2371,7 +2373,7 @@ sub_model options:
         )
 
         with pytest.raises(SystemExit):
-            Settings(_cli_parse_args=True, _cli_avoid_json=True)
+            Settings(_cli_avoid_json=True)
 
         assert (
             capsys.readouterr().out
@@ -2390,13 +2392,15 @@ def test_cli_hide_none_type(capsys, monkeypatch):
     class Settings(BaseSettings):
         v0: Optional[str]
 
+        model_config = SettingsConfigDict(cli_parse_args=True)
+
     argparse_options_text = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
 
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
 
         with pytest.raises(SystemExit):
-            Settings(_cli_parse_args=True, _cli_hide_none_type=False)
+            Settings(_cli_hide_none_type=False)
 
         assert (
             capsys.readouterr().out
@@ -2409,7 +2413,7 @@ def test_cli_hide_none_type(capsys, monkeypatch):
         )
 
         with pytest.raises(SystemExit):
-            Settings(_cli_parse_args=True, _cli_hide_none_type=True)
+            Settings(_cli_hide_none_type=True)
 
         assert (
             capsys.readouterr().out
@@ -2433,13 +2437,15 @@ def test_cli_use_class_docs_for_groups(capsys, monkeypatch):
 
         sub_model: SubModel = Field(description='The help text from the field description')
 
+        model_config = SettingsConfigDict(cli_parse_args=True)
+
     argparse_options_text = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
 
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
 
         with pytest.raises(SystemExit):
-            Settings(_cli_parse_args=True, _cli_use_class_docs_for_groups=False)
+            Settings(_cli_use_class_docs_for_groups=False)
 
         assert (
             capsys.readouterr().out
@@ -2459,7 +2465,7 @@ sub_model options:
         )
 
         with pytest.raises(SystemExit):
-            Settings(_cli_parse_args=True, _cli_use_class_docs_for_groups=True)
+            Settings(_cli_use_class_docs_for_groups=True)
 
         assert (
             capsys.readouterr().out
