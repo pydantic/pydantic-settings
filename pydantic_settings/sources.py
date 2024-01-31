@@ -601,7 +601,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     except ValueError as e:
                         if not allow_json_failure:
                             raise e
-            env_var[last_key] = env_val
+
+            if last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] is {}:
+                env_var[last_key] = env_val
 
         return result
 

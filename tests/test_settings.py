@@ -1917,6 +1917,26 @@ def test_env_parse_none_str(env):
     assert s.nested.deep['z'] is None
     assert s.nested.keep['z'] == 'None'
 
+    env.set('nested__deep', 'None')
+
+    with pytest.raises(ValidationError):
+        s = NestedSettings()
+    s = NestedSettings(_env_parse_none_str='None')
+    assert s.nested.x is None
+    assert s.nested.y == 'y_override'
+    assert s.nested.deep['z'] is None
+    assert s.nested.keep['z'] == 'None'
+
+    env.pop('nested__deep__z')
+
+    with pytest.raises(ValidationError):
+        s = NestedSettings()
+    s = NestedSettings(_env_parse_none_str='None')
+    assert s.nested.x is None
+    assert s.nested.y == 'y_override'
+    assert s.nested.deep is None
+    assert s.nested.keep['z'] == 'None'
+
 
 def test_env_json_field_dict(env):
     class Settings(BaseSettings):
