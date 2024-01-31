@@ -970,7 +970,7 @@ class CliSettingsSource(EnvSettingsSource):
             return '...'
         elif isinstance(obj, Representation):
             return repr(obj)
-        elif isinstance(obj, typing_extensions.TypeAliasType):
+        elif isinstance(obj, typing_extensions.TypeAliasType):  # type: ignore
             return str(obj)
 
         if not isinstance(obj, (typing_base, WithArgsTypes, type)):
