@@ -994,8 +994,8 @@ class CliSettingsSource(EnvSettingsSource):
         else:
             return repr(obj).replace('typing.', '').replace('typing_extensions.', '')
 
-    def _metavar_format(self, args: list[str]) -> str:
-        return self._metavar_format_recurse(args).replace(', ', ',')
+    def _metavar_format(self, obj: Any) -> str:
+        return self._metavar_format_recurse(obj).replace(', ', ',')
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
