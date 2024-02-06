@@ -871,7 +871,7 @@ class CliSettingsSource(EnvSettingsSource):
         added_args: list[str],
         arg_prefix: str,
         subcommand_prefix: str,
-        group: _ArgumentGroup | tuple[str, str] | None,
+        group: _ArgumentGroup | Dict[str, Any] | None,
     ) -> ArgumentParser:
         subparsers: _SubParsersAction[Any] | None = None
         for field_name, field_info in self._sort_arg_fields(model):
@@ -927,16 +927,18 @@ class CliSettingsSource(EnvSettingsSource):
                     arg_flag = ''
 
                 if sub_models and kwargs.get('action') != 'append':
-                    group_help_text = (
+                    model_group: _ArgumentGroup | None = None
+                    model_group_kwargs: dict[str, Any] = {}
+                    model_group_kwargs['title'] = f'{arg_name} options'
+                    model_group_kwargs['description'] = (
                         sub_models[0].__doc__
                         if self.cli_use_class_docs_for_groups and len(sub_models) == 1
                         else field_info.description
                     )
-                    model_group = (f'{arg_name} options', group_help_text)
                     if not self.cli_avoid_json:
                         added_args.append(arg_name)
                         kwargs['help'] = f'set {arg_name} from JSON string'
-                        model_group = parser.add_argument_group(*model_group)
+                        model_group = parser.add_argument_group(**model_group_kwargs)
                         model_group.add_argument(f'{arg_flag}{arg_name}', **kwargs)
                     for model in sub_models:
                         self._add_fields_to_parser(
@@ -945,11 +947,11 @@ class CliSettingsSource(EnvSettingsSource):
                             added_args=added_args,
                             arg_prefix=f'{arg_prefix}{field_name}.',
                             subcommand_prefix=subcommand_prefix,
-                            group=model_group,
+                            group=model_group if model_group else model_group_kwargs,
                         )
                 elif group is not None:
-                    if isinstance(group, tuple):
-                        group = parser.add_argument_group(*group)
+                    if not isinstance(group, _ArgumentGroup):
+                        group = parser.add_argument_group(**group)
                     added_args.append(arg_name)
                     group.add_argument(f'{arg_flag}{arg_name}', **kwargs)
                 else:

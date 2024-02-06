@@ -2408,7 +2408,6 @@ sub_model options:
         )
 
 
-
 def test_cli_remove_empty_groups(capsys, monkeypatch):
     class SubModel(BaseModel):
         pass
