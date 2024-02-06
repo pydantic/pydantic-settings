@@ -2408,6 +2408,49 @@ sub_model options:
         )
 
 
+
+def test_cli_remove_empty_groups(capsys, monkeypatch):
+    class SubModel(BaseModel):
+        pass
+
+    class Settings(BaseSettings):
+        sub_model: SubModel
+
+        model_config = SettingsConfigDict(cli_parse_args=True)
+
+    argparse_options_text = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Settings(_cli_avoid_json=False)
+
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] [--sub_model JSON]
+
+{argparse_options_text}:
+  -h, --help        show this help message and exit
+
+sub_model options:
+  --sub_model JSON  set sub_model from JSON string
+"""
+        )
+
+        with pytest.raises(SystemExit):
+            Settings(_cli_avoid_json=True)
+
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h]
+
+{argparse_options_text}:
+  -h, --help  show this help message and exit
+"""
+        )
+
+
 def test_cli_hide_none_type(capsys, monkeypatch):
     class Settings(BaseSettings):
         v0: Optional[str]

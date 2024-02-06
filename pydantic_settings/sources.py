@@ -871,7 +871,7 @@ class CliSettingsSource(EnvSettingsSource):
         added_args: list[str],
         arg_prefix: str,
         subcommand_prefix: str,
-        group: _ArgumentGroup | None,
+        group: _ArgumentGroup | Tuple[str, str] | None,
     ) -> ArgumentParser:
         subparsers: _SubParsersAction[Any] | None = None
         for field_name, field_info in self._sort_arg_fields(model):
@@ -932,10 +932,11 @@ class CliSettingsSource(EnvSettingsSource):
                         if self.cli_use_class_docs_for_groups and len(sub_models) == 1
                         else field_info.description
                     )
-                    model_group = parser.add_argument_group(f'{arg_name} options', group_help_text)
+                    model_group = (f'{arg_name} options', group_help_text)
                     if not self.cli_avoid_json:
                         added_args.append(arg_name)
                         kwargs['help'] = f'set {arg_name} from JSON string'
+                        model_group = parser.add_argument_group(*model_group)
                         model_group.add_argument(f'{arg_flag}{arg_name}', **kwargs)
                     for model in sub_models:
                         self._add_fields_to_parser(
@@ -947,6 +948,8 @@ class CliSettingsSource(EnvSettingsSource):
                             group=model_group,
                         )
                 elif group is not None:
+                    if isinstance(group, tuple):
+                        group = parser.add_argument_group(*group)
                     added_args.append(arg_name)
                     group.add_argument(f'{arg_flag}{arg_name}', **kwargs)
                 else:
