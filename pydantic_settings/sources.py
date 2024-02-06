@@ -871,7 +871,7 @@ class CliSettingsSource(EnvSettingsSource):
         added_args: list[str],
         arg_prefix: str,
         subcommand_prefix: str,
-        group: _ArgumentGroup | Dict[str, Any] | None,
+        group: _ArgumentGroup | dict[str, Any] | None,
     ) -> ArgumentParser:
         subparsers: _SubParsersAction[Any] | None = None
         for field_name, field_info in self._sort_arg_fields(model):
