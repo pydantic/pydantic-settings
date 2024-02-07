@@ -8,6 +8,7 @@ import warnings
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import is_dataclass
+from enum import Enum
 from pathlib import Path
 from types import FunctionType
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Sequence, Tuple, TypeVar, Union, cast
@@ -27,7 +28,7 @@ from pydantic_settings.utils import path_type_label
 if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
 
-from argparse import SUPPRESS, ArgumentParser, _ArgumentGroup, _SubParsersAction
+from argparse import SUPPRESS, Action, ArgumentParser, Namespace, _ArgumentGroup, _SubParsersAction
 
 DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
 
@@ -48,6 +49,22 @@ class _CliPositionalArg:
 T = TypeVar('T')
 CliSubCommand = Annotated[Union[T, None], _CliSubCommand]
 CliPositionalArg = Annotated[T, _CliPositionalArg]
+
+
+class _CliEnumAction(Action):
+    """
+    CLI argparse action handler for enum types
+    """
+
+    def __init__(self, **kwargs: Any):
+        self._enum = kwargs.pop('type')
+        kwargs['choices'] = tuple(val.name for val in self._enum)
+        super().__init__(**kwargs)
+
+    def __call__(
+        self, parser: ArgumentParser, namespace: Namespace, value: Any, option_string: str | None = None
+    ) -> None:
+        setattr(namespace, self.dest, self._enum[value])
 
 
 class EnvNoneType(str):
@@ -917,6 +934,10 @@ class CliSettingsSource(EnvSettingsSource):
                     kwargs['action'] = 'append'
                     if _annotation_contains_types(field_info.annotation, (dict, Mapping), is_include_origin=True):
                         self._cli_dict_arg_names.append(kwargs['dest'])
+                elif lenient_issubclass(field_info.annotation, Enum):
+                    kwargs['type'] = field_info.annotation
+                    kwargs['action'] = _CliEnumAction
+                    del kwargs['metavar']
 
                 arg_name = f'{arg_prefix.replace(subcommand_prefix, "", 1)}{field_name}'
                 if _CliPositionalArg in field_info.metadata:
@@ -972,6 +993,8 @@ class CliSettingsSource(EnvSettingsSource):
 
     def _metavar_format_recurse(self, obj: Any) -> str:
         """Pretty metavar representation of a type. Adapts logic from `pydantic._repr.display_as_type`."""
+        while get_origin(obj) == Annotated:
+            obj = get_args(obj)[0]
         if isinstance(obj, FunctionType):
             return obj.__name__
         elif obj is ...:

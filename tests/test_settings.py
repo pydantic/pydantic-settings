@@ -4,6 +4,7 @@ import sys
 import typing
 import uuid
 from datetime import datetime, timezone
+from enum import IntEnum
 from pathlib import Path
 from typing import Any, Callable, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar, Union
 
@@ -14,6 +15,7 @@ from pydantic import (
     AliasChoices,
     AliasPath,
     BaseModel,
+    DirectoryPath,
     Field,
     HttpUrl,
     Json,
@@ -2302,6 +2304,22 @@ def test_cli_union_similar_sub_models():
     assert cfg.model_dump() == {'child': {'name': 'new name a', 'diff_a': 'new diff a'}}
 
 
+def test_cli_enum():
+    class Fruit(IntEnum):
+        apple = 0
+        banna = 1
+        orange = 2
+
+    class Cfg(BaseSettings):
+        fruit: Fruit
+
+    cfg = Cfg(_cli_parse_args=['--fruit', 'orange'])
+    assert cfg.model_dump() == {'fruit': Fruit.orange}
+
+    with pytest.raises(SystemExit):
+        Cfg(_cli_parse_args=['--fruit', 'lettuce'])
+
+
 def test_cli_annotation_exceptions(monkeypatch):
     class SubCmdAlt(BaseModel):
         pass
@@ -2586,6 +2604,8 @@ def test_cli_enforce_required(env):
         (Union[SimpleSettings, SettingWithIgnoreEmpty], 'JSON'),
         (Union[SimpleSettings, str, SettingWithIgnoreEmpty], '{JSON,str}'),
         (Union[str, SimpleSettings, SettingWithIgnoreEmpty], '{str,JSON}'),
+        (Annotated[SimpleSettings, 'annotation'], 'JSON'),
+        (DirectoryPath, 'Path'),
     ],
 )
 def test_cli_metavar_format(value, expected):
