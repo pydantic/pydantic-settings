@@ -137,12 +137,16 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         settings_cls: type[BaseSettings],
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
+        prefix_optional: bool | None = None,
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
     ) -> None:
         super().__init__(settings_cls)
         self.case_sensitive = case_sensitive if case_sensitive is not None else self.config.get('case_sensitive', False)
         self.env_prefix = env_prefix if env_prefix is not None else self.config.get('env_prefix', '')
+        self.prefix_optional = (
+            prefix_optional if prefix_optional is not None else self.config.get('prefix_optional', False)
+        )
         self.env_ignore_empty = (
             env_ignore_empty if env_ignore_empty is not None else self.config.get('env_ignore_empty', False)
         )
@@ -315,10 +319,13 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         secrets_dir: str | Path | None = None,
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
+        prefix_optional: bool | None = None,
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
     ) -> None:
-        super().__init__(settings_cls, case_sensitive, env_prefix, env_ignore_empty, env_parse_none_str)
+        super().__init__(
+            settings_cls, case_sensitive, env_prefix, prefix_optional, env_ignore_empty, env_parse_none_str
+        )
         self.secrets_dir = secrets_dir if secrets_dir is not None else self.config.get('secrets_dir')
 
     def __call__(self) -> dict[str, Any]:
@@ -404,11 +411,14 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         settings_cls: type[BaseSettings],
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
+        prefix_optional: bool | None = None,
         env_nested_delimiter: str | None = None,
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
     ) -> None:
-        super().__init__(settings_cls, case_sensitive, env_prefix, env_ignore_empty, env_parse_none_str)
+        super().__init__(
+            settings_cls, case_sensitive, env_prefix, prefix_optional, env_ignore_empty, env_parse_none_str
+        )
         self.env_nested_delimiter = (
             env_nested_delimiter if env_nested_delimiter is not None else self.config.get('env_nested_delimiter')
         )
@@ -435,6 +445,8 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         env_val: str | None = None
         for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
             env_val = self.env_vars.get(env_name)
+            if env_val is None and self.prefix_optional:
+                env_val = self.env_vars.get(env_name[self.env_prefix_len :])
             if env_val is not None:
                 break
 
@@ -602,6 +614,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
         env_file_encoding: str | None = None,
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
+        prefix_optional: bool | None = None,
         env_nested_delimiter: str | None = None,
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
@@ -611,7 +624,13 @@ class DotEnvSettingsSource(EnvSettingsSource):
             env_file_encoding if env_file_encoding is not None else settings_cls.model_config.get('env_file_encoding')
         )
         super().__init__(
-            settings_cls, case_sensitive, env_prefix, env_nested_delimiter, env_ignore_empty, env_parse_none_str
+            settings_cls,
+            case_sensitive,
+            env_prefix,
+            prefix_optional,
+            env_nested_delimiter,
+            env_ignore_empty,
+            env_parse_none_str,
         )
 
     def _load_env_vars(self) -> Mapping[str, str | None]:

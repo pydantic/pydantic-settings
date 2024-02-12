@@ -22,6 +22,7 @@ from .sources import (
 class SettingsConfigDict(ConfigDict, total=False):
     case_sensitive: bool
     env_prefix: str
+    prefix_optional: bool
     env_file: DotenvType | None
     env_file_encoding: str | None
     env_ignore_empty: bool
@@ -51,6 +52,7 @@ class BaseSettings(BaseModel):
     Args:
         _case_sensitive: Whether environment variables names should be read with case-sensitivity. Defaults to `None`.
         _env_prefix: Prefix for all environment variables. Defaults to `None`.
+        _prefix_optional: If unable to find environment variable with prefix, look then for one without.
         _env_file: The env file(s) to load settings values from. Defaults to `Path('')`, which
             means that the value from `model_config['env_file']` should be used. You can also pass
             `None` to indicate that environment variables should not be loaded from an env file.
@@ -66,6 +68,7 @@ class BaseSettings(BaseModel):
         __pydantic_self__,
         _case_sensitive: bool | None = None,
         _env_prefix: str | None = None,
+        _prefix_optional: bool | None = None,
         _env_file: DotenvType | None = ENV_FILE_SENTINEL,
         _env_file_encoding: str | None = None,
         _env_ignore_empty: bool | None = None,
@@ -80,6 +83,7 @@ class BaseSettings(BaseModel):
                 values,
                 _case_sensitive=_case_sensitive,
                 _env_prefix=_env_prefix,
+                _prefix_optional=_prefix_optional,
                 _env_file=_env_file,
                 _env_file_encoding=_env_file_encoding,
                 _env_ignore_empty=_env_ignore_empty,
@@ -118,6 +122,7 @@ class BaseSettings(BaseModel):
         init_kwargs: dict[str, Any],
         _case_sensitive: bool | None = None,
         _env_prefix: str | None = None,
+        _prefix_optional: bool | None = None,
         _env_file: DotenvType | None = None,
         _env_file_encoding: str | None = None,
         _env_ignore_empty: bool | None = None,
@@ -128,6 +133,9 @@ class BaseSettings(BaseModel):
         # Determine settings config values
         case_sensitive = _case_sensitive if _case_sensitive is not None else self.model_config.get('case_sensitive')
         env_prefix = _env_prefix if _env_prefix is not None else self.model_config.get('env_prefix')
+        prefix_optional = (
+            _prefix_optional if _prefix_optional is not None else self.model_config.get('prefix_optional', False)
+        )
         env_file = _env_file if _env_file != ENV_FILE_SENTINEL else self.model_config.get('env_file')
         env_file_encoding = (
             _env_file_encoding if _env_file_encoding is not None else self.model_config.get('env_file_encoding')
@@ -151,6 +159,7 @@ class BaseSettings(BaseModel):
             self.__class__,
             case_sensitive=case_sensitive,
             env_prefix=env_prefix,
+            prefix_optional=prefix_optional,
             env_nested_delimiter=env_nested_delimiter,
             env_ignore_empty=env_ignore_empty,
             env_parse_none_str=env_parse_none_str,
@@ -161,13 +170,18 @@ class BaseSettings(BaseModel):
             env_file_encoding=env_file_encoding,
             case_sensitive=case_sensitive,
             env_prefix=env_prefix,
+            prefix_optional=prefix_optional,
             env_nested_delimiter=env_nested_delimiter,
             env_ignore_empty=env_ignore_empty,
             env_parse_none_str=env_parse_none_str,
         )
 
         file_secret_settings = SecretsSettingsSource(
-            self.__class__, secrets_dir=secrets_dir, case_sensitive=case_sensitive, env_prefix=env_prefix
+            self.__class__,
+            secrets_dir=secrets_dir,
+            case_sensitive=case_sensitive,
+            env_prefix=env_prefix,
+            prefix_optional=prefix_optional,
         )
         # Provide a hook to set built-in sources priority and add / remove sources
         sources = self.settings_customise_sources(
@@ -190,6 +204,7 @@ class BaseSettings(BaseModel):
         validate_default=True,
         case_sensitive=False,
         env_prefix='',
+        prefix_optional=False,
         env_file=None,
         env_file_encoding=None,
         env_ignore_empty=False,

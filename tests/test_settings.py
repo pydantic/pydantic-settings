@@ -1993,3 +1993,31 @@ def test_dotenv_optional_json_field(tmp_path):
 
     s = Settings()
     assert s.data == {'foo': 'bar'}
+
+
+def test_fallback_on_prefix(monkeypatch):
+    env_name = 'TESTING_FALLBACK_ON_PREFIX_ENVIRONMENT'
+    env_name_specific = 'SPECIFIC_TESTING_FALLBACK_ON_PREFIX_ENVIRONMENT'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='SPECIFIC_', prefix_optional=True)
+        testing_fallback_on_prefix_environment: str = 'local'
+
+    # This is only necessary for testing purposes
+    # No need for a real fixture with teardown
+    monkeypatch.delenv(env_name, raising=False)
+    monkeypatch.delenv(env_name_specific, raising=False)
+
+    monkeypatch.setenv(env_name, 'stage')
+    assert Settings().testing_fallback_on_prefix_environment == 'stage'
+
+    monkeypatch.setenv(env_name_specific, 'prod')
+    assert Settings().testing_fallback_on_prefix_environment == 'prod'
+
+    # Also check that ``prefix_optional`` is False by default
+    class SettingsWithDefault(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='SPECIFIC_')
+        testing_fallback_on_prefix_environment: str = 'local'
+
+    monkeypatch.delenv(env_name_specific, raising=True)
+    assert SettingsWithDefault().testing_fallback_on_prefix_environment == 'local'
