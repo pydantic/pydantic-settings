@@ -189,6 +189,7 @@ class Settings(BaseSettings):
 ```py
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix='my_prefix_', prefix_optional=True)
     environment: str = 'stage'
