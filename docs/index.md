@@ -189,14 +189,12 @@ class Settings(BaseSettings):
 ```py
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix='my_prefix_', prefix_optional=True)
     environment: str = 'stage'
 ```
-
-Sometimes it is useful to share one environment variable between several services, but retain the ability to override 
-certain variables for specific services. By setting ``prefix_optional=True``, environment variables with prefixes will 
+Sometimes it is useful to share one environment variable between several services, but retain the ability to override
+certain variables for specific services. By setting ``prefix_optional=True``, environment variables with prefixes will
 be searched for first. If the variable is not found, the version lacking the prefix will be defaulted to.
 
 ### Case-sensitivity
