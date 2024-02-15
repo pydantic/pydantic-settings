@@ -591,7 +591,6 @@ This will be able to read the following "config.toml" file, located in your work
 foobar = "Hello"
 [nested]
 nested_field = "world!"
-"""
 ```
 
 ## Field value priority
