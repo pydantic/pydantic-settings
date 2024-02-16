@@ -56,6 +56,15 @@ jobs:
         COVERAGE_FILE: .coverage.${{ runner.os }}-py${{ matrix.python }}
         CONTEXT: ${{ runner.os }}-py${{ matrix.python }}
 
+    - name: uninstall deps
+      run: pip uninstall -y tomlkit PyYAML
+
+    - name: test without deps
+      run: make test
+      env:
+        COVERAGE_FILE: .coverage.${{ runner.os }}-py${{ matrix.python }}-without-deps
+        CONTEXT: ${{ runner.os }}-py${{ matrix.python }}-without-deps
+
     - run: coverage combine
     - run: coverage xml
 

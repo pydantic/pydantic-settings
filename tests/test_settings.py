@@ -1,4 +1,5 @@
 import dataclasses
+import json
 import os
 import sys
 import uuid
@@ -30,9 +31,12 @@ from pydantic_settings import (
     DotEnvSettingsSource,
     EnvSettingsSource,
     InitSettingsSource,
+    JsonConfigSettingsSource,
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
     SettingsConfigDict,
+    TomlConfigSettingsSource,
+    YamlConfigSettingsSource,
 )
 from pydantic_settings.sources import SettingsError, read_env_file
 
@@ -40,6 +44,14 @@ try:
     import dotenv
 except ImportError:
     dotenv = None
+try:
+    import yaml
+except ImportError:
+    yaml = None
+try:
+    import tomlkit
+except ImportError:
+    tomlkit = None
 
 
 class SimpleSettings(BaseSettings):
@@ -1148,16 +1160,60 @@ def test_read_dotenv_vars_when_env_file_is_none():
     )
 
 
-@pytest.mark.skipif(dotenv, reason='python-dotenv is installed')
-def test_dotenv_not_installed(tmp_path):
+@pytest.mark.skipif(yaml, reason='PyYAML is installed')
+def test_yaml_not_installed(tmp_path):
     p = tmp_path / '.env'
-    p.write_text('a=b')
+    p.write_text(
+        """
+    foobar: "Hello"
+    """
+    )
 
     class Settings(BaseSettings):
-        a: str
+        foobar: str
+        model_config = SettingsConfigDict(yaml_file=p)
 
-    with pytest.raises(ImportError, match=r'^python-dotenv is not installed, run `pip install pydantic\[dotenv\]`$'):
-        Settings(_env_file=p)
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls),)
+
+    with pytest.raises(ImportError, match=r'^PyYAML is not installed, run `pip install pydantic-settings\[yaml\]`$'):
+        Settings()
+
+
+@pytest.mark.skipif(sys.version_info >= (3, 11) or tomlkit, reason='tomlkit/tomllib is installed')
+def test_toml_not_installed(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text(
+        """
+    foobar = "Hello"
+    """
+    )
+
+    class Settings(BaseSettings):
+        foobar: str
+        model_config = SettingsConfigDict(toml_file=p)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls),)
+
+    with pytest.raises(ImportError, match=r'^tomlkit is not installed, run `pip install pydantic-settings\[toml\]`$'):
+        Settings()
 
 
 def test_alias_set(env):
@@ -1993,3 +2049,264 @@ def test_dotenv_optional_json_field(tmp_path):
 
     s = Settings()
     assert s.data == {'foo': 'bar'}
+
+
+def test_json_file(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text(
+        """
+    {"foobar": "Hello", "nested": {"nested_field": "world!"}, "null_field": null}
+    """
+    )
+
+    class Nested(BaseModel):
+        nested_field: str
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(json_file=p)
+        foobar: str
+        nested: Nested
+        null_field: Union[str, None]
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (JsonConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.foobar == 'Hello'
+    assert s.nested.nested_field == 'world!'
+
+
+def test_json_no_file():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(json_file=None)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (JsonConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.model_dump() == {}
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYaml is not installed')
+def test_yaml_file(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text(
+        """
+    foobar: "Hello"
+    null_field:
+    nested:
+        nested_field: "world!"
+    """
+    )
+
+    class Nested(BaseModel):
+        nested_field: str
+
+    class Settings(BaseSettings):
+        foobar: str
+        nested: Nested
+        null_field: Union[str, None]
+        model_config = SettingsConfigDict(yaml_file=p)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.foobar == 'Hello'
+    assert s.nested.nested_field == 'world!'
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYaml is not installed')
+def test_yaml_no_file():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(yaml_file=None)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.model_dump() == {}
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomlkit is None, reason='tomlkit/tomllib is not installed')
+def test_toml_file(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text(
+        """
+    foobar = "Hello"
+
+    [nested]
+    nested_field = "world!"
+    """
+    )
+
+    class Nested(BaseModel):
+        nested_field: str
+
+    class Settings(BaseSettings):
+        foobar: str
+        nested: Nested
+        model_config = SettingsConfigDict(toml_file=p)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.foobar == 'Hello'
+    assert s.nested.nested_field == 'world!'
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomlkit is None, reason='tomlkit/tomllib is not installed')
+def test_toml_no_file():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(toml_file=None)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.model_dump() == {}
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomlkit is None, reason='tomlkit/tomllib is not installed')
+def test_multiple_file_toml(tmp_path):
+    p1 = tmp_path / '.env.toml1'
+    p2 = tmp_path / '.env.toml2'
+    p1.write_text(
+        """
+    toml1=1
+    """
+    )
+    p2.write_text(
+        """
+    toml2=2
+    """
+    )
+
+    class Settings(BaseSettings):
+        toml1: int
+        toml2: int
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls, toml_file=[p1, p2]),)
+
+    s = Settings()
+    assert s.model_dump() == {'toml1': 1, 'toml2': 2}
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
+def test_multiple_file_yaml(tmp_path):
+    p3 = tmp_path / '.env.yaml3'
+    p4 = tmp_path / '.env.yaml4'
+    p3.write_text(
+        """
+    yaml3: 3
+    """
+    )
+    p4.write_text(
+        """
+    yaml4: 4
+    """
+    )
+
+    class Settings(BaseSettings):
+        yaml3: int
+        yaml4: int
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls, yaml_file=[p3, p4]),)
+
+    s = Settings()
+    assert s.model_dump() == {'yaml3': 3, 'yaml4': 4}
+
+
+def test_multiple_file_json(tmp_path):
+    p5 = tmp_path / '.env.json5'
+    p6 = tmp_path / '.env.json6'
+
+    with open(p5, 'w') as f5:
+        json.dump({'json5': 5}, f5)
+    with open(p6, 'w') as f6:
+        json.dump({'json6': 6}, f6)
+
+    class Settings(BaseSettings):
+        json5: int
+        json6: int
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (JsonConfigSettingsSource(settings_cls, json_file=[p5, p6]),)
+
+    s = Settings()
+    assert s.model_dump() == {'json5': 5, 'json6': 6}

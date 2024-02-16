@@ -2,6 +2,7 @@ from __future__ import annotations as _annotations
 
 import json
 import os
+import sys
 import warnings
 from abc import ABC, abstractmethod
 from collections import deque
@@ -19,10 +20,49 @@ from typing_extensions import get_args, get_origin
 from pydantic_settings.utils import path_type_label
 
 if TYPE_CHECKING:
+    if sys.version_info >= (3, 11):
+        import tomllib
+    else:
+        tomllib = None
+    import tomlkit
+    import yaml
+
     from pydantic_settings.main import BaseSettings
+else:
+    yaml = None
+    tomllib = None
+    tomlkit = None
+
+
+def import_yaml() -> None:
+    global yaml
+    if yaml is not None:
+        return
+    try:
+        import yaml
+    except ImportError as e:
+        raise ImportError('PyYAML is not installed, run `pip install pydantic-settings[yaml]`') from e
+
+
+def import_toml() -> None:
+    global tomlkit
+    global tomllib
+    if sys.version_info < (3, 11):
+        if tomlkit is not None:
+            return
+        try:
+            import tomlkit
+        except ImportError as e:
+            raise ImportError('tomlkit is not installed, run `pip install pydantic-settings[toml]`') from e
+    else:
+        if tomllib is not None:
+            return
+        import tomllib
 
 
 DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
+PathType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
+DEFAULT_PATH: PathType = Path('')
 
 # This is used as default value for `_env_file` in the `BaseSettings` class and
 # `env_file` in `DotEnvSettingsSource` so the default can be distinguished from `None`.
@@ -672,6 +712,103 @@ class DotEnvSettingsSource(EnvSettingsSource):
             f'DotEnvSettingsSource(env_file={self.env_file!r}, env_file_encoding={self.env_file_encoding!r}, '
             f'env_nested_delimiter={self.env_nested_delimiter!r}, env_prefix_len={self.env_prefix_len!r})'
         )
+
+
+class ConfigFileSourceMixin(ABC):
+    def _read_files(self, files: PathType | None) -> dict[str, Any]:
+        if files is None:
+            return {}
+        if isinstance(files, (str, os.PathLike)):
+            files = [files]
+        vars: dict[str, Any] = {}
+        for file in files:
+            file_path = Path(file).expanduser()
+            if file_path.is_file():
+                vars.update(self._read_file(file_path))
+        return vars
+
+    @abstractmethod
+    def _read_file(self, path: Path) -> dict[str, Any]:
+        pass
+
+
+class JsonConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
+    """
+    A source class that loads variables from a JSON file
+    """
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        json_file: PathType | None = DEFAULT_PATH,
+        json_file_encoding: str | None = None,
+    ):
+        self.json_file_path = json_file if json_file != DEFAULT_PATH else settings_cls.model_config.get('json_file')
+        self.json_file_encoding = (
+            json_file_encoding
+            if json_file_encoding is not None
+            else settings_cls.model_config.get('json_file_encoding')
+        )
+        self.json_data = self._read_files(self.json_file_path)
+        super().__init__(settings_cls, self.json_data)
+
+    def _read_file(self, file_path: Path) -> dict[str, Any]:
+        with open(file_path, encoding=self.json_file_encoding) as json_file:
+            return json.load(json_file)
+
+
+class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
+    """
+    A source class that loads variables from a JSON file
+    """
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        toml_file: PathType | None = DEFAULT_PATH,
+        toml_file_encoding: str | None = None,
+    ):
+        self.toml_file_path = toml_file if toml_file != DEFAULT_PATH else settings_cls.model_config.get('toml_file')
+        self.toml_file_encoding = (
+            toml_file_encoding
+            if toml_file_encoding is not None
+            else settings_cls.model_config.get('toml_file_encoding')
+        )
+        self.toml_data = self._read_files(self.toml_file_path)
+        super().__init__(settings_cls, self.toml_data)
+
+    def _read_file(self, file_path: Path) -> dict[str, Any]:
+        import_toml()
+        with open(file_path, mode='rb', encoding=self.toml_file_encoding) as toml_file:
+            if sys.version_info < (3, 11):
+                return tomlkit.load(toml_file)
+            return tomllib.load(toml_file)
+
+
+class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
+    """
+    A source class that loads variables from a yaml file
+    """
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        yaml_file: PathType | None = DEFAULT_PATH,
+        yaml_file_encoding: str | None = None,
+    ):
+        self.yaml_file_path = yaml_file if yaml_file != DEFAULT_PATH else settings_cls.model_config.get('yaml_file')
+        self.yaml_file_encoding = (
+            yaml_file_encoding
+            if yaml_file_encoding is not None
+            else settings_cls.model_config.get('yaml_file_encoding')
+        )
+        self.yaml_data = self._read_files(self.yaml_file_path)
+        super().__init__(settings_cls, self.yaml_data)
+
+    def _read_file(self, file_path: Path) -> dict[str, Any]:
+        import_yaml()
+        with open(file_path, encoding=self.yaml_file_encoding) as yaml_file:
+            return yaml.safe_load(yaml_file)
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:

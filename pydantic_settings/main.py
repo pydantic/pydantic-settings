@@ -14,6 +14,7 @@ from .sources import (
     DotenvType,
     EnvSettingsSource,
     InitSettingsSource,
+    PathType,
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
 )
@@ -28,6 +29,12 @@ class SettingsConfigDict(ConfigDict, total=False):
     env_nested_delimiter: str | None
     env_parse_none_str: str | None
     secrets_dir: str | Path | None
+    json_file: PathType | None
+    json_file_encoding: str | None
+    yaml_file: PathType | None
+    yaml_file_encoding: str | None
+    toml_file: PathType | None
+    toml_file_encoding: str | None
 
 
 # Extend `config_keys` by pydantic settings config keys to
@@ -195,6 +202,12 @@ class BaseSettings(BaseModel):
         env_ignore_empty=False,
         env_nested_delimiter=None,
         env_parse_none_str=None,
+        json_file=None,
+        json_file_encoding=None,
+        yaml_file=None,
+        yaml_file_encoding=None,
+        toml_file=None,
+        toml_file_encoding=None,
         secrets_dir=None,
         protected_namespaces=('model_', 'settings_'),
     )
