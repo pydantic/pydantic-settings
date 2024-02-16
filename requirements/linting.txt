@@ -4,19 +4,19 @@
 #
 #    pip-compile --output-file=requirements/linting.txt requirements/linting.in
 #
-black==23.3.0
+black==24.2.0
     # via -r requirements/linting.in
-cfgv==3.3.1
+cfgv==3.4.0
     # via pre-commit
-click==8.1.3
+click==8.1.7
     # via black
-distlib==0.3.6
+distlib==0.3.8
     # via virtualenv
-filelock==3.12.0
+filelock==3.13.1
     # via virtualenv
-identify==2.5.24
+identify==2.5.34
     # via pre-commit
-mypy==1.3.0
+mypy==1.8.0
     # via -r requirements/linting.in
 mypy-extensions==1.0.0
     # via
@@ -24,31 +24,31 @@ mypy-extensions==1.0.0
     #   mypy
 nodeenv==1.8.0
     # via pre-commit
-packaging==23.1
+packaging==23.2
     # via black
-pathspec==0.11.1
+pathspec==0.12.1
     # via black
-platformdirs==3.5.1
+platformdirs==4.2.0
     # via
     #   black
     #   virtualenv
-pre-commit==2.21.0
+pre-commit==3.6.1
     # via -r requirements/linting.in
-pyupgrade==3.3.2
+pyupgrade==3.15.0
     # via -r requirements/linting.in
 pyyaml==6.0.1
     # via
     #   -r requirements/linting.in
     #   pre-commit
-ruff==0.0.270
+ruff==0.2.1
     # via -r requirements/linting.in
-tokenize-rt==5.0.0
+tokenize-rt==5.2.0
     # via pyupgrade
 types-pyyaml==6.0.12.12
     # via -r requirements/linting.in
-typing-extensions==4.6.2
+typing-extensions==4.9.0
     # via mypy
-virtualenv==20.23.0
+virtualenv==20.25.0
     # via pre-commit
 
 # The following packages are considered to be unsafe in a requirements file:

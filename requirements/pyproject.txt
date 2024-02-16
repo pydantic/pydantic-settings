@@ -4,19 +4,19 @@
 #
 #    pip-compile --extra=toml --extra=yaml --output-file=requirements/pyproject.txt pyproject.toml
 #
-annotated-types==0.4.0
+annotated-types==0.6.0
     # via pydantic
-pydantic==2.5.2
+pydantic==2.6.1
     # via pydantic-settings (pyproject.toml)
-pydantic-core==2.14.5
+pydantic-core==2.16.2
     # via pydantic
-python-dotenv==0.21.1
+python-dotenv==1.0.1
     # via pydantic-settings (pyproject.toml)
 pyyaml==6.0.1
     # via pydantic-settings (pyproject.toml)
 tomlkit==0.12.3
     # via pydantic-settings (pyproject.toml)
-typing-extensions==4.6.2
+typing-extensions==4.9.0
     # via
     #   pydantic
     #   pydantic-core
