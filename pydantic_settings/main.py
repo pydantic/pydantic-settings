@@ -70,7 +70,7 @@ class BaseSettings(BaseModel):
             Otherwse, defaults to sys.argv[0].
         _cli_parse_args: The list of CLI arguments to parse. Defaults to None.
             If set to `True`, defaults to sys.argv[1:].
-        _cli_hide_none_type: Hide NoneType values in CLI help text. Defaults to `False`.
+        _cli_hide_none_type: Hide `None` values in CLI help text. Defaults to `False`.
         _cli_avoid_json: Avoid complex JSON objects in CLI help text. Defaults to `False`.
         _cli_enforce_required: Enforce required fields at the CLI. Defaults to `False`.
         _cli_use_class_docs_for_groups: Use class docstrings in CLI group help text instead of field descriptions.
