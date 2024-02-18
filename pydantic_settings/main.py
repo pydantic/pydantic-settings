@@ -34,7 +34,6 @@ class SettingsConfigDict(ConfigDict, total=False):
     yaml_file: PathType | None
     yaml_file_encoding: str | None
     toml_file: PathType | None
-    toml_file_encoding: str | None
 
 
 # Extend `config_keys` by pydantic settings config keys to
@@ -207,7 +206,6 @@ class BaseSettings(BaseModel):
         yaml_file=None,
         yaml_file_encoding=None,
         toml_file=None,
-        toml_file_encoding=None,
         secrets_dir=None,
         protected_namespaces=('model_', 'settings_'),
     )

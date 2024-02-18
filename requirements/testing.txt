@@ -32,7 +32,7 @@ pluggy==1.4.0
     # via pytest
 pygments==2.17.2
     # via rich
-pytest==8.0.0
+pytest==8.0.1
     # via
     #   -r requirements/testing.in
     #   pytest-examples
@@ -46,7 +46,7 @@ pytest-pretty==1.2.0
     # via -r requirements/testing.in
 rich==13.7.0
     # via pytest-pretty
-ruff==0.2.1
+ruff==0.2.2
     # via pytest-examples
 tomli==2.0.1
     # via

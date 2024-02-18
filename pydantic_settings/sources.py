@@ -24,14 +24,14 @@ if TYPE_CHECKING:
         import tomllib
     else:
         tomllib = None
-    import tomlkit
+    import tomli
     import yaml
 
     from pydantic_settings.main import BaseSettings
 else:
     yaml = None
     tomllib = None
-    tomlkit = None
+    tomli = None
 
 
 def import_yaml() -> None:
@@ -45,15 +45,15 @@ def import_yaml() -> None:
 
 
 def import_toml() -> None:
-    global tomlkit
+    global tomli
     global tomllib
     if sys.version_info < (3, 11):
-        if tomlkit is not None:
+        if tomli is not None:
             return
         try:
-            import tomlkit
+            import tomli
         except ImportError as e:
-            raise ImportError('tomlkit is not installed, run `pip install pydantic-settings[toml]`') from e
+            raise ImportError('tomli is not installed, run `pip install pydantic-settings[toml]`') from e
     else:
         if tomllib is not None:
             return
@@ -758,22 +758,16 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         self,
         settings_cls: type[BaseSettings],
         toml_file: PathType | None = DEFAULT_PATH,
-        toml_file_encoding: str | None = None,
     ):
         self.toml_file_path = toml_file if toml_file != DEFAULT_PATH else settings_cls.model_config.get('toml_file')
-        self.toml_file_encoding = (
-            toml_file_encoding
-            if toml_file_encoding is not None
-            else settings_cls.model_config.get('toml_file_encoding')
-        )
         self.toml_data = self._read_files(self.toml_file_path)
         super().__init__(settings_cls, self.toml_data)
 
     def _read_file(self, file_path: Path) -> dict[str, Any]:
         import_toml()
-        with open(file_path, mode='rb', encoding=self.toml_file_encoding) as toml_file:
+        with open(file_path, mode='rb') as toml_file:
             if sys.version_info < (3, 11):
-                return tomlkit.load(toml_file)
+                return tomli.load(toml_file)
             return tomllib.load(toml_file)
 
 

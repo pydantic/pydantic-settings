@@ -14,7 +14,7 @@ python-dotenv==1.0.1
     # via pydantic-settings (pyproject.toml)
 pyyaml==6.0.1
     # via pydantic-settings (pyproject.toml)
-tomlkit==0.12.3
+tomli==2.0.1
     # via pydantic-settings (pyproject.toml)
 typing-extensions==4.9.0
     # via

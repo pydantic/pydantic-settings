@@ -49,9 +49,9 @@ try:
 except ImportError:
     yaml = None
 try:
-    import tomlkit
+    import tomli
 except ImportError:
-    tomlkit = None
+    tomli = None
 
 
 class SimpleSettings(BaseSettings):
@@ -1187,34 +1187,6 @@ def test_yaml_not_installed(tmp_path):
         Settings()
 
 
-@pytest.mark.skipif(sys.version_info >= (3, 11) or tomlkit, reason='tomlkit/tomllib is installed')
-def test_toml_not_installed(tmp_path):
-    p = tmp_path / '.env'
-    p.write_text(
-        """
-    foobar = "Hello"
-    """
-    )
-
-    class Settings(BaseSettings):
-        foobar: str
-        model_config = SettingsConfigDict(toml_file=p)
-
-        @classmethod
-        def settings_customise_sources(
-            cls,
-            settings_cls: Type[BaseSettings],
-            init_settings: PydanticBaseSettingsSource,
-            env_settings: PydanticBaseSettingsSource,
-            dotenv_settings: PydanticBaseSettingsSource,
-            file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
-            return (TomlConfigSettingsSource(settings_cls),)
-
-    with pytest.raises(ImportError, match=r'^tomlkit is not installed, run `pip install pydantic-settings\[toml\]`$'):
-        Settings()
-
-
 def test_alias_set(env):
     class Settings(BaseSettings):
         foo: str = Field('default foo', validation_alias='foo_env')
@@ -2159,7 +2131,7 @@ def test_yaml_no_file():
     assert s.model_dump() == {}
 
 
-@pytest.mark.skipif(sys.version_info <= (3, 11) and tomlkit is None, reason='tomlkit/tomllib is not installed')
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
 def test_toml_file(tmp_path):
     p = tmp_path / '.env'
     p.write_text(
@@ -2195,7 +2167,7 @@ def test_toml_file(tmp_path):
     assert s.nested.nested_field == 'world!'
 
 
-@pytest.mark.skipif(sys.version_info <= (3, 11) and tomlkit is None, reason='tomlkit/tomllib is not installed')
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
 def test_toml_no_file():
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(toml_file=None)
@@ -2215,7 +2187,7 @@ def test_toml_no_file():
     assert s.model_dump() == {}
 
 
-@pytest.mark.skipif(sys.version_info <= (3, 11) and tomlkit is None, reason='tomlkit/tomllib is not installed')
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
 def test_multiple_file_toml(tmp_path):
     p1 = tmp_path / '.env.toml1'
     p2 = tmp_path / '.env.toml2'
