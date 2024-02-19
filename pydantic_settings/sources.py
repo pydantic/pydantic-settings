@@ -683,9 +683,10 @@ class DotEnvSettingsSource(EnvSettingsSource):
 
     def __call__(self) -> dict[str, Any]:
         data: dict[str, Any] = super().__call__()
+        is_extra_allowed = self.config.get('extra') != 'forbid'
 
         # As `extra` config is allowed in dotenv settings source, We have to
-        # update data with extra env variabels from dotenv file.
+        # update data with extra env variables from dotenv file.
         for env_name, env_value in self.env_vars.items():
             if not env_value:
                 continue
@@ -696,7 +697,12 @@ class DotEnvSettingsSource(EnvSettingsSource):
                         env_used = True
                         break
             if not env_used:
-                data[env_name] = env_value
+                if is_extra_allowed and env_name.startswith(self.env_prefix):
+                    # env_prefix should be respected and removed from the env_name
+                    normalized_env_name = env_name[len(self.env_prefix) :]
+                    data[normalized_env_name] = env_value
+                else:
+                    data[env_name] = env_value
         return data
 
     def __repr__(self) -> str:
