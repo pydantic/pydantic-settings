@@ -165,7 +165,7 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         return None, '', False
 
     def __call__(self) -> dict[str, Any]:
-        return TypeAdapter(Dict[str, Any]).dump_python(self.init_kwargs)
+        return TypeAdapter(Dict[str, Any]).dump_python(self.init_kwargs, by_alias=True)
 
     def __repr__(self) -> str:
         return f'InitSettingsSource(init_kwargs={self.init_kwargs!r})'
