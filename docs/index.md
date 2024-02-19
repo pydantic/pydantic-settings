@@ -539,7 +539,7 @@ docker service create --name pydantic-with-secrets --secret my_secret_data pydan
 
 Other settings sources are available for common configuration files:
 
-- `TomlConfigSettingsSource` using `toml_file` and toml_file_encoding arguments
+- `TomlConfigSettingsSource` using `toml_file` argument
 - `YamlConfigSettingsSource` using `yaml_file` and yaml_file_encoding arguments
 - `JsonConfigSettingsSource` using `json_file` and `json_file_encoding` arguments
 
@@ -570,9 +570,7 @@ class Nested(BaseModel):
 class Settings(BaseSettings):
     foobar: str
     nested: Nested
-    model_config = SettingsConfigDict(
-        toml_file='config.toml', toml_file_encoding='utf-8'
-    )
+    model_config = SettingsConfigDict(toml_file='config.toml')
 
     @classmethod
     def settings_customise_sources(
