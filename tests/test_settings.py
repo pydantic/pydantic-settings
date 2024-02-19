@@ -2355,16 +2355,13 @@ def test_dotenv_with_alias_and_env_prefix_nested(tmp_path):
     s = Settings()
     assert s.model_dump() == {'foo': '', 'bar_alias': '0', 'nested_alias': {'a': '1', 'b': '2'}}
 
+
 def test_dotenv_with_extra_and_env_prefix(tmp_path):
     p = tmp_path / '.env'
     p.write_text('xxx__foo=1\nxxx__extra_var=extra_value')
 
     class Settings(BaseSettings):
-        model_config = SettingsConfigDict(
-            extra='allow',
-            env_file=p,
-            env_prefix='xxx__'
-        )
+        model_config = SettingsConfigDict(extra='allow', env_file=p, env_prefix='xxx__')
 
         foo: str = ''
 
