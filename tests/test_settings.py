@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar, Union
+from abc import ABC, abstractmethod
 
 import pytest
 from annotated_types import MinLen
@@ -682,6 +683,59 @@ def test_env_deep_override(env):
 
     s = Settings(v0='0', sub_model={'v1': 'init-v1', 'v2': b'init-v2', 'v3': 3, 'deep': DeepSubModel(v4='init-v4')})
     assert s.model_dump() == s_final
+
+
+def test_env_deep_override_copy_by_reference(env):
+    class BaseAuth(ABC, BaseModel):
+        @property
+        @abstractmethod
+        def token(self) -> str:
+            """returns authentication token for XYZ"""
+            pass
+
+    class CustomAuth(BaseAuth):
+        url: HttpUrl
+        username: str
+        password: SecretStr
+
+        _token: SecretStr
+
+        @property
+        def token(self):
+            ...  # (re)fetch token
+            return self._token.get_secret_value()
+
+
+    class Settings(BaseSettings, env_nested_delimiter='__'):
+        auth: BaseAuth
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls,
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings):
+            return env_settings, init_settings, file_secret_settings
+
+    auth_orig = CustomAuth(
+            url='https://127.0.0.1',
+            username='some-username',
+            password='some-password'
+        )
+
+    s = Settings(auth=auth_orig)
+    assert s.auth is auth_orig
+
+
+    env.set('AUTH__URL', 'https://123.4.5.6')
+
+    s = Settings(auth=auth_orig)
+    assert s.auth is not auth_orig
+    assert s.auth.username == auth_orig.username
+    assert s.auth.url == HttpUrl('https://123.4.5.6')
+    assert s.auth.password is auth_orig.password
 
 
 def test_config_file_settings_nornir(env):
