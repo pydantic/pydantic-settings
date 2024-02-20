@@ -733,6 +733,7 @@ def test_env_deep_override_copy_by_reference(env):
 
     s = Settings(auth=auth_orig)
     assert s.auth is not auth_orig
+    assert type(s.auth) is CustomAuth
     assert s.auth.username == auth_orig.username
     assert s.auth.url == HttpUrl('https://123.4.5.6')
     assert s.auth.password is auth_orig.password
