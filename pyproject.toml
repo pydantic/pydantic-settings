@@ -45,6 +45,10 @@ dependencies = [
 ]
 dynamic = ['version']
 
+[project.optional-dependencies]
+yaml = ["pyyaml>=6.0.1"]
+toml = ["tomli>=2.0.1"]
+
 [project.urls]
 Homepage = 'https://github.com/pydantic/pydantic-settings'
 Funding = 'https://github.com/sponsors/samuelcolvin'

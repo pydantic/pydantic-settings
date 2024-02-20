@@ -2,6 +2,7 @@ from __future__ import annotations as _annotations
 
 import json
 import os
+import sys
 import warnings
 from abc import ABC, abstractmethod
 from collections import deque
@@ -10,24 +11,67 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Sequence, Tuple, Union, cast
 
 from dotenv import dotenv_values
-from pydantic import AliasChoices, AliasPath, BaseModel, Json, TypeAdapter
-from pydantic._internal._typing_extra import origin_is_union
-from pydantic._internal._utils import deep_update, lenient_issubclass
+from pydantic import AliasChoices, AliasPath, BaseModel, Json
+from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union
+from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
 from pydantic.fields import FieldInfo
 from typing_extensions import get_args, get_origin
 
 from pydantic_settings.utils import path_type_label
 
 if TYPE_CHECKING:
+    if sys.version_info >= (3, 11):
+        import tomllib
+    else:
+        tomllib = None
+    import tomli
+    import yaml
+
     from pydantic_settings.main import BaseSettings
+else:
+    yaml = None
+    tomllib = None
+    tomli = None
+
+
+def import_yaml() -> None:
+    global yaml
+    if yaml is not None:
+        return
+    try:
+        import yaml
+    except ImportError as e:
+        raise ImportError('PyYAML is not installed, run `pip install pydantic-settings[yaml]`') from e
+
+
+def import_toml() -> None:
+    global tomli
+    global tomllib
+    if sys.version_info < (3, 11):
+        if tomli is not None:
+            return
+        try:
+            import tomli
+        except ImportError as e:
+            raise ImportError('tomli is not installed, run `pip install pydantic-settings[toml]`') from e
+    else:
+        if tomllib is not None:
+            return
+        import tomllib
 
 
 DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
+PathType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
+DEFAULT_PATH: PathType = Path('')
 
 # This is used as default value for `_env_file` in the `BaseSettings` class and
 # `env_file` in `DotEnvSettingsSource` so the default can be distinguished from `None`.
 # See the docstring of `BaseSettings` for more details.
 ENV_FILE_SENTINEL: DotenvType = Path('')
+
+
+class EnvNoneType(str):
+    pass
 
 
 class SettingsError(ValueError):
@@ -134,12 +178,16 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
         env_ignore_empty: bool | None = None,
+        env_parse_none_str: str | None = None,
     ) -> None:
         super().__init__(settings_cls)
         self.case_sensitive = case_sensitive if case_sensitive is not None else self.config.get('case_sensitive', False)
         self.env_prefix = env_prefix if env_prefix is not None else self.config.get('env_prefix', '')
         self.env_ignore_empty = (
             env_ignore_empty if env_ignore_empty is not None else self.config.get('env_ignore_empty', False)
+        )
+        self.env_parse_none_str = (
+            env_parse_none_str if env_parse_none_str is not None else self.config.get('env_parse_none_str')
         )
 
     def _apply_case_sensitive(self, value: str) -> str:
@@ -180,6 +228,8 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                         )
             else:  # string validation alias
                 field_info.append((v_alias, self._apply_case_sensitive(v_alias), False))
+        elif origin_is_union(get_origin(field.annotation)) and _union_is_complex(field.annotation, field.metadata):
+            field_info.append((field_name, self._apply_case_sensitive(self.env_prefix + field_name), True))
         else:
             field_info.append((field_name, self._apply_case_sensitive(self.env_prefix + field_name), False))
 
@@ -244,6 +294,20 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
         return values
 
+    def _replace_env_none_type_values(self, field_value: dict[str, Any]) -> dict[str, Any]:
+        """
+        Recursively parse values that are of "None" type(EnvNoneType) to `None` type(None).
+        """
+        values: dict[str, Any] = {}
+
+        for key, value in field_value.items():
+            if not isinstance(value, EnvNoneType):
+                values[key] = value if not isinstance(value, dict) else self._replace_env_none_type_values(value)
+            else:
+                values[key] = None
+
+        return values
+
     def __call__(self) -> dict[str, Any]:
         data: dict[str, Any] = {}
 
@@ -263,6 +327,11 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                 ) from e
 
             if field_value is not None:
+                if self.env_parse_none_str is not None:
+                    if isinstance(field_value, dict):
+                        field_value = self._replace_env_none_type_values(field_value)
+                    elif isinstance(field_value, EnvNoneType):
+                        field_value = None
                 if (
                     not self.case_sensitive
                     and lenient_issubclass(field.annotation, BaseModel)
@@ -287,8 +356,9 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
         env_ignore_empty: bool | None = None,
+        env_parse_none_str: str | None = None,
     ) -> None:
-        super().__init__(settings_cls, case_sensitive, env_prefix, env_ignore_empty)
+        super().__init__(settings_cls, case_sensitive, env_prefix, env_ignore_empty, env_parse_none_str)
         self.secrets_dir = secrets_dir if secrets_dir is not None else self.config.get('secrets_dir')
 
     def __call__(self) -> dict[str, Any]:
@@ -376,8 +446,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         env_prefix: str | None = None,
         env_nested_delimiter: str | None = None,
         env_ignore_empty: bool | None = None,
+        env_parse_none_str: str | None = None,
     ) -> None:
-        super().__init__(settings_cls, case_sensitive, env_prefix, env_ignore_empty)
+        super().__init__(settings_cls, case_sensitive, env_prefix, env_ignore_empty, env_parse_none_str)
         self.env_nested_delimiter = (
             env_nested_delimiter if env_nested_delimiter is not None else self.config.get('env_nested_delimiter')
         )
@@ -386,7 +457,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         self.env_vars = self._load_env_vars()
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
-        return parse_env_vars(os.environ, self.case_sensitive, self.env_ignore_empty)
+        return parse_env_vars(os.environ, self.case_sensitive, self.env_ignore_empty, self.env_parse_none_str)
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         """
@@ -449,16 +520,13 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             # simplest case, field is not complex, we only need to add the value if it was found
             return value
 
-    def _union_is_complex(self, annotation: type[Any] | None, metadata: list[Any]) -> bool:
-        return any(_annotation_is_complex(arg, metadata) for arg in get_args(annotation))
-
     def _field_is_complex(self, field: FieldInfo) -> tuple[bool, bool]:
         """
         Find out if a field is complex, and if so whether JSON errors should be ignored
         """
         if self.field_is_complex(field):
             allow_parse_failure = False
-        elif origin_is_union(get_origin(field.annotation)) and self._union_is_complex(field.annotation, field.metadata):
+        elif origin_is_union(get_origin(field.annotation)) and _union_is_complex(field.annotation, field.metadata):
             allow_parse_failure = True
         else:
             return False, False
@@ -466,7 +534,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         return True, allow_parse_failure
 
     @staticmethod
-    def next_field(field: FieldInfo | None, key: str) -> FieldInfo | None:
+    def next_field(field: FieldInfo | Any | None, key: str) -> FieldInfo | None:
         """
         Find the field in a sub model by key(env name)
 
@@ -495,11 +563,17 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         Returns:
             Field if it finds the next field otherwise `None`.
         """
-        if not field or origin_is_union(get_origin(field.annotation)):
-            # no support for Unions of complex BaseSettings fields
+        if not field:
             return None
-        elif field.annotation and hasattr(field.annotation, 'model_fields') and field.annotation.model_fields.get(key):
-            return field.annotation.model_fields[key]
+
+        annotation = field.annotation if isinstance(field, FieldInfo) else field
+        if origin_is_union(get_origin(annotation)) or isinstance(annotation, WithArgsTypes):
+            for type_ in get_args(annotation):
+                type_has_key = EnvSettingsSource.next_field(type_, key)
+                if type_has_key:
+                    return type_has_key
+        elif is_model_class(annotation) and annotation.model_fields.get(key):
+            return annotation.model_fields[key]
 
         return None
 
@@ -515,7 +589,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             env_vars: Environment variables.
 
         Returns:
-            A dictionaty contains extracted values from nested env values.
+            A dictionary contains extracted values from nested env values.
         """
         prefixes = [
             f'{env_name}{self.env_nested_delimiter}' for _, env_name, _ in self._extract_field_info(field, field_name)
@@ -570,12 +644,15 @@ class DotEnvSettingsSource(EnvSettingsSource):
         env_prefix: str | None = None,
         env_nested_delimiter: str | None = None,
         env_ignore_empty: bool | None = None,
+        env_parse_none_str: str | None = None,
     ) -> None:
         self.env_file = env_file if env_file != ENV_FILE_SENTINEL else settings_cls.model_config.get('env_file')
         self.env_file_encoding = (
             env_file_encoding if env_file_encoding is not None else settings_cls.model_config.get('env_file_encoding')
         )
-        super().__init__(settings_cls, case_sensitive, env_prefix, env_nested_delimiter, env_ignore_empty)
+        super().__init__(
+            settings_cls, case_sensitive, env_prefix, env_nested_delimiter, env_ignore_empty, env_parse_none_str
+        )
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
         return self._read_env_files()
@@ -598,6 +675,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
                         encoding=self.env_file_encoding,
                         case_sensitive=self.case_sensitive,
                         ignore_empty=self.env_ignore_empty,
+                        parse_none_str=self.env_parse_none_str,
                     )
                 )
 
@@ -605,23 +683,26 @@ class DotEnvSettingsSource(EnvSettingsSource):
 
     def __call__(self) -> dict[str, Any]:
         data: dict[str, Any] = super().__call__()
-
-        data_lower_keys: list[str] = []
-        if not self.case_sensitive:
-            data_lower_keys = [x.lower() for x in data.keys()]
+        is_extra_allowed = self.config.get('extra') != 'forbid'
 
         # As `extra` config is allowed in dotenv settings source, We have to
-        # update data with extra env variabels from dotenv file.
+        # update data with extra env variables from dotenv file.
         for env_name, env_value in self.env_vars.items():
-            if env_name.startswith(self.env_prefix) and env_value is not None:
-                env_name_without_prefix = env_name[self.env_prefix_len :]
-                first_key, *_ = env_name_without_prefix.split(self.env_nested_delimiter)
-
-                if (data_lower_keys and first_key not in data_lower_keys) or (
-                    not data_lower_keys and first_key not in data
-                ):
-                    data[first_key] = env_value
-
+            if not env_value:
+                continue
+            env_used = False
+            for field_name, field in self.settings_cls.model_fields.items():
+                for _, field_env_name, _ in self._extract_field_info(field, field_name):
+                    if env_name.startswith(field_env_name):
+                        env_used = True
+                        break
+            if not env_used:
+                if is_extra_allowed and env_name.startswith(self.env_prefix):
+                    # env_prefix should be respected and removed from the env_name
+                    normalized_env_name = env_name[len(self.env_prefix) :]
+                    data[normalized_env_name] = env_value
+                else:
+                    data[env_name] = env_value
         return data
 
     def __repr__(self) -> str:
@@ -631,14 +712,116 @@ class DotEnvSettingsSource(EnvSettingsSource):
         )
 
 
+class ConfigFileSourceMixin(ABC):
+    def _read_files(self, files: PathType | None) -> dict[str, Any]:
+        if files is None:
+            return {}
+        if isinstance(files, (str, os.PathLike)):
+            files = [files]
+        vars: dict[str, Any] = {}
+        for file in files:
+            file_path = Path(file).expanduser()
+            if file_path.is_file():
+                vars.update(self._read_file(file_path))
+        return vars
+
+    @abstractmethod
+    def _read_file(self, path: Path) -> dict[str, Any]:
+        pass
+
+
+class JsonConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
+    """
+    A source class that loads variables from a JSON file
+    """
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        json_file: PathType | None = DEFAULT_PATH,
+        json_file_encoding: str | None = None,
+    ):
+        self.json_file_path = json_file if json_file != DEFAULT_PATH else settings_cls.model_config.get('json_file')
+        self.json_file_encoding = (
+            json_file_encoding
+            if json_file_encoding is not None
+            else settings_cls.model_config.get('json_file_encoding')
+        )
+        self.json_data = self._read_files(self.json_file_path)
+        super().__init__(settings_cls, self.json_data)
+
+    def _read_file(self, file_path: Path) -> dict[str, Any]:
+        with open(file_path, encoding=self.json_file_encoding) as json_file:
+            return json.load(json_file)
+
+
+class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
+    """
+    A source class that loads variables from a JSON file
+    """
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        toml_file: PathType | None = DEFAULT_PATH,
+    ):
+        self.toml_file_path = toml_file if toml_file != DEFAULT_PATH else settings_cls.model_config.get('toml_file')
+        self.toml_data = self._read_files(self.toml_file_path)
+        super().__init__(settings_cls, self.toml_data)
+
+    def _read_file(self, file_path: Path) -> dict[str, Any]:
+        import_toml()
+        with open(file_path, mode='rb') as toml_file:
+            if sys.version_info < (3, 11):
+                return tomli.load(toml_file)
+            return tomllib.load(toml_file)
+
+
+class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
+    """
+    A source class that loads variables from a yaml file
+    """
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        yaml_file: PathType | None = DEFAULT_PATH,
+        yaml_file_encoding: str | None = None,
+    ):
+        self.yaml_file_path = yaml_file if yaml_file != DEFAULT_PATH else settings_cls.model_config.get('yaml_file')
+        self.yaml_file_encoding = (
+            yaml_file_encoding
+            if yaml_file_encoding is not None
+            else settings_cls.model_config.get('yaml_file_encoding')
+        )
+        self.yaml_data = self._read_files(self.yaml_file_path)
+        super().__init__(settings_cls, self.yaml_data)
+
+    def _read_file(self, file_path: Path) -> dict[str, Any]:
+        import_yaml()
+        with open(file_path, encoding=self.yaml_file_encoding) as yaml_file:
+            return yaml.safe_load(yaml_file)
+
+
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
     return key if case_sensitive else key.lower()
 
 
+def _parse_env_none_str(value: str | None, parse_none_str: str | None = None) -> str | None | EnvNoneType:
+    return value if not (value == parse_none_str and parse_none_str is not None) else EnvNoneType(value)
+
+
 def parse_env_vars(
-    env_vars: Mapping[str, str | None], case_sensitive: bool = False, ignore_empty: bool = False
+    env_vars: Mapping[str, str | None],
+    case_sensitive: bool = False,
+    ignore_empty: bool = False,
+    parse_none_str: str | None = None,
 ) -> Mapping[str, str | None]:
-    return {_get_env_var_key(k, case_sensitive): v for k, v in env_vars.items() if not (ignore_empty and v == '')}
+    return {
+        _get_env_var_key(k, case_sensitive): _parse_env_none_str(v, parse_none_str)
+        for k, v in env_vars.items()
+        if not (ignore_empty and v == '')
+    }
 
 
 def read_env_file(
@@ -647,9 +830,10 @@ def read_env_file(
     encoding: str | None = None,
     case_sensitive: bool = False,
     ignore_empty: bool = False,
+    parse_none_str: str | None = None,
 ) -> Mapping[str, str | None]:
     file_vars: dict[str, str | None] = dotenv_values(file_path, encoding=encoding or 'utf8')
-    return parse_env_vars(file_vars, case_sensitive, ignore_empty)
+    return parse_env_vars(file_vars, case_sensitive, ignore_empty, parse_none_str)
 
 
 def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
@@ -671,3 +855,7 @@ def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:
     return lenient_issubclass(annotation, (BaseModel, Mapping, Sequence, tuple, set, frozenset, deque)) or is_dataclass(
         annotation
     )
+
+
+def _union_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
+    return any(_annotation_is_complex(arg, metadata) for arg in get_args(annotation))
