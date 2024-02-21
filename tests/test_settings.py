@@ -3,10 +3,10 @@ import json
 import os
 import sys
 import uuid
+from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar, Union
-from abc import ABC, abstractmethod
 
 import pytest
 from annotated_types import MinLen
@@ -710,19 +710,11 @@ def test_env_deep_override_copy_by_reference(env):
 
         @classmethod
         def settings_customise_sources(
-            cls,
-            settings_cls,
-            init_settings,
-            env_settings,
-            dotenv_settings,
-            file_secret_settings):
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
             return env_settings, init_settings, file_secret_settings
 
-    auth_orig = CustomAuth(
-            url='https://127.0.0.1',
-            username='some-username',
-            password='some-password'
-        )
+    auth_orig = CustomAuth(url='https://127.0.0.1', username='some-username', password='some-password')
 
     s = Settings(auth=auth_orig)
     assert s.auth is auth_orig
