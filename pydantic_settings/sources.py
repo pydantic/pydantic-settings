@@ -157,10 +157,10 @@ class InitSettingsSource(PydanticBaseSettingsSource):
     """
 
     def __init__(
-            self,
-            settings_cls: type[BaseSettings],
-            init_kwargs: dict[str, Any],
-            init_ignore_none: bool | None = None,
+        self,
+        settings_cls: type[BaseSettings],
+        init_kwargs: dict[str, Any],
+        init_ignore_none: bool | None = None,
     ):
         self.init_kwargs = {k: v for k, v in init_kwargs.items() if v is not None} if init_ignore_none else init_kwargs
         super().__init__(settings_cls)
