@@ -76,6 +76,12 @@ def test_sub_env_override(env):
     assert s.apple == 'goodbye'
 
 
+def test_sub_env_init_ignore_none(env):
+    env.set('apple', 'hello')
+    s = SimpleSettings(apple=None, _init_ignore_none=True)
+    assert s.apple == 'hello'
+
+
 def test_sub_env_missing():
     with pytest.raises(ValidationError) as exc_info:
         SimpleSettings()

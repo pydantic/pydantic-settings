@@ -28,6 +28,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     env_ignore_empty: bool
     env_nested_delimiter: str | None
     env_parse_none_str: str | None
+    init_ignore_none: bool
     secrets_dir: str | Path | None
     json_file: PathType | None
     json_file_encoding: str | None
@@ -65,6 +66,7 @@ class BaseSettings(BaseModel):
         _env_nested_delimiter: The nested env values delimiter. Defaults to `None`.
         _env_parse_none_str: The env string value that should be parsed (e.g. "null", "void", "None", etc.)
             into `None` type(None). Defaults to `None` type(None), which means no parsing should occur.
+        _init_ignore_none: Ignore init variables where the value is None. Default to `False`.
         _secrets_dir: The secret files directory. Defaults to `None`.
     """
 
@@ -78,6 +80,7 @@ class BaseSettings(BaseModel):
         _env_nested_delimiter: str | None = None,
         _env_parse_none_str: str | None = None,
         _secrets_dir: str | Path | None = None,
+        _init_ignore_none: bool | None = None,
         **values: Any,
     ) -> None:
         # Uses something other than `self` the first arg to allow "self" as a settable attribute
@@ -91,6 +94,7 @@ class BaseSettings(BaseModel):
                 _env_ignore_empty=_env_ignore_empty,
                 _env_nested_delimiter=_env_nested_delimiter,
                 _env_parse_none_str=_env_parse_none_str,
+                _init_ignore_none=_init_ignore_none,
                 _secrets_dir=_secrets_dir,
             )
         )
@@ -129,6 +133,7 @@ class BaseSettings(BaseModel):
         _env_ignore_empty: bool | None = None,
         _env_nested_delimiter: str | None = None,
         _env_parse_none_str: str | None = None,
+        _init_ignore_none: bool | None = None,
         _secrets_dir: str | Path | None = None,
     ) -> dict[str, Any]:
         # Determine settings config values
@@ -149,10 +154,13 @@ class BaseSettings(BaseModel):
         env_parse_none_str = (
             _env_parse_none_str if _env_parse_none_str is not None else self.model_config.get('env_parse_none_str')
         )
+        init_ignore_none = (
+            _init_ignore_none if _init_ignore_none is not None else self.model_config.get('init_ignore_none')
+        )
         secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
         # Configure built-in sources
-        init_settings = InitSettingsSource(self.__class__, init_kwargs=init_kwargs)
+        init_settings = InitSettingsSource(self.__class__, init_kwargs=init_kwargs, init_ignore_none=init_ignore_none)
         env_settings = EnvSettingsSource(
             self.__class__,
             case_sensitive=case_sensitive,

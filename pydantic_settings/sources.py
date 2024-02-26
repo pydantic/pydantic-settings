@@ -156,8 +156,13 @@ class InitSettingsSource(PydanticBaseSettingsSource):
     Source class for loading values provided during settings class initialization.
     """
 
-    def __init__(self, settings_cls: type[BaseSettings], init_kwargs: dict[str, Any]):
-        self.init_kwargs = init_kwargs
+    def __init__(
+            self,
+            settings_cls: type[BaseSettings],
+            init_kwargs: dict[str, Any],
+            init_ignore_none: bool | None = None,
+    ):
+        self.init_kwargs = {k: v for k, v in init_kwargs.items() if v is not None} if init_ignore_none else init_kwargs
         super().__init__(settings_cls)
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
