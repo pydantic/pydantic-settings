@@ -563,15 +563,6 @@ defined in argparse. In the above example, we parsed our args from the `['--help
 Lastly, a CLI settings source is always [**the topmost source**](#field-value-priority), and does not support [changing
 its priority](#changing-priority).
 
-#### Enable CLI Argument Parsing
-
-`cli_parse_args: Optional[Union[List[str], bool]] = None`
-
-* Default = `None`
-* If `True`, parse from `sys.argv[1:]`
-* If `List[str]`, parse from `List[str]`
-* If `False` or `None`, do not parse CLI arguments
-
 #### Lists
 
 CLI argument parsing of lists supports intermixing of any of the below three styles:
@@ -641,7 +632,7 @@ subcommands must be a valid type derived from the pydantic `BaseModel` class.
     subcommands](https://docs.python.org/3/library/argparse.html#sub-commands).
 
 ```py test="skip"
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from pydantic_settings import (
     BaseSettings,
@@ -650,54 +641,54 @@ from pydantic_settings import (
 )
 
 
-class FooPlugin(BaseModel, use_attribute_docstrings=True):
+class FooPlugin(BaseModel):
     """git-plugins-foo - Extra deep foo plugin command"""
 
-    my_feature: bool = False
-    """Enable my feature on foo plugin"""
+    my_feature: bool = Field(
+        default=False, description='Enable my feature on foo plugin'
+    )
 
 
-class BarPlugin(BaseModel, use_attribute_docstrings=True):
+class BarPlugin(BaseModel):
     """git-plugins-bar - Extra deep bar plugin command"""
 
-    my_feature: bool = False
-    """Enable my feature on bar plugin"""
+    my_feature: bool = Field(
+        default=False, description='Enable my feature on bar plugin'
+    )
 
 
-class Plugins(BaseModel, use_attribute_docstrings=True):
+class Plugins(BaseModel):
     """git-plugins - Fake plugins for GIT"""
 
-    foo: CliSubCommand[FooPlugin]
-    """Foo is fake plugin"""
+    foo: CliSubCommand[FooPlugin] = Field(description='Foo is fake plugin')
 
-    bar: CliSubCommand[BarPlugin]
-    """Bar is also a fake plugin"""
+    bar: CliSubCommand[BarPlugin] = Field(description='Bar is also a fake plugin')
 
 
-class Clone(BaseModel, use_attribute_docstrings=True):
+class Clone(BaseModel):
     """git-clone - Clone a repository into a new directory"""
 
-    repository: CliPositionalArg[str]
-    """The repository to clone"""
+    repository: CliPositionalArg[str] = Field(description='The repository to clone')
 
-    directory: CliPositionalArg[str]
-    """The directory to clone into"""
+    directory: CliPositionalArg[str] = Field(description='The directory to clone into')
 
-    local: bool = False
-    """When the resposity to clone from is on a local machine, bypass ..."""
+    local: bool = Field(
+        default=False,
+        description='When the resposity to clone from is on a local machine, bypass ...',
+    )
 
 
-class Git(BaseSettings, use_attribute_docstrings=True):
+class Git(BaseSettings, cli_prog_name='git'):
     """git - The stupid content tracker"""
 
-    clone: CliSubCommand[Clone]
-    """Clone a repository into a new directory"""
+    clone: CliSubCommand[Clone] = Field(
+        description='Clone a repository into a new directory'
+    )
 
-    plugins: CliSubCommand[Plugins]
-    """Fake GIT plugion commands"""
+    plugins: CliSubCommand[Plugins] = Field(description='Fake GIT plugin commands')
 
 
-Git(_cli_prog_name='git', _cli_parse_args=['--help'])
+Git(_cli_parse_args=['--help'])
 """
 usage: git [-h] {clone,plugins} ...
 
@@ -709,11 +700,11 @@ options:
 subcommands:
   {clone,plugins}
     clone               Clone a repository into a new directory
-    plugins             Fake GIT plugion commands
+    plugins             Fake GIT plugin commands
 """
 
 
-Git(_cli_prog_name='git', _cli_parse_args=['clone', '--help'])
+Git(_cli_parse_args=['clone', '--help'])
 """
 usage: git clone [-h] [--local bool] [--shared bool] REPOSITORY DIRECTORY
 
@@ -729,7 +720,7 @@ options:
 """
 
 
-Git(_cli_prog_name='git', _cli_parse_args=['plugins', 'bar', '--help'])
+Git(_cli_parse_args=['plugins', 'bar', '--help'])
 """
 usage: git plugins bar [-h] [--my_feature bool]
 
@@ -753,64 +744,49 @@ sources provides the required value.
 
 However, if your use case [aligns more with #2](#command-line-support), using Pydantic models to define CLIs, you will
 likely want required fields to be _strictly required at the CLI_. We can enable this behavior by using the
-`cli_enforce_required` flag as shown below.
+`cli_enforce_required`.
 
-```py test="skip"
+```py
 import os
+
+from pydantic import Field
 
 from pydantic_settings import BaseSettings
 
 
-class Settings(BaseSettings, use_attribute_docstrings=True):
-    my_required_field: str
-    """a top level required field"""
+class Settings(BaseSettings, cli_enforce_required=True):
+    my_required_field: str = Field(description='a top level required field')
 
 
 os.environ['MY_REQUIRED_FIELD'] = 'hello from environment'
 
-print(Settings(_cli_parse_args=[], _cli_enforce_required=False).model_dump())
-"""
-{'my_required_field': 'hello from environment'}
-"""
-
-print(Settings(_cli_parse_args=[], _cli_enforce_required=True).model_dump())
-"""
+try:
+    print(Settings(_cli_parse_args=[]).model_dump())
+    """
 usage: example.py [-h] --my_required_field str
 example.py: error: the following arguments are required: --my_required_field
 """
+except SystemExit:
+    pass
 ```
-
-`cli_enforce_required: Optional[bool] = None`
-
-* Default = `None`
-* If `True`, strictly enforce required fields at the CLI
-* If `False` or `None`, do not enforce required fields at the CLI
 
 #### Hide None Type Values
 
-Hide `None` values from the CLI help text.
+Hide `None` values from the CLI help text by enabling `cli_hide_none_type`.
 
-```py test="skip"
+```py
 from typing import Optional
 
-from pydantic_settings import BaseSettings
+from pydantic import Field
+
+from pydantic_settings import BaseSettings, CliSettingsSource
 
 
-class Settings(BaseSettings):
-    v0: Optional[str]
-    """the top level v0 option"""
+class Settings(BaseSettings, cli_hide_none_type=True):
+    v0: Optional[str] = Field(description='the top level v0 option')
 
 
-Settings(_cli_parse_args=['--help'], _cli_hide_none_type=False)
-"""
-usage: example.py [-h] [--v0 {str,null}]
-
-options:
-  -h, --help       show this help message and exit
-  --v0 {str,null}  the top level v0 option
-"""
-
-Settings(_cli_parse_args=['--help'], _cli_hide_none_type=True)
+print(CliSettingsSource(Settings, cli_prog_name='example.py').root_parser.format_help())
 """
 usage: example.py [-h] [--v0 str]
 
@@ -820,47 +796,27 @@ options:
 """
 ```
 
-`cli_hide_none_type: Optional[bool] = None`
-
-* Default = `None`
-* If `True`, hide `None` type values from CLI help text
-* If `False` or `None`, show `None` type values in CLI help text
-
 #### Avoid Adding JSON CLI Options
 
-Avoid adding complex fields that result in JSON strings at the CLI.
+Avoid adding complex fields that result in JSON strings at the CLI by enabling `cli_avoid_json`.
 
-```py test="skip"
-from pydantic import BaseModel
+```py
+from pydantic import BaseModel, Field
 
-from pydantic_settings import BaseSettings
-
-
-class SubModel(BaseModel, use_attribute_docstrings=True):
-    v1: int
-    """the sub model v1 option"""
+from pydantic_settings import BaseSettings, CliSettingsSource
 
 
-class Settings(BaseSettings, use_attribute_docstrings=True):
-    sub_model: SubModel
-    """The help summary for SubModel related options"""
+class SubModel(BaseModel):
+    v1: int = Field(description='the sub model v1 option')
 
 
-Settings(_cli_parse_args=['--help'], _cli_avoid_json=False)
-"""
-usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
+class Settings(BaseSettings, cli_avoid_json=True):
+    sub_model: SubModel = Field(
+        description='The help summary for SubModel related options'
+    )
 
-options:
-  -h, --help          show this help message and exit
 
-sub_model options:
-  The help summary for SubModel related options
-
-  --sub_model JSON    set sub_model from JSON string
-  --sub_model.v1 int  the sub model v1 option
-"""
-
-Settings(_cli_parse_args=['--help'], _cli_avoid_json=True)
+print(CliSettingsSource(Settings, cli_prog_name='example.py').root_parser.format_help())
 """
 usage: example.py [-h] [--sub_model.v1 int]
 
@@ -874,12 +830,6 @@ sub_model options:
 """
 ```
 
-`cli_avoid_json: Optional[bool] = None`
-
-* Default = `None`
-* If `True`, avoid adding complex JSON fields to CLI
-* If `False` or `None`, add complex JSON fields to CLI
-
 #### Use Class Docstring for Group Help Text
 
 By default, when populating the group help text for nested models it will pull from the field descriptions.
@@ -889,27 +839,25 @@ Alternatively, we can also configure CLI settings to pull from the class docstri
     If the field is a union of nested models the group help text will always be pulled from the field description;
     even if `cli_use_class_docs_for_groups` is set to `True`.
 
-```py test="skip"
-from pydantic import BaseModel
+```py
+from pydantic import BaseModel, Field
 
-from pydantic_settings import BaseSettings
-
-
-class SubModel(BaseModel, use_attribute_docstrings=True):
-    """The help text from the class docstring"""
-
-    v1: int
-    """the sub model v1 option"""
+from pydantic_settings import BaseSettings, CliSettingsSource
 
 
-class Settings(BaseSettings, use_attribute_docstrings=True):
+class SubModel(BaseModel):
+    """The help text from the class docstring."""
+
+    v1: int = Field(description='the sub model v1 option')
+
+
+class Settings(BaseSettings, cli_use_class_docs_for_groups=True):
     """My application help text."""
 
-    sub_model: SubModel
-    """The help text from the field description"""
+    sub_model: SubModel = Field(description='The help text from the field description')
 
 
-Settings(_cli_parse_args=['--help'], _cli_use_class_docs_for_groups=False)
+print(CliSettingsSource(Settings, cli_prog_name='example.py').root_parser.format_help())
 """
 usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
 
@@ -919,71 +867,34 @@ options:
   -h, --help          show this help message and exit
 
 sub_model options:
-  The help text from the field description
-
-  --sub_model JSON    set sub_model from JSON string
-  --sub_model.v1 int  the sub model v1 option
-"""
-
-
-Settings(_cli_parse_args=['--help'], _cli_use_class_docs_for_groups=True)
-"""
-usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
-
-My application help text.
-
-options:
-  -h, --help          show this help message and exit
-
-sub_model options:
-  The help text from the class docstring
+  The help text from the class docstring.
 
   --sub_model JSON    set sub_model from JSON string
   --sub_model.v1 int  the sub model v1 option
 """
 ```
-
-`cli_use_class_docs_for_groups: Optional[bool] = None`
-
-* Default = `None`
-* If `True`, use class docstrings for CLI group help text
-* If `False` or `None`, use field description for CLI group help text
 
 #### Change the Displayed Program Name
 
-Change the default program name displayed in the help text usage. By default, it will derive the name of the currently
+Change the default program name displayed in the help text usage by setting `cli_prog_name`. By default, it will derive the name of the currently
 executing program from `sys.argv[0]`, just like argparse.
 
-```py test="skip"
-from pydantic_settings import BaseSettings
+```py
+from pydantic_settings import BaseSettings, CliSettingsSource
 
 
-class Settings(BaseSettings):
+class Settings(BaseSettings, cli_prog_name='appdantic'):
     pass
 
 
-Settings(_cli_parse_args=['--help'])
+print(CliSettingsSource(Settings).root_parser.format_help())
 """
-usage: example.py [-h]
-
-options:
-  -h, --help  show this help message and exit
-"""
-
-Settings(_cli_parse_args=['--help'], _cli_prog_name='appdantic?')
-"""
-usage: appdantic? [-h]
+usage: appdantic [-h]
 
 options:
   -h, --help  show this help message and exit
 """
 ```
-
-`cli_prog_name: Optional[str] = None`
-
-* Default = `None`
-* If `str`, use `str` as program name
-* If `None`, use `sys.argv[0]` as program name
 
 ## Secrets
 

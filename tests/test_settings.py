@@ -1,3 +1,4 @@
+import argparse
 import dataclasses
 import os
 import sys
@@ -6,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import IntEnum
 from pathlib import Path
-from typing import Any, Callable, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Dict, Generic, List, Literal, Optional, Set, Tuple, Type, TypeVar, Union
 
 import pytest
 import typing_extensions
@@ -52,6 +53,42 @@ def foobar(a, b, c=4):
 
 
 T = TypeVar('T')
+
+
+class FruitsEnum(IntEnum):
+    pear = 0
+    kiwi = 1
+    lime = 2
+
+
+class CliDummyArgGroup(BaseModel, arbitrary_types_allowed=True):
+    group: argparse._ArgumentGroup
+
+    def add_argument(self, *args, **kwargs) -> None:
+        self.group.add_argument(*args, **kwargs)
+
+
+class CliDummySubParsers(BaseModel, arbitrary_types_allowed=True):
+    sub_parser: argparse._SubParsersAction
+
+    def add_parser(self, *args, **kwargs) -> 'CliDummyParser':
+        return CliDummyParser(parser=self.sub_parser.add_parser(*args, **kwargs))
+
+
+class CliDummyParser(BaseModel, arbitrary_types_allowed=True):
+    parser: argparse.ArgumentParser = Field(default_factory=lambda: argparse.ArgumentParser())
+
+    def add_argument(self, *args, **kwargs) -> None:
+        self.parser.add_argument(*args, **kwargs)
+
+    def add_argument_group(self, *args, **kwargs) -> CliDummyArgGroup:
+        return CliDummyArgGroup(group=self.parser.add_argument_group(*args, **kwargs))
+
+    def add_subparsers(self, *args, **kwargs) -> CliDummySubParsers:
+        return CliDummySubParsers(sub_parser=self.parser.add_subparsers(*args, **kwargs))
+
+    def parse_args(self, *args, **kwargs) -> argparse.Namespace:
+        return self.parser.parse_args(*args, **kwargs)
 
 
 class LoggedVar(Generic[T]):
@@ -2155,6 +2192,27 @@ def test_cli_list_arg(prefix):
     check_answer(cfg, prefix, expected)
 
 
+def test_cli_list_json_value_parsing():
+    class Cfg(BaseSettings):
+        json_list: list[str | bool | None]
+
+    assert Cfg(
+        _cli_parse_args=[
+            '--json_list',
+            'true,"true"',
+            '--json_list',
+            'false,"false"',
+            '--json_list',
+            'null,"null"',
+            '--json_list',
+            'hi,"bye"',
+        ]
+    ).model_dump() == {'json_list': [True, 'true', False, 'false', None, 'null', 'hi', 'bye']}
+
+    assert Cfg(_cli_parse_args=['--json_list', '"","","",""']).model_dump() == {'json_list': ['', '', '', '']}
+    assert Cfg(_cli_parse_args=['--json_list', ',,,']).model_dump() == {'json_list': ['', '', '', '']}
+
+
 @pytest.mark.parametrize('prefix', ['', 'child.'])
 def test_cli_dict_arg(prefix):
     class Child(BaseModel):
@@ -2220,6 +2278,12 @@ def test_cli_dict_arg(prefix):
     else:
         expected['child'] = None
     assert cfg.model_dump() == expected
+
+    with pytest.raises(SettingsError):
+        cfg = Cfg(_cli_parse_args=[f'--{prefix}check_dict', 'k9="i'])
+
+    with pytest.raises(SettingsError):
+        cfg = Cfg(_cli_parse_args=[f'--{prefix}check_dict', 'k9=i"'])
 
 
 def test_cli_nested_dict_arg():
@@ -2304,20 +2368,15 @@ def test_cli_union_similar_sub_models():
     assert cfg.model_dump() == {'child': {'name': 'new name a', 'diff_a': 'new diff a'}}
 
 
-def test_cli_enum():
-    class Fruit(IntEnum):
-        apple = 0
-        banna = 1
-        orange = 2
-
+def test_cli_literal():
     class Cfg(BaseSettings):
-        fruit: Fruit
+        pet: Literal['dog', 'cat', 'bird']
 
-    cfg = Cfg(_cli_parse_args=['--fruit', 'orange'])
-    assert cfg.model_dump() == {'fruit': Fruit.orange}
+    cfg = Cfg(_cli_parse_args=['--pet', 'cat'])
+    assert cfg.model_dump() == {'pet': 'cat'}
 
-    with pytest.raises(SystemExit):
-        Cfg(_cli_parse_args=['--fruit', 'lettuce'])
+    with pytest.raises(ValidationError):
+        Cfg(_cli_parse_args=['--pet', 'rock'])
 
 
 def test_cli_annotation_exceptions(monkeypatch):
@@ -2579,6 +2638,159 @@ def test_cli_enforce_required(env):
         Settings(_cli_parse_args=[], _cli_enforce_required=True).model_dump()
 
 
+@pytest.mark.parametrize('parser_type', [pytest.Parser, argparse.ArgumentParser, CliDummyParser])
+@pytest.mark.parametrize('prefix', ['', 'cfg'])
+def test_cli_user_settings_source(parser_type, prefix):
+    class Cfg(BaseSettings):
+        pet: Literal['dog', 'cat', 'bird'] = 'bird'
+
+    if parser_type is pytest.Parser:
+        parser = pytest.Parser(_ispytest=True)
+        parse_args = parser.parse
+        add_arg = parser.addoption
+        cli_cfg_settings = CliSettingsSource(
+            Cfg,
+            cli_prefix=prefix,
+            root_parser=parser,
+            parse_args_method=pytest.Parser.parse,
+            add_argument_method=pytest.Parser.addoption,
+            add_argument_group_method=pytest.Parser.getgroup,
+            add_parser_method=None,
+            add_subparsers_method=None,
+            formatter_class=None,
+        )
+    elif parser_type is CliDummyParser:
+        parser = CliDummyParser()
+        parse_args = parser.parse_args
+        add_arg = parser.add_argument
+        cli_cfg_settings = CliSettingsSource(
+            Cfg,
+            cli_prefix=prefix,
+            root_parser=parser,
+            parse_args_method=CliDummyParser.parse_args,
+            add_argument_method=CliDummyParser.add_argument,
+            add_argument_group_method=CliDummyParser.add_argument_group,
+            add_parser_method=CliDummySubParsers.add_parser,
+            add_subparsers_method=CliDummyParser.add_subparsers,
+        )
+    else:
+        parser = argparse.ArgumentParser()
+        parse_args = parser.parse_args
+        add_arg = parser.add_argument
+        cli_cfg_settings = CliSettingsSource(Cfg, cli_prefix=prefix, root_parser=parser)
+
+    add_arg('--fruit', choices=['pear', 'kiwi', 'lime'])
+
+    args = ['--fruit', 'pear']
+    parsed_args = parse_args(args)
+    assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=parsed_args)).model_dump() == {'pet': 'bird'}
+    assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {'pet': 'bird'}
+
+    arg_prefix = f'{prefix}.' if prefix else ''
+    args = ['--fruit', 'kiwi', f'--{arg_prefix}pet', 'dog']
+    parsed_args = parse_args(args)
+    assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=parsed_args)).model_dump() == {'pet': 'dog'}
+    assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {'pet': 'dog'}
+
+    parsed_args = parse_args(['--fruit', 'kiwi', f'--{arg_prefix}pet', 'cat'])
+    assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=vars(parsed_args))).model_dump() == {'pet': 'cat'}
+
+
+@pytest.mark.parametrize('prefix', ['', 'cfg'])
+def test_cli_dummy_user_settings_with_subcommand(prefix):
+    class DogCommands(BaseModel):
+        name: str = 'Bob'
+        command: Literal['roll', 'bark', 'sit'] = 'sit'
+
+    class Cfg(BaseSettings):
+        pet: Literal['dog', 'cat', 'bird'] = 'bird'
+        command: CliSubCommand[DogCommands]
+
+    parser = CliDummyParser()
+    cli_cfg_settings = CliSettingsSource(
+        Cfg,
+        root_parser=parser,
+        cli_prefix=prefix,
+        parse_args_method=CliDummyParser.parse_args,
+        add_argument_method=CliDummyParser.add_argument,
+        add_argument_group_method=CliDummyParser.add_argument_group,
+        add_parser_method=CliDummySubParsers.add_parser,
+        add_subparsers_method=CliDummyParser.add_subparsers,
+    )
+
+    parser.add_argument('--fruit', choices=['pear', 'kiwi', 'lime'])
+
+    args = ['--fruit', 'pear']
+    parsed_args = parser.parse_args(args)
+    assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=parsed_args)).model_dump() == {
+        'pet': 'bird',
+        'command': None,
+    }
+    assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {
+        'pet': 'bird',
+        'command': None,
+    }
+
+    arg_prefix = f'{prefix}.' if prefix else ''
+    args = ['--fruit', 'kiwi', f'--{arg_prefix}pet', 'dog']
+    parsed_args = parser.parse_args(args)
+    assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=parsed_args)).model_dump() == {
+        'pet': 'dog',
+        'command': None,
+    }
+    assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {
+        'pet': 'dog',
+        'command': None,
+    }
+
+    parsed_args = parser.parse_args(['--fruit', 'kiwi', f'--{arg_prefix}pet', 'cat'])
+    assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=vars(parsed_args))).model_dump() == {
+        'pet': 'cat',
+        'command': None,
+    }
+
+    args = ['--fruit', 'kiwi', f'--{arg_prefix}pet', 'dog', 'command', '--name', 'ralph', '--command', 'roll']
+    parsed_args = parser.parse_args(args)
+    assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=vars(parsed_args))).model_dump() == {
+        'pet': 'dog',
+        'command': {'name': 'ralph', 'command': 'roll'},
+    }
+    assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {
+        'pet': 'dog',
+        'command': {'name': 'ralph', 'command': 'roll'},
+    }
+
+
+def test_cli_user_settings_source_exceptions():
+    class Cfg(BaseSettings):
+        pet: Literal['dog', 'cat', 'bird'] = 'bird'
+
+    with pytest.raises(SettingsError):
+        args = ['--pet', 'dog']
+        parsed_args = {'pet': 'dog'}
+        cli_cfg_settings = CliSettingsSource(Cfg)
+        Cfg(_cli_settings_source=cli_cfg_settings(args=args, parsed_args=parsed_args))
+
+    with pytest.raises(SettingsError):
+        CliSettingsSource(Cfg, cli_prefix='.cfg')
+
+    with pytest.raises(SettingsError):
+        CliSettingsSource(Cfg, cli_prefix='cfg.')
+
+    with pytest.raises(SettingsError):
+        CliSettingsSource(Cfg, cli_prefix='123')
+
+    class Food(BaseModel):
+        fruit: FruitsEnum = FruitsEnum.kiwi
+
+    class CfgWithSubCommand(BaseSettings):
+        pet: Literal['dog', 'cat', 'bird'] = 'bird'
+        food: CliSubCommand[Food]
+
+    with pytest.raises(SettingsError):
+        CliSettingsSource(CfgWithSubCommand, add_subparsers_method=None)
+
+
 @pytest.mark.parametrize(
     'value,expected',
     [
@@ -2600,12 +2812,15 @@ def test_cli_enforce_required(env):
         (Representation(), 'Representation()'),
         (typing.Literal[1, 2, 3], '{1,2,3}'),
         (typing_extensions.Literal[1, 2, 3], '{1,2,3}'),
+        (typing.Literal['a', 'b', 'c'], '{a,b,c}'),
+        (typing_extensions.Literal['a', 'b', 'c'], '{a,b,c}'),
         (SimpleSettings, 'JSON'),
         (Union[SimpleSettings, SettingWithIgnoreEmpty], 'JSON'),
         (Union[SimpleSettings, str, SettingWithIgnoreEmpty], '{JSON,str}'),
         (Union[str, SimpleSettings, SettingWithIgnoreEmpty], '{str,JSON}'),
         (Annotated[SimpleSettings, 'annotation'], 'JSON'),
         (DirectoryPath, 'Path'),
+        (FruitsEnum, '{pear,kiwi,lime}'),
     ],
 )
 def test_cli_metavar_format(value, expected):

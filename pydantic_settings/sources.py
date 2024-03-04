@@ -11,7 +11,21 @@ from dataclasses import is_dataclass
 from enum import Enum
 from pathlib import Path
 from types import FunctionType
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Sequence, Tuple, TypeVar, Union, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    List,
+    Mapping,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+    overload,
+)
 
 import pydantic._internal._repr
 import pydantic.v1.utils
@@ -28,7 +42,7 @@ from pydantic_settings.utils import path_type_label
 if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
 
-from argparse import SUPPRESS, Action, ArgumentParser, Namespace, _ArgumentGroup, _SubParsersAction
+from argparse import SUPPRESS, ArgumentParser, HelpFormatter, Namespace, _SubParsersAction
 
 DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
 
@@ -49,22 +63,6 @@ class _CliPositionalArg:
 T = TypeVar('T')
 CliSubCommand = Annotated[Union[T, None], _CliSubCommand]
 CliPositionalArg = Annotated[T, _CliPositionalArg]
-
-
-class _CliEnumAction(Action):
-    """
-    CLI argparse action handler for enum types
-    """
-
-    def __init__(self, **kwargs: Any):
-        self._enum = kwargs.pop('type')
-        kwargs['choices'] = tuple(val.name for val in self._enum)
-        super().__init__(**kwargs)
-
-    def __call__(
-        self, parser: ArgumentParser, namespace: Namespace, value: Any, option_string: str | None = None
-    ) -> None:
-        setattr(namespace, self.dest, self._enum[value])
 
 
 class EnvNoneType(str):
@@ -715,9 +713,35 @@ class DotEnvSettingsSource(EnvSettingsSource):
         )
 
 
-class CliSettingsSource(EnvSettingsSource):
+class CliSettingsSource(EnvSettingsSource, Generic[T]):
     """
     Source class for loading settings values from CLI.
+
+    The root parser to connect the CLI settings source to. This will add fields from the `settings_cls` to the root parser as
+    arguments and associate the internal CLI settings source parsing logic with the root parser.
+
+    Note:
+        The parser methods must support the same attributes as their `argparse` library counterparts.
+
+    Args:
+        cli_prog_name: The CLI program name to display in help text. Defaults to `None` if cli_parse_args is `None`.
+            Otherwse, defaults to sys.argv[0].
+        cli_parse_args: The list of CLI arguments to parse. Defaults to None.
+            If set to `True`, defaults to sys.argv[1:].
+        cli_settings_source: Override the default CLI settings source with a user defined instance. Defaults to None.
+        cli_hide_none_type: Hide `None` values in CLI help text. Defaults to `False`.
+        cli_avoid_json: Avoid complex JSON objects in CLI help text. Defaults to `False`.
+        cli_enforce_required: Enforce required fields at the CLI. Defaults to `False`.
+        cli_use_class_docs_for_groups: Use class docstrings in CLI group help text instead of field descriptions.
+            Defaults to `False`.
+        cli_prefix: Prefix for command line arguments added under the root parser. Defaults to "".
+        root_parser: The root parser object.
+        parse_args_method: The root parser parse args method. Defaults to `argparse.ArgumentParser.parse_args`.
+        add_argument_method: The root parser add argument method. Defaults to `argparse.ArgumentParser.add_argument`.
+        add_argument_group_method: The root parser add argument group method. Defaults to `argparse.ArgumentParser.add_argument_group`.
+        add_parser_method: The root parser add new parser (sub-command) method. Defaults to `argparse._SubParsersAction.add_parser`.
+        add_subparsers_method: The root parser add subparsers (sub-commands) method. Defaults to `argparse.ArgumentParser.add_subparsers`.
+        formatter_class: A class for customizing the root parser help text. Defaults to `argparse.HelpFormatter`.
     """
 
     def __init__(
@@ -730,14 +754,18 @@ class CliSettingsSource(EnvSettingsSource):
         cli_avoid_json: bool | None = None,
         cli_enforce_required: bool | None = None,
         cli_use_class_docs_for_groups: bool | None = None,
+        cli_prefix: str | None = None,
+        root_parser: Any = None,
+        parse_args_method: Callable[..., Any] | None = ArgumentParser.parse_args,
+        add_argument_method: Callable[..., Any] | None = ArgumentParser.add_argument,
+        add_argument_group_method: Callable[..., Any] | None = ArgumentParser.add_argument_group,
+        add_parser_method: Callable[..., Any] | None = _SubParsersAction.add_parser,
+        add_subparsers_method: Callable[..., Any] | None = ArgumentParser.add_subparsers,
+        formatter_class: Any = HelpFormatter,
     ) -> None:
-        self.cli_prog_name = sys.argv[0] if cli_prog_name is None else cli_prog_name
-        self.cli_parse_args = cli_parse_args
-        if self.cli_parse_args not in (None, False):
-            if self.cli_parse_args is True:
-                self.cli_parse_args = sys.argv[1:]
-            elif not isinstance(self.cli_parse_args, list):
-                raise SettingsError(f'cli_parse_args must be List[str], recieved {type(self.cli_parse_args)}')
+        self.cli_prog_name = (
+            cli_prog_name if cli_prog_name is not None else settings_cls.model_config.get('cli_prog_name', sys.argv[0])
+        )
         self.cli_hide_none_type = (
             cli_hide_none_type
             if cli_hide_none_type is not None
@@ -758,37 +786,98 @@ class CliSettingsSource(EnvSettingsSource):
             if cli_use_class_docs_for_groups is not None
             else settings_cls.model_config.get('cli_use_class_docs_for_groups', False)
         )
-        super().__init__(settings_cls, env_nested_delimiter='.', env_parse_none_str=cli_parse_none_str)
+        self.cli_prefix = cli_prefix if cli_prefix is not None else settings_cls.model_config.get('cli_prefix', '')
+        if self.cli_prefix:
+            if cli_prefix.startswith('.') or cli_prefix.endswith('.') or not cli_prefix.replace('.', '').isidentifier():  # type: ignore
+                raise SettingsError(f'CLI settings source prefix is invalid: {cli_prefix}')
+            self.cli_prefix += '.'
 
-    def _load_env_vars(self) -> Mapping[str, str | None]:
-        if self.cli_parse_args in (None, False):
-            return {}
-
-        self._cli_dict_arg_names: list[str] = []
-        self._cli_subcommands: dict[str, list[str]] = {}
-        parser: ArgumentParser = self._add_fields_to_parser(
-            ArgumentParser(prog=self.cli_prog_name, description=self.settings_cls.__doc__),
-            model=self.settings_cls,
-            added_args=[],
-            arg_prefix='',
-            subcommand_prefix='',
-            group=None,
+        super().__init__(
+            settings_cls, env_nested_delimiter='.', env_parse_none_str=cli_parse_none_str, env_prefix=self.cli_prefix
         )
 
-        parsed_args: dict[str, list[str] | str] = vars(parser.parse_args(self.cli_parse_args))  # type: ignore
+        root_parser = (
+            ArgumentParser(prog=self.cli_prog_name, description=settings_cls.__doc__)
+            if root_parser is None
+            else root_parser
+        )
+        self._connect_root_parser(
+            root_parser=root_parser,
+            parse_args_method=parse_args_method,
+            add_argument_method=add_argument_method,
+            add_argument_group_method=add_argument_group_method,
+            add_parser_method=add_parser_method,
+            add_subparsers_method=add_subparsers_method,
+            formatter_class=formatter_class,
+        )
+
+        if cli_parse_args not in (None, False):
+            if cli_parse_args is True:
+                cli_parse_args = sys.argv[1:]
+            elif not isinstance(cli_parse_args, list):
+                raise SettingsError(f'cli_parse_args must be List[str], recieved {type(cli_parse_args)}')
+            self._load_env_vars(parsed_args=self._parse_args(self.root_parser, cli_parse_args))
+
+    @overload
+    def __call__(self) -> dict[str, Any]:
+        ...
+
+    @overload
+    def __call__(self, *, args: list[str]) -> dict[str, Any]:
+        ...
+
+    @overload
+    def __call__(self, *, parsed_args: Namespace | dict[str, list[str] | str]) -> dict[str, Any]:
+        ...
+
+    def __call__(
+        self, *, args: list[str] | None = None, parsed_args: Namespace | dict[str, list[str] | str] | None = None
+    ) -> dict[str, Any] | CliSettingsSource[T]:
+        """
+        Loads parsed command line arguments into the CLI settings source. If parsed args are `None`
+        (the default) will return the CLI settings source vars dicitionary.
+
+        Note:
+            The parsed args must be in `argparse.Namespace` or vars dictionary (e.g., vars(argparse.Namespace))
+            format.
+
+        Args:
+            args:
+            parsed_args: The parsed args to load.
+
+        Returns:
+            CliSettingsSource: The object instance itself.
+        """
+        if args is not None and parsed_args is not None:
+            raise SettingsError('args and parsed_args are mutually exclusive')
+        elif args is not None:
+            return self._load_env_vars(parsed_args=self._parse_args(self.root_parser, args))
+        elif parsed_args is not None:
+            return self._load_env_vars(parsed_args=parsed_args)
+        else:
+            return super().__call__()
+
+    @overload
+    def _load_env_vars(self) -> Mapping[str, str | None]:
+        ...
+
+    @overload
+    def _load_env_vars(self, *, parsed_args: Namespace | dict[str, list[str] | str]) -> CliSettingsSource[T]:
+        ...
+
+    def _load_env_vars(
+        self, *, parsed_args: Namespace | dict[str, list[str] | str] | None = None
+    ) -> Mapping[str, str | None] | CliSettingsSource[T]:
+        if parsed_args is None:
+            return {}
+
+        if isinstance(parsed_args, Namespace):
+            parsed_args = vars(parsed_args)
+
         selected_subcommands: list[str] = []
         for field_name, val in parsed_args.items():
             if isinstance(val, list):
-                merge_list = []
-                for sub_val in val:
-                    if sub_val.startswith('[') and sub_val.endswith(']'):
-                        sub_val = sub_val[1:-1]
-                    merge_list.append(sub_val)
-                parsed_args[field_name] = (
-                    f'[{",".join(merge_list)}]'
-                    if field_name not in self._cli_dict_arg_names
-                    else self._merge_json_key_val_list_str(f'[{",".join(merge_list)}]')
-                )
+                parsed_args[field_name] = self._merge_parsed_list(val, field_name)
             elif field_name.endswith(':subcommand') and val is not None:
                 selected_subcommands.append(field_name.split(':')[0] + val)
 
@@ -803,43 +892,86 @@ class CliSettingsSource(EnvSettingsSource):
             if not any(field_name for field_name in parsed_args.keys() if f'{last_selected_subcommand}.' in field_name):
                 parsed_args[last_selected_subcommand] = '{}'
 
-        return parse_env_vars(
+        self.env_vars = parse_env_vars(
             parsed_args, self.case_sensitive, self.env_ignore_empty, self.env_parse_none_str  # type: ignore
         )
 
-    def _merge_json_key_val_list_str(self, key_val_list_str: str) -> str:
-        orig_key_val_list_str, key_val_list_str = key_val_list_str, key_val_list_str[1:-1]
-        key_val_dict: dict[str, str] = {}
-        obj_count = 0
-        try:
-            while key_val_list_str:
-                assert obj_count == 0
-                for i in range(len(key_val_list_str)):
-                    if key_val_list_str[i] == '{':
-                        obj_count += 1
-                    elif key_val_list_str[i] == '}':
-                        obj_count -= 1
-                        if obj_count == 0:
-                            key_val_dict.update(json.loads(key_val_list_str[: i + 1]))
-                            key_val_list_str = key_val_list_str[i + 1 :].lstrip(',')
-                            break
-                    elif obj_count == 0:
-                        val, quote_count = '', 0
-                        key, key_val_list_str = key_val_list_str.split('=', 1)
-                        for i in range(len(key_val_list_str)):
-                            if key_val_list_str[i] in ('"', "'"):
-                                quote_count += 1
-                            if key_val_list_str[i] == ',' and quote_count % 2 == 0:
-                                val, key_val_list_str = key_val_list_str[:i], key_val_list_str[i:].lstrip(',')
-                                break
-                        if not val:
-                            val, key_val_list_str = key_val_list_str, ''
-                        key_val_dict.update({key.strip('\'"'): val.strip('\'"')})
-                        break
-        except Exception:
-            raise SettingsError(f'Parsing error encountered on JSON object {orig_key_val_list_str}')
+        return self
 
-        return json.dumps(key_val_dict)
+    def _merge_parsed_list(self, parsed_list: list[str], field_name: str) -> str:
+        try:
+            merged_list: list[str] = []
+            is_last_consumed_a_value = False
+            is_dict_list = field_name in self._cli_dict_arg_names
+            for val in parsed_list:
+                if val.startswith('[') and val.endswith(']'):
+                    val = val[1:-1]
+                while val:
+                    if val.startswith(','):
+                        val = self._consume_comma(val, merged_list, is_last_consumed_a_value)
+                        is_last_consumed_a_value = False
+                    else:
+                        if val.startswith('{') or val.startswith('['):
+                            val = self._consume_object_or_array(val, merged_list)
+                        else:
+                            val = self._consume_string_or_number(val, merged_list, is_dict_list)
+                        is_last_consumed_a_value = True
+                if not is_last_consumed_a_value:
+                    val = self._consume_comma(val, merged_list, is_last_consumed_a_value)
+
+            if not is_dict_list:
+                return f'[{",".join(merged_list)}]'
+            else:
+                merged_dict: dict[str, str] = {}
+                for item in merged_list:
+                    merged_dict.update(json.loads(item))
+                return json.dumps(merged_dict)
+        except Exception as e:
+            raise SettingsError(f'Parsing error encountered for {field_name}: {e}')
+
+    def _consume_comma(self, item: str, merged_list: list[str], is_last_consumed_a_value: bool) -> str:
+        if not is_last_consumed_a_value:
+            merged_list.append('""')
+        return item[1:]
+
+    def _consume_object_or_array(self, item: str, merged_list: list[str]) -> str:
+        count = 1
+        close_delim = '}' if item.startswith('{') else ']'
+        for consumed in range(1, len(item)):
+            if item[consumed] in ('{', '['):
+                count += 1
+            elif item[consumed] in ('}', ']'):
+                count -= 1
+                if item[consumed] == close_delim and count == 0:
+                    merged_list.append(item[: consumed + 1])
+                    return item[consumed + 1 :]
+        raise SettingsError(f'Missing end delimiter "{close_delim}"')
+
+    def _consume_string_or_number(self, item: str, merged_list: list[str], is_dict_list: bool) -> str:
+        consumed = 0
+        is_find_end_quote = False
+        while consumed < len(item):
+            if item[consumed] == '"' and (consumed == 0 or item[consumed - 1] != '\\'):
+                is_find_end_quote = not is_find_end_quote
+            if not is_find_end_quote and item[consumed] == ',':
+                break
+            consumed += 1
+        if is_find_end_quote:
+            raise SettingsError('Mismatched quotes')
+        val_string = item[:consumed].strip()
+        if not is_dict_list:
+            try:
+                float(val_string)
+            except ValueError:
+                if val_string == self.env_parse_none_str:
+                    val_string = 'null'
+                if val_string not in ('true', 'false', 'null') and not val_string.startswith('"'):
+                    val_string = f'"{val_string}"'
+            merged_list.append(val_string)
+        else:
+            key, val = (kv.strip('"') for kv in val_string.split('=', 1))
+            merged_list.append(json.dumps({key: val}))
+        return item[consumed:]
 
     def _get_sub_models(self, model: type[BaseModel], field_name: str, field_info: FieldInfo) -> list[type[BaseModel]]:
         field_types: tuple[Any, ...] = (
@@ -881,38 +1013,86 @@ class CliSettingsSource(EnvSettingsSource):
                 optional_args.append((field_name, field_info))
         return positional_args + subcommand_args + optional_args
 
-    def _add_fields_to_parser(
+    @property
+    def root_parser(self) -> T:
+        """The connected root parser instance."""
+        return self._root_parser
+
+    def _connect_parser_method(
+        self, parser_method: Callable[..., Any] | None, method_name: str, *args: Any, **kwargs: Any
+    ) -> Callable[..., Any]:
+        if parser_method:
+            return parser_method
+
+        def none_parser_method(*args: Any, **kwargs: Any) -> Any:
+            raise SettingsError(
+                f'cannot connect CLI settings source root parser: {method_name} is set to `None` but is needed for connecting'
+            )
+
+        return none_parser_method
+
+    def _connect_root_parser(
         self,
-        parser: ArgumentParser,
+        root_parser: T,
+        parse_args_method: Callable[..., Any] | None = ArgumentParser.parse_args,
+        add_argument_method: Callable[..., Any] | None = ArgumentParser.add_argument,
+        add_argument_group_method: Callable[..., Any] | None = ArgumentParser.add_argument_group,
+        add_parser_method: Callable[..., Any] | None = _SubParsersAction.add_parser,
+        add_subparsers_method: Callable[..., Any] | None = ArgumentParser.add_subparsers,
+        formatter_class: Any = HelpFormatter,
+    ) -> None:
+        self._root_parser = root_parser
+        self._parse_args = self._connect_parser_method(parse_args_method, 'parsed_args_method')
+        self._add_argument = self._connect_parser_method(add_argument_method, 'add_argument_method')
+        self._add_argument_group = self._connect_parser_method(add_argument_group_method, 'add_argument_group_method')
+        self._add_parser = self._connect_parser_method(add_parser_method, 'add_parser_method')
+        self._add_subparsers = self._connect_parser_method(add_subparsers_method, 'add_subparsers_method')
+        self._formatter_class = formatter_class
+        self._cli_dict_arg_names: list[str] = []
+        self._cli_subcommands: dict[str, list[str]] = {}
+        self._add_parser_args(
+            parser=self.root_parser,
+            model=self.settings_cls,
+            added_args=[],
+            arg_prefix=self.env_prefix,
+            subcommand_prefix=self.env_prefix,
+            group=None,
+        )
+
+    def _add_parser_args(
+        self,
+        parser: Any,
         model: type[BaseModel],
         added_args: list[str],
         arg_prefix: str,
         subcommand_prefix: str,
-        group: _ArgumentGroup | dict[str, Any] | None,
+        group: Any,
     ) -> ArgumentParser:
-        subparsers: _SubParsersAction[Any] | None = None
+        subparsers: Any = None
         for field_name, field_info in self._sort_arg_fields(model):
             sub_models: list[type[BaseModel]] = self._get_sub_models(model, field_name, field_info)
             if _CliSubCommand in field_info.metadata:
                 if subparsers is None:
-                    subparsers = parser.add_subparsers(
-                        title='subcommands', dest=f'{arg_prefix}:subcommand', required=self.cli_enforce_required
+                    subparsers = self._add_subparsers(
+                        parser, title='subcommands', dest=f'{arg_prefix}:subcommand', required=self.cli_enforce_required
                     )
                     self._cli_subcommands[f'{arg_prefix}:subcommand'] = [f'{arg_prefix}{field_name}']
                 else:
                     self._cli_subcommands[f'{arg_prefix}:subcommand'].append(f'{arg_prefix}{field_name}')
-                metavar = ','.join(self._cli_subcommands[f'{arg_prefix}:subcommand'])
-                subparsers.metavar = f'{{{metavar}}}'
+                if hasattr(subparsers, 'metavar'):
+                    metavar = ','.join(self._cli_subcommands[f'{arg_prefix}:subcommand'])
+                    subparsers.metavar = f'{{{metavar}}}'
 
                 model = sub_models[0]
-                self._add_fields_to_parser(
-                    subparsers.add_parser(
+                self._add_parser_args(
+                    parser=self._add_parser(
+                        subparsers,
                         field_name,
                         help=field_info.description,
-                        formatter_class=parser.formatter_class,
+                        formatter_class=self._formatter_class,
                         description=model.__doc__,
                     ),
-                    model,
+                    model=model,
                     added_args=[],
                     arg_prefix=f'{arg_prefix}{field_name}.',
                     subcommand_prefix=f'{subcommand_prefix}{field_name}.',
@@ -929,17 +1109,21 @@ class CliSettingsSource(EnvSettingsSource):
                 if kwargs['dest'] in added_args:
                     continue
                 if _annotation_contains_types(
-                    field_info.annotation, (list, set, dict, Sequence, Mapping), is_include_origin=True
+                    _strip_annotated(field_info.annotation),
+                    (list, set, dict, Sequence, Mapping),
+                    is_include_origin=True,
                 ):
                     kwargs['action'] = 'append'
-                    if _annotation_contains_types(field_info.annotation, (dict, Mapping), is_include_origin=True):
+                    if _annotation_contains_types(
+                        _strip_annotated(field_info.annotation), (dict, Mapping), is_include_origin=True
+                    ):
                         self._cli_dict_arg_names.append(kwargs['dest'])
-                elif lenient_issubclass(field_info.annotation, Enum):
-                    kwargs['type'] = field_info.annotation
-                    kwargs['action'] = _CliEnumAction
-                    del kwargs['metavar']
 
-                arg_name = f'{arg_prefix.replace(subcommand_prefix, "", 1)}{field_name}'
+                arg_name = (
+                    f'{arg_prefix}{field_name}'
+                    if subcommand_prefix == self.env_prefix
+                    else f'{arg_prefix.replace(subcommand_prefix, "", 1)}{field_name}'
+                )
                 if _CliPositionalArg in field_info.metadata:
                     kwargs['metavar'] = field_name.upper()
                     arg_name = kwargs['dest']
@@ -948,7 +1132,7 @@ class CliSettingsSource(EnvSettingsSource):
                     arg_flag = ''
 
                 if sub_models and kwargs.get('action') != 'append':
-                    model_group: _ArgumentGroup | None = None
+                    model_group: Any = None
                     model_group_kwargs: dict[str, Any] = {}
                     model_group_kwargs['title'] = f'{arg_name} options'
                     model_group_kwargs['description'] = (
@@ -959,25 +1143,25 @@ class CliSettingsSource(EnvSettingsSource):
                     if not self.cli_avoid_json:
                         added_args.append(arg_name)
                         kwargs['help'] = f'set {arg_name} from JSON string'
-                        model_group = parser.add_argument_group(**model_group_kwargs)
-                        model_group.add_argument(f'{arg_flag}{arg_name}', **kwargs)
+                        model_group = self._add_argument_group(parser, **model_group_kwargs)
+                        self._add_argument(model_group, f'{arg_flag}{arg_name}', **kwargs)
                     for model in sub_models:
-                        self._add_fields_to_parser(
-                            parser,
-                            model,
+                        self._add_parser_args(
+                            parser=parser,
+                            model=model,
                             added_args=added_args,
                             arg_prefix=f'{arg_prefix}{field_name}.',
                             subcommand_prefix=subcommand_prefix,
                             group=model_group if model_group else model_group_kwargs,
                         )
                 elif group is not None:
-                    if not isinstance(group, _ArgumentGroup):
-                        group = parser.add_argument_group(**group)
+                    if isinstance(group, dict):
+                        group = self._add_argument_group(parser, **group)
                     added_args.append(arg_name)
-                    group.add_argument(f'{arg_flag}{arg_name}', **kwargs)
+                    self._add_argument(group, f'{arg_flag}{arg_name}', **kwargs)
                 else:
                     added_args.append(arg_name)
-                    parser.add_argument(f'{arg_flag}{arg_name}', **kwargs)
+                    self._add_argument(parser, f'{arg_flag}{arg_name}', **kwargs)
         return parser
 
     def _get_modified_args(self, obj: Any) -> tuple[str, ...]:
@@ -993,8 +1177,7 @@ class CliSettingsSource(EnvSettingsSource):
 
     def _metavar_format_recurse(self, obj: Any) -> str:
         """Pretty metavar representation of a type. Adapts logic from `pydantic._repr.display_as_type`."""
-        while get_origin(obj) == Annotated:
-            obj = get_args(obj)[0]
+        obj = _strip_annotated(obj)
         if isinstance(obj, FunctionType):
             return obj.__name__
         elif obj is ...:
@@ -1011,7 +1194,10 @@ class CliSettingsSource(EnvSettingsSource):
             args = self._metavar_format_list(list(map(self._metavar_format_recurse, self._get_modified_args(obj))))
             return f'{{{args}}}' if ',' in args else args
         elif get_origin(obj) in (typing_extensions.Literal, typing.Literal):
-            args = self._metavar_format_list(list(map(repr, self._get_modified_args(obj))))
+            args = self._metavar_format_list(list(map(str, self._get_modified_args(obj))))
+            return f'{{{args}}}' if ',' in args else args
+        elif lenient_issubclass(obj, Enum):
+            args = self._metavar_format_list([val.name for val in obj])
             return f'{{{args}}}' if ',' in args else args
         elif isinstance(obj, WithArgsTypes):
             args = self._metavar_format_list(list(map(self._metavar_format_recurse, self._get_modified_args(obj))))
@@ -1094,3 +1280,9 @@ def _annotation_contains_types(annotation: type[Any] | None, types: tuple[Any, .
         if _annotation_contains_types(type_, types, is_include_origin=True):
             return True
     return annotation in types
+
+
+def _strip_annotated(annotation: Any) -> Any:
+    while get_origin(annotation) == Annotated:
+        annotation = get_args(annotation)[0]
+    return annotation

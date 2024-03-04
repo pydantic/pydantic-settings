@@ -30,10 +30,12 @@ class SettingsConfigDict(ConfigDict, total=False):
     env_parse_none_str: str | None
     cli_prog_name: str | None
     cli_parse_args: bool | list[str] | None
+    cli_settings_source: CliSettingsSource[Any] | None
     cli_hide_none_type: bool
     cli_avoid_json: bool
     cli_enforce_required: bool
     cli_use_class_docs_for_groups: bool
+    cli_prefix: str
     secrets_dir: str | Path | None
 
 
@@ -70,11 +72,13 @@ class BaseSettings(BaseModel):
             Otherwse, defaults to sys.argv[0].
         _cli_parse_args: The list of CLI arguments to parse. Defaults to None.
             If set to `True`, defaults to sys.argv[1:].
+        _cli_settings_source: Override the default CLI settings source with a user defined instance. Defaults to None.
         _cli_hide_none_type: Hide `None` values in CLI help text. Defaults to `False`.
         _cli_avoid_json: Avoid complex JSON objects in CLI help text. Defaults to `False`.
         _cli_enforce_required: Enforce required fields at the CLI. Defaults to `False`.
         _cli_use_class_docs_for_groups: Use class docstrings in CLI group help text instead of field descriptions.
             Defaults to `False`.
+        _cli_prefix: The root parser command line arguments prefix. Defaults to "".
         _secrets_dir: The secret files directory. Defaults to `None`.
     """
 
@@ -89,10 +93,12 @@ class BaseSettings(BaseModel):
         _env_parse_none_str: str | None = None,
         _cli_prog_name: str | None = None,
         _cli_parse_args: bool | list[str] | None = None,
+        _cli_settings_source: CliSettingsSource[Any] | None = None,
         _cli_hide_none_type: bool | None = None,
         _cli_avoid_json: bool | None = None,
         _cli_enforce_required: bool | None = None,
         _cli_use_class_docs_for_groups: bool | None = None,
+        _cli_prefix: str | None = None,
         _secrets_dir: str | Path | None = None,
         **values: Any,
     ) -> None:
@@ -109,10 +115,12 @@ class BaseSettings(BaseModel):
                 _env_parse_none_str=_env_parse_none_str,
                 _cli_prog_name=_cli_prog_name,
                 _cli_parse_args=_cli_parse_args,
+                _cli_settings_source=_cli_settings_source,
                 _cli_hide_none_type=_cli_hide_none_type,
                 _cli_avoid_json=_cli_avoid_json,
                 _cli_enforce_required=_cli_enforce_required,
                 _cli_use_class_docs_for_groups=_cli_use_class_docs_for_groups,
+                _cli_prefix=_cli_prefix,
                 _secrets_dir=_secrets_dir,
             )
         )
@@ -153,10 +161,12 @@ class BaseSettings(BaseModel):
         _env_parse_none_str: str | None = None,
         _cli_prog_name: str | None = None,
         _cli_parse_args: bool | list[str] | None = None,
+        _cli_settings_source: CliSettingsSource[Any] | None = None,
         _cli_hide_none_type: bool | None = None,
         _cli_avoid_json: bool | None = None,
         _cli_enforce_required: bool | None = None,
         _cli_use_class_docs_for_groups: bool | None = None,
+        _cli_prefix: str | None = None,
         _secrets_dir: str | Path | None = None,
     ) -> dict[str, Any]:
         # Determine settings config values
@@ -180,6 +190,9 @@ class BaseSettings(BaseModel):
 
         cli_prog_name = _cli_prog_name if _cli_prog_name is not None else self.model_config.get('cli_prog_name')
         cli_parse_args = _cli_parse_args if _cli_parse_args is not None else self.model_config.get('cli_parse_args')
+        cli_settings_source = (
+            _cli_settings_source if _cli_settings_source is not None else self.model_config.get('cli_settings_source')
+        )
         cli_hide_none_type = (
             _cli_hide_none_type if _cli_hide_none_type is not None else self.model_config.get('cli_hide_none_type')
         )
@@ -194,20 +207,26 @@ class BaseSettings(BaseModel):
             if _cli_use_class_docs_for_groups is not None
             else self.model_config.get('cli_use_class_docs_for_groups')
         )
+        cli_prefix = _cli_prefix if _cli_prefix is not None else self.model_config.get('cli_prefix')
 
         secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
         # Configure built-in sources
         init_settings = InitSettingsSource(self.__class__, init_kwargs=init_kwargs)
-        cli_settings = CliSettingsSource(
-            self.__class__,
-            cli_prog_name=cli_prog_name,
-            cli_parse_args=cli_parse_args,
-            cli_parse_none_str=env_parse_none_str,
-            cli_hide_none_type=cli_hide_none_type,
-            cli_avoid_json=cli_avoid_json,
-            cli_enforce_required=cli_enforce_required,
-            cli_use_class_docs_for_groups=cli_use_class_docs_for_groups,
+        cli_settings = (
+            CliSettingsSource(
+                self.__class__,
+                cli_prog_name=cli_prog_name,
+                cli_parse_args=cli_parse_args,
+                cli_parse_none_str=env_parse_none_str,
+                cli_hide_none_type=cli_hide_none_type,
+                cli_avoid_json=cli_avoid_json,
+                cli_enforce_required=cli_enforce_required,
+                cli_use_class_docs_for_groups=cli_use_class_docs_for_groups,
+                cli_prefix=cli_prefix,
+            )
+            if cli_settings_source is None
+            else cli_settings_source
         )
         env_settings = EnvSettingsSource(
             self.__class__,
@@ -239,7 +258,7 @@ class BaseSettings(BaseModel):
             dotenv_settings=dotenv_settings,
             file_secret_settings=file_secret_settings,
         )
-        if cli_parse_args:
+        if cli_parse_args or cli_settings_source:
             sources = (cli_settings,) + sources
         if sources:
             return deep_update(*reversed([source() for source in sources]))
@@ -261,10 +280,12 @@ class BaseSettings(BaseModel):
         env_parse_none_str=None,
         cli_prog_name=None,
         cli_parse_args=None,
+        cli_settings_source=None,
         cli_hide_none_type=False,
         cli_avoid_json=False,
         cli_enforce_required=False,
         cli_use_class_docs_for_groups=False,
+        cli_prefix='',
         secrets_dir=None,
         protected_namespaces=('model_', 'settings_'),
     )
