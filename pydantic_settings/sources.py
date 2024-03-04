@@ -717,18 +717,18 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     """
     Source class for loading settings values from CLI.
 
-    The root parser to connect the CLI settings source to. This will add fields from the `settings_cls` to the root parser as
-    arguments and associate the internal CLI settings source parsing logic with the root parser.
-
     Note:
-        The parser methods must support the same attributes as their `argparse` library counterparts.
+        A `CliSettingsSource` connects with a `root_parser` object by using the parser methods to add
+        `settings_cls` fields as command line arguments. The `CliSettingsSource` internal parser representation
+        is based upon the `argparse` parsing library, and therefore, requires the parser methods to support
+        the same attributes as their `argparse` library counterparts.
 
     Args:
         cli_prog_name: The CLI program name to display in help text. Defaults to `None` if cli_parse_args is `None`.
             Otherwse, defaults to sys.argv[0].
         cli_parse_args: The list of CLI arguments to parse. Defaults to None.
             If set to `True`, defaults to sys.argv[1:].
-        cli_settings_source: Override the default CLI settings source with a user defined instance. Defaults to None.
+        cli_settings_source: Override the default CLI settings source with a user defined instance. Defaults to `None`.
         cli_hide_none_type: Hide `None` values in CLI help text. Defaults to `False`.
         cli_avoid_json: Avoid complex JSON objects in CLI help text. Defaults to `False`.
         cli_enforce_required: Enforce required fields at the CLI. Defaults to `False`.
@@ -738,9 +738,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         root_parser: The root parser object.
         parse_args_method: The root parser parse args method. Defaults to `argparse.ArgumentParser.parse_args`.
         add_argument_method: The root parser add argument method. Defaults to `argparse.ArgumentParser.add_argument`.
-        add_argument_group_method: The root parser add argument group method. Defaults to `argparse.ArgumentParser.add_argument_group`.
-        add_parser_method: The root parser add new parser (sub-command) method. Defaults to `argparse._SubParsersAction.add_parser`.
-        add_subparsers_method: The root parser add subparsers (sub-commands) method. Defaults to `argparse.ArgumentParser.add_subparsers`.
+        add_argument_group_method: The root parser add argument group method.
+            Defaults to `argparse.ArgumentParser.add_argument_group`.
+        add_parser_method: The root parser add new parser (sub-command) method.
+            Defaults to `argparse._SubParsersAction.add_parser`.
+        add_subparsers_method: The root parser add subparsers (sub-commands) method.
+            Defaults to `argparse.ArgumentParser.add_subparsers`.
         formatter_class: A class for customizing the root parser help text. Defaults to `argparse.HelpFormatter`.
     """
 
@@ -748,7 +751,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self,
         settings_cls: type[BaseSettings],
         cli_prog_name: str | None = None,
-        cli_parse_args: bool | list[str] | None = None,
+        cli_parse_args: bool | list[str] | tuple[str, ...] | None = None,
         cli_parse_none_str: str | None = None,
         cli_hide_none_type: bool | None = None,
         cli_avoid_json: bool | None = None,
@@ -814,8 +817,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         if cli_parse_args not in (None, False):
             if cli_parse_args is True:
                 cli_parse_args = sys.argv[1:]
-            elif not isinstance(cli_parse_args, list):
-                raise SettingsError(f'cli_parse_args must be List[str], recieved {type(cli_parse_args)}')
+            elif not isinstance(cli_parse_args, (list, tuple)):
+                raise SettingsError(
+                    f'cli_parse_args must be List[str] or Tuple[str, ...], recieved {type(cli_parse_args)}'
+                )
             self._load_env_vars(parsed_args=self._parse_args(self.root_parser, cli_parse_args))
 
     @overload
@@ -823,34 +828,47 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         ...
 
     @overload
-    def __call__(self, *, args: list[str]) -> dict[str, Any]:
+    def __call__(self, *, args: list[str] | tuple[str, ...] | bool) -> dict[str, Any]:
+        """
+        Parse and load the command line arguments list into the CLI settings source.
+
+        Args:
+            args: The command line arguments to parse and load. Defaults to `None`. If set to `True`, defaults
+                to sys.argv[1:]. If set to `False`, defaults to [].
+
+        Returns:
+            CliSettingsSource: The object instance itself.
+        """
         ...
 
     @overload
     def __call__(self, *, parsed_args: Namespace | dict[str, list[str] | str]) -> dict[str, Any]:
-        ...
-
-    def __call__(
-        self, *, args: list[str] | None = None, parsed_args: Namespace | dict[str, list[str] | str] | None = None
-    ) -> dict[str, Any] | CliSettingsSource[T]:
         """
-        Loads parsed command line arguments into the CLI settings source. If parsed args are `None`
-        (the default) will return the CLI settings source vars dicitionary.
+        Loads parsed command line arguments into the CLI settings source.
 
         Note:
             The parsed args must be in `argparse.Namespace` or vars dictionary (e.g., vars(argparse.Namespace))
             format.
 
         Args:
-            args:
             parsed_args: The parsed args to load.
 
         Returns:
             CliSettingsSource: The object instance itself.
         """
+        ...
+
+    def __call__(
+        self,
+        *,
+        args: list[str] | tuple[str, ...] | bool | None = None,
+        parsed_args: Namespace | dict[str, list[str] | str] | None = None,
+    ) -> dict[str, Any] | CliSettingsSource[T]:
         if args is not None and parsed_args is not None:
-            raise SettingsError('args and parsed_args are mutually exclusive')
+            raise SettingsError('`args` and `parsed_args` are mutually exclusive')
         elif args is not None:
+            if args is True:
+                args = sys.argv[1:] if args else []
             return self._load_env_vars(parsed_args=self._parse_args(self.root_parser, args))
         elif parsed_args is not None:
             return self._load_env_vars(parsed_args=parsed_args)
@@ -863,6 +881,19 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     @overload
     def _load_env_vars(self, *, parsed_args: Namespace | dict[str, list[str] | str]) -> CliSettingsSource[T]:
+        """
+        Loads the parsed command line arguments into the CLI environment settings variables.
+
+        Note:
+            The parsed args must be in `argparse.Namespace` or vars dictionary (e.g., vars(argparse.Namespace))
+            format.
+
+        Args:
+            parsed_args: The parsed args to load.
+
+        Returns:
+            CliSettingsSource: The object instance itself.
+        """
         ...
 
     def _load_env_vars(

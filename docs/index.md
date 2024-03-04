@@ -473,95 +473,118 @@ to enable [enforcing required arguments at the CLI](#enforce-required-arguments-
 
 ### The Basics
 
-To get started, let's look at a basic example for defining a Pydantic settings CLI:
+To get started, let's revisit the example presented in [parsing environment variables](#parsing-environment-variables) but using a Pydantic settings CLI:
 
-```py test="skip"
-from typing import List
+```py
+import sys
 
 from pydantic import BaseModel
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class DeepSubModel(BaseModel, use_attribute_docstrings=True):
-    """DeepSubModel class documentation."""
-
-    v4: List[int]
-    """the deeply nested sub model v4 option"""
+class DeepSubModel(BaseModel):
+    v4: str
 
 
-class SubModel(BaseModel, use_attribute_docstrings=True):
-    """SubModel class documentation."""
-
-    v1: int
-    """the sub model v1 option"""
-
+class SubModel(BaseModel):
+    v1: str
+    v2: bytes
+    v3: int
     deep: DeepSubModel
-    """The help summary for DeepSubModel and related options. This will be placed at top of group."""
 
 
-class Settings(BaseSettings, use_attribute_docstrings=True):
-    """The Settings class documentation will show in top level help text."""
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(cli_parse_args=True)
 
     v0: str
-    """the top level v0 option"""
-
     sub_model: SubModel
-    """The help summary for SubModel related options. This will be placed at top of group."""
 
 
-Settings(_cli_prog_name='app', _cli_parse_args=['--help'])  # (1)!
+sys.argv = [
+    'example.py',
+    '--v0=0',
+    '--sub_model={"v1": "json-1", "v2": "json-2"}',
+    '--sub_model.v2=nested-2',
+    '--sub_model.v3=3',
+    '--sub_model.deep.v4=v4',
+]
+
+print(Settings().model_dump())
 """
-usage: app [-h] [--v0 str] [--sub_model JSON] [--sub_model.v1 int] [--sub_model.deep JSON]
-           [--sub_model.deep.v4 List[int]]
-
-The Settings class documentation will show in top level help text.  # (2)!
-
-options:
-  -h, --help            show this help message and exit
-  --v0 str              the top level v0 option  # (3)!
-
-sub_model options:  # (4)!
-  The help summary for SubModel related options. This will be placed at top of group.
-
-  --sub_model JSON      set sub_model from JSON string
-  --sub_model.v1 int    the sub model v1 option   # (5)!
-
-sub_model.deep options:
-  The help summary for DeepSubModel and related options. This will be placed at top of
-  group.  # (6)!
-
-  --sub_model.deep JSON  # (7)!
-                        set sub_model.deep from JSON string
-  --sub_model.deep.v4 List[int]
-                        the deeply nested sub model v4 option
+{
+    'v0': '0',
+    'sub_model': {'v1': 'json-1', 'v2': b'nested-2', 'v3': 3, 'deep': {'v4': 'v4'}},
+}
 """
 ```
 
-1. Does `_cli_prog_name` and `_cli_parse_args` look familiar? They retain the same meanings as in argparse.
-
-2. Help text for application main or subcommands is populated from class docstrings.
-
-3. Help text for fields is populated from field descriptions.
-
-4. Nested models (e.g. `SubModel`, `DeepSubModel`) and their associated fields will always be grouped together.
-
-5. Note that nested fields look and act just like their environment variable counterparts. The CLI uses `.` as its
-   nested delimiter.
-
-6. Group help text is populated from field descriptions by default, but can be configured to pull from class docstrings
-   as well.
-
-7. Just like when parsing environment variables, top level models allow for JSON strings and nested fields taking
-   precedence.
-
 To enable CLI parsing, we simply set the `cli_parse_args` flag to a valid value, which retains similar conotations as
-defined in argparse. In the above example, we parsed our args from the `['--help']` list that was passed into
-`_cli_parse_args`. Alternatively, we could have set `_cli_parse_args=True` to parse args from the command line (i.e.,
-`sys.argv[1:]`).
+defined in `argparse`. Alternatively, we can also directly provided the args to parse at time of instantiation:
 
-Lastly, a CLI settings source is always [**the topmost source**](#field-value-priority), and does not support [changing
+```py test="skip" lint="skip"
+Settings(
+    _cli_parse_args=[
+        '--v0=0',
+        '--sub_model={"v1": "json-1", "v2": "json-2"}',
+        '--sub_model.v2=nested-2',
+        '--sub_model.v3=3',
+        '--sub_model.deep.v4=v4',
+    ]
+)
+```
+
+Note that a CLI settings source is always [**the topmost source**](#field-value-priority) and does not support [changing
 its priority](#changing-priority).
+
+#### Integrating with Existing Parsers
+
+A CLI settings source can be integrated with existing parsers by overriding the default CLI settings source with a user
+defined one that specifies the `root_parser` object.
+
+```py
+import sys
+from argparse import ArgumentParser
+
+from pydantic_settings import BaseSettings, CliSettingsSource
+
+parser = ArgumentParser()
+parser.add_argument('--food', choices=['pear', 'kiwi', 'lime'])
+
+
+class Settings(BaseSettings):
+    name: str = 'Bob'
+
+
+# Set existing `parser` as the `root_parser` object for the user defined settings source
+cli_settings = CliSettingsSource(Settings, root_parser=parser)
+
+# Parse and load CLI settings from the command line into the settings source.
+sys.argv = ['example.py', '--food', 'kiwi', '--name', 'waldo']
+print(Settings(_cli_settings_source=cli_settings(args=True)).model_dump())
+#> {'name': 'waldo'}
+
+# Load CLI settings from pre-parsed arguments. i.e., the parsing occurs elsewhere and we
+# just need to load the pre-parsed args into the settings source.
+parsed_args = parser.parse_args(['--food', 'kiwi', '--name', 'ralph'])
+print(Settings(_cli_settings_source=cli_settings(parsed_args=parsed_args)).model_dump())
+#> {'name': 'ralph'}
+```
+
+A `CliSettingsSource` connects with a `root_parser` object by using parser methods to add `settings_cls` fields as
+command line arguments. The `CliSettingsSource` internal parser representation is based on the `argparse` library, and
+therefore, requires parser methods that support the same attributes as their `argparse` counterparts. The available
+parser methods that can be customised, along with their argparse counterparts (the defaults), are listed below:
+
+* `parse_args_method` - argparse.ArgumentParser.parse_args
+* `add_argument_method` - argparse.ArgumentParser.add_argument
+* `add_argument_group_method` - argparse.ArgumentParser.add\_argument_group
+* `add_parser_method` - argparse.\_SubParsersAction.add_parser
+* `add_subparsers_method` - argparse.ArgumentParser.add_subparsers
+* `formatter_class` - argparse.HelpFormatter
+
+For a non-argparse parser the parser methods can be set to `None` if not supported. The CLI settings will only raise an
+error when connecting to the root parser if a parser method is necessary but set to `None`.
 
 #### Lists
 
@@ -572,22 +595,26 @@ CLI argument parsing of lists supports intermixing of any of the below three sty
   * Lazy style `--field=1,2`
 
 ```py
+import sys
 from typing import List
 
 from pydantic_settings import BaseSettings
 
 
-class Settings(BaseSettings):
+class Settings(BaseSettings, cli_parse_args=True):
     my_list: List[int]
 
 
-print(Settings(_cli_parse_args=['--my_list', '[1,2]']).model_dump())
+sys.argv = ['example.py', '--my_list', '[1,2]']
+print(Settings().model_dump())
 #> {'my_list': [1, 2]}
 
-print(Settings(_cli_parse_args=['--my_list', '1', '--my_list', '2']).model_dump())
+sys.argv = ['example.py', '--my_list', '1', '--my_list', '2']
+print(Settings().model_dump())
 #> {'my_list': [1, 2]}
 
-print(Settings(_cli_parse_args=['--my_list', '1,2']).model_dump())
+sys.argv = ['example.py', '--my_list', '1,2']
+print(Settings().model_dump())
 #> {'my_list': [1, 2]}
 ```
 
@@ -603,19 +630,22 @@ These can be used in conjunction with list forms as well, e.g:
   * `--field k1=1,k2=2 --field k3=3 --field '{"k4: 4}'` etc.
 
 ```py
+import sys
 from typing import Dict
 
 from pydantic_settings import BaseSettings
 
 
-class Settings(BaseSettings):
+class Settings(BaseSettings, cli_parse_args=True):
     my_dict: Dict[str, int]
 
 
-print(Settings(_cli_parse_args=['--my_dict', '{"k1":1,"k2":2}']).model_dump())
+sys.argv = ['example.py', '--my_dict', '{"k1":1,"k2":2}']
+print(Settings().model_dump())
 #> {'my_dict': {'k1': 1, 'k2': 2}}
 
-print(Settings(_cli_parse_args=['--my_dict', 'k1=1', '--my_dict', 'k2=2']).model_dump())
+sys.argv = ['example.py', '--my_dict', 'k1=1', '--my_dict', 'k2=2']
+print(Settings().model_dump())
 #> {'my_dict': {'k1': 1, 'k2': 2}}
 ```
 
@@ -631,7 +661,9 @@ subcommands must be a valid type derived from the pydantic `BaseModel` class.
     set of subcommands. For more information on subparsers, see [argparse
     subcommands](https://docs.python.org/3/library/argparse.html#sub-commands).
 
-```py test="skip"
+```py
+import sys
+
 from pydantic import BaseModel, Field
 
 from pydantic_settings import (
@@ -678,7 +710,7 @@ class Clone(BaseModel):
     )
 
 
-class Git(BaseSettings, cli_prog_name='git'):
+class Git(BaseSettings, cli_parse_args=True, cli_prog_name='git'):
     """git - The stupid content tracker"""
 
     clone: CliSubCommand[Clone] = Field(
@@ -688,7 +720,12 @@ class Git(BaseSettings, cli_prog_name='git'):
     plugins: CliSubCommand[Plugins] = Field(description='Fake GIT plugin commands')
 
 
-Git(_cli_parse_args=['--help'])
+try:
+    sys.argv = ['example.py', '--help']
+    Git()
+except SystemExit as e:
+    print(e)
+    #> 0
 """
 usage: git [-h] {clone,plugins} ...
 
@@ -704,7 +741,12 @@ subcommands:
 """
 
 
-Git(_cli_parse_args=['clone', '--help'])
+try:
+    sys.argv = ['example.py', 'clone', '--help']
+    Git()
+except SystemExit as e:
+    print(e)
+    #> 0
 """
 usage: git clone [-h] [--local bool] [--shared bool] REPOSITORY DIRECTORY
 
@@ -720,7 +762,12 @@ options:
 """
 
 
-Git(_cli_parse_args=['plugins', 'bar', '--help'])
+try:
+    sys.argv = ['example.py', 'plugins', 'bar', '--help']
+    Git()
+except SystemExit as e:
+    print(e)
+    #> 0
 """
 usage: git plugins bar [-h] [--my_feature bool]
 
@@ -736,6 +783,28 @@ options:
 
 The below flags can be used to customise the CLI experience to your needs.
 
+#### Change the Displayed Program Name
+
+Change the default program name displayed in the help text usage by setting `cli_prog_name`. By default, it will derive the name of the currently
+executing program from `sys.argv[0]`, just like argparse.
+
+```py
+from pydantic_settings import BaseSettings, CliSettingsSource
+
+
+class Settings(BaseSettings, cli_prog_name='appdantic'):
+    pass
+
+
+print(CliSettingsSource(Settings).root_parser.format_help())
+"""
+usage: appdantic [-h]
+
+options:
+  -h, --help  show this help message and exit
+"""
+```
+
 #### Enforce Required Arguments at CLI
 
 Pydantic settings is designed to pull values in from various sources when instantating a model. This means a field that
@@ -748,26 +817,29 @@ likely want required fields to be _strictly required at the CLI_. We can enable 
 
 ```py
 import os
+import sys
 
 from pydantic import Field
 
 from pydantic_settings import BaseSettings
 
 
-class Settings(BaseSettings, cli_enforce_required=True):
+class Settings(BaseSettings, cli_parse_args=True, cli_enforce_required=True):
     my_required_field: str = Field(description='a top level required field')
 
 
 os.environ['MY_REQUIRED_FIELD'] = 'hello from environment'
 
 try:
-    print(Settings(_cli_parse_args=[]).model_dump())
-    """
+    sys.argv = ['example.py']
+    Settings()
+except SystemExit as e:
+    print(e)
+    #> 2
+"""
 usage: example.py [-h] --my_required_field str
 example.py: error: the following arguments are required: --my_required_field
 """
-except SystemExit:
-    pass
 ```
 
 #### Hide None Type Values
@@ -871,28 +943,6 @@ sub_model options:
 
   --sub_model JSON    set sub_model from JSON string
   --sub_model.v1 int  the sub model v1 option
-"""
-```
-
-#### Change the Displayed Program Name
-
-Change the default program name displayed in the help text usage by setting `cli_prog_name`. By default, it will derive the name of the currently
-executing program from `sys.argv[0]`, just like argparse.
-
-```py
-from pydantic_settings import BaseSettings, CliSettingsSource
-
-
-class Settings(BaseSettings, cli_prog_name='appdantic'):
-    pass
-
-
-print(CliSettingsSource(Settings).root_parser.format_help())
-"""
-usage: appdantic [-h]
-
-options:
-  -h, --help  show this help message and exit
 """
 ```
 
