@@ -29,7 +29,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     env_nested_delimiter: str | None
     env_parse_none_str: str | None
     cli_prog_name: str | None
-    cli_parse_args: bool | list[str] | None
+    cli_parse_args: bool | list[str] | tuple[str, ...] | None
     cli_settings_source: CliSettingsSource[Any] | None
     cli_hide_none_type: bool
     cli_avoid_json: bool
@@ -92,7 +92,7 @@ class BaseSettings(BaseModel):
         _env_nested_delimiter: str | None = None,
         _env_parse_none_str: str | None = None,
         _cli_prog_name: str | None = None,
-        _cli_parse_args: bool | list[str] | None = None,
+        _cli_parse_args: bool | list[str] | tuple[str, ...] | None = None,
         _cli_settings_source: CliSettingsSource[Any] | None = None,
         _cli_hide_none_type: bool | None = None,
         _cli_avoid_json: bool | None = None,
@@ -160,7 +160,7 @@ class BaseSettings(BaseModel):
         _env_nested_delimiter: str | None = None,
         _env_parse_none_str: str | None = None,
         _cli_prog_name: str | None = None,
-        _cli_parse_args: bool | list[str] | None = None,
+        _cli_parse_args: bool | list[str] | tuple[str, ...] | None = None,
         _cli_settings_source: CliSettingsSource[Any] | None = None,
         _cli_hide_none_type: bool | None = None,
         _cli_avoid_json: bool | None = None,
