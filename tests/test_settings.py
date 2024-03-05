@@ -2368,7 +2368,25 @@ def test_cli_union_similar_sub_models():
     assert cfg.model_dump() == {'child': {'name': 'new name a', 'diff_a': 'new diff a'}}
 
 
-def test_cli_literal():
+# TODO Remove skip once environment parsing support for enums is added
+@pytest.mark.skip
+def test_cli_enums():
+    class Pet(IntEnum):
+        dog = 0
+        cat = 1
+        bird = 2
+
+    class Cfg(BaseSettings):
+        pet: Pet
+
+    cfg = Cfg(_cli_parse_args=['--pet', 'cat'])
+    assert cfg.model_dump() == {'pet': Pet.cat}
+
+    with pytest.raises(ValidationError):
+        Cfg(_cli_parse_args=['--pet', 'rock'])
+
+
+def test_cli_literals():
     class Cfg(BaseSettings):
         pet: Literal['dog', 'cat', 'bird']
 

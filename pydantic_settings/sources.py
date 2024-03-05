@@ -828,13 +828,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         ...
 
     @overload
-    def __call__(self, *, args: list[str] | tuple[str, ...] | bool) -> dict[str, Any]:
+    def __call__(self, *, args: list[str] | tuple[str, ...] | bool) -> CliSettingsSource[T]:
         """
         Parse and load the command line arguments list into the CLI settings source.
 
         Args:
-            args: The command line arguments to parse and load. Defaults to `None`. If set to `True`, defaults
-                to sys.argv[1:]. If set to `False`, defaults to [].
+            args:
+                The command line arguments to parse and load. Defaults to `None`, which means do not parse
+                command line arguments. If set to `True`, defaults to sys.argv[1:]. If set to `False`, does
+                not parse command line arguments.
 
         Returns:
             CliSettingsSource: The object instance itself.
@@ -842,7 +844,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         ...
 
     @overload
-    def __call__(self, *, parsed_args: Namespace | dict[str, list[str] | str]) -> dict[str, Any]:
+    def __call__(self, *, parsed_args: Namespace | dict[str, list[str] | str]) -> CliSettingsSource[T]:
         """
         Loads parsed command line arguments into the CLI settings source.
 
@@ -867,8 +869,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         if args is not None and parsed_args is not None:
             raise SettingsError('`args` and `parsed_args` are mutually exclusive')
         elif args is not None:
+            if args is False:
+                return self
             if args is True:
-                args = sys.argv[1:] if args else []
+                args = sys.argv[1:]
             return self._load_env_vars(parsed_args=self._parse_args(self.root_parser, args))
         elif parsed_args is not None:
             return self._load_env_vars(parsed_args=parsed_args)

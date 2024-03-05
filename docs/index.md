@@ -649,6 +649,35 @@ print(Settings().model_dump())
 #> {'my_dict': {'k1': 1, 'k2': 2}}
 ```
 
+#### Literals and Enums
+
+CLI argument parsing of literals and enums are converted into CLI choices.
+
+<!-- TODO Remove skip once environment parsing support for enums is added -->
+```py test="skip"
+import sys
+from enum import IntEnum
+from typing import Literal
+
+from pydantic_settings import BaseSettings
+
+
+class Fruit(IntEnum):
+    pear = 0
+    kiwi = 1
+    lime = 2
+
+
+class Settings(BaseSettings, cli_parse_args=True):
+    fruit: Fruit
+    pet: Literal['dog', 'cat', 'bird']
+
+
+sys.argv = ['example.py', '--fruit', 'lime', '--pet', 'cat']
+print(Settings().model_dump())
+#> {'fruit': <Fruit.lime: 2>, 'pet': 'cat'}
+```
+
 ### Subcommands and Positional Arguments
 
 Subcommands and positional arguments are expressed using the `CliSubCommand` and `CliPositionalArg` annotations. These
