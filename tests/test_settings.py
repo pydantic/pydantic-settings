@@ -1863,10 +1863,17 @@ def test_env_parse_enums(env):
     class Settings(BaseSettings):
         fruit: FruitsEnum
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as exc_info:
         env.set('FRUIT', 'kiwi')
         s = Settings()
-        assert s.fruit == FruitsEnum.kiwi
+    assert exc_info.value.errors(include_url=False) == [
+        {
+            'type': 'int_parsing',
+            'loc': ('fruit',),
+            'msg': 'Input should be a valid integer, unable to parse string as an integer',
+            'input': 'kiwi',
+        }
+    ]
 
     env.set('FRUIT', str(FruitsEnum.lime.value))
     s = Settings()
