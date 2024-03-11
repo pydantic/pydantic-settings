@@ -7,6 +7,7 @@ import warnings
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import is_dataclass
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, List, Mapping, Sequence, Tuple, Union, cast
 
@@ -179,6 +180,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         env_prefix: str | None = None,
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
+        env_parse_enums: bool | None = None,
     ) -> None:
         super().__init__(settings_cls)
         self.case_sensitive = case_sensitive if case_sensitive is not None else self.config.get('case_sensitive', False)
@@ -189,6 +191,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         self.env_parse_none_str = (
             env_parse_none_str if env_parse_none_str is not None else self.config.get('env_parse_none_str')
         )
+        self.env_parse_enums = env_parse_enums if env_parse_enums is not None else self.config.get('env_parse_enums')
 
     def _apply_case_sensitive(self, value: str) -> str:
         return value.lower() if not self.case_sensitive else value
@@ -357,8 +360,11 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         env_prefix: str | None = None,
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
+        env_parse_enums: bool | None = None,
     ) -> None:
-        super().__init__(settings_cls, case_sensitive, env_prefix, env_ignore_empty, env_parse_none_str)
+        super().__init__(
+            settings_cls, case_sensitive, env_prefix, env_ignore_empty, env_parse_none_str, env_parse_enums
+        )
         self.secrets_dir = secrets_dir if secrets_dir is not None else self.config.get('secrets_dir')
 
     def __call__(self) -> dict[str, Any]:
@@ -447,8 +453,11 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         env_nested_delimiter: str | None = None,
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
+        env_parse_enums: bool | None = None,
     ) -> None:
-        super().__init__(settings_cls, case_sensitive, env_prefix, env_ignore_empty, env_parse_none_str)
+        super().__init__(
+            settings_cls, case_sensitive, env_prefix, env_ignore_empty, env_parse_none_str, env_parse_enums
+        )
         self.env_nested_delimiter = (
             env_nested_delimiter if env_nested_delimiter is not None else self.config.get('env_nested_delimiter')
         )
@@ -498,6 +507,10 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             ValuesError: When There is an error in deserializing value for complex field.
         """
         is_complex, allow_parse_failure = self._field_is_complex(field)
+        if self.env_parse_enums and lenient_issubclass(field.annotation, Enum):
+            if value in tuple(val.name for val in field.annotation):  # type: ignore
+                value = field.annotation[value]  # type: ignore
+
         if is_complex or value_is_complex:
             if value is None:
                 # field is complex but no value found so far, try explode_env_vars
@@ -645,13 +658,20 @@ class DotEnvSettingsSource(EnvSettingsSource):
         env_nested_delimiter: str | None = None,
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
+        env_parse_enums: bool | None = None,
     ) -> None:
         self.env_file = env_file if env_file != ENV_FILE_SENTINEL else settings_cls.model_config.get('env_file')
         self.env_file_encoding = (
             env_file_encoding if env_file_encoding is not None else settings_cls.model_config.get('env_file_encoding')
         )
         super().__init__(
-            settings_cls, case_sensitive, env_prefix, env_nested_delimiter, env_ignore_empty, env_parse_none_str
+            settings_cls,
+            case_sensitive,
+            env_prefix,
+            env_nested_delimiter,
+            env_ignore_empty,
+            env_parse_none_str,
+            env_parse_enums,
         )
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
