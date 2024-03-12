@@ -1908,11 +1908,6 @@ def test_env_json_field(env):
 
 
 def test_env_parse_enums(env):
-    class FruitsEnum(IntEnum):
-        pear = 0
-        kiwi = 1
-        lime = 2
-
     class Settings(BaseSettings):
         fruit: FruitsEnum
 
@@ -2392,8 +2387,6 @@ def test_cli_union_similar_sub_models():
     assert cfg.model_dump() == {'child': {'name': 'new name a', 'diff_a': 'new diff a'}}
 
 
-# TODO Remove skip once environment parsing support for enums is added
-@pytest.mark.skip
 def test_cli_enums():
     class Pet(IntEnum):
         dog = 0

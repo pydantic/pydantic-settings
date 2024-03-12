@@ -652,8 +652,7 @@ print(Settings().model_dump())
 
 CLI argument parsing of literals and enums are converted into CLI choices.
 
-<!-- TODO Remove skip once environment parsing support for enums is added -->
-```py test="skip"
+```py
 import sys
 from enum import IntEnum
 from typing import Literal

@@ -851,7 +851,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             self.cli_prefix += '.'
 
         super().__init__(
-            settings_cls, env_nested_delimiter='.', env_parse_none_str=cli_parse_none_str, env_prefix=self.cli_prefix
+            settings_cls,
+            env_nested_delimiter='.',
+            env_parse_none_str=cli_parse_none_str,
+            env_parse_enums=True,
+            env_prefix=self.cli_prefix,
         )
 
         root_parser = (
