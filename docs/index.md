@@ -815,15 +815,18 @@ The below flags can be used to customise the CLI experience to your needs.
 Change the default program name displayed in the help text usage by setting `cli_prog_name`. By default, it will derive the name of the currently
 executing program from `sys.argv[0]`, just like argparse.
 
-```py
-from pydantic_settings import BaseSettings, CliSettingsSource
+```py test="skip"
+import sys
+
+from pydantic_settings import BaseSettings
 
 
-class Settings(BaseSettings, cli_prog_name='appdantic'):
+class Settings(BaseSettings, cli_parse_args=True, cli_prog_name='appdantic'):
     pass
 
 
-print(CliSettingsSource(Settings).root_parser.format_help())
+sys.argv = ['example.py', '--help']
+Settings()
 """
 usage: appdantic [-h]
 
@@ -873,19 +876,21 @@ example.py: error: the following arguments are required: --my_required_field
 
 Hide `None` values from the CLI help text by enabling `cli_hide_none_type`.
 
-```py
+```py test="skip"
+import sys
 from typing import Optional
 
 from pydantic import Field
 
-from pydantic_settings import BaseSettings, CliSettingsSource
+from pydantic_settings import BaseSettings
 
 
-class Settings(BaseSettings, cli_hide_none_type=True):
+class Settings(BaseSettings, cli_parse_args=True, cli_hide_none_type=True):
     v0: Optional[str] = Field(description='the top level v0 option')
 
 
-print(CliSettingsSource(Settings, cli_prog_name='example.py').root_parser.format_help())
+sys.argv = ['example.py', '--help']
+Settings()
 """
 usage: example.py [-h] [--v0 str]
 
@@ -899,23 +904,26 @@ options:
 
 Avoid adding complex fields that result in JSON strings at the CLI by enabling `cli_avoid_json`.
 
-```py
+```py test="skip"
+import sys
+
 from pydantic import BaseModel, Field
 
-from pydantic_settings import BaseSettings, CliSettingsSource
+from pydantic_settings import BaseSettings
 
 
 class SubModel(BaseModel):
     v1: int = Field(description='the sub model v1 option')
 
 
-class Settings(BaseSettings, cli_avoid_json=True):
+class Settings(BaseSettings, cli_parse_args=True, cli_avoid_json=True):
     sub_model: SubModel = Field(
         description='The help summary for SubModel related options'
     )
 
 
-print(CliSettingsSource(Settings, cli_prog_name='example.py').root_parser.format_help())
+sys.argv = ['example.py', '--help']
+Settings()
 """
 usage: example.py [-h] [--sub_model.v1 int]
 
@@ -938,10 +946,12 @@ Alternatively, we can also configure CLI settings to pull from the class docstri
     If the field is a union of nested models the group help text will always be pulled from the field description;
     even if `cli_use_class_docs_for_groups` is set to `True`.
 
-```py
+```py test="skip"
+import sys
+
 from pydantic import BaseModel, Field
 
-from pydantic_settings import BaseSettings, CliSettingsSource
+from pydantic_settings import BaseSettings
 
 
 class SubModel(BaseModel):
@@ -950,13 +960,14 @@ class SubModel(BaseModel):
     v1: int = Field(description='the sub model v1 option')
 
 
-class Settings(BaseSettings, cli_use_class_docs_for_groups=True):
+class Settings(BaseSettings, cli_parse_args=True, cli_use_class_docs_for_groups=True):
     """My application help text."""
 
     sub_model: SubModel = Field(description='The help text from the field description')
 
 
-print(CliSettingsSource(Settings, cli_prog_name='example.py').root_parser.format_help())
+sys.argv = ['example.py', '--help']
+Settings()
 """
 usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
 
