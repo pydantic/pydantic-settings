@@ -104,8 +104,7 @@ class CliDummyParser(BaseModel, arbitrary_types_allowed=True):
 
 
 class LoggedVar(Generic[T]):
-    def get(self) -> T:
-        ...
+    def get(self) -> T: ...
 
 
 class SimpleSettings(BaseSettings):

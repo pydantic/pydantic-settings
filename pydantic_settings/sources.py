@@ -883,8 +883,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             self._load_env_vars(parsed_args=self._parse_args(self.root_parser, cli_parse_args))
 
     @overload
-    def __call__(self) -> dict[str, Any]:
-        ...
+    def __call__(self) -> dict[str, Any]: ...
 
     @overload
     def __call__(self, *, args: list[str] | tuple[str, ...] | bool) -> CliSettingsSource[T]:
