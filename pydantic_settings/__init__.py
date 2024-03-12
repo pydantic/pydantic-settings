@@ -6,8 +6,11 @@ from .sources import (
     DotEnvSettingsSource,
     EnvSettingsSource,
     InitSettingsSource,
+    JsonConfigSettingsSource,
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
+    TomlConfigSettingsSource,
+    YamlConfigSettingsSource,
 )
 from .version import VERSION
 
@@ -19,9 +22,12 @@ __all__ = (
     'CliSubCommand',
     'CliPositionalArg',
     'InitSettingsSource',
+    'JsonConfigSettingsSource',
     'PydanticBaseSettingsSource',
     'SecretsSettingsSource',
     'SettingsConfigDict',
+    'TomlConfigSettingsSource',
+    'YamlConfigSettingsSource',
     '__version__',
 )
 

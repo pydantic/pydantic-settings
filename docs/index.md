@@ -212,12 +212,12 @@ In case of nested models, the `case_sensitive` setting will be applied to all ne
 ```py
 import os
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from pydantic_settings import BaseSettings
 
 
-class RedisSettings(BaseSettings):
+class RedisSettings(BaseModel):
     host: str
     port: int
 
@@ -235,13 +235,10 @@ try:
 except ValidationError as e:
     print(e)
     """
-    2 validation errors for Settings
+    1 validation error for Settings
     redis.host
       Field required [type=missing, input_value={'HOST': 'localhost', 'port': 6379}, input_type=dict]
         For further information visit https://errors.pydantic.dev/2/v/missing
-    redis.HOST
-      Extra inputs are not permitted [type=extra_forbidden, input_value='localhost', input_type=str]
-        For further information visit https://errors.pydantic.dev/2/v/extra_forbidden
     """
 ```
 
@@ -269,6 +266,10 @@ config setting, then use an environment variable with a name pointing to the nes
 What it does is simply explodes your variable into nested models or dicts.
 So if you define a variable `FOO__BAR__BAZ=123` it will convert it into `FOO={'BAR': {'BAZ': 123}}`
 If you have multiple variables with the same structure they will be merged.
+
+!!! note
+    Sub model has to inherit from `pydantic.BaseModel`, Otherwise `pydantic-settings` will initialize sub model,
+    collects values for sub model fields separately, and you may get unexpected results.
 
 As an example, given the following environment variables:
 ```bash
@@ -315,11 +316,9 @@ print(Settings().model_dump())
 """
 ```
 
-1. Sub model has to inherit from `pydantic.BaseModel`, Otherwise `pydantic-settings` will initialize sub model,
-   collects values for sub model fields separately, and you may get unexpected results.
+1. Sub model has to inherit from `pydantic.BaseModel`.
 
-2. Sub model has to inherit from `pydantic.BaseModel`, Otherwise `pydantic-settings` will initialize sub model,
-   collects values for sub model fields separately, and you may get unexpected results.
+2. Sub model has to inherit from `pydantic.BaseModel`.
 
 `env_nested_delimiter` can be configured via the `model_config` as shown above, or via the
 `_env_nested_delimiter` keyword argument on instantiation.
@@ -975,6 +974,11 @@ sub_model options:
 """
 ```
 
+!!! note
+    Pydantic settings loads all the values from dotenv file and passes it to the model, regardless of the model's `env_prefix`.
+    So if you provide extra values in a dotenv file, whether they start with `env_prefix` or not,
+    a `ValidationError` will be raised.
+
 ## Secrets
 
 Placing secret values in files is a common pattern to provide sensitive configuration to an application.
@@ -1044,6 +1048,63 @@ printf "This is a secret" | docker secret create my_secret_data -
 Last, run your application inside a Docker container and supply your newly created secret
 ```bash
 docker service create --name pydantic-with-secrets --secret my_secret_data pydantic-app:latest
+```
+
+## Other settings source
+
+Other settings sources are available for common configuration files:
+
+- `TomlConfigSettingsSource` using `toml_file` argument
+- `YamlConfigSettingsSource` using `yaml_file` and yaml_file_encoding arguments
+- `JsonConfigSettingsSource` using `json_file` and `json_file_encoding` arguments
+
+You can also provide multiple files by providing a list of path:
+```py
+toml_file = ['config.default.toml', 'config.custom.toml']
+```
+To use them, you can use the same mechanism described [here](#customise-settings-sources)
+
+
+```py
+from typing import Tuple, Type
+
+from pydantic import BaseModel
+
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    TomlConfigSettingsSource,
+)
+
+
+class Nested(BaseModel):
+    nested_field: str
+
+
+class Settings(BaseSettings):
+    foobar: str
+    nested: Nested
+    model_config = SettingsConfigDict(toml_file='config.toml')
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        return (TomlConfigSettingsSource(settings_cls),)
+```
+
+This will be able to read the following "config.toml" file, located in your working directory:
+
+```toml
+foobar = "Hello"
+[nested]
+nested_field = "world!"
 ```
 
 ## Field value priority
