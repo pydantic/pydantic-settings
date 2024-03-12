@@ -2213,7 +2213,7 @@ def test_cli_list_arg(prefix):
 
 def test_cli_list_json_value_parsing():
     class Cfg(BaseSettings):
-        json_list: list[Union[str, bool, None]]
+        json_list: List[Union[str, bool, None]]
 
     assert Cfg(
         _cli_parse_args=[
