@@ -1276,7 +1276,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             return '...'
         elif isinstance(obj, (pydantic._internal._repr.Representation, pydantic.v1.utils.Representation)):
             return repr(obj)
-        elif isinstance(obj, typing_extensions.TypeAliasType):  # type: ignore
+        elif isinstance(obj, typing_extensions.TypeAliasType):
             return str(obj)
 
         if not isinstance(obj, (typing_base, WithArgsTypes, type)):
