@@ -938,8 +938,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             return super().__call__()
 
     @overload
-    def _load_env_vars(self) -> Mapping[str, str | None]:
-        ...
+    def _load_env_vars(self) -> Mapping[str, str | None]: ...
 
     @overload
     def _load_env_vars(self, *, parsed_args: Namespace | dict[str, list[str] | str]) -> CliSettingsSource[T]:
