@@ -783,7 +783,7 @@ class JsonConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
 
 class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
     """
-    A source class that loads variables from a JSON file
+    A source class that loads variables from a TOML file
     """
 
     def __init__(
@@ -801,6 +801,47 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
             if sys.version_info < (3, 11):
                 return tomli.load(toml_file)
             return tomllib.load(toml_file)
+
+
+class PyprojectTomlConfigSettingsSource(TomlConfigSettingsSource):
+    """
+    A source class that loads variables from a `pyproject.toml` file.
+    """
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        toml_file: Path | None = None,
+    ) -> None:
+        self.toml_file_path = self._pick_pyproject_toml_file(
+            toml_file, settings_cls.model_config.get('pyproject_toml_depth', 0)
+        )
+        self.toml_table_header: tuple[str, ...] = settings_cls.model_config.get('toml_table_header', ())
+        self.toml_data = self._read_files(self.toml_file_path)
+        for key in self.toml_table_header:
+            self.toml_data = self.toml_data.get(key, {})
+        super(TomlConfigSettingsSource, self).__init__(settings_cls, self.toml_data)
+
+    @staticmethod
+    def _pick_pyproject_toml_file(provided: Path | None, depth: int) -> Path:
+        """Pick a `pyproject.toml` file path to use.
+
+        Args:
+            provided: Explicit path provided when instantiating this class.
+            depth: Number of directories up the tree to check of a pyproject.toml.
+
+        """
+        if provided:
+            return provided.resolve()
+        rv = Path.cwd() / 'pyproject.toml'
+        count = 0
+        while count < depth:
+            if not rv.is_file():
+                other = rv.parent.parent / 'pyproject.toml'
+                if other.is_file():
+                    return other
+            count += 1
+        return rv
 
 
 class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):

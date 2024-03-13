@@ -34,6 +34,7 @@ from pydantic_settings import (
     InitSettingsSource,
     JsonConfigSettingsSource,
     PydanticBaseSettingsSource,
+    PyprojectTomlConfigSettingsSource,
     SecretsSettingsSource,
     SettingsConfigDict,
     TomlConfigSettingsSource,
@@ -2180,6 +2181,97 @@ def test_toml_no_file():
             file_secret_settings: PydanticBaseSettingsSource,
         ) -> Tuple[PydanticBaseSettingsSource, ...]:
             return (TomlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.model_dump() == {}
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+def test_pyproject_toml_file(cd_tmp_path: Path):
+    pyproject = cd_tmp_path / 'pyproject.toml'
+    pyproject.write_text(
+        """
+    foobar = "Hello"
+
+    [nested]
+    nested_field = "world!"
+    """
+    )
+
+    class Nested(BaseModel):
+        nested_field: str
+
+    class Settings(BaseSettings):
+        foobar: str
+        nested: Nested
+        model_config = SettingsConfigDict()
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (PyprojectTomlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.foobar == 'Hello'
+    assert s.nested.nested_field == 'world!'
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+def test_pyproject_toml_file_header(cd_tmp_path: Path):
+    pyproject = cd_tmp_path / 'subdir' / 'pyproject.toml'
+    pyproject.parent.mkdir()
+    pyproject.write_text(
+        """
+    foobar = "Hello"
+
+    [nested]
+    nested_field = "world!"
+
+    [tool."my.tool".foo]
+    status = "success"
+    """
+    )
+
+    class Settings(BaseSettings):
+        status: str
+        model_config = SettingsConfigDict(extra='forbid', toml_table_header=('tool', 'my.tool', 'foo'))
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (PyprojectTomlConfigSettingsSource(settings_cls, pyproject),)
+
+    s = Settings()
+    assert s.status == 'success'
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+def test_pyproject_toml_no_file(cd_tmp_path: Path):
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict()
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (PyprojectTomlConfigSettingsSource(settings_cls),)
 
     s = Settings()
     assert s.model_dump() == {}
