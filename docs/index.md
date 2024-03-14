@@ -600,14 +600,15 @@ nested_field = "world!"
 While encouraged to use the `[tool]` table, `PyprojectTomlConfigSettingsSource` can be used to load variables from any location with in "pyproject.toml" file.
 
 ```python
-from pydantic import BaseModel
+from typing import Tuple, Type
 
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
-    SettingsConfigDict,
     PyprojectTomlConfigSettingsSource,
+    SettingsConfigDict,
 )
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(toml_table_header=('tool', 'some-table'))
@@ -624,6 +625,7 @@ class Settings(BaseSettings):
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> Tuple[PydanticBaseSettingsSource, ...]:
         return (PyprojectTomlConfigSettingsSource(settings_cls),)
+
 
 class RootSettings(Settings):
     model_config = SettingsConfigDict(extra='ignore')
