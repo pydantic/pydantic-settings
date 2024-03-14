@@ -539,9 +539,10 @@ docker service create --name pydantic-with-secrets --secret my_secret_data pydan
 
 Other settings sources are available for common configuration files:
 
+- `JsonConfigSettingsSource` using `json_file` and `json_file_encoding` arguments
+- `PyprojectTomlConfigSettingsSource` using *(optional)* `pyproject_toml_depth` and *(optional)* `toml_table_header` arguments
 - `TomlConfigSettingsSource` using `toml_file` argument
 - `YamlConfigSettingsSource` using `yaml_file` and yaml_file_encoding arguments
-- `JsonConfigSettingsSource` using `json_file` and `json_file_encoding` arguments
 
 You can also provide multiple files by providing a list of path:
 ```py
@@ -591,6 +592,59 @@ foobar = "Hello"
 [nested]
 nested_field = "world!"
 ```
+
+### pyproject.toml
+
+"pyproject.toml" is a standardized file for providing configuration values in Python projects.
+[PEP 518](https://peps.python.org/pep-0518/#tool-table) defines a `[tool]` table that can be used to provide arbitrary tool configuration.
+While encouraged to use the `[tool]` table, `PyprojectTomlConfigSettingsSource` can be used to load variables from any location with in "pyproject.toml" file.
+
+```python
+from pydantic import BaseModel
+
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    PyprojectTomlConfigSettingsSource,
+)
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(toml_table_header=('tool', 'some-table'))
+
+    field: str
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        return (PyprojectTomlConfigSettingsSource(settings_cls),)
+
+class RootSettings(Settings):
+    model_config = SettingsConfigDict(extra='ignore')
+```
+
+This will be able to read the following "pyproject.toml" file, located in your working directory, resulting in `Settings(field='some-table')` & `RootSettings(field='root')`:
+
+```toml
+field = "root"
+
+[tool.some-table]
+field = "some-table"
+```
+
+By default, `PyprojectTomlConfigSettingsSource` will only look for a "pyproject.toml" in the your current working directory.
+However, there are two options to change this behavior.
+
+* `SettingsConfigDict(pyproject_toml_depth=<int>)` can be provided to check `<int>` number of directories **up** in the directory tree for a "pyproject.toml" if one is not found in the current working directory.
+  By default, no parent directories are checked.
+* An explicit file path can be provided to the source when it is instantiated (e.g. `PyprojectTomlConfigSettingsSource(Path('~/.config').resolve() /'pyproject.toml')`).
+  If a file path is provided this way, it will be treated as absolute (no other locations are checked).
 
 ## Field value priority
 
