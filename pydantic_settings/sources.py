@@ -837,12 +837,15 @@ class PyprojectTomlConfigSettingsSource(TomlConfigSettingsSource):
             return provided.resolve()
         rv = Path.cwd() / 'pyproject.toml'
         count = 0
-        while count < depth:
-            if not rv.is_file():
-                other = rv.parent.parent / 'pyproject.toml'
-                if other.is_file():
-                    return other
-            count += 1
+        if not rv.is_file():
+            child = rv.parent.parent / 'pyproject.toml'
+            while count < depth:
+                if child.is_file():
+                    return child
+                if str(child.parent) == rv.root:
+                    break  # end discovery after checking system root once
+                child = child.parent.parent / 'pyproject.toml'
+                count += 1
         return rv
 
 

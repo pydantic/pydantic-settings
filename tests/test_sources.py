@@ -75,10 +75,15 @@ class TestPyprojectTomlConfigSettingsSource:
         assert not obj.toml_data
         assert obj.toml_file_path == pyproject
 
-    def test___init___no_file(self, mocker: MockerFixture, tmp_path: Path) -> None:
+    @pytest.mark.parametrize('depth', [0, 99])
+    def test___init___no_file(self, depth: int, mocker: MockerFixture, tmp_path: Path) -> None:
         """Test __init__ no file."""
+
+        class Settings(BaseSettings):
+            model_config = SettingsConfigDict(pyproject_toml_depth=depth)
+
         mocker.patch(f'{MODULE}.Path.cwd', return_value=tmp_path / 'foo')
-        obj = PyprojectTomlConfigSettingsSource(BaseSettings)
+        obj = PyprojectTomlConfigSettingsSource(Settings)
         assert obj.toml_table_header == ('tool', 'pydantic-settings')
         assert not obj.toml_data
         assert obj.toml_file_path == tmp_path / 'foo' / 'pyproject.toml'
