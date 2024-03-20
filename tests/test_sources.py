@@ -38,7 +38,7 @@ field = "other"
 class SimpleSettings(BaseSettings):
     """Simple settings."""
 
-    model_config = SettingsConfigDict(pyproject_toml_depth=1, toml_table_header=('some', 'table'))
+    model_config = SettingsConfigDict(pyproject_toml_depth=1, pyproject_toml_table_header=('some', 'table'))
 
 
 @pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')

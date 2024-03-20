@@ -2242,7 +2242,7 @@ def test_pyproject_toml_file_header(cd_tmp_path: Path):
 
     class Settings(BaseSettings):
         status: str
-        model_config = SettingsConfigDict(extra='forbid', toml_table_header=('tool', 'my.tool', 'foo'))
+        model_config = SettingsConfigDict(extra='forbid', pyproject_toml_table_header=('tool', 'my.tool', 'foo'))
 
         @classmethod
         def settings_customise_sources(

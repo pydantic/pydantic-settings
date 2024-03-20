@@ -42,8 +42,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     This is only used when a pyproject.toml file is not found in the current working directory.
     """
 
-    toml_file: PathType | None
-    toml_table_header: tuple[str, ...]
+    pyproject_toml_table_header: tuple[str, ...]
     """
     Header of the TOML table within a pyproject.toml file to use when filling variables.
     This is supplied as a `tuple[str, ...]` instead of a `str` to accommodate for headers
@@ -54,6 +53,8 @@ class SettingsConfigDict(ConfigDict, total=False):
 
     To use the root table, exclude this config setting or provide an empty tuple.
     """
+
+    toml_file: PathType | None
 
 
 # Extend `config_keys` by pydantic settings config keys to

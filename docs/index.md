@@ -540,7 +540,7 @@ docker service create --name pydantic-with-secrets --secret my_secret_data pydan
 Other settings sources are available for common configuration files:
 
 - `JsonConfigSettingsSource` using `json_file` and `json_file_encoding` arguments
-- `PyprojectTomlConfigSettingsSource` using *(optional)* `pyproject_toml_depth` and *(optional)* `toml_table_header` arguments
+- `PyprojectTomlConfigSettingsSource` using *(optional)* `pyproject_toml_depth` and *(optional)* `pyproject_toml_table_header` arguments
 - `TomlConfigSettingsSource` using `toml_file` argument
 - `YamlConfigSettingsSource` using `yaml_file` and yaml_file_encoding arguments
 
@@ -599,8 +599,8 @@ nested_field = "world!"
 [PEP 518](https://peps.python.org/pep-0518/#tool-table) defines a `[tool]` table that can be used to provide arbitrary tool configuration.
 While encouraged to use the `[tool]` table, `PyprojectTomlConfigSettingsSource` can be used to load variables from any location with in "pyproject.toml" file.
 
-This is controlled by providing `SettingsConfigDict(toml_table_header=tuple[str, ...])` where the value is a tuple of header parts.
-By default, `toml_table_header=('tool', 'pydantic-settings')` which will load variables from the `[tool.pydantic-settings]` table.
+This is controlled by providing `SettingsConfigDict(pyproject_toml_table_header=tuple[str, ...])` where the value is a tuple of header parts.
+By default, `pyproject_toml_table_header=('tool', 'pydantic-settings')` which will load variables from the `[tool.pydantic-settings]` table.
 
 ```python
 from typing import Tuple, Type
@@ -614,7 +614,9 @@ from pydantic_settings import (
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(toml_table_header=('tool', 'some-table'))
+    model_config = SettingsConfigDict(
+        pyproject_toml_table_header=('tool', 'some-table')
+    )
 
     field: str
 
