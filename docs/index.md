@@ -599,6 +599,9 @@ nested_field = "world!"
 [PEP 518](https://peps.python.org/pep-0518/#tool-table) defines a `[tool]` table that can be used to provide arbitrary tool configuration.
 While encouraged to use the `[tool]` table, `PyprojectTomlConfigSettingsSource` can be used to load variables from any location with in "pyproject.toml" file.
 
+This is controlled by providing `SettingsConfigDict(toml_table_header=tuple[str, ...])` where the value is a tuple of header parts.
+By default, `toml_table_header=('tool', 'pydantic-settings')` which will load variables from the `[tool.pydantic-settings]` table.
+
 ```python
 from typing import Tuple, Type
 

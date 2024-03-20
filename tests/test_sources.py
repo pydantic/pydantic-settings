@@ -79,7 +79,7 @@ class TestPyprojectTomlConfigSettingsSource:
         """Test __init__ no file."""
         mocker.patch(f'{MODULE}.Path.cwd', return_value=tmp_path / 'foo')
         obj = PyprojectTomlConfigSettingsSource(BaseSettings)
-        assert not obj.toml_table_header
+        assert obj.toml_table_header == ('tool', 'pydantic-settings')
         assert not obj.toml_data
         assert obj.toml_file_path == tmp_path / 'foo' / 'pyproject.toml'
 

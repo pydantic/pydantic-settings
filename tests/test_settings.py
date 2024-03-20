@@ -2191,9 +2191,10 @@ def test_pyproject_toml_file(cd_tmp_path: Path):
     pyproject = cd_tmp_path / 'pyproject.toml'
     pyproject.write_text(
         """
+    [tool.pydantic-settings]
     foobar = "Hello"
 
-    [nested]
+    [tool.pydantic-settings.nested]
     nested_field = "world!"
     """
     )
@@ -2228,9 +2229,10 @@ def test_pyproject_toml_file_header(cd_tmp_path: Path):
     pyproject.parent.mkdir()
     pyproject.write_text(
         """
+    [tool.pydantic-settings]
     foobar = "Hello"
 
-    [nested]
+    [tool.pydantic-settings.nested]
     nested_field = "world!"
 
     [tool."my.tool".foo]

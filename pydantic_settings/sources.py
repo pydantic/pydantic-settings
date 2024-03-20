@@ -816,7 +816,9 @@ class PyprojectTomlConfigSettingsSource(TomlConfigSettingsSource):
         self.toml_file_path = self._pick_pyproject_toml_file(
             toml_file, settings_cls.model_config.get('pyproject_toml_depth', 0)
         )
-        self.toml_table_header: tuple[str, ...] = settings_cls.model_config.get('toml_table_header', ())
+        self.toml_table_header: tuple[str, ...] = settings_cls.model_config.get(
+            'toml_table_header', ('tool', 'pydantic-settings')
+        )
         self.toml_data = self._read_files(self.toml_file_path)
         for key in self.toml_table_header:
             self.toml_data = self.toml_data.get(key, {})
