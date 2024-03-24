@@ -2352,6 +2352,10 @@ def test_cli_union_dict_arg():
     cfg = Cfg(_cli_parse_args=args)
     assert cfg.model_dump() == {'union_str_dict': {'hello': 'world'}}
 
+    args = ['--union_str_dict', '"hello=world"']
+    cfg = Cfg(_cli_parse_args=args)
+    assert cfg.model_dump() == {'union_str_dict': 'hello=world'}
+
     class Cfg(BaseSettings):
         union_list_dict: Union[List[str], Dict[str, Any]]
 
@@ -2394,6 +2398,34 @@ def test_cli_union_dict_arg():
     args = ['--union_list_dict', 'hello=world']
     cfg = Cfg(_cli_parse_args=args)
     assert cfg.model_dump() == {'union_list_dict': {'hello': 'world'}}
+
+    with pytest.raises(ValidationError) as exc_info:
+        args = ['--union_list_dict', '"hello=world"']
+        cfg = Cfg(_cli_parse_args=args)
+    assert exc_info.value.errors(include_url=False) == [
+        {
+            'input': 'hello=world',
+            'loc': (
+                'union_list_dict',
+                'list[str]',
+            ),
+            'msg': 'Input should be a valid list',
+            'type': 'list_type',
+        },
+        {
+            'input': 'hello=world',
+            'loc': (
+                'union_list_dict',
+                'dict[str,any]',
+            ),
+            'msg': 'Input should be a valid dictionary',
+            'type': 'dict_type',
+        },
+    ]
+
+    args = ['--union_list_dict', '["hello=world"]']
+    cfg = Cfg(_cli_parse_args=args)
+    assert cfg.model_dump() == {'union_list_dict': ['hello=world']}
 
 
 def test_cli_nested_dict_arg():
@@ -3026,8 +3058,6 @@ def test_cli_metavar_format_310(hide_none_type, value_gen, expected):
     value = value_gen()
     cli_settings = CliSettingsSource(SimpleSettings, cli_hide_none_type=hide_none_type)
     if hide_none_type:
-        if value == 'SomeForwardRefString':
-            expected = f"ForwardRef('{value}')"  # forward ref implicit cast
         if typing_extensions.get_origin(value) is Union:
             args = typing_extensions.get_args(value)
             value = Union[args + (None,) if args else (value, None)]

@@ -1083,7 +1083,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     val_string = f'"{val_string}"'
             merged_list.append(val_string)
         else:
-            key, val = (kv.strip('"') for kv in val_string.split('=', 1))
+            key, val = (kv for kv in val_string.split('=', 1))
+            if key.startswith('"') and not key.endswith('"') and not val.startswith('"') and val.endswith('"'):
+                raise ValueError(f'Dictionary key=val parameter is a quoted string: {val_string}')
+            key, val = key.strip('"'), val.strip('"')
             merged_list.append(json.dumps({key: val}))
         return item[consumed:]
 
