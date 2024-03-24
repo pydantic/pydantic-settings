@@ -2306,6 +2306,96 @@ def test_cli_dict_arg(prefix):
     assert str(exc_info.value) == f'Parsing error encountered for {prefix}check_dict: Mismatched quotes'
 
 
+def test_cli_union_dict_arg():
+    class Cfg(BaseSettings):
+        union_str_dict: Union[str, Dict[str, Any]]
+
+    with pytest.raises(ValidationError) as exc_info:
+        args = ['--union_str_dict', 'hello world', '--union_str_dict', 'hello world']
+        cfg = Cfg(_cli_parse_args=args)
+    assert exc_info.value.errors(include_url=False) == [
+        {
+            'input': [
+                'hello world',
+                'hello world',
+            ],
+            'loc': (
+                'union_str_dict',
+                'str',
+            ),
+            'msg': 'Input should be a valid string',
+            'type': 'string_type',
+        },
+        {
+            'input': [
+                'hello world',
+                'hello world',
+            ],
+            'loc': (
+                'union_str_dict',
+                'dict[str,any]',
+            ),
+            'msg': 'Input should be a valid dictionary',
+            'type': 'dict_type',
+        },
+    ]
+
+    args = ['--union_str_dict', 'hello world']
+    cfg = Cfg(_cli_parse_args=args)
+    assert cfg.model_dump() == {'union_str_dict': 'hello world'}
+
+    args = ['--union_str_dict', '{"hello": "world"}']
+    cfg = Cfg(_cli_parse_args=args)
+    assert cfg.model_dump() == {'union_str_dict': {'hello': 'world'}}
+
+    args = ['--union_str_dict', 'hello=world']
+    cfg = Cfg(_cli_parse_args=args)
+    assert cfg.model_dump() == {'union_str_dict': {'hello': 'world'}}
+
+    class Cfg(BaseSettings):
+        union_list_dict: Union[List[str], Dict[str, Any]]
+
+    with pytest.raises(ValidationError) as exc_info:
+        args = ['--union_list_dict', 'hello,world']
+        cfg = Cfg(_cli_parse_args=args)
+    assert exc_info.value.errors(include_url=False) == [
+        {
+            'input': 'hello,world',
+            'loc': (
+                'union_list_dict',
+                'list[str]',
+            ),
+            'msg': 'Input should be a valid list',
+            'type': 'list_type',
+        },
+        {
+            'input': 'hello,world',
+            'loc': (
+                'union_list_dict',
+                'dict[str,any]',
+            ),
+            'msg': 'Input should be a valid dictionary',
+            'type': 'dict_type',
+        },
+    ]
+
+    args = ['--union_list_dict', 'hello,world', '--union_list_dict', 'hello,world']
+    cfg = Cfg(_cli_parse_args=args)
+    assert cfg.model_dump() == {'union_list_dict': ['hello', 'world', 'hello', 'world']}
+
+    args = ['--union_list_dict', '[hello,world]']
+    cfg = Cfg(_cli_parse_args=args)
+    assert cfg.model_dump() == {'union_list_dict': ['hello', 'world']}
+
+    args = ['--union_list_dict', '{"hello": "world"}']
+    cfg = Cfg(_cli_parse_args=args)
+    assert cfg.model_dump() == {'union_list_dict': {'hello': 'world'}}
+
+    args = ['--union_list_dict', 'hello=world']
+    cfg = Cfg(_cli_parse_args=args)
+    assert cfg.model_dump() == {'union_list_dict': {'hello': 'world'}}
+
+
 def test_cli_nested_dict_arg():
     class Cfg(BaseSettings):
         check_dict: Dict[str, Any]
@@ -2752,15 +2842,18 @@ def test_cli_user_settings_source(parser_type, prefix):
     parsed_args = parse_args(args)
     assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=parsed_args)).model_dump() == {'pet': 'bird'}
     assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {'pet': 'bird'}
+    assert Cfg(_cli_settings_source=cli_cfg_settings(args=False)).model_dump() == {'pet': 'bird'}
 
     arg_prefix = f'{prefix}.' if prefix else ''
     args = ['--fruit', 'kiwi', f'--{arg_prefix}pet', 'dog']
     parsed_args = parse_args(args)
     assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=parsed_args)).model_dump() == {'pet': 'dog'}
     assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {'pet': 'dog'}
+    assert Cfg(_cli_settings_source=cli_cfg_settings(args=False)).model_dump() == {'pet': 'bird'}
 
     parsed_args = parse_args(['--fruit', 'kiwi', f'--{arg_prefix}pet', 'cat'])
     assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=vars(parsed_args))).model_dump() == {'pet': 'cat'}
+    assert Cfg(_cli_settings_source=cli_cfg_settings(args=False)).model_dump() == {'pet': 'bird'}
 
 
 @pytest.mark.parametrize('prefix', ['', 'cfg'])
@@ -2898,8 +2991,18 @@ def test_cli_user_settings_source_exceptions():
         (FruitsEnum, '{pear,kiwi,lime}'),
     ],
 )
-def test_cli_metavar_format(value, expected):
-    assert CliSettingsSource(SimpleSettings)._metavar_format(value) == expected
+@pytest.mark.parametrize('hide_none_type', [True, False])
+def test_cli_metavar_format(hide_none_type, value, expected):
+    cli_settings = CliSettingsSource(SimpleSettings, cli_hide_none_type=hide_none_type)
+    if hide_none_type:
+        if value in ('foobar', 'SomeForwardRefString'):
+            expected = f"ForwardRef('{value}')"  # forward ref implicit cast
+        if typing_extensions.get_origin(value) is Union:
+            args = typing_extensions.get_args(value)
+            value = Union[args + (None,) if args else (value, None)]
+        elif value != [1, 2, 3]:
+            value = Union[(value, None)]
+    assert cli_settings._metavar_format(value) == expected
 
 
 @pytest.mark.skipif(sys.version_info < (3, 10), reason='requires python 3.10 or higher')
@@ -2921,9 +3024,19 @@ def test_cli_metavar_format(value, expected):
         (lambda: LoggedVar[Dict[int, str]], 'LoggedVar[Dict[int,str]]'),
     ],
 )
-def test_cli_metavar_format_310(value_gen, expected):
+@pytest.mark.parametrize('hide_none_type', [True, False])
+def test_cli_metavar_format_310(hide_none_type, value_gen, expected):
     value = value_gen()
-    assert CliSettingsSource(SimpleSettings)._metavar_format(value) == expected
+    cli_settings = CliSettingsSource(SimpleSettings, cli_hide_none_type=hide_none_type)
+    if hide_none_type:
+        if value == 'SomeForwardRefString':
+            expected = f"ForwardRef('{value}')"  # forward ref implicit cast
+        if typing_extensions.get_origin(value) is Union:
+            args = typing_extensions.get_args(value)
+            value = Union[args + (None,) if args else (value, None)]
+        else:
+            value = Union[(value, None)]
+    assert cli_settings._metavar_format(value) == expected
 
 
 @pytest.mark.skipif(sys.version_info < (3, 12), reason='requires python 3.12 or higher')

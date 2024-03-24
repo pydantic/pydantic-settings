@@ -928,7 +928,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             raise SettingsError('`args` and `parsed_args` are mutually exclusive')
         elif args is not None:
             if args is False:
-                return self
+                return self._load_env_vars(parsed_args={})
             if args is True:
                 args = sys.argv[1:]
             return self._load_env_vars(parsed_args=self._parse_args(self.root_parser, args))
@@ -994,7 +994,21 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         try:
             merged_list: list[str] = []
             is_last_consumed_a_value = False
-            is_dict_list = field_name in self._cli_dict_arg_names
+            merge_type = self._cli_dict_args.get(field_name, list)
+            if (
+                merge_type is list
+                or not origin_is_union(get_origin(merge_type))
+                or not any(
+                    type_
+                    for type_ in get_args(merge_type)
+                    if type_ is not type(None) and get_origin(type_) not in (dict, Mapping)
+                )
+            ):
+                inferred_type = merge_type
+            else:
+                inferred_type = (
+                    list if parsed_list and (len(parsed_list) > 1 or parsed_list[0].startswith('[')) else str
+                )
             for val in parsed_list:
                 if val.startswith('[') and val.endswith(']'):
                     val = val[1:-1]
@@ -1006,12 +1020,20 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         if val.startswith('{') or val.startswith('['):
                             val = self._consume_object_or_array(val, merged_list)
                         else:
-                            val = self._consume_string_or_number(val, merged_list, is_dict_list)
+                            try:
+                                val = self._consume_string_or_number(val, merged_list, merge_type)
+                            except ValueError as e:
+                                if merge_type is inferred_type:
+                                    raise e
+                                merge_type = inferred_type
+                                val = self._consume_string_or_number(val, merged_list, merge_type)
                         is_last_consumed_a_value = True
                 if not is_last_consumed_a_value:
                     val = self._consume_comma(val, merged_list, is_last_consumed_a_value)
 
-            if not is_dict_list:
+            if merge_type is str:
+                return merged_list[0]
+            elif merge_type is list:
                 return f'[{",".join(merged_list)}]'
             else:
                 merged_dict: dict[str, str] = {}
@@ -1039,8 +1061,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     return item[consumed + 1 :]
         raise SettingsError(f'Missing end delimiter "{close_delim}"')
 
-    def _consume_string_or_number(self, item: str, merged_list: list[str], is_dict_list: bool) -> str:
-        consumed = 0
+    def _consume_string_or_number(self, item: str, merged_list: list[str], merge_type: type[Any] | None) -> str:
+        consumed = 0 if merge_type is not str else len(item)
         is_find_end_quote = False
         while consumed < len(item):
             if item[consumed] == '"' and (consumed == 0 or item[consumed - 1] != '\\'):
@@ -1051,7 +1073,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         if is_find_end_quote:
             raise SettingsError('Mismatched quotes')
         val_string = item[:consumed].strip()
-        if not is_dict_list:
+        if merge_type in (list, str):
             try:
                 float(val_string)
             except ValueError:
@@ -1140,7 +1162,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self._add_parser = self._connect_parser_method(add_parser_method, 'add_parser_method')
         self._add_subparsers = self._connect_parser_method(add_subparsers_method, 'add_subparsers_method')
         self._formatter_class = formatter_class
-        self._cli_dict_arg_names: list[str] = []
+        self._cli_dict_args: dict[str, type[Any] | None] = {}
         self._cli_subcommands: dict[str, list[str]] = {}
         self._add_parser_args(
             parser=self.root_parser,
@@ -1201,15 +1223,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 if kwargs['dest'] in added_args:
                     continue
                 if _annotation_contains_types(
-                    _strip_annotated(field_info.annotation),
-                    (list, set, dict, Sequence, Mapping),
-                    is_include_origin=True,
+                    field_info.annotation, (list, set, dict, Sequence, Mapping), is_strip_annotated=True
                 ):
                     kwargs['action'] = 'append'
-                    if _annotation_contains_types(
-                        _strip_annotated(field_info.annotation), (dict, Mapping), is_include_origin=True
-                    ):
-                        self._cli_dict_arg_names.append(kwargs['dest'])
+                    if _annotation_contains_types(field_info.annotation, (dict, Mapping), is_strip_annotated=True):
+                        self._cli_dict_args[kwargs['dest']] = field_info.annotation
 
                 arg_name = (
                     f'{arg_prefix}{field_name}'
@@ -1262,10 +1280,14 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         else:
             return tuple([type_ for type_ in get_args(obj) if type_ is not type(None)])
 
-    def _metavar_format_list(self, args: list[str]) -> str:
+    def _metavar_format_choices(self, args: list[str], obj_qualname: str | None = None) -> str:
         if 'JSON' in args:
             args = args[: args.index('JSON') + 1] + [arg for arg in args[args.index('JSON') + 1 :] if arg != 'JSON']
-        return ','.join(args)
+        metavar = ','.join(args)
+        if obj_qualname:
+            return f'{obj_qualname}[{metavar}]'
+        else:
+            return metavar if len(args) == 1 else f'{{{metavar}}}'
 
     def _metavar_format_recurse(self, obj: Any) -> str:
         """Pretty metavar representation of a type. Adapts logic from `pydantic._repr.display_as_type`."""
@@ -1283,17 +1305,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             obj = obj.__class__
 
         if origin_is_union(get_origin(obj)):
-            args = self._metavar_format_list(list(map(self._metavar_format_recurse, self._get_modified_args(obj))))
-            return f'{{{args}}}' if ',' in args else args
+            return self._metavar_format_choices(list(map(self._metavar_format_recurse, self._get_modified_args(obj))))
         elif get_origin(obj) in (typing_extensions.Literal, typing.Literal):
-            args = self._metavar_format_list(list(map(str, self._get_modified_args(obj))))
-            return f'{{{args}}}' if ',' in args else args
+            return self._metavar_format_choices(list(map(str, self._get_modified_args(obj))))
         elif lenient_issubclass(obj, Enum):
-            args = self._metavar_format_list([val.name for val in obj])
-            return f'{{{args}}}' if ',' in args else args
+            return self._metavar_format_choices([val.name for val in obj])
         elif isinstance(obj, WithArgsTypes):
-            args = self._metavar_format_list(list(map(self._metavar_format_recurse, self._get_modified_args(obj))))
-            return f'{obj.__qualname__}[{args}]'
+            return self._metavar_format_choices(
+                list(map(self._metavar_format_recurse, self._get_modified_args(obj))), obj_qualname=obj.__qualname__
+            )
         elif obj is type(None):
             return self.env_parse_none_str
         elif is_model_class(obj):
@@ -1456,11 +1476,18 @@ def _union_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool
     return any(_annotation_is_complex(arg, metadata) for arg in get_args(annotation))
 
 
-def _annotation_contains_types(annotation: type[Any] | None, types: tuple[Any, ...], is_include_origin: bool) -> bool:
+def _annotation_contains_types(
+    annotation: type[Any] | None,
+    types: tuple[Any, ...],
+    is_include_origin: bool = True,
+    is_strip_annotated: bool = False,
+) -> bool:
+    if is_strip_annotated:
+        annotation = _strip_annotated(annotation)
     if is_include_origin is True and get_origin(annotation) in types:
         return True
     for type_ in get_args(annotation):
-        if _annotation_contains_types(type_, types, is_include_origin=True):
+        if _annotation_contains_types(type_, types, is_include_origin=True, is_strip_annotated=is_strip_annotated):
             return True
     return annotation in types
 
