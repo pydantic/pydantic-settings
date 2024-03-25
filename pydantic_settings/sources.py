@@ -604,6 +604,8 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         Returns:
             A dictionary contains extracted values from nested env values.
         """
+        is_dict = lenient_issubclass(get_origin(field.annotation), dict)
+
         prefixes = [
             f'{env_name}{self.env_nested_delimiter}' for _, env_name, _ in self._extract_field_info(field, field_name)
         ]
@@ -624,11 +626,15 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             target_field = self.next_field(target_field, last_key)
 
             # check if env_val maps to a complex field and if so, parse the env_val
-            if target_field and env_val:
-                is_complex, allow_json_failure = self._field_is_complex(target_field)
+            if (target_field or is_dict) and env_val:
+                if target_field:
+                    is_complex, allow_json_failure = self._field_is_complex(target_field)
+                else:
+                    # nested field type is dict
+                    is_complex, allow_json_failure = True, False
                 if is_complex:
                     try:
-                        env_val = self.decode_complex_value(last_key, target_field, env_val)
+                        env_val = self.decode_complex_value(last_key, target_field, env_val)  # type: ignore
                     except ValueError as e:
                         if not allow_json_failure:
                             raise e

@@ -2348,3 +2348,19 @@ def test_nested_field_with_alias_init_source():
 
     s = Settings(nested_foo=NestedSettings(fooAlias='EXAMPLE'))
     assert s.model_dump() == {'nested_foo': {'foo': 'EXAMPLE'}}
+
+
+def test_nested_models_as_dict_value(env):
+    class NestedSettings(BaseModel):
+        foo: Dict[str, int]
+
+    class Settings(BaseSettings):
+        nested: NestedSettings
+        sub_dict: Dict[str, NestedSettings]
+
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set('nested__foo', '{"a": 1}')
+    env.set('sub_dict__bar__foo', '{"b": 2}')
+    s = Settings()
+    assert s.model_dump() == {'nested': {'foo': {'a': 1}}, 'sub_dict': {'bar': {'foo': {'b': 2}}}}
