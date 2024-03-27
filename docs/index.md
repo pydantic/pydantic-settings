@@ -614,9 +614,7 @@ from pydantic_settings import (
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        pyproject_toml_table_header=('tool', 'some-table')
-    )
+    """Example loading values from the table used by default."""
 
     field: str
 
@@ -632,14 +630,27 @@ class Settings(BaseSettings):
         return (PyprojectTomlConfigSettingsSource(settings_cls),)
 
 
+class SomeTableSettings(Settings):
+    """Example loading values from a user defined table."""
+
+    model_config = SettingsConfigDict(
+        pyproject_toml_table_header=('tool', 'some-table')
+    )
+
+
 class RootSettings(Settings):
-    model_config = SettingsConfigDict(extra='ignore')
+    """Example loading values from the root of a pyproject.toml file."""
+
+    model_config = SettingsConfigDict(extra='ignore', pyproject_toml_table_header=())
 ```
 
-This will be able to read the following "pyproject.toml" file, located in your working directory, resulting in `Settings(field='some-table')` & `RootSettings(field='root')`:
+This will be able to read the following "pyproject.toml" file, located in your working directory, resulting in `Settings(field='default-table')`, `SomeTableSettings(field='some-table')`, & `RootSettings(field='root')`:
 
 ```toml
 field = "root"
+
+[tool.pydantic-settings]
+field = "default-table"
 
 [tool.some-table]
 field = "some-table"
@@ -650,8 +661,58 @@ However, there are two options to change this behavior.
 
 * `SettingsConfigDict(pyproject_toml_depth=<int>)` can be provided to check `<int>` number of directories **up** in the directory tree for a "pyproject.toml" if one is not found in the current working directory.
   By default, no parent directories are checked.
-* An explicit file path can be provided to the source when it is instantiated (e.g. `PyprojectTomlConfigSettingsSource(Path('~/.config').resolve() /'pyproject.toml')`).
+* An explicit file path can be provided to the source when it is instantiated (e.g. `PyprojectTomlConfigSettingsSource(settings_cls, Path('~/.config').resolve() / 'pyproject.toml')`).
   If a file path is provided this way, it will be treated as absolute (no other locations are checked).
+
+```python
+from pathlib import Path
+from typing import Tuple, Type
+
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    PyprojectTomlConfigSettingsSource,
+    SettingsConfigDict,
+)
+
+
+class DiscoverSettings(BaseSettings):
+    """Example of discovering a pyproject.toml in parent directories in not in `Path.cwd()`."""
+
+    model_config = SettingsConfigDict(pyproject_toml_depth=2)
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        return (PyprojectTomlConfigSettingsSource(settings_cls),)
+
+
+class ExplicitFilePathSettings(BaseSettings):
+    """Example of explicitly providing the path to the file to load."""
+
+    field: str
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        return (
+            PyprojectTomlConfigSettingsSource(
+                settings_cls, Path('~/.config').resolve() / 'pyproject.toml'
+            ),
+        )
+```
 
 ## Field value priority
 
