@@ -34,6 +34,26 @@ class SettingsConfigDict(ConfigDict, total=False):
     json_file_encoding: str | None
     yaml_file: PathType | None
     yaml_file_encoding: str | None
+    pyproject_toml_depth: int
+    """
+    Number of levels **up** from the current working directory to attempt to find a pyproject.toml
+    file.
+
+    This is only used when a pyproject.toml file is not found in the current working directory.
+    """
+
+    pyproject_toml_table_header: tuple[str, ...]
+    """
+    Header of the TOML table within a pyproject.toml file to use when filling variables.
+    This is supplied as a `tuple[str, ...]` instead of a `str` to accommodate for headers
+    containing a `.`.
+
+    For example, `toml_table_header = ("tool", "my.tool", "foo")` can be used to fill variable
+    values from a table with header `[tool."my.tool".foo]`.
+
+    To use the root table, exclude this config setting or provide an empty tuple.
+    """
+
     toml_file: PathType | None
 
 

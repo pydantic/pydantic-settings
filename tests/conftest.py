@@ -1,6 +1,13 @@
+from __future__ import annotations
+
 import os
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 class SetEnv:
@@ -18,6 +25,34 @@ class SetEnv:
     def clear(self):
         for n in self.envars:
             os.environ.pop(n)
+
+
+@pytest.fixture
+def cd_tmp_path(tmp_path: Path) -> Iterator[Path]:
+    """Change directory into the value of the ``tmp_path`` fixture.
+
+    .. rubric:: Example
+    .. code-block:: python
+
+        from typing import TYPE_CHECKING
+
+        if TYPE_CHECKING:
+            from pathlib import Path
+
+
+        def test_something(cd_tmp_path: Path) -> None:
+            ...
+
+    Returns:
+        Value of the :fixture:`tmp_path` fixture (a :class:`~pathlib.Path` object).
+
+    """
+    prev_dir = Path.cwd()
+    os.chdir(tmp_path)
+    try:
+        yield tmp_path
+    finally:
+        os.chdir(prev_dir)
 
 
 @pytest.fixture
