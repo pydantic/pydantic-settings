@@ -458,6 +458,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
 ```
 
+
+!!! note
+    Pydantic settings loads all the values from dotenv file and passes it to the model, regardless of the model's `env_prefix`.
+    So if you provide extra values in a dotenv file, whether they start with `env_prefix` or not,
+    a `ValidationError` will be raised.
+
 ## Command Line Support
 
 Pydantic settings provides integrated CLI support, making it easy to quickly define CLI applications using Pydantic
@@ -934,11 +940,6 @@ sub_model options:
   --sub_model.v1 int  the sub model v1 option
 """
 ```
-
-!!! note
-    Pydantic settings loads all the values from dotenv file and passes it to the model, regardless of the model's `env_prefix`.
-    So if you provide extra values in a dotenv file, whether they start with `env_prefix` or not,
-    a `ValidationError` will be raised.
 
 ### Integrating with Existing Parsers
 
