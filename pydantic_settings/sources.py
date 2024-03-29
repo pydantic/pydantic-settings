@@ -27,11 +27,10 @@ from typing import (
     overload,
 )
 
-import pydantic._internal._repr
-import pydantic.v1.utils
 import typing_extensions
 from dotenv import dotenv_values
 from pydantic import AliasChoices, AliasPath, BaseModel, Json
+from pydantic._internal._repr import Representation
 from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union, typing_base
 from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
 from pydantic.fields import FieldInfo
@@ -1305,7 +1304,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             return obj.__name__
         elif obj is ...:
             return '...'
-        elif isinstance(obj, (pydantic._internal._repr.Representation, pydantic.v1.utils.Representation)):
+        elif isinstance(obj, Representation):
             return repr(obj)
         elif isinstance(obj, typing_extensions.TypeAliasType):
             return str(obj)

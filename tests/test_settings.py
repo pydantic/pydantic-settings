@@ -28,8 +28,8 @@ from pydantic import (
 from pydantic import (
     dataclasses as pydantic_dataclasses,
 )
+from pydantic._internal._repr import Representation
 from pydantic.fields import FieldInfo
-from pydantic.v1.utils import Representation
 from pytest_mock import MockerFixture
 from typing_extensions import Annotated
 
