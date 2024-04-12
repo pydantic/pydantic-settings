@@ -4,6 +4,7 @@ import platform
 import re
 import sys
 from pathlib import Path
+from typing import Dict, Optional
 
 import pytest
 from pytest_examples import CodeExample, EvalExample, find_examples
@@ -24,13 +25,13 @@ def skip_docs_tests():
 class GroupModuleGlobals:
     def __init__(self) -> None:
         self.name = None
-        self.module_dict: dict[str, str] = {}
+        self.module_dict: Dict[str, str] = {}
 
-    def get(self, name: str | None):
+    def get(self, name: Optional[str]):
         if name is not None and name == self.name:
             return self.module_dict
 
-    def set(self, name: str | None, module_dict: dict[str, str]):
+    def set(self, name: Optional[str], module_dict: Dict[str, str]):
         self.name = name
         if self.name is None:
             self.module_dict = None

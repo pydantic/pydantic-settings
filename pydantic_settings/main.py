@@ -1,7 +1,7 @@
 from __future__ import annotations as _annotations
 
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Dict, Optional, Tuple, Type, Union
 
 from pydantic import ConfigDict
 from pydantic._internal._config import config_keys
@@ -23,17 +23,17 @@ from .sources import (
 class SettingsConfigDict(ConfigDict, total=False):
     case_sensitive: bool
     env_prefix: str
-    env_file: DotenvType | None
-    env_file_encoding: str | None
+    env_file: Optional[DotenvType]
+    env_file_encoding: Optional[str]
     env_ignore_empty: bool
-    env_nested_delimiter: str | None
-    env_parse_none_str: str | None
-    env_parse_enums: bool | None
-    secrets_dir: str | Path | None
-    json_file: PathType | None
-    json_file_encoding: str | None
-    yaml_file: PathType | None
-    yaml_file_encoding: str | None
+    env_nested_delimiter: Optional[str]
+    env_parse_none_str: Optional[str]
+    env_parse_enums: Optional[bool]
+    secrets_dir: Optional[Union[str, Path]]
+    json_file: Optional[PathType]
+    json_file_encoding: Optional[str]
+    yaml_file: Optional[PathType]
+    yaml_file_encoding: Optional[str]
     pyproject_toml_depth: int
     """
     Number of levels **up** from the current working directory to attempt to find a pyproject.toml
@@ -42,10 +42,10 @@ class SettingsConfigDict(ConfigDict, total=False):
     This is only used when a pyproject.toml file is not found in the current working directory.
     """
 
-    pyproject_toml_table_header: tuple[str, ...]
+    pyproject_toml_table_header: Tuple[str, ...]
     """
     Header of the TOML table within a pyproject.toml file to use when filling variables.
-    This is supplied as a `tuple[str, ...]` instead of a `str` to accommodate for headers
+    This is supplied as a `Tuple[str, ...]` instead of a `str` to accommodate for headers
     containing a `.`.
 
     For example, `toml_table_header = ("tool", "my.tool", "foo")` can be used to fill variable
@@ -54,7 +54,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     To use the root table, exclude this config setting or provide an empty tuple.
     """
 
-    toml_file: PathType | None
+    toml_file: Optional[PathType]
 
 
 # Extend `config_keys` by pydantic settings config keys to
@@ -92,15 +92,15 @@ class BaseSettings(BaseModel):
 
     def __init__(
         __pydantic_self__,
-        _case_sensitive: bool | None = None,
-        _env_prefix: str | None = None,
-        _env_file: DotenvType | None = ENV_FILE_SENTINEL,
-        _env_file_encoding: str | None = None,
-        _env_ignore_empty: bool | None = None,
-        _env_nested_delimiter: str | None = None,
-        _env_parse_none_str: str | None = None,
-        _env_parse_enums: bool | None = None,
-        _secrets_dir: str | Path | None = None,
+        _case_sensitive: Optional[bool] = None,
+        _env_prefix: Optional[str] = None,
+        _env_file: Optional[DotenvType] = ENV_FILE_SENTINEL,
+        _env_file_encoding: Optional[str] = None,
+        _env_ignore_empty: Optional[bool] = None,
+        _env_nested_delimiter: Optional[str] = None,
+        _env_parse_none_str: Optional[str] = None,
+        _env_parse_enums: Optional[bool] = None,
+        _secrets_dir: Optional[Union[str, Path]] = None,
         **values: Any,
     ) -> None:
         # Uses something other than `self` the first arg to allow "self" as a settable attribute
@@ -122,12 +122,12 @@ class BaseSettings(BaseModel):
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: type[BaseSettings],
+        settings_cls: Type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
-    ) -> tuple[PydanticBaseSettingsSource, ...]:
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
         """
         Define the sources and their order for loading the settings values.
 
@@ -145,17 +145,17 @@ class BaseSettings(BaseModel):
 
     def _settings_build_values(
         self,
-        init_kwargs: dict[str, Any],
-        _case_sensitive: bool | None = None,
-        _env_prefix: str | None = None,
-        _env_file: DotenvType | None = None,
-        _env_file_encoding: str | None = None,
-        _env_ignore_empty: bool | None = None,
-        _env_nested_delimiter: str | None = None,
-        _env_parse_none_str: str | None = None,
-        _env_parse_enums: bool | None = None,
-        _secrets_dir: str | Path | None = None,
-    ) -> dict[str, Any]:
+        init_kwargs: Dict[str, Any],
+        _case_sensitive: Optional[bool] = None,
+        _env_prefix: Optional[str] = None,
+        _env_file: Optional[DotenvType] = None,
+        _env_file_encoding: Optional[str] = None,
+        _env_ignore_empty: Optional[bool] = None,
+        _env_nested_delimiter: Optional[str] = None,
+        _env_parse_none_str: Optional[str] = None,
+        _env_parse_enums: Optional[bool] = None,
+        _secrets_dir: Optional[Union[str, Path]] = None,
+    ) -> Dict[str, Any]:
         # Determine settings config values
         case_sensitive = _case_sensitive if _case_sensitive is not None else self.model_config.get('case_sensitive')
         env_prefix = _env_prefix if _env_prefix is not None else self.model_config.get('env_prefix')

@@ -2,12 +2,9 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Iterator
 
 import pytest
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
 
 
 class SetEnv:
