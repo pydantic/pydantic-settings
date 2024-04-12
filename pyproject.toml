@@ -85,11 +85,13 @@ source = [
 
 [tool.ruff]
 line-length = 120
+target-version = 'py38'
+
+[tool.ruff.lint]
 extend-select = ['Q', 'RUF100', 'C90', 'UP', 'I']
 flake8-quotes = {inline-quotes = 'single', multiline-quotes = 'double'}
 mccabe = { max-complexity = 14 }
 isort = { known-first-party = ['pydantic_settings', 'tests'] }
-target-version = 'py38'
 
 [tool.black]
 color = true
