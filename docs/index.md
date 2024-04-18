@@ -95,7 +95,7 @@ print(Settings().model_dump())
 3. The `AliasChoices` class allows to have multiple environment variable names for a single field.
    The first environment variable that is found will be used.
 
-    Check the [`AliasChoices`](fields.md#aliaspath-and-aliaschoices) for more information.
+    Check the [`AliasChoices`](alias.md#aliaspath-and-aliaschoices) for more information.
 
 4. The `ImportString` class allows to import an object from a string.
    In this case, the environment variable `special_function` will be read and the function `math.cos` will be imported.
