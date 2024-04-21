@@ -723,8 +723,7 @@ from azure.identity import DefaultAzureCredential
 from pydantic import BaseModel
 from pydantic_settings import (
     BaseSettings,
-    PydanticBaseSettingsSource,
-    SettingsConfigDict,
+    PydanticBaseSettingsSource
 )
 from pydantic_settings.sources import AzureKeyVaultSettingsSource
 
@@ -733,8 +732,6 @@ os.environ['KEY_VAULT__URL'] = 'https://my-resource.vault.azure.net/'
 
 
 class AzureKeyVaultSettings(BaseSettings):
-    model_config = SettingsConfigDict()
-
     my_password: str
     sql_server__password: str
 
