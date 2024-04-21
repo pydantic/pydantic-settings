@@ -733,7 +733,7 @@ os.environ['KEY_VAULT__URL'] = 'https://my-resource.vault.azure.net/'
 
 
 class AzureKeyVaultSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_nested_delimiter='__')
+    model_config = SettingsConfigDict()
 
     my_password: str
     sql_server__password: str
