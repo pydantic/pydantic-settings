@@ -543,6 +543,7 @@ Other settings sources are available for common configuration files:
 - `PyprojectTomlConfigSettingsSource` using *(optional)* `pyproject_toml_depth` and *(optional)* `pyproject_toml_table_header` arguments
 - `TomlConfigSettingsSource` using `toml_file` argument
 - `YamlConfigSettingsSource` using `yaml_file` and yaml_file_encoding arguments
+- `AzureKeyVaultSettingsSource`. It requires the packages `azure-keyvault-secrets` and `azure-identity`, and the Azure role `Key Vault Administrator`.
 
 You can also provide multiple files by providing a list of path:
 ```py
@@ -710,6 +711,45 @@ class ExplicitFilePathSettings(BaseSettings):
         return (
             PyprojectTomlConfigSettingsSource(
                 settings_cls, Path('~/.config').resolve() / 'pyproject.toml'
+            ),
+        )
+```
+
+### Azure Key Vault
+
+```python
+import os
+from azure.identity import DefaultAzureCredential
+from pydantic import BaseModel
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
+from pydantic_settings.sources import AzureKeyVaultSettingsSource
+
+
+os.environ['KEY_VAULT__URL'] = 'https://my-resource.vault.azure.net/'
+
+
+class AzureKeyVaultSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    my_password: str
+    sql_server__password: str
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (
+            AzureKeyVaultSettingsSource(
+                settings_cls, os.environ['KEY_VAULT__URL'], DefaultAzureCredential()
             ),
         )
 ```

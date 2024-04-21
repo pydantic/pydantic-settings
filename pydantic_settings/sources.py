@@ -11,6 +11,9 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, List, Mapping, Sequence, Tuple, Union, cast
 
+from azure.core.credentials import TokenCredential
+from azure.core.exceptions import ResourceNotFoundError
+from azure.keyvault.secrets import SecretClient
 from dotenv import dotenv_values
 from pydantic import AliasChoices, AliasPath, BaseModel, Json
 from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union
@@ -873,6 +876,52 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         import_yaml()
         with open(file_path, encoding=self.yaml_file_encoding) as yaml_file:
             return yaml.safe_load(yaml_file)
+
+class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
+    _secret_client: SecretClient
+
+    def __init__(
+        self, settings_cls: type[BaseSettings], url: str, credential: TokenCredential
+    ) -> None:
+        super().__init__(settings_cls)
+        self._secret_client = SecretClient(vault_url=url, credential=credential)
+
+    def get_field_value(
+        self, field: FieldInfo, field_name: str
+    ) -> tuple[Any, str, bool]:
+        field_value: Any | None = None
+
+        # It's not possible to use underscores in Azure Key Vault
+        secret_name = field_name.replace("_", "-")
+
+        try:
+            secret = self._secret_client.get_secret(secret_name)  # type: ignore
+            field_value = secret.value
+        except ResourceNotFoundError:
+            field_value = None
+
+        return field_value, field_name, False
+
+    def prepare_field_value(
+        self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool
+    ) -> Any:
+        return value
+
+    def __call__(self) -> dict[str, Any]:
+        data: dict[str, Any] = {}
+
+        for field_name, field in self.settings_cls.model_fields.items():
+            field_value, field_key, value_is_complex = self.get_field_value(
+                field, field_name
+            )
+            field_value = self.prepare_field_value(
+                field_name, field, field_value, value_is_complex
+            )
+
+            if field_value is not None:
+                data[field_key] = field_value
+
+        return data
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
