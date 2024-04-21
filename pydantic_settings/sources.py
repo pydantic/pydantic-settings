@@ -64,6 +64,22 @@ def import_toml() -> None:
         import tomllib
 
 
+def import_azure_key_vault() -> None:
+    global TokenCredential
+    global ResourceNotFoundError
+    global SecretClient
+
+    if TokenCredential is not None or ResourceNotFoundError is not None or SecretClient is not None:
+        return
+    
+    try:
+        from azure.core.credentials import TokenCredential
+        from azure.core.exceptions import ResourceNotFoundError
+        from azure.keyvault.secrets import SecretClient
+    except ImportError as e:
+        raise ImportError('azure_key_vault dependencies are not installed, run `pip install pydantic-settings[azure-key-vault]`') from e
+
+
 DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
 PathType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
 DEFAULT_PATH: PathType = Path('')
@@ -883,6 +899,7 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
 
     def __init__(self, settings_cls: type[BaseSettings], url: str, credential: TokenCredential) -> None:
         super().__init__(settings_cls)
+        import_azure_key_vault()
         self._secret_client = SecretClient(vault_url=url, credential=credential)
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:

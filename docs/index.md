@@ -717,7 +717,7 @@ class ExplicitFilePathSettings(BaseSettings):
 
 ### Azure Key Vault
 
-```python
+```
 import os
 from azure.identity import DefaultAzureCredential
 from pydantic import BaseModel
