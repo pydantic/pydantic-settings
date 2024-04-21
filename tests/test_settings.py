@@ -1870,10 +1870,11 @@ def test_env_parse_enums(env):
         s = Settings()
     assert exc_info.value.errors(include_url=False) == [
         {
-            'type': 'int_parsing',
+            'type': 'enum',
             'loc': ('fruit',),
-            'msg': 'Input should be a valid integer, unable to parse string as an integer',
+            'msg': 'Input should be 0, 1 or 2',
             'input': 'kiwi',
+            'ctx': {'expected': '0, 1 or 2'},
         }
     ]
 
