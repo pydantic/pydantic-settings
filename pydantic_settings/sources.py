@@ -877,6 +877,7 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         with open(file_path, encoding=self.yaml_file_encoding) as yaml_file:
             return yaml.safe_load(yaml_file)
 
+
 class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
     _secret_client: SecretClient
 
