@@ -892,7 +892,7 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
         field_value: Any | None = None
 
         # It's not possible to use underscores in Azure Key Vault
-        secret_name = field_name.replace("_", "-")
+        secret_name = field_name.replace('_', '-')
 
         try:
             secret = self._secret_client.get_secret(secret_name)  # type: ignore
