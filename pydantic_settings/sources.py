@@ -892,7 +892,7 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
         secret_name = field_name.replace('_', '-')
 
         try:
-            secret = self._secret_client.get_secret(secret_name)  # type: ignore
+            secret = self._secret_client.get_secret(secret_name)
             field_value = secret.value
         except ResourceNotFoundError:
             field_value = None
