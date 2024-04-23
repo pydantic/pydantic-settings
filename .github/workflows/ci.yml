@@ -31,8 +31,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu, macos, windows]
+        os: [ubuntu, macos-13, macos, windows]
         python: ['3.8', '3.9', '3.10', '3.11', '3.12']
+        exclude:
+          # Python 3.8 and 3.9 are not available on macOS 14
+          - os: macos-13
+            python: '3.10'
+          - os: macos-13
+          python: '3.11'
+          - os: macos-13
+          python: '3.12'
+          - os: macos
+          python: '3.8'
+          - os: macos-13
+          python: '3.9'
 
     env:
       PYTHON: ${{ matrix.python }}
