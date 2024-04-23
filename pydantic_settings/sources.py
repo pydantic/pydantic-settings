@@ -638,7 +638,8 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     except ValueError as e:
                         if not allow_json_failure:
                             raise e
-            env_var[last_key] = env_val
+            if isinstance(env_var, dict):
+                env_var[last_key] = env_val
 
         return result
 
