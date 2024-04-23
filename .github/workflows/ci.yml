@@ -41,16 +41,16 @@ jobs:
             python: '3.11'
           - os: macos-13
             python: '3.12'
-          - os: macos
+          - os: macos-latest
             python: '3.8'
-          - os: macos
+          - os: macos-latest
             python: '3.9'
 
     env:
       PYTHON: ${{ matrix.python }}
       OS: ${{ matrix.os }}
 
-    runs-on: ${{ matrix.os }}-latest
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v2
