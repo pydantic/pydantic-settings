@@ -2602,5 +2602,9 @@ def test_nested_models_leaf_vs_deeper_env_dict_assumed(env):
         'nested__foo__bar',
         'this should not be evaluated, since foo is a string by annotation and not a dict',
     )
+    env.set(
+        'nested__foo__bar__baz',
+        'one more',
+    )
     s = Settings()
     assert s.model_dump() == {'nested': {'foo': 'string'}}

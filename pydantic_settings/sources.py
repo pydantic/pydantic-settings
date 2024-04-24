@@ -620,7 +620,8 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             target_field: FieldInfo | None = field
             for key in keys:
                 target_field = self.next_field(target_field, key)
-                env_var = env_var.setdefault(key, {})
+                if isinstance(env_var, dict):
+                    env_var = env_var.setdefault(key, {})
 
             # get proper field with last_key
             target_field = self.next_field(target_field, last_key)
