@@ -1870,10 +1870,11 @@ def test_env_parse_enums(env):
         s = Settings()
     assert exc_info.value.errors(include_url=False) == [
         {
-            'type': 'int_parsing',
+            'type': 'enum',
             'loc': ('fruit',),
-            'msg': 'Input should be a valid integer, unable to parse string as an integer',
+            'msg': 'Input should be 0, 1 or 2',
             'input': 'kiwi',
+            'ctx': {'expected': '0, 1 or 2'},
         }
     ]
 
@@ -2585,3 +2586,25 @@ def test_nested_models_as_dict_value(env):
     env.set('sub_dict__bar__foo', '{"b": 2}')
     s = Settings()
     assert s.model_dump() == {'nested': {'foo': {'a': 1}}, 'sub_dict': {'bar': {'foo': {'b': 2}}}}
+
+
+def test_nested_models_leaf_vs_deeper_env_dict_assumed(env):
+    class NestedSettings(BaseModel):
+        foo: str
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+        nested: NestedSettings
+
+    env.set('nested__foo', 'string')
+    env.set(
+        'nested__foo__bar',
+        'this should not be evaluated, since foo is a string by annotation and not a dict',
+    )
+    env.set(
+        'nested__foo__bar__baz',
+        'one more',
+    )
+    s = Settings()
+    assert s.model_dump() == {'nested': {'foo': 'string'}}
