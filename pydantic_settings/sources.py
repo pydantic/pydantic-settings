@@ -908,7 +908,7 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         field_value: Any | None = None
 
-        # It's not possible to use underscores in Azure Key Vault
+        # Azure Key Vault uses "-" instead of "_"
         secret_name = field_name.replace('_', '-')
 
         try:
@@ -917,10 +917,7 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
         except ResourceNotFoundError:  # type: ignore
             field_value = None
 
-        return field_value, field_name, False
-
-    def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
-        return value
+        return field_value, field_name, self.field_is_complex(field)
 
     def __call__(self) -> dict[str, Any]:
         data: dict[str, Any] = {}
