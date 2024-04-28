@@ -6,14 +6,28 @@ import sys
 from typing import TYPE_CHECKING
 
 import pytest
+from pydantic.fields import FieldInfo
 
 from pydantic_settings.main import BaseSettings, SettingsConfigDict
-from pydantic_settings.sources import PyprojectTomlConfigSettingsSource
+from pydantic_settings.sources import (
+    AzureKeyVaultSettingsSource,
+    PyprojectTomlConfigSettingsSource,
+    import_azure_key_vault,
+)
 
 try:
     import tomli
 except ImportError:
     tomli = None
+
+
+try:
+    azure_key_vault = True
+    import_azure_key_vault()
+    from azure.identity import DefaultAzureCredential
+    from azure.keyvault.secrets import KeyVaultSecret, SecretProperties
+except ImportError:
+    azure_key_vault = None
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -97,3 +111,44 @@ class TestPyprojectTomlConfigSettingsSource:
         assert obj.toml_table_header == ('some', 'table')
         assert obj.toml_data == {'field': 'some'}
         assert obj.toml_file_path == tmp_path / 'pyproject.toml'
+
+@pytest.mark.skipif(azure_key_vault is None, reason='azure-keyvault-secrets and azure-identity are not installed')
+class TestAzureKeyVaultSettingsSource:
+    """Test AzureKeyVaultSettingsSource."""
+
+
+    def test___init__(self) -> None:
+        """Test __init__."""
+
+        class AzureKeyVaultSettings(BaseSettings):
+            """AzureKeyVault settings."""
+
+        AzureKeyVaultSettingsSource(AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential())
+    
+    def test_get_field_value(self, mocker: MockerFixture) -> None:
+        """Test _get_field_value."""
+
+        class AzureKeyVaultSettings(BaseSettings):
+            """AzureKeyVault settings."""
+
+        key_vault_secret = KeyVaultSecret(SecretProperties(), 'SecretValue')
+        mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
+        obj = AzureKeyVaultSettingsSource(AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential())
+        
+        obj.get_field_value(field=FieldInfo(), field_name='sqlserverpassword')
+
+    def test___call__(self, mocker: MockerFixture) -> None:
+        """Test __cal__."""
+
+        class AzureKeyVaultSettings(BaseSettings):
+            """AzureKeyVault settings."""
+
+            sqlserverpassword: str
+            SQLSERVERPASSWORD: str
+            sql_server__password: str
+
+        key_vault_secret = KeyVaultSecret(SecretProperties(), 'SecretValue')
+        mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
+        obj = AzureKeyVaultSettingsSource(AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential())
+        
+        obj()
