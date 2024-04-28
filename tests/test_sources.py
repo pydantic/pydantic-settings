@@ -112,10 +112,10 @@ class TestPyprojectTomlConfigSettingsSource:
         assert obj.toml_data == {'field': 'some'}
         assert obj.toml_file_path == tmp_path / 'pyproject.toml'
 
+
 @pytest.mark.skipif(azure_key_vault is None, reason='azure-keyvault-secrets and azure-identity are not installed')
 class TestAzureKeyVaultSettingsSource:
     """Test AzureKeyVaultSettingsSource."""
-
 
     def test___init__(self) -> None:
         """Test __init__."""
@@ -123,8 +123,10 @@ class TestAzureKeyVaultSettingsSource:
         class AzureKeyVaultSettings(BaseSettings):
             """AzureKeyVault settings."""
 
-        AzureKeyVaultSettingsSource(AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential())
-    
+        AzureKeyVaultSettingsSource(
+            AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential()
+        )
+
     def test_get_field_value(self, mocker: MockerFixture) -> None:
         """Test _get_field_value."""
 
@@ -133,8 +135,10 @@ class TestAzureKeyVaultSettingsSource:
 
         key_vault_secret = KeyVaultSecret(SecretProperties(), 'SecretValue')
         mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
-        obj = AzureKeyVaultSettingsSource(AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential())
-        
+        obj = AzureKeyVaultSettingsSource(
+            AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential()
+        )
+
         obj.get_field_value(field=FieldInfo(), field_name='sqlserverpassword')
 
     def test___call__(self, mocker: MockerFixture) -> None:
@@ -149,6 +153,8 @@ class TestAzureKeyVaultSettingsSource:
 
         key_vault_secret = KeyVaultSecret(SecretProperties(), 'SecretValue')
         mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
-        obj = AzureKeyVaultSettingsSource(AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential())
-        
+        obj = AzureKeyVaultSettingsSource(
+            AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential()
+        )
+
         obj()

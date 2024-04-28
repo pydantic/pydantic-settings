@@ -893,17 +893,17 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
 
 
 class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
-    _secret_client: SecretClient # type: ignore
+    _secret_client: SecretClient  # type: ignore
 
     def __init__(
         self,
         settings_cls: type[BaseSettings],
         url: str,
-        credential: TokenCredential, # type: ignore
+        credential: TokenCredential,  # type: ignore
     ) -> None:
         import_azure_key_vault()
         super().__init__(settings_cls)
-        self._secret_client = SecretClient(vault_url=url, credential=credential) # type: ignore
+        self._secret_client = SecretClient(vault_url=url, credential=credential)  # type: ignore
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         field_value: Any | None = None
@@ -914,7 +914,7 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
         try:
             secret = self._secret_client.get_secret(secret_name)
             field_value = secret.value
-        except ResourceNotFoundError: # type: ignore
+        except ResourceNotFoundError:  # type: ignore
             field_value = None
 
         return field_value, field_name, False
