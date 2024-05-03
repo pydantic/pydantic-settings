@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import IntEnum
 from pathlib import Path
-from typing import Any, Callable, Dict, Generic, List, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Dict, Generic, Hashable, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 import pytest
 from annotated_types import MinLen
@@ -14,11 +14,13 @@ from pydantic import (
     AliasChoices,
     AliasPath,
     BaseModel,
+    Discriminator,
     Field,
     HttpUrl,
     Json,
     RootModel,
     SecretStr,
+    Tag,
     ValidationError,
 )
 from pydantic import (
@@ -26,7 +28,7 @@ from pydantic import (
 )
 from pydantic.fields import FieldInfo
 from pytest_mock import MockerFixture
-from typing_extensions import Annotated
+from typing_extensions import Annotated, Literal
 
 from pydantic_settings import (
     BaseSettings,
@@ -1672,6 +1674,44 @@ def test_nested_env_union_complex_values(env):
     env.set('cfg_sub_model__vals', '{"invalid": dict}')
     with pytest.raises(ValidationError):
         Cfg()
+
+
+def test_discriminated_union_with_callable_discriminator(env):
+    class A(BaseModel):
+        x: Literal['a'] = 'a'
+        y: str
+
+    class B(BaseModel):
+        x: Literal['b'] = 'b'
+        z: str
+
+    def get_discriminator_value(v: Any) -> Hashable:
+        if isinstance(v, dict):
+            v0 = v.get('x')
+        else:
+            v0 = getattr(v, 'x', None)
+
+        if v0 == 'a':
+            return 'a'
+        elif v0 == 'b':
+            return 'b'
+        else:
+            return None
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+        # Discriminated union using a callable discriminator.
+        a_or_b: Annotated[Union[Annotated[A, Tag('a')], Annotated[B, Tag('b')]], Discriminator(get_discriminator_value)]
+
+    # Set up environment so that the discriminator is 'a'.
+    env.set('a_or_b__x', 'a')
+    env.set('a_or_b__y', 'foo')
+
+    s = Settings()
+
+    assert s.a_or_b.x == 'a'
+    assert s.a_or_b.y == 'foo'
 
 
 def test_nested_model_case_insensitive(env):
