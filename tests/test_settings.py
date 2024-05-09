@@ -267,7 +267,7 @@ def test_nested_env_delimiter_complex_required(env):
 
 
 def test_nested_env_delimiter_aliases(env):
-    class SubModel(BaseSettings):
+    class SubModel(BaseModel):
         v1: str
         v2: str
 
