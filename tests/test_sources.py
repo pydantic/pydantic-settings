@@ -146,7 +146,6 @@ class TestAzureKeyVaultSettingsSource:
 
         assert secret_value == expected_secret_value
 
-
     def test___call__(self, mocker: MockerFixture) -> None:
         """Test __cal__."""
 
@@ -176,6 +175,7 @@ class TestAzureKeyVaultSettingsSource:
         class AzureKeyVaultSettings(BaseSettings):
             my_password: str
             sql_server__password: str
+
             @classmethod
             def settings_customise_sources(
                 cls,
@@ -190,7 +190,6 @@ class TestAzureKeyVaultSettingsSource:
                         settings_cls, 'https://my-resource.vault.azure.net/', DefaultAzureCredential()
                     ),
                 )
-
 
         expected_secret_value = 'SecretValue'
         key_vault_secret = KeyVaultSecret(SecretProperties(), expected_secret_value)
