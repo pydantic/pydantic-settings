@@ -16,7 +16,7 @@ from pydantic import AliasChoices, AliasPath, BaseModel, Json
 from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union
 from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
 from pydantic.fields import FieldInfo
-from typing_extensions import get_args, get_origin
+from typing_extensions import _AnnotatedAlias, get_args, get_origin
 
 from pydantic_settings.utils import path_type_label
 
@@ -968,6 +968,11 @@ def read_env_file(
 def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
     if any(isinstance(md, Json) for md in metadata):  # type: ignore[misc]
         return False
+    # Check if annotation is of the form Annotated[type, metadata].
+    if isinstance(annotation, _AnnotatedAlias):
+        # Return result of recursive call on inner type.
+        inner, meta = get_args(annotation)
+        return _annotation_is_complex(inner, [meta])
     origin = get_origin(annotation)
     return (
         _annotation_is_complex_inner(annotation)
