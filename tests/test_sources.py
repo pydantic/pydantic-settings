@@ -11,6 +11,7 @@ from pydantic.fields import FieldInfo
 from pydantic_settings.main import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources import (
     AzureKeyVaultSettingsSource,
+    PydanticBaseSettingsSource,
     PyprojectTomlConfigSettingsSource,
     import_azure_key_vault,
 )
@@ -133,13 +134,18 @@ class TestAzureKeyVaultSettingsSource:
         class AzureKeyVaultSettings(BaseSettings):
             """AzureKeyVault settings."""
 
-        key_vault_secret = KeyVaultSecret(SecretProperties(), 'SecretValue')
-        mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
+        expected_secret_value = 'SecretValue'
+        key_vault_secret = KeyVaultSecret(SecretProperties(), expected_secret_value)
+
         obj = AzureKeyVaultSettingsSource(
             AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential()
         )
+        mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
 
-        obj.get_field_value(field=FieldInfo(), field_name='sqlserverpassword')
+        secret_value = obj.get_field_value(field=FieldInfo(), field_name='sqlserverpassword')[0]
+        
+        assert secret_value == expected_secret_value
+
 
     def test___call__(self, mocker: MockerFixture) -> None:
         """Test __cal__."""
@@ -151,10 +157,46 @@ class TestAzureKeyVaultSettingsSource:
             SQLSERVERPASSWORD: str
             sql_server__password: str
 
-        key_vault_secret = KeyVaultSecret(SecretProperties(), 'SecretValue')
-        mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
+        expected_secret_value = 'SecretValue'
+        key_vault_secret = KeyVaultSecret(SecretProperties(), expected_secret_value)
         obj = AzureKeyVaultSettingsSource(
             AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential()
         )
+        mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
+        
+        settings = obj()
+        
+        assert settings['sqlserverpassword'] == expected_secret_value
+        assert settings['SQLSERVERPASSWORD'] == expected_secret_value
+        assert settings['sql_server__password'] == expected_secret_value
+    
+    def test_azure_key_vault_settings_source(self, mocker: MockerFixture) -> None:
+        """Test AzureKeyVaultSettingsSource."""
 
-        obj()
+        class AzureKeyVaultSettings(BaseSettings):
+            my_password: str
+            sql_server__password: str
+            @classmethod
+            def settings_customise_sources(
+                cls,
+                settings_cls: type[BaseSettings],
+                init_settings: PydanticBaseSettingsSource,
+                env_settings: PydanticBaseSettingsSource,
+                dotenv_settings: PydanticBaseSettingsSource,
+                file_secret_settings: PydanticBaseSettingsSource,
+            ) -> tuple[PydanticBaseSettingsSource, ...]:
+                return (
+                    AzureKeyVaultSettingsSource(
+                        settings_cls, 'https://my-resource.vault.azure.net/', DefaultAzureCredential()
+                    ),
+                )
+
+
+        expected_secret_value = 'SecretValue'
+        key_vault_secret = KeyVaultSecret(SecretProperties(), expected_secret_value)
+        mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
+        
+        settings = AzureKeyVaultSettings()  # type: ignore
+        
+        assert settings.my_password == expected_secret_value
+        assert settings.sql_server__password == expected_secret_value
