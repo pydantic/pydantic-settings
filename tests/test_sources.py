@@ -143,7 +143,7 @@ class TestAzureKeyVaultSettingsSource:
         mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
 
         secret_value = obj.get_field_value(field=FieldInfo(), field_name='sqlserverpassword')[0]
-        
+
         assert secret_value == expected_secret_value
 
 
@@ -163,13 +163,13 @@ class TestAzureKeyVaultSettingsSource:
             AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential()
         )
         mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
-        
+
         settings = obj()
-        
+
         assert settings['sqlserverpassword'] == expected_secret_value
         assert settings['SQLSERVERPASSWORD'] == expected_secret_value
         assert settings['sql_server__password'] == expected_secret_value
-    
+
     def test_azure_key_vault_settings_source(self, mocker: MockerFixture) -> None:
         """Test AzureKeyVaultSettingsSource."""
 
@@ -195,8 +195,8 @@ class TestAzureKeyVaultSettingsSource:
         expected_secret_value = 'SecretValue'
         key_vault_secret = KeyVaultSecret(SecretProperties(), expected_secret_value)
         mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
-        
+
         settings = AzureKeyVaultSettings()  # type: ignore
-        
+
         assert settings.my_password == expected_secret_value
         assert settings.sql_server__password == expected_secret_value
