@@ -2131,6 +2131,19 @@ def test_cli_nested_arg():
     }
 
 
+def test_cli_alias_arg():
+    class Animal(BaseModel):
+        name: str
+
+    class Cfg(BaseSettings):
+        apple: str = Field(alias='alias')
+        pet: Animal = Field(alias='critter')
+
+    cfg = Cfg(_cli_parse_args=['--alias', 'foo', '--critter.name', 'harry'])
+    assert cfg.model_dump() == {'apple': 'foo', 'pet': {'name': 'harry'}}
+    assert cfg.model_dump(by_alias=True) == {'alias': 'foo', 'critter': {'name': 'harry'}}
+
+
 @pytest.mark.parametrize('prefix', ['', 'child.'])
 def test_cli_list_arg(prefix):
     class Obj(BaseModel):

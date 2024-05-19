@@ -1095,7 +1095,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             merged_list.append(json.dumps({key: val}))
         return item[consumed:]
 
-    def _get_sub_models(self, model: type[BaseModel], field_name: str, field_info: FieldInfo) -> list[type[BaseModel]]:
+    def _get_sub_models(
+        self, model: type[BaseModel], resolved_name: str, field_info: FieldInfo
+    ) -> list[type[BaseModel]]:
         field_types: tuple[Any, ...] = (
             (field_info.annotation,) if not get_args(field_info.annotation) else get_args(field_info.annotation)
         )
@@ -1105,9 +1107,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         sub_models: list[type[BaseModel]] = []
         for type_ in field_types:
             if _annotation_contains_types(type_, (_CliSubCommand,), is_include_origin=False):
-                raise SettingsError(f'CliSubCommand is not outermost annotation for {model.__name__}.{field_name}')
+                raise SettingsError(f'CliSubCommand is not outermost annotation for {model.__name__}.{resolved_name}')
             elif _annotation_contains_types(type_, (_CliPositionalArg,), is_include_origin=False):
-                raise SettingsError(f'CliPositionalArg is not outermost annotation for {model.__name__}.{field_name}')
+                raise SettingsError(
+                    f'CliPositionalArg is not outermost annotation for {model.__name__}.{resolved_name}'
+                )
             if is_model_class(type_):
                 sub_models.append(type_)
         return sub_models
@@ -1115,24 +1119,25 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, FieldInfo]]:
         positional_args, subcommand_args, optional_args = [], [], []
         for field_name, field_info in model.model_fields.items():
+            resolved_name = field_name if field_info.alias is None else field_info.alias
             if _CliSubCommand in field_info.metadata:
                 if not field_info.is_required():
-                    raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has a default value')
+                    raise SettingsError(f'subcommand argument {model.__name__}.{resolved_name} has a default value')
                 else:
                     field_types = [type_ for type_ in get_args(field_info.annotation) if type_ is not type(None)]
                     if len(field_types) != 1:
-                        raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has multiple types')
+                        raise SettingsError(f'subcommand argument {model.__name__}.{resolved_name} has multiple types')
                     elif not is_model_class(field_types[0]):
                         raise SettingsError(
-                            f'subcommand argument {model.__name__}.{field_name} is not derived from BaseModel'
+                            f'subcommand argument {model.__name__}.{resolved_name} is not derived from BaseModel'
                         )
-                subcommand_args.append((field_name, field_info))
+                subcommand_args.append((resolved_name, field_info))
             elif _CliPositionalArg in field_info.metadata:
                 if not field_info.is_required():
-                    raise SettingsError(f'positional argument {model.__name__}.{field_name} has a default value')
-                positional_args.append((field_name, field_info))
+                    raise SettingsError(f'positional argument {model.__name__}.{resolved_name} has a default value')
+                positional_args.append((resolved_name, field_info))
             else:
-                optional_args.append((field_name, field_info))
+                optional_args.append((resolved_name, field_info))
         return positional_args + subcommand_args + optional_args
 
     @property
@@ -1191,16 +1196,16 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         group: Any,
     ) -> ArgumentParser:
         subparsers: Any = None
-        for field_name, field_info in self._sort_arg_fields(model):
-            sub_models: list[type[BaseModel]] = self._get_sub_models(model, field_name, field_info)
+        for resolved_name, field_info in self._sort_arg_fields(model):
+            sub_models: list[type[BaseModel]] = self._get_sub_models(model, resolved_name, field_info)
             if _CliSubCommand in field_info.metadata:
                 if subparsers is None:
                     subparsers = self._add_subparsers(
                         parser, title='subcommands', dest=f'{arg_prefix}:subcommand', required=self.cli_enforce_required
                     )
-                    self._cli_subcommands[f'{arg_prefix}:subcommand'] = [f'{arg_prefix}{field_name}']
+                    self._cli_subcommands[f'{arg_prefix}:subcommand'] = [f'{arg_prefix}{resolved_name}']
                 else:
-                    self._cli_subcommands[f'{arg_prefix}:subcommand'].append(f'{arg_prefix}{field_name}')
+                    self._cli_subcommands[f'{arg_prefix}:subcommand'].append(f'{arg_prefix}{resolved_name}')
                 if hasattr(subparsers, 'metavar'):
                     metavar = ','.join(self._cli_subcommands[f'{arg_prefix}:subcommand'])
                     subparsers.metavar = f'{{{metavar}}}'
@@ -1209,15 +1214,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 self._add_parser_args(
                     parser=self._add_parser(
                         subparsers,
-                        field_name,
+                        resolved_name,
                         help=field_info.description,
                         formatter_class=self._formatter_class,
                         description=model.__doc__,
                     ),
                     model=model,
                     added_args=[],
-                    arg_prefix=f'{arg_prefix}{field_name}.',
-                    subcommand_prefix=f'{subcommand_prefix}{field_name}.',
+                    arg_prefix=f'{arg_prefix}{resolved_name}.',
+                    subcommand_prefix=f'{subcommand_prefix}{resolved_name}.',
                     group=None,
                 )
             else:
@@ -1225,7 +1230,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 kwargs: dict[str, Any] = {}
                 kwargs['default'] = SUPPRESS
                 kwargs['help'] = field_info.description
-                kwargs['dest'] = f'{arg_prefix}{field_name}'
+                kwargs['dest'] = f'{arg_prefix}{resolved_name}'
                 kwargs['metavar'] = self._metavar_format(field_info.annotation)
                 kwargs['required'] = self.cli_enforce_required and field_info.is_required()
                 if kwargs['dest'] in added_args:
@@ -1238,12 +1243,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         self._cli_dict_args[kwargs['dest']] = field_info.annotation
 
                 arg_name = (
-                    f'{arg_prefix}{field_name}'
+                    f'{arg_prefix}{resolved_name}'
                     if subcommand_prefix == self.env_prefix
-                    else f'{arg_prefix.replace(subcommand_prefix, "", 1)}{field_name}'
+                    else f'{arg_prefix.replace(subcommand_prefix, "", 1)}{resolved_name}'
                 )
                 if _CliPositionalArg in field_info.metadata:
-                    kwargs['metavar'] = field_name.upper()
+                    kwargs['metavar'] = resolved_name.upper()
                     arg_name = kwargs['dest']
                     del kwargs['dest']
                     del kwargs['required']
@@ -1268,7 +1273,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                             parser=parser,
                             model=model,
                             added_args=added_args,
-                            arg_prefix=f'{arg_prefix}{field_name}.',
+                            arg_prefix=f'{arg_prefix}{resolved_name}.',
                             subcommand_prefix=subcommand_prefix,
                             group=model_group if model_group else model_group_kwargs,
                         )
