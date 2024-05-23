@@ -1955,13 +1955,13 @@ def test_env_parse_enums(env):
     with pytest.raises(ValidationError) as exc_info:
         env.set('FRUIT', 'kiwi')
         s = Settings()
-    print(exc_info.value.errors(include_url=False))
     assert exc_info.value.errors(include_url=False) == [
         {
-            'type': 'int_parsing',
+            'type': 'enum',
             'loc': ('fruit',),
-            'msg': 'Input should be a valid integer, unable to parse string as an integer',
+            'msg': 'Input should be 0, 1 or 2',
             'input': 'kiwi',
+            'ctx': {'expected': '0, 1 or 2'},
         }
     ]
 
@@ -2629,10 +2629,11 @@ def test_cli_enums():
         Cfg(_cli_parse_args=['--pet', 'rock'])
     assert exc_info.value.errors(include_url=False) == [
         {
-            'type': 'int_parsing',
+            'type': 'enum',
             'loc': ('pet',),
-            'msg': 'Input should be a valid integer, unable to parse string as an integer',
+            'msg': 'Input should be 0, 1 or 2',
             'input': 'rock',
+            'ctx': {'expected': '0, 1 or 2'},
         }
     ]
 
