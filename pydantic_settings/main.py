@@ -292,8 +292,9 @@ class BaseSettings(BaseModel):
             dotenv_settings=dotenv_settings,
             file_secret_settings=file_secret_settings,
         )
-        if cli_parse_args or cli_settings_source:
-            sources = (cli_settings,) + sources
+        if not any([source for source in sources if isinstance(source, CliSettingsSource)]):
+            if cli_parse_args or cli_settings_source:
+                sources = (cli_settings,) + sources
         if sources:
             return deep_update(*reversed([source() for source in sources]))
         else:

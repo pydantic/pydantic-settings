@@ -539,8 +539,8 @@ Settings(
 )
 ```
 
-Note that a CLI settings source is always [**the topmost source**](#field-value-priority) and does not support [changing
-its priority](#changing-priority).
+Note that a CLI settings source is [**the topmost source**](#field-value-priority) by default unless its [priority value
+is changed](#changing-priority).
 
 #### Lists
 

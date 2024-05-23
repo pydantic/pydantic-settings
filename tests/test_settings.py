@@ -2131,6 +2131,33 @@ def test_cli_nested_arg():
     }
 
 
+def test_cli_source_prioritization(env):
+    class CfgDefault(BaseSettings):
+        foo: str
+
+    class CfgPrioritized(BaseSettings):
+        foo: str
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return env_settings, CliSettingsSource(settings_cls, cli_parse_args=['--foo', 'FOO FROM CLI'])
+
+    env.set('FOO', 'FOO FROM ENV')
+
+    cfg = CfgDefault(_cli_parse_args=['--foo', 'FOO FROM CLI'])
+    assert cfg.model_dump() == {'foo': 'FOO FROM CLI'}
+
+    cfg = CfgPrioritized()
+    assert cfg.model_dump() == {'foo': 'FOO FROM ENV'}
+
+
 def test_cli_alias_arg():
     class Animal(BaseModel):
         name: str
