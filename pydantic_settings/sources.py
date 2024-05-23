@@ -992,7 +992,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 parsed_args[last_selected_subcommand] = '{}'
 
         self.env_vars = parse_env_vars(
-            parsed_args, self.case_sensitive, self.env_ignore_empty, self.env_parse_none_str  # type: ignore
+            parsed_args,
+            self.case_sensitive,
+            self.env_ignore_empty,
+            self.env_parse_none_str,  # type: ignore
         )
 
         return self
@@ -1115,7 +1118,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     f'CliPositionalArg is not outermost annotation for {model.__name__}.{resolved_name}'
                 )
             if is_model_class(type_) or is_pydantic_dataclass(type_):
-                sub_models.append(type_) # type: ignore
+                sub_models.append(type_)  # type: ignore
         return sub_models
 
     def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, FieldInfo]]:
