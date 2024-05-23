@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import IntEnum
 from pathlib import Path
-from typing import Any, Callable, Dict, Generic, List, Literal, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Dict, Generic, Hashable, List, Literal, Optional, Set, Tuple, Type, TypeVar, Union
 
 import pytest
 import typing_extensions
@@ -18,11 +18,13 @@ from pydantic import (
     AliasPath,
     BaseModel,
     DirectoryPath,
+    Discriminator,
     Field,
     HttpUrl,
     Json,
     RootModel,
     SecretStr,
+    Tag,
     ValidationError,
 )
 from pydantic import (
@@ -31,7 +33,7 @@ from pydantic import (
 from pydantic._internal._repr import Representation
 from pydantic.fields import FieldInfo
 from pytest_mock import MockerFixture
-from typing_extensions import Annotated
+from typing_extensions import Annotated, Literal
 
 from pydantic_settings import (
     BaseSettings,
@@ -317,7 +319,7 @@ def test_nested_env_delimiter_complex_required(env):
 
 
 def test_nested_env_delimiter_aliases(env):
-    class SubModel(BaseSettings):
+    class SubModel(BaseModel):
         v1: str
         v2: str
 
@@ -1726,6 +1728,44 @@ def test_nested_env_union_complex_values(env):
         Cfg()
 
 
+def test_discriminated_union_with_callable_discriminator(env):
+    class A(BaseModel):
+        x: Literal['a'] = 'a'
+        y: str
+
+    class B(BaseModel):
+        x: Literal['b'] = 'b'
+        z: str
+
+    def get_discriminator_value(v: Any) -> Hashable:
+        if isinstance(v, dict):
+            v0 = v.get('x')
+        else:
+            v0 = getattr(v, 'x', None)
+
+        if v0 == 'a':
+            return 'a'
+        elif v0 == 'b':
+            return 'b'
+        else:
+            return None
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+        # Discriminated union using a callable discriminator.
+        a_or_b: Annotated[Union[Annotated[A, Tag('a')], Annotated[B, Tag('b')]], Discriminator(get_discriminator_value)]
+
+    # Set up environment so that the discriminator is 'a'.
+    env.set('a_or_b__x', 'a')
+    env.set('a_or_b__y', 'foo')
+
+    s = Settings()
+
+    assert s.a_or_b.x == 'a'
+    assert s.a_or_b.y == 'foo'
+
+
 def test_nested_model_case_insensitive(env):
     class SubSubSub(BaseModel):
         VaL3: str
@@ -1917,10 +1957,11 @@ def test_env_parse_enums(env):
         s = Settings()
     assert exc_info.value.errors(include_url=False) == [
         {
-            'type': 'int_parsing',
+            'type': 'enum',
             'loc': ('fruit',),
-            'msg': 'Input should be a valid integer, unable to parse string as an integer',
+            'msg': 'Input should be 0, 1 or 2',
             'input': 'kiwi',
+            'ctx': {'expected': '0, 1 or 2'},
         }
     ]
 
@@ -3696,3 +3737,25 @@ def test_nested_models_as_dict_value(env):
     env.set('sub_dict__bar__foo', '{"b": 2}')
     s = Settings()
     assert s.model_dump() == {'nested': {'foo': {'a': 1}}, 'sub_dict': {'bar': {'foo': {'b': 2}}}}
+
+
+def test_nested_models_leaf_vs_deeper_env_dict_assumed(env):
+    class NestedSettings(BaseModel):
+        foo: str
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+        nested: NestedSettings
+
+    env.set('nested__foo', 'string')
+    env.set(
+        'nested__foo__bar',
+        'this should not be evaluated, since foo is a string by annotation and not a dict',
+    )
+    env.set(
+        'nested__foo__bar__baz',
+        'one more',
+    )
+    s = Settings()
+    assert s.model_dump() == {'nested': {'foo': 'string'}}

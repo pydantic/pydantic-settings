@@ -35,7 +35,7 @@ from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union, typ
 from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
-from typing_extensions import Annotated, get_args, get_origin
+from typing_extensions import Annotated, _AnnotatedAlias, get_args, get_origin
 
 from pydantic_settings.utils import path_type_label
 
@@ -654,7 +654,8 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             target_field: FieldInfo | None = field
             for key in keys:
                 target_field = self.next_field(target_field, key)
-                env_var = env_var.setdefault(key, {})
+                if isinstance(env_var, dict):
+                    env_var = env_var.setdefault(key, {})
 
             # get proper field with last_key
             target_field = self.next_field(target_field, last_key)
@@ -672,8 +673,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     except ValueError as e:
                         if not allow_json_failure:
                             raise e
-
-            if last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] is {}:
+            if isinstance(env_var, dict):
                 env_var[last_key] = env_val
 
         return result
@@ -1515,6 +1515,11 @@ def read_env_file(
 def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
     if any(isinstance(md, Json) for md in metadata):  # type: ignore[misc]
         return False
+    # Check if annotation is of the form Annotated[type, metadata].
+    if isinstance(annotation, _AnnotatedAlias):
+        # Return result of recursive call on inner type.
+        inner, meta = get_args(annotation)
+        return _annotation_is_complex(inner, [meta])
     origin = get_origin(annotation)
     return (
         _annotation_is_complex_inner(annotation)
