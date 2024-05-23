@@ -674,7 +674,8 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                         if not allow_json_failure:
                             raise e
             if isinstance(env_var, dict):
-                env_var[last_key] = env_val
+                if last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] is {}:
+                    env_var[last_key] = env_val
 
         return result
 
@@ -1114,7 +1115,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     f'CliPositionalArg is not outermost annotation for {model.__name__}.{resolved_name}'
                 )
             if is_model_class(type_) or is_pydantic_dataclass(type_):
-                sub_models.append(type_)
+                sub_models.append(type_) # type: ignore
         return sub_models
 
     def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, FieldInfo]]:
