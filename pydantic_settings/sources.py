@@ -992,7 +992,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 parsed_args[last_selected_subcommand] = '{}'
 
         self.env_vars = parse_env_vars(
-            cast(Mapping[str, str | None], parsed_args),
+            cast(Mapping[str, str], parsed_args),
             self.case_sensitive,
             self.env_ignore_empty,
             self.env_parse_none_str,
