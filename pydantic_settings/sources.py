@@ -33,6 +33,7 @@ from pydantic import AliasChoices, AliasPath, BaseModel, Json
 from pydantic._internal._repr import Representation
 from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union, typing_base
 from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
+from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
 from typing_extensions import Annotated, get_args, get_origin
 
@@ -1112,13 +1113,14 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 raise SettingsError(
                     f'CliPositionalArg is not outermost annotation for {model.__name__}.{resolved_name}'
                 )
-            if is_model_class(type_):
+            if is_model_class(type_) or is_pydantic_dataclass(type_):
                 sub_models.append(type_)
         return sub_models
 
     def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, FieldInfo]]:
         positional_args, subcommand_args, optional_args = [], [], []
-        for field_name, field_info in model.model_fields.items():
+        fields = model.__pydantic_fields__ if is_pydantic_dataclass(model) else model.model_fields
+        for field_name, field_info in fields.items():
             resolved_name = field_name if field_info.alias is None else field_info.alias
             if _CliSubCommand in field_info.metadata:
                 if not field_info.is_required():

@@ -2144,6 +2144,21 @@ def test_cli_alias_arg():
     assert cfg.model_dump(by_alias=True) == {'alias': 'foo', 'critter': {'name': 'harry'}}
 
 
+def test_cli_nested_dataclass_arg():
+    @pydantic_dataclasses.dataclass
+    class MyDataclass:
+        foo: int
+        bar: str
+
+    class Settings(BaseSettings):
+        n: MyDataclass
+
+    s = Settings(_cli_parse_args=['--n.foo', '123', '--n.bar', 'bar value'])
+    assert isinstance(s.n, MyDataclass)
+    assert s.n.foo == 123
+    assert s.n.bar == 'bar value'
+
+
 @pytest.mark.parametrize('prefix', ['', 'child.'])
 def test_cli_list_arg(prefix):
     class Obj(BaseModel):
