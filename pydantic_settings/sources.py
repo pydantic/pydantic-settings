@@ -1115,9 +1115,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             merged_list.append(json.dumps({key: val}))
         return item[consumed:]
 
-    def _get_sub_models(
-        self, model: type[BaseModel], field_name: str, field_info: FieldInfo
-    ) -> list[type[BaseModel]]:
+    def _get_sub_models(self, model: type[BaseModel], field_name: str, field_info: FieldInfo) -> list[type[BaseModel]]:
         field_types: tuple[Any, ...] = (
             (field_info.annotation,) if not get_args(field_info.annotation) else get_args(field_info.annotation)
         )
@@ -1129,9 +1127,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if _annotation_contains_types(type_, (_CliSubCommand,), is_include_origin=False):
                 raise SettingsError(f'CliSubCommand is not outermost annotation for {model.__name__}.{field_name}')
             elif _annotation_contains_types(type_, (_CliPositionalArg,), is_include_origin=False):
-                raise SettingsError(
-                    f'CliPositionalArg is not outermost annotation for {model.__name__}.{field_name}'
-                )
+                raise SettingsError(f'CliPositionalArg is not outermost annotation for {model.__name__}.{field_name}')
             if is_model_class(type_) or is_pydantic_dataclass(type_):
                 sub_models.append(type_)  # type: ignore
         return sub_models
@@ -1170,17 +1166,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _connect_parser_method(
         self, parser_method: Callable[..., Any] | None, method_name: str, *args: Any, **kwargs: Any
     ) -> Callable[..., Any]:
-        if not parser_method:
-
-            def none_parser_method(*args: Any, **kwargs: Any) -> Any:
-                raise SettingsError(
-                    f'cannot connect CLI settings source root parser: {method_name} is set to `None` but is needed for connecting'
-                )
-
-            return none_parser_method
-
-        elif (
-            self.case_sensitive is False
+        if (
+            parser_method is not None
+            and self.case_sensitive is False
             and method_name == 'parsed_args_method'
             and isinstance(self._root_parser, _CliInternalArgParser)
         ):
@@ -1196,9 +1184,18 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     if matched:
                         arg = matched.group(1).lower() + matched.group(2)
                     insensitive_args.append(arg)
-                return parser_method(root_parser, insensitive_args, namespace)
+                return parser_method(root_parser, insensitive_args, namespace)  # type: ignore
 
             return parse_args_insensitive_method
+
+        elif parser_method is None:
+
+            def none_parser_method(*args: Any, **kwargs: Any) -> Any:
+                raise SettingsError(
+                    f'cannot connect CLI settings source root parser: {method_name} is set to `None` but is needed for connecting'
+                )
+
+            return none_parser_method
 
         else:
             return parser_method
