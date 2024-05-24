@@ -540,7 +540,42 @@ Settings(
 ```
 
 Note that a CLI settings source is [**the topmost source**](#field-value-priority) by default unless its [priority value
-is changed](#changing-priority).
+is customised](#customise-settings-sources):
+
+```py
+import os
+import sys
+from typing import Tuple, Type
+
+from pydantic_settings import (
+    BaseSettings,
+    CliSettingsSource,
+    PydanticBaseSettingsSource,
+)
+
+
+class Settings(BaseSettings):
+    my_foo: str
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        return env_settings, CliSettingsSource(settings_cls, cli_parse_args=True)
+
+
+os.environ['MY_FOO'] = 'from environment'
+
+sys.argv = ['example.py', '--my_foo=from cli']
+
+print(Settings().model_dump())
+#> {'my_foo': 'from environment'}
+```
 
 #### Lists
 
