@@ -2,6 +2,8 @@ from __future__ import annotations as _annotations
 
 import json
 import os
+import re
+import shlex
 import sys
 import typing
 import warnings
@@ -95,6 +97,10 @@ class _CliSubCommand:
 
 
 class _CliPositionalArg:
+    pass
+
+
+class _CliInternalArgParser(ArgumentParser):
     pass
 
 
@@ -797,6 +803,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_use_class_docs_for_groups: Use class docstrings in CLI group help text instead of field descriptions.
             Defaults to `False`.
         cli_prefix: Prefix for command line arguments added under the root parser. Defaults to "".
+        case_sensitive: Whether CLI "--arg" names should be read with case-sensitivity. Defaults to `True`.
+            Note: Case-insensitive matching is only supported on the internal root parser and does not apply to CLI
+            subcommands.
         root_parser: The root parser object.
         parse_args_method: The root parser parse args method. Defaults to `argparse.ArgumentParser.parse_args`.
         add_argument_method: The root parser add argument method. Defaults to `argparse.ArgumentParser.add_argument`.
@@ -820,6 +829,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_enforce_required: bool | None = None,
         cli_use_class_docs_for_groups: bool | None = None,
         cli_prefix: str | None = None,
+        case_sensitive: bool = True,
         root_parser: Any = None,
         parse_args_method: Callable[..., Any] | None = ArgumentParser.parse_args,
         add_argument_method: Callable[..., Any] | None = ArgumentParser.add_argument,
@@ -857,16 +867,20 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 raise SettingsError(f'CLI settings source prefix is invalid: {cli_prefix}')
             self.cli_prefix += '.'
 
+        if not case_sensitive and root_parser is not None:
+            raise SettingsError('Case-insensitive matching is only supported on the internal root parser')
+
         super().__init__(
             settings_cls,
             env_nested_delimiter='.',
             env_parse_none_str=cli_parse_none_str,
             env_parse_enums=True,
             env_prefix=self.cli_prefix,
+            case_sensitive=case_sensitive,
         )
 
         root_parser = (
-            ArgumentParser(prog=self.cli_prog_name, description=settings_cls.__doc__)
+            _CliInternalArgParser(prog=self.cli_prog_name, description=settings_cls.__doc__)
             if root_parser is None
             else root_parser
         )
@@ -1101,7 +1115,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         return item[consumed:]
 
     def _get_sub_models(
-        self, model: type[BaseModel], resolved_name: str, field_info: FieldInfo
+        self, model: type[BaseModel], field_name: str, field_info: FieldInfo
     ) -> list[type[BaseModel]]:
         field_types: tuple[Any, ...] = (
             (field_info.annotation,) if not get_args(field_info.annotation) else get_args(field_info.annotation)
@@ -1112,38 +1126,39 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         sub_models: list[type[BaseModel]] = []
         for type_ in field_types:
             if _annotation_contains_types(type_, (_CliSubCommand,), is_include_origin=False):
-                raise SettingsError(f'CliSubCommand is not outermost annotation for {model.__name__}.{resolved_name}')
+                raise SettingsError(f'CliSubCommand is not outermost annotation for {model.__name__}.{field_name}')
             elif _annotation_contains_types(type_, (_CliPositionalArg,), is_include_origin=False):
                 raise SettingsError(
-                    f'CliPositionalArg is not outermost annotation for {model.__name__}.{resolved_name}'
+                    f'CliPositionalArg is not outermost annotation for {model.__name__}.{field_name}'
                 )
             if is_model_class(type_) or is_pydantic_dataclass(type_):
                 sub_models.append(type_)  # type: ignore
         return sub_models
 
-    def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, FieldInfo]]:
+    def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, str, FieldInfo]]:
         positional_args, subcommand_args, optional_args = [], [], []
         fields = model.__pydantic_fields__ if is_pydantic_dataclass(model) else model.model_fields
         for field_name, field_info in fields.items():
             resolved_name = field_name if field_info.alias is None else field_info.alias
+            resolved_name = resolved_name.lower() if not self.case_sensitive else resolved_name
             if _CliSubCommand in field_info.metadata:
                 if not field_info.is_required():
-                    raise SettingsError(f'subcommand argument {model.__name__}.{resolved_name} has a default value')
+                    raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has a default value')
                 else:
                     field_types = [type_ for type_ in get_args(field_info.annotation) if type_ is not type(None)]
                     if len(field_types) != 1:
-                        raise SettingsError(f'subcommand argument {model.__name__}.{resolved_name} has multiple types')
+                        raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has multiple types')
                     elif not is_model_class(field_types[0]):
                         raise SettingsError(
                             f'subcommand argument {model.__name__}.{resolved_name} is not derived from BaseModel'
                         )
-                subcommand_args.append((resolved_name, field_info))
+                subcommand_args.append((field_name, resolved_name, field_info))
             elif _CliPositionalArg in field_info.metadata:
                 if not field_info.is_required():
-                    raise SettingsError(f'positional argument {model.__name__}.{resolved_name} has a default value')
-                positional_args.append((resolved_name, field_info))
+                    raise SettingsError(f'positional argument {model.__name__}.{field_name} has a default value')
+                positional_args.append((field_name, resolved_name, field_info))
             else:
-                optional_args.append((resolved_name, field_info))
+                optional_args.append((field_name, resolved_name, field_info))
         return positional_args + subcommand_args + optional_args
 
     @property
@@ -1154,15 +1169,38 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _connect_parser_method(
         self, parser_method: Callable[..., Any] | None, method_name: str, *args: Any, **kwargs: Any
     ) -> Callable[..., Any]:
-        if parser_method:
+        if not parser_method:
+
+            def none_parser_method(*args: Any, **kwargs: Any) -> Any:
+                raise SettingsError(
+                    f'cannot connect CLI settings source root parser: {method_name} is set to `None` but is needed for connecting'
+                )
+
+            return none_parser_method
+
+        elif (
+            self.case_sensitive is False
+            and method_name == 'parsed_args_method'
+            and isinstance(self._root_parser, _CliInternalArgParser)
+        ):
+
+            def parse_args_insensitive_method(
+                root_parser: _CliInternalArgParser,
+                args: list[str] | tuple[str, ...] | None = None,
+                namespace: Namespace | None = None,
+            ) -> Any:
+                insensitive_args = []
+                for arg in shlex.split(shlex.join(args)) if args else []:
+                    matched = re.match(r'^(--[^\s=]+)(.*)', arg)
+                    if matched:
+                        arg = matched.group(1).lower() + matched.group(2)
+                    insensitive_args.append(arg)
+                return parser_method(root_parser, insensitive_args, namespace)
+
+            return parse_args_insensitive_method
+
+        else:
             return parser_method
-
-        def none_parser_method(*args: Any, **kwargs: Any) -> Any:
-            raise SettingsError(
-                f'cannot connect CLI settings source root parser: {method_name} is set to `None` but is needed for connecting'
-            )
-
-        return none_parser_method
 
     def _connect_root_parser(
         self,
@@ -1202,8 +1240,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         group: Any,
     ) -> ArgumentParser:
         subparsers: Any = None
-        for resolved_name, field_info in self._sort_arg_fields(model):
-            sub_models: list[type[BaseModel]] = self._get_sub_models(model, resolved_name, field_info)
+        for field_name, resolved_name, field_info in self._sort_arg_fields(model):
+            sub_models: list[type[BaseModel]] = self._get_sub_models(model, field_name, field_info)
             if _CliSubCommand in field_info.metadata:
                 if subparsers is None:
                     subparsers = self._add_subparsers(

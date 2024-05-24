@@ -2212,6 +2212,25 @@ def test_cli_alias_arg():
     assert cfg.model_dump(by_alias=True) == {'alias': 'foo', 'critter': {'name': 'harry'}}
 
 
+def test_cli_case_insensitve_arg():
+    class Cfg(BaseSettings):
+        Foo: str
+        Bar: str
+
+    cfg = Cfg(_cli_parse_args=['--FOO=--VAL', '--BAR', '"--VAL"'])
+    assert cfg.model_dump() == {'Foo': '--VAL', 'Bar': '"--VAL"'}
+
+    cfg = Cfg(_cli_parse_args=['--Foo=--VAL', '--Bar', '"--VAL"'], _case_sensitive=True)
+    assert cfg.model_dump() == {'Foo': '--VAL', 'Bar': '"--VAL"'}
+
+    with pytest.raises(SystemExit):
+        Cfg(_cli_parse_args=['--FOO=--VAL', '--BAR', '"--VAL"'], _case_sensitive=True)
+
+    with pytest.raises(SettingsError) as exc_info:
+        CliSettingsSource(Cfg, root_parser=CliDummyParser(), case_sensitive=False)
+    assert str(exc_info.value) == 'Case-insensitive matching is only supported on the internal root parser'
+
+
 def test_cli_nested_dataclass_arg():
     @pydantic_dataclasses.dataclass
     class MyDataclass:

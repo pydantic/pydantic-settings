@@ -256,6 +256,7 @@ class BaseSettings(BaseModel):
                 cli_enforce_required=cli_enforce_required,
                 cli_use_class_docs_for_groups=cli_use_class_docs_for_groups,
                 cli_prefix=cli_prefix,
+                case_sensitive=case_sensitive,
             )
             if cli_settings_source is None
             else cli_settings_source
