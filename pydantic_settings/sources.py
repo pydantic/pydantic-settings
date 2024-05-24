@@ -829,7 +829,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_enforce_required: bool | None = None,
         cli_use_class_docs_for_groups: bool | None = None,
         cli_prefix: str | None = None,
-        case_sensitive: bool = True,
+        case_sensitive: bool | None = True,
         root_parser: Any = None,
         parse_args_method: Callable[..., Any] | None = ArgumentParser.parse_args,
         add_argument_method: Callable[..., Any] | None = ArgumentParser.add_argument,
@@ -867,6 +867,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 raise SettingsError(f'CLI settings source prefix is invalid: {cli_prefix}')
             self.cli_prefix += '.'
 
+        case_sensitive = case_sensitive if case_sensitive is not None else True
         if not case_sensitive and root_parser is not None:
             raise SettingsError('Case-insensitive matching is only supported on the internal root parser')
 
