@@ -33,6 +33,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_prog_name: str | None
     cli_parse_args: bool | list[str] | tuple[str, ...] | None
     cli_settings_source: CliSettingsSource[Any] | None
+    cli_parse_none_str: str | None
     cli_hide_none_type: bool
     cli_avoid_json: bool
     cli_enforce_required: bool
@@ -101,6 +102,9 @@ class BaseSettings(BaseModel):
         _cli_parse_args: The list of CLI arguments to parse. Defaults to None.
             If set to `True`, defaults to sys.argv[1:].
         _cli_settings_source: Override the default CLI settings source with a user defined instance. Defaults to None.
+        _cli_parse_none_str: The CLI string value that should be parsed (e.g. "null", "void", "None", etc.) into
+            `None` type(None). Defaults to _env_parse_none_str value if set. Otherwise, defaults to "null" if
+            _cli_avoid_json is `False`, and "None" if _cli_avoid_json is `True`.
         _cli_hide_none_type: Hide `None` values in CLI help text. Defaults to `False`.
         _cli_avoid_json: Avoid complex JSON objects in CLI help text. Defaults to `False`.
         _cli_enforce_required: Enforce required fields at the CLI. Defaults to `False`.
@@ -123,6 +127,7 @@ class BaseSettings(BaseModel):
         _cli_prog_name: str | None = None,
         _cli_parse_args: bool | list[str] | tuple[str, ...] | None = None,
         _cli_settings_source: CliSettingsSource[Any] | None = None,
+        _cli_parse_none_str: str | None = None,
         _cli_hide_none_type: bool | None = None,
         _cli_avoid_json: bool | None = None,
         _cli_enforce_required: bool | None = None,
@@ -146,6 +151,7 @@ class BaseSettings(BaseModel):
                 _cli_prog_name=_cli_prog_name,
                 _cli_parse_args=_cli_parse_args,
                 _cli_settings_source=_cli_settings_source,
+                _cli_parse_none_str=_cli_parse_none_str,
                 _cli_hide_none_type=_cli_hide_none_type,
                 _cli_avoid_json=_cli_avoid_json,
                 _cli_enforce_required=_cli_enforce_required,
@@ -193,6 +199,7 @@ class BaseSettings(BaseModel):
         _cli_prog_name: str | None = None,
         _cli_parse_args: bool | list[str] | tuple[str, ...] | None = None,
         _cli_settings_source: CliSettingsSource[Any] | None = None,
+        _cli_parse_none_str: str | None = None,
         _cli_hide_none_type: bool | None = None,
         _cli_avoid_json: bool | None = None,
         _cli_enforce_required: bool | None = None,
@@ -225,6 +232,10 @@ class BaseSettings(BaseModel):
         cli_settings_source = (
             _cli_settings_source if _cli_settings_source is not None else self.model_config.get('cli_settings_source')
         )
+        cli_parse_none_str = (
+            _cli_parse_none_str if _cli_parse_none_str is not None else self.model_config.get('cli_parse_none_str')
+        )
+        cli_parse_none_str = cli_parse_none_str if not env_parse_none_str else env_parse_none_str
         cli_hide_none_type = (
             _cli_hide_none_type if _cli_hide_none_type is not None else self.model_config.get('cli_hide_none_type')
         )
@@ -250,7 +261,7 @@ class BaseSettings(BaseModel):
                 self.__class__,
                 cli_prog_name=cli_prog_name,
                 cli_parse_args=cli_parse_args,
-                cli_parse_none_str=env_parse_none_str,
+                cli_parse_none_str=cli_parse_none_str,
                 cli_hide_none_type=cli_hide_none_type,
                 cli_avoid_json=cli_avoid_json,
                 cli_enforce_required=cli_enforce_required,
@@ -318,6 +329,7 @@ class BaseSettings(BaseModel):
         cli_prog_name=None,
         cli_parse_args=None,
         cli_settings_source=None,
+        cli_parse_none_str=None,
         cli_hide_none_type=False,
         cli_avoid_json=False,
         cli_enforce_required=False,

@@ -478,7 +478,8 @@ to enable [enforcing required arguments at the CLI](#enforce-required-arguments-
 
 ### The Basics
 
-To get started, let's revisit the example presented in [parsing environment variables](#parsing-environment-variables) but using a Pydantic settings CLI:
+To get started, let's revisit the example presented in [parsing environment variables](#parsing-environment-variables)
+but using a Pydantic settings CLI:
 
 ```py
 import sys
@@ -777,7 +778,7 @@ positional arguments:
 
 options:
   -h, --help     show this help message and exit
-  --local bool   When the resposity to clone from is on a local machine, bypass ...
+  --local bool   When the resposity to clone from is on a local machine, bypass ... (default: False)
 """
 
 
@@ -794,7 +795,7 @@ git-plugins-bar - Extra deep bar plugin command
 
 options:
   -h, --help         show this help message and exit
-  --my_feature bool  Enable my feature on bar plugin
+  --my_feature bool  Enable my feature on bar plugin (default: False)
 """
 ```
 
@@ -804,8 +805,8 @@ The below flags can be used to customise the CLI experience to your needs.
 
 #### Change the Displayed Program Name
 
-Change the default program name displayed in the help text usage by setting `cli_prog_name`. By default, it will derive the name of the currently
-executing program from `sys.argv[0]`, just like argparse.
+Change the default program name displayed in the help text usage by setting `cli_prog_name`. By default, it will derive
+the name of the currently executing program from `sys.argv[0]`, just like argparse.
 
 ```py test="skip"
 import sys
@@ -864,6 +865,30 @@ example.py: error: the following arguments are required: --my_required_field
 """
 ```
 
+#### Change the None Type Parse String
+
+Change the CLI string value that will be parsed (e.g. "null", "void", "None", etc.) into `None` type(None) by setting
+`cli_parse_none_str`. By default it will use the `env_parse_none_str` value if set. Otherwise, it will default to "null"
+if `cli_avoid_json` is `False`, and "None" if `cli_avoid_json` is `True`.
+
+```py
+import sys
+from typing import Optional
+
+from pydantic import Field
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings, cli_parse_args=True, cli_parse_none_str='void'):
+    v1: Optional[int] = Field(description='the top level v0 option')
+
+
+sys.argv = ['example.py', '--v1', 'void']
+print(Settings().model_dump())
+#> {'v1': None}
+```
+
 #### Hide None Type Values
 
 Hide `None` values from the CLI help text by enabling `cli_hide_none_type`.
@@ -888,7 +913,7 @@ usage: example.py [-h] [--v0 str]
 
 options:
   -h, --help  show this help message and exit
-  --v0 str    the top level v0 option
+  --v0 str    the top level v0 option (required)
 """
 ```
 
@@ -925,7 +950,7 @@ options:
 sub_model options:
   The help summary for SubModel related options
 
-  --sub_model.v1 int  the sub model v1 option
+  --sub_model.v1 int  the sub model v1 option (required)
 """
 ```
 
@@ -972,7 +997,7 @@ sub_model options:
   The help text from the class docstring.
 
   --sub_model JSON    set sub_model from JSON string
-  --sub_model.v1 int  the sub model v1 option
+  --sub_model.v1 int  the sub model v1 option (required)
 """
 ```
 

@@ -37,6 +37,7 @@ from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union, typ
 from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
+from pydantic_core import PydanticUndefined
 from typing_extensions import Annotated, _AnnotatedAlias, get_args, get_origin
 
 from pydantic_settings.utils import path_type_label
@@ -797,6 +798,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_parse_args: The list of CLI arguments to parse. Defaults to None.
             If set to `True`, defaults to sys.argv[1:].
         cli_settings_source: Override the default CLI settings source with a user defined instance. Defaults to `None`.
+        cli_parse_none_str: The CLI string value that should be parsed (e.g. "null", "void", "None", etc.) into `None`
+            type(None). Defaults to "null" if cli_avoid_json is `False`, and "None" if cli_avoid_json is `True`.
         cli_hide_none_type: Hide `None` values in CLI help text. Defaults to `False`.
         cli_avoid_json: Avoid complex JSON objects in CLI help text. Defaults to `False`.
         cli_enforce_required: Enforce required fields at the CLI. Defaults to `False`.
@@ -851,6 +854,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         )
         if cli_parse_none_str is None:
             cli_parse_none_str = 'None' if self.cli_avoid_json is True else 'null'
+        self.cli_parse_none_str = cli_parse_none_str
         self.cli_enforce_required = (
             cli_enforce_required
             if cli_enforce_required is not None
@@ -874,7 +878,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         super().__init__(
             settings_cls,
             env_nested_delimiter='.',
-            env_parse_none_str=cli_parse_none_str,
+            env_parse_none_str=self.cli_parse_none_str,
             env_parse_enums=True,
             env_prefix=self.cli_prefix,
             case_sensitive=case_sensitive,
@@ -998,7 +1002,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         for subcommands in self._cli_subcommands.values():
             for subcommand in subcommands:
                 if subcommand not in selected_subcommands:
-                    parsed_args[subcommand] = self.env_parse_none_str  # type: ignore
+                    parsed_args[subcommand] = self.cli_parse_none_str
 
         parsed_args = {key: val for key, val in parsed_args.items() if not key.endswith(':subcommand')}
         if selected_subcommands:
@@ -1010,7 +1014,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             cast(Mapping[str, str], parsed_args),
             self.case_sensitive,
             self.env_ignore_empty,
-            self.env_parse_none_str,
+            self.cli_parse_none_str,
         )
 
         return self
@@ -1102,7 +1106,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             try:
                 float(val_string)
             except ValueError:
-                if val_string == self.env_parse_none_str:
+                if val_string == self.cli_parse_none_str:
                     val_string = 'null'
                 if val_string not in ('true', 'false', 'null') and not val_string.startswith('"'):
                     val_string = f'"{val_string}"'
@@ -1271,7 +1275,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 arg_flag: str = '--'
                 kwargs: dict[str, Any] = {}
                 kwargs['default'] = SUPPRESS
-                kwargs['help'] = field_info.description
+                kwargs['help'] = self._help_format(field_info)
                 kwargs['dest'] = f'{arg_prefix}{resolved_name}'
                 kwargs['metavar'] = self._metavar_format(field_info.annotation)
                 kwargs['required'] = self.cli_enforce_required and field_info.is_required()
@@ -1370,7 +1374,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 list(map(self._metavar_format_recurse, self._get_modified_args(obj))), obj_qualname=obj.__qualname__
             )
         elif obj is type(None):
-            return self.env_parse_none_str
+            return self.cli_parse_none_str
         elif is_model_class(obj):
             return 'JSON'
         elif isinstance(obj, type):
@@ -1380,6 +1384,19 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _metavar_format(self, obj: Any) -> str:
         return self._metavar_format_recurse(obj).replace(', ', ',')
+
+    def _help_format(self, field_info: FieldInfo) -> str:
+        _help = field_info.description if field_info.description else ''
+        if field_info.is_required() and _CliPositionalArg not in field_info.metadata:
+            _help += ' (required)' if _help else '(required)'
+        elif field_info.default is not PydanticUndefined:
+            default = (
+                f'(default: {field_info.default})'
+                if field_info.default is not None
+                else f'(default: {self.cli_parse_none_str})'
+            )
+            _help += f' {default}' if _help else default
+        return _help
 
 
 class ConfigFileSourceMixin(ABC):

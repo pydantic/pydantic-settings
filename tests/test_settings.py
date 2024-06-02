@@ -2772,7 +2772,7 @@ def test_cli_avoid_json(capsys, monkeypatch):
 
 sub_model options:
   --sub_model JSON    set sub_model from JSON string
-  --sub_model.v1 int
+  --sub_model.v1 int  (required)
 """
         )
 
@@ -2787,7 +2787,7 @@ sub_model options:
   -h, --help          show this help message and exit
 
 sub_model options:
-  --sub_model.v1 int
+  --sub_model.v1 int  (required)
 """
         )
 
@@ -2854,7 +2854,7 @@ def test_cli_hide_none_type(capsys, monkeypatch):
 
 {argparse_options_text}:
   -h, --help       show this help message and exit
-  --v0 {{str,null}}
+  --v0 {{str,null}}  (required)
 """
         )
 
@@ -2867,7 +2867,7 @@ def test_cli_hide_none_type(capsys, monkeypatch):
 
 {argparse_options_text}:
   -h, --help  show this help message and exit
-  --v0 str
+  --v0 str    (required)
 """
         )
 
@@ -2906,7 +2906,7 @@ sub_model options:
   The help text from the field description
 
   --sub_model JSON    set sub_model from JSON string
-  --sub_model.v1 int
+  --sub_model.v1 int  (required)
 """
         )
 
@@ -2926,7 +2926,7 @@ sub_model options:
   The help text from the class docstring
 
   --sub_model JSON    set sub_model from JSON string
-  --sub_model.v1 int
+  --sub_model.v1 int  (required)
 """
         )
 
