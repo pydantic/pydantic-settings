@@ -2,6 +2,7 @@ import argparse
 import dataclasses
 import json
 import os
+import re
 import sys
 import typing
 import uuid
@@ -2229,6 +2230,35 @@ def test_cli_case_insensitve_arg():
     with pytest.raises(SettingsError) as exc_info:
         CliSettingsSource(Cfg, root_parser=CliDummyParser(), case_sensitive=False)
     assert str(exc_info.value) == 'Case-insensitive matching is only supported on the internal root parser'
+
+
+def test_cli_help_differentiation(capsys, monkeypatch):
+    class Cfg(BaseSettings):
+        foo: str
+        bar: int = 123
+        boo: int = Field(default_factory=lambda: 456)
+
+    argparse_options_text = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Cfg(_cli_parse_args=True)
+
+        assert (
+            re.sub(r'0x\w+', '0xffffffff', capsys.readouterr().out, re.MULTILINE)
+            == f"""usage: example.py [-h] [--foo str] [--bar int] [--boo int]
+
+{argparse_options_text}:
+  -h, --help  show this help message and exit
+  --foo str   (required)
+  --bar int   (default: 123)
+  --boo int   (default: <function
+              test_cli_help_differentiation.<locals>.Cfg.<lambda> at
+              0xffffffff>)
+"""
+        )
 
 
 def test_cli_nested_dataclass_arg():

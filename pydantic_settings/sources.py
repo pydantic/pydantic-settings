@@ -852,7 +852,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self.cli_avoid_json = (
             cli_avoid_json if cli_avoid_json is not None else settings_cls.model_config.get('cli_avoid_json', False)
         )
-        if cli_parse_none_str is None:
+        if not cli_parse_none_str:
             cli_parse_none_str = 'None' if self.cli_avoid_json is True else 'null'
         self.cli_parse_none_str = cli_parse_none_str
         self.cli_enforce_required = (
@@ -1387,14 +1387,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _help_format(self, field_info: FieldInfo) -> str:
         _help = field_info.description if field_info.description else ''
-        if field_info.is_required() and _CliPositionalArg not in field_info.metadata:
-            _help += ' (required)' if _help else '(required)'
-        elif field_info.default is not PydanticUndefined:
-            default = (
-                f'(default: {field_info.default})'
-                if field_info.default is not None
-                else f'(default: {self.cli_parse_none_str})'
-            )
+        if field_info.is_required():
+            if _CliPositionalArg not in field_info.metadata:
+                _help += ' (required)' if _help else '(required)'
+        else:
+            default = f'(default: {self.cli_parse_none_str})'
+            if field_info.default not in (PydanticUndefined, None):
+                default = f'(default: {field_info.default})'
+            elif field_info.default_factory is not None:
+                default = f'(default: {field_info.default_factory})'
             _help += f' {default}' if _help else default
         return _help
 
