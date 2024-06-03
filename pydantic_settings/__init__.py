@@ -1,5 +1,8 @@
 from .main import BaseSettings, SettingsConfigDict
 from .sources import (
+    CliPositionalArg,
+    CliSettingsSource,
+    CliSubCommand,
     DotEnvSettingsSource,
     EnvSettingsSource,
     InitSettingsSource,
@@ -16,6 +19,9 @@ __all__ = (
     'BaseSettings',
     'DotEnvSettingsSource',
     'EnvSettingsSource',
+    'CliSettingsSource',
+    'CliSubCommand',
+    'CliPositionalArg',
     'InitSettingsSource',
     'JsonConfigSettingsSource',
     'PyprojectTomlConfigSettingsSource',
