@@ -683,7 +683,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     is_complex, allow_json_failure = self._field_is_complex(target_field)
                 else:
                     # nested field type is dict
-                    is_complex, allow_json_failure = True, False
+                    is_complex, allow_json_failure = True, True
                 if is_complex:
                     try:
                         env_val = self.decode_complex_value(last_key, target_field, env_val)  # type: ignore
