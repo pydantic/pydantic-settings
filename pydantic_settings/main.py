@@ -10,6 +10,7 @@ from pydantic.main import BaseModel
 
 from .sources import (
     ENV_FILE_SENTINEL,
+    CliSettingsSource,
     DotEnvSettingsSource,
     DotenvType,
     EnvSettingsSource,
@@ -30,11 +31,41 @@ class SettingsConfigDict(ConfigDict, total=False):
     env_ignore_empty: bool
     env_nested_delimiter: str | None
     env_parse_none_str: str | None
+    env_parse_enums: bool | None
+    cli_prog_name: str | None
+    cli_parse_args: bool | list[str] | tuple[str, ...] | None
+    cli_settings_source: CliSettingsSource[Any] | None
+    cli_parse_none_str: str | None
+    cli_hide_none_type: bool
+    cli_avoid_json: bool
+    cli_enforce_required: bool
+    cli_use_class_docs_for_groups: bool
+    cli_prefix: str
     secrets_dir: str | Path | None
     json_file: PathType | None
     json_file_encoding: str | None
     yaml_file: PathType | None
     yaml_file_encoding: str | None
+    pyproject_toml_depth: int
+    """
+    Number of levels **up** from the current working directory to attempt to find a pyproject.toml
+    file.
+
+    This is only used when a pyproject.toml file is not found in the current working directory.
+    """
+
+    pyproject_toml_table_header: tuple[str, ...]
+    """
+    Header of the TOML table within a pyproject.toml file to use when filling variables.
+    This is supplied as a `tuple[str, ...]` instead of a `str` to accommodate for headers
+    containing a `.`.
+
+    For example, `toml_table_header = ("tool", "my.tool", "foo")` can be used to fill variable
+    values from a table with header `[tool."my.tool".foo]`.
+
+    To use the root table, exclude this config setting or provide an empty tuple.
+    """
+
     toml_file: PathType | None
 
 
@@ -67,6 +98,21 @@ class BaseSettings(BaseModel):
         _env_nested_delimiter: The nested env values delimiter. Defaults to `None`.
         _env_parse_none_str: The env string value that should be parsed (e.g. "null", "void", "None", etc.)
             into `None` type(None). Defaults to `None` type(None), which means no parsing should occur.
+        _env_parse_enums: Parse enum field names to values. Defaults to `None.`, which means no parsing should occur.
+        _cli_prog_name: The CLI program name to display in help text. Defaults to `None` if _cli_parse_args is `None`.
+            Otherwse, defaults to sys.argv[0].
+        _cli_parse_args: The list of CLI arguments to parse. Defaults to None.
+            If set to `True`, defaults to sys.argv[1:].
+        _cli_settings_source: Override the default CLI settings source with a user defined instance. Defaults to None.
+        _cli_parse_none_str: The CLI string value that should be parsed (e.g. "null", "void", "None", etc.) into
+            `None` type(None). Defaults to _env_parse_none_str value if set. Otherwise, defaults to "null" if
+            _cli_avoid_json is `False`, and "None" if _cli_avoid_json is `True`.
+        _cli_hide_none_type: Hide `None` values in CLI help text. Defaults to `False`.
+        _cli_avoid_json: Avoid complex JSON objects in CLI help text. Defaults to `False`.
+        _cli_enforce_required: Enforce required fields at the CLI. Defaults to `False`.
+        _cli_use_class_docs_for_groups: Use class docstrings in CLI group help text instead of field descriptions.
+            Defaults to `False`.
+        _cli_prefix: The root parser command line arguments prefix. Defaults to "".
         _secrets_dir: The secret files directory. Defaults to `None`.
     """
 
@@ -79,6 +125,16 @@ class BaseSettings(BaseModel):
         _env_ignore_empty: bool | None = None,
         _env_nested_delimiter: str | None = None,
         _env_parse_none_str: str | None = None,
+        _env_parse_enums: bool | None = None,
+        _cli_prog_name: str | None = None,
+        _cli_parse_args: bool | list[str] | tuple[str, ...] | None = None,
+        _cli_settings_source: CliSettingsSource[Any] | None = None,
+        _cli_parse_none_str: str | None = None,
+        _cli_hide_none_type: bool | None = None,
+        _cli_avoid_json: bool | None = None,
+        _cli_enforce_required: bool | None = None,
+        _cli_use_class_docs_for_groups: bool | None = None,
+        _cli_prefix: str | None = None,
         _secrets_dir: str | Path | None = None,
         **values: Any,
     ) -> None:
@@ -93,6 +149,16 @@ class BaseSettings(BaseModel):
                 _env_ignore_empty=_env_ignore_empty,
                 _env_nested_delimiter=_env_nested_delimiter,
                 _env_parse_none_str=_env_parse_none_str,
+                _env_parse_enums=_env_parse_enums,
+                _cli_prog_name=_cli_prog_name,
+                _cli_parse_args=_cli_parse_args,
+                _cli_settings_source=_cli_settings_source,
+                _cli_parse_none_str=_cli_parse_none_str,
+                _cli_hide_none_type=_cli_hide_none_type,
+                _cli_avoid_json=_cli_avoid_json,
+                _cli_enforce_required=_cli_enforce_required,
+                _cli_use_class_docs_for_groups=_cli_use_class_docs_for_groups,
+                _cli_prefix=_cli_prefix,
                 _secrets_dir=_secrets_dir,
             )
         )
@@ -131,6 +197,16 @@ class BaseSettings(BaseModel):
         _env_ignore_empty: bool | None = None,
         _env_nested_delimiter: str | None = None,
         _env_parse_none_str: str | None = None,
+        _env_parse_enums: bool | None = None,
+        _cli_prog_name: str | None = None,
+        _cli_parse_args: bool | list[str] | tuple[str, ...] | None = None,
+        _cli_settings_source: CliSettingsSource[Any] | None = None,
+        _cli_parse_none_str: str | None = None,
+        _cli_hide_none_type: bool | None = None,
+        _cli_avoid_json: bool | None = None,
+        _cli_enforce_required: bool | None = None,
+        _cli_use_class_docs_for_groups: bool | None = None,
+        _cli_prefix: str | None = None,
         _secrets_dir: str | Path | None = None,
     ) -> dict[str, Any]:
         # Determine settings config values
@@ -151,10 +227,53 @@ class BaseSettings(BaseModel):
         env_parse_none_str = (
             _env_parse_none_str if _env_parse_none_str is not None else self.model_config.get('env_parse_none_str')
         )
+        env_parse_enums = _env_parse_enums if _env_parse_enums is not None else self.model_config.get('env_parse_enums')
+
+        cli_prog_name = _cli_prog_name if _cli_prog_name is not None else self.model_config.get('cli_prog_name')
+        cli_parse_args = _cli_parse_args if _cli_parse_args is not None else self.model_config.get('cli_parse_args')
+        cli_settings_source = (
+            _cli_settings_source if _cli_settings_source is not None else self.model_config.get('cli_settings_source')
+        )
+        cli_parse_none_str = (
+            _cli_parse_none_str if _cli_parse_none_str is not None else self.model_config.get('cli_parse_none_str')
+        )
+        cli_parse_none_str = cli_parse_none_str if not env_parse_none_str else env_parse_none_str
+        cli_hide_none_type = (
+            _cli_hide_none_type if _cli_hide_none_type is not None else self.model_config.get('cli_hide_none_type')
+        )
+        cli_avoid_json = _cli_avoid_json if _cli_avoid_json is not None else self.model_config.get('cli_avoid_json')
+        cli_enforce_required = (
+            _cli_enforce_required
+            if _cli_enforce_required is not None
+            else self.model_config.get('cli_enforce_required')
+        )
+        cli_use_class_docs_for_groups = (
+            _cli_use_class_docs_for_groups
+            if _cli_use_class_docs_for_groups is not None
+            else self.model_config.get('cli_use_class_docs_for_groups')
+        )
+        cli_prefix = _cli_prefix if _cli_prefix is not None else self.model_config.get('cli_prefix')
+
         secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
         # Configure built-in sources
         init_settings = InitSettingsSource(self.__class__, init_kwargs=init_kwargs)
+        cli_settings = (
+            CliSettingsSource(
+                self.__class__,
+                cli_prog_name=cli_prog_name,
+                cli_parse_args=cli_parse_args,
+                cli_parse_none_str=cli_parse_none_str,
+                cli_hide_none_type=cli_hide_none_type,
+                cli_avoid_json=cli_avoid_json,
+                cli_enforce_required=cli_enforce_required,
+                cli_use_class_docs_for_groups=cli_use_class_docs_for_groups,
+                cli_prefix=cli_prefix,
+                case_sensitive=case_sensitive,
+            )
+            if cli_settings_source is None
+            else cli_settings_source
+        )
         env_settings = EnvSettingsSource(
             self.__class__,
             case_sensitive=case_sensitive,
@@ -162,6 +281,7 @@ class BaseSettings(BaseModel):
             env_nested_delimiter=env_nested_delimiter,
             env_ignore_empty=env_ignore_empty,
             env_parse_none_str=env_parse_none_str,
+            env_parse_enums=env_parse_enums,
         )
         dotenv_settings = DotEnvSettingsSource(
             self.__class__,
@@ -172,6 +292,7 @@ class BaseSettings(BaseModel):
             env_nested_delimiter=env_nested_delimiter,
             env_ignore_empty=env_ignore_empty,
             env_parse_none_str=env_parse_none_str,
+            env_parse_enums=env_parse_enums,
         )
 
         file_secret_settings = SecretsSettingsSource(
@@ -185,6 +306,9 @@ class BaseSettings(BaseModel):
             dotenv_settings=dotenv_settings,
             file_secret_settings=file_secret_settings,
         )
+        if not any([source for source in sources if isinstance(source, CliSettingsSource)]):
+            if cli_parse_args or cli_settings_source:
+                sources = (cli_settings,) + sources
         if sources:
             return BaseSettings._deep_update(*reversed([source() for source in sources]))
         else:
@@ -203,6 +327,16 @@ class BaseSettings(BaseModel):
         env_ignore_empty=False,
         env_nested_delimiter=None,
         env_parse_none_str=None,
+        env_parse_enums=None,
+        cli_prog_name=None,
+        cli_parse_args=None,
+        cli_settings_source=None,
+        cli_parse_none_str=None,
+        cli_hide_none_type=False,
+        cli_avoid_json=False,
+        cli_enforce_required=False,
+        cli_use_class_docs_for_groups=False,
+        cli_prefix='',
         json_file=None,
         json_file_encoding=None,
         yaml_file=None,

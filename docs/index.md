@@ -95,7 +95,7 @@ print(Settings().model_dump())
 3. The `AliasChoices` class allows to have multiple environment variable names for a single field.
    The first environment variable that is found will be used.
 
-    Check the [`AliasChoices`](fields.md#aliaspath-and-aliaschoices) for more information.
+    Check the [`AliasChoices`](alias.md#aliaspath-and-aliaschoices) for more information.
 
 4. The `ImportString` class allows to import an object from a string.
    In this case, the environment variable `special_function` will be read and the function `math.cos` will be imported.
@@ -464,6 +464,592 @@ class Settings(BaseSettings):
     So if you provide extra values in a dotenv file, whether they start with `env_prefix` or not,
     a `ValidationError` will be raised.
 
+## Command Line Support
+
+Pydantic settings provides integrated CLI support, making it easy to quickly define CLI applications using Pydantic
+models. There are two primary use cases for Pydantic settings CLI:
+
+1. When using a CLI to override fields in Pydantic models.
+2. When using Pydantic models to define CLIs.
+
+By default, the experience is tailored towards use case #1 and builds on the foundations established in [parsing
+environment variables](#parsing-environment-variables). If your use case primarily falls into #2, you will likely want
+to enable [enforcing required arguments at the CLI](#enforce-required-arguments-at-cli).
+
+### The Basics
+
+To get started, let's revisit the example presented in [parsing environment variables](#parsing-environment-variables)
+but using a Pydantic settings CLI:
+
+```py
+import sys
+
+from pydantic import BaseModel
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class DeepSubModel(BaseModel):
+    v4: str
+
+
+class SubModel(BaseModel):
+    v1: str
+    v2: bytes
+    v3: int
+    deep: DeepSubModel
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(cli_parse_args=True)
+
+    v0: str
+    sub_model: SubModel
+
+
+sys.argv = [
+    'example.py',
+    '--v0=0',
+    '--sub_model={"v1": "json-1", "v2": "json-2"}',
+    '--sub_model.v2=nested-2',
+    '--sub_model.v3=3',
+    '--sub_model.deep.v4=v4',
+]
+
+print(Settings().model_dump())
+"""
+{
+    'v0': '0',
+    'sub_model': {'v1': 'json-1', 'v2': b'nested-2', 'v3': 3, 'deep': {'v4': 'v4'}},
+}
+"""
+```
+
+To enable CLI parsing, we simply set the `cli_parse_args` flag to a valid value, which retains similar conotations as
+defined in `argparse`. Alternatively, we can also directly provided the args to parse at time of instantiation:
+
+```py test="skip" lint="skip"
+Settings(
+    _cli_parse_args=[
+        '--v0=0',
+        '--sub_model={"v1": "json-1", "v2": "json-2"}',
+        '--sub_model.v2=nested-2',
+        '--sub_model.v3=3',
+        '--sub_model.deep.v4=v4',
+    ]
+)
+```
+
+Note that a CLI settings source is [**the topmost source**](#field-value-priority) by default unless its [priority value
+is customised](#customise-settings-sources):
+
+```py
+import os
+import sys
+from typing import Tuple, Type
+
+from pydantic_settings import (
+    BaseSettings,
+    CliSettingsSource,
+    PydanticBaseSettingsSource,
+)
+
+
+class Settings(BaseSettings):
+    my_foo: str
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        return env_settings, CliSettingsSource(settings_cls, cli_parse_args=True)
+
+
+os.environ['MY_FOO'] = 'from environment'
+
+sys.argv = ['example.py', '--my_foo=from cli']
+
+print(Settings().model_dump())
+#> {'my_foo': 'from environment'}
+```
+
+#### Lists
+
+CLI argument parsing of lists supports intermixing of any of the below three styles:
+
+  * JSON style `--field='[1,2]'`
+  * Argparse style `--field 1 --field 2`
+  * Lazy style `--field=1,2`
+
+```py
+import sys
+from typing import List
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings, cli_parse_args=True):
+    my_list: List[int]
+
+
+sys.argv = ['example.py', '--my_list', '[1,2]']
+print(Settings().model_dump())
+#> {'my_list': [1, 2]}
+
+sys.argv = ['example.py', '--my_list', '1', '--my_list', '2']
+print(Settings().model_dump())
+#> {'my_list': [1, 2]}
+
+sys.argv = ['example.py', '--my_list', '1,2']
+print(Settings().model_dump())
+#> {'my_list': [1, 2]}
+```
+
+#### Dictionaries
+
+CLI argument parsing of dictionaries supports intermixing of any of the below two styles:
+
+  * JSON style `--field='{"k1": 1, "k2": 2}'`
+  * Environment variable style `--field k1=1 --field k2=2`
+
+These can be used in conjunction with list forms as well, e.g:
+
+  * `--field k1=1,k2=2 --field k3=3 --field '{"k4: 4}'` etc.
+
+```py
+import sys
+from typing import Dict
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings, cli_parse_args=True):
+    my_dict: Dict[str, int]
+
+
+sys.argv = ['example.py', '--my_dict', '{"k1":1,"k2":2}']
+print(Settings().model_dump())
+#> {'my_dict': {'k1': 1, 'k2': 2}}
+
+sys.argv = ['example.py', '--my_dict', 'k1=1', '--my_dict', 'k2=2']
+print(Settings().model_dump())
+#> {'my_dict': {'k1': 1, 'k2': 2}}
+```
+
+#### Literals and Enums
+
+CLI argument parsing of literals and enums are converted into CLI choices.
+
+```py
+import sys
+from enum import IntEnum
+from typing import Literal
+
+from pydantic_settings import BaseSettings
+
+
+class Fruit(IntEnum):
+    pear = 0
+    kiwi = 1
+    lime = 2
+
+
+class Settings(BaseSettings, cli_parse_args=True):
+    fruit: Fruit
+    pet: Literal['dog', 'cat', 'bird']
+
+
+sys.argv = ['example.py', '--fruit', 'lime', '--pet', 'cat']
+print(Settings().model_dump())
+#> {'fruit': <Fruit.lime: 2>, 'pet': 'cat'}
+```
+
+### Subcommands and Positional Arguments
+
+Subcommands and positional arguments are expressed using the `CliSubCommand` and `CliPositionalArg` annotations. These
+annotations can only be applied to required fields (i.e. fields that do not have a default value). Furthermore,
+subcommands must be a valid type derived from the pydantic `BaseModel` class.
+
+!!! note
+    CLI settings subcommands are limited to a single subparser per model. In other words, all subcommands for a model
+    are grouped under a single subparser; it does not allow for multiple subparsers with each subparser having its own
+    set of subcommands. For more information on subparsers, see [argparse
+    subcommands](https://docs.python.org/3/library/argparse.html#sub-commands).
+
+```py
+import sys
+
+from pydantic import BaseModel, Field
+
+from pydantic_settings import (
+    BaseSettings,
+    CliPositionalArg,
+    CliSubCommand,
+)
+
+
+class FooPlugin(BaseModel):
+    """git-plugins-foo - Extra deep foo plugin command"""
+
+    my_feature: bool = Field(
+        default=False, description='Enable my feature on foo plugin'
+    )
+
+
+class BarPlugin(BaseModel):
+    """git-plugins-bar - Extra deep bar plugin command"""
+
+    my_feature: bool = Field(
+        default=False, description='Enable my feature on bar plugin'
+    )
+
+
+class Plugins(BaseModel):
+    """git-plugins - Fake plugins for GIT"""
+
+    foo: CliSubCommand[FooPlugin] = Field(description='Foo is fake plugin')
+
+    bar: CliSubCommand[BarPlugin] = Field(description='Bar is also a fake plugin')
+
+
+class Clone(BaseModel):
+    """git-clone - Clone a repository into a new directory"""
+
+    repository: CliPositionalArg[str] = Field(description='The repository to clone')
+
+    directory: CliPositionalArg[str] = Field(description='The directory to clone into')
+
+    local: bool = Field(
+        default=False,
+        description='When the resposity to clone from is on a local machine, bypass ...',
+    )
+
+
+class Git(BaseSettings, cli_parse_args=True, cli_prog_name='git'):
+    """git - The stupid content tracker"""
+
+    clone: CliSubCommand[Clone] = Field(
+        description='Clone a repository into a new directory'
+    )
+
+    plugins: CliSubCommand[Plugins] = Field(description='Fake GIT plugin commands')
+
+
+try:
+    sys.argv = ['example.py', '--help']
+    Git()
+except SystemExit as e:
+    print(e)
+    #> 0
+"""
+usage: git [-h] {clone,plugins} ...
+
+git - The stupid content tracker
+
+options:
+  -h, --help            show this help message and exit
+
+subcommands:
+  {clone,plugins}
+    clone               Clone a repository into a new directory
+    plugins             Fake GIT plugin commands
+"""
+
+
+try:
+    sys.argv = ['example.py', 'clone', '--help']
+    Git()
+except SystemExit as e:
+    print(e)
+    #> 0
+"""
+usage: git clone [-h] [--local bool] [--shared bool] REPOSITORY DIRECTORY
+
+git-clone - Clone a repository into a new directory
+
+positional arguments:
+  REPOSITORY     The repository to clone
+  DIRECTORY      The directory to clone into
+
+options:
+  -h, --help     show this help message and exit
+  --local bool   When the resposity to clone from is on a local machine, bypass ... (default: False)
+"""
+
+
+try:
+    sys.argv = ['example.py', 'plugins', 'bar', '--help']
+    Git()
+except SystemExit as e:
+    print(e)
+    #> 0
+"""
+usage: git plugins bar [-h] [--my_feature bool]
+
+git-plugins-bar - Extra deep bar plugin command
+
+options:
+  -h, --help         show this help message and exit
+  --my_feature bool  Enable my feature on bar plugin (default: False)
+"""
+```
+
+### Customizing the CLI Experience
+
+The below flags can be used to customise the CLI experience to your needs.
+
+#### Change the Displayed Program Name
+
+Change the default program name displayed in the help text usage by setting `cli_prog_name`. By default, it will derive
+the name of the currently executing program from `sys.argv[0]`, just like argparse.
+
+```py test="skip"
+import sys
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings, cli_parse_args=True, cli_prog_name='appdantic'):
+    pass
+
+
+sys.argv = ['example.py', '--help']
+Settings()
+"""
+usage: appdantic [-h]
+
+options:
+  -h, --help  show this help message and exit
+"""
+```
+
+#### Enforce Required Arguments at CLI
+
+Pydantic settings is designed to pull values in from various sources when instantating a model. This means a field that
+is required is not strictly required from any single source (e.g. the CLI). Instead, all that matters is that one of the
+sources provides the required value.
+
+However, if your use case [aligns more with #2](#command-line-support), using Pydantic models to define CLIs, you will
+likely want required fields to be _strictly required at the CLI_. We can enable this behavior by using the
+`cli_enforce_required`.
+
+```py
+import os
+import sys
+
+from pydantic import Field
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings, cli_parse_args=True, cli_enforce_required=True):
+    my_required_field: str = Field(description='a top level required field')
+
+
+os.environ['MY_REQUIRED_FIELD'] = 'hello from environment'
+
+try:
+    sys.argv = ['example.py']
+    Settings()
+except SystemExit as e:
+    print(e)
+    #> 2
+"""
+usage: example.py [-h] --my_required_field str
+example.py: error: the following arguments are required: --my_required_field
+"""
+```
+
+#### Change the None Type Parse String
+
+Change the CLI string value that will be parsed (e.g. "null", "void", "None", etc.) into `None` type(None) by setting
+`cli_parse_none_str`. By default it will use the `env_parse_none_str` value if set. Otherwise, it will default to "null"
+if `cli_avoid_json` is `False`, and "None" if `cli_avoid_json` is `True`.
+
+```py
+import sys
+from typing import Optional
+
+from pydantic import Field
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings, cli_parse_args=True, cli_parse_none_str='void'):
+    v1: Optional[int] = Field(description='the top level v0 option')
+
+
+sys.argv = ['example.py', '--v1', 'void']
+print(Settings().model_dump())
+#> {'v1': None}
+```
+
+#### Hide None Type Values
+
+Hide `None` values from the CLI help text by enabling `cli_hide_none_type`.
+
+```py test="skip"
+import sys
+from typing import Optional
+
+from pydantic import Field
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings, cli_parse_args=True, cli_hide_none_type=True):
+    v0: Optional[str] = Field(description='the top level v0 option')
+
+
+sys.argv = ['example.py', '--help']
+Settings()
+"""
+usage: example.py [-h] [--v0 str]
+
+options:
+  -h, --help  show this help message and exit
+  --v0 str    the top level v0 option (required)
+"""
+```
+
+#### Avoid Adding JSON CLI Options
+
+Avoid adding complex fields that result in JSON strings at the CLI by enabling `cli_avoid_json`.
+
+```py test="skip"
+import sys
+
+from pydantic import BaseModel, Field
+
+from pydantic_settings import BaseSettings
+
+
+class SubModel(BaseModel):
+    v1: int = Field(description='the sub model v1 option')
+
+
+class Settings(BaseSettings, cli_parse_args=True, cli_avoid_json=True):
+    sub_model: SubModel = Field(
+        description='The help summary for SubModel related options'
+    )
+
+
+sys.argv = ['example.py', '--help']
+Settings()
+"""
+usage: example.py [-h] [--sub_model.v1 int]
+
+options:
+  -h, --help          show this help message and exit
+
+sub_model options:
+  The help summary for SubModel related options
+
+  --sub_model.v1 int  the sub model v1 option (required)
+"""
+```
+
+#### Use Class Docstring for Group Help Text
+
+By default, when populating the group help text for nested models it will pull from the field descriptions.
+Alternatively, we can also configure CLI settings to pull from the class docstring instead.
+
+!!! note
+    If the field is a union of nested models the group help text will always be pulled from the field description;
+    even if `cli_use_class_docs_for_groups` is set to `True`.
+
+```py test="skip"
+import sys
+
+from pydantic import BaseModel, Field
+
+from pydantic_settings import BaseSettings
+
+
+class SubModel(BaseModel):
+    """The help text from the class docstring."""
+
+    v1: int = Field(description='the sub model v1 option')
+
+
+class Settings(BaseSettings, cli_parse_args=True, cli_use_class_docs_for_groups=True):
+    """My application help text."""
+
+    sub_model: SubModel = Field(description='The help text from the field description')
+
+
+sys.argv = ['example.py', '--help']
+Settings()
+"""
+usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
+
+My application help text.
+
+options:
+  -h, --help          show this help message and exit
+
+sub_model options:
+  The help text from the class docstring.
+
+  --sub_model JSON    set sub_model from JSON string
+  --sub_model.v1 int  the sub model v1 option (required)
+"""
+```
+
+### Integrating with Existing Parsers
+
+A CLI settings source can be integrated with existing parsers by overriding the default CLI settings source with a user
+defined one that specifies the `root_parser` object.
+
+```py
+import sys
+from argparse import ArgumentParser
+
+from pydantic_settings import BaseSettings, CliSettingsSource
+
+parser = ArgumentParser()
+parser.add_argument('--food', choices=['pear', 'kiwi', 'lime'])
+
+
+class Settings(BaseSettings):
+    name: str = 'Bob'
+
+
+# Set existing `parser` as the `root_parser` object for the user defined settings source
+cli_settings = CliSettingsSource(Settings, root_parser=parser)
+
+# Parse and load CLI settings from the command line into the settings source.
+sys.argv = ['example.py', '--food', 'kiwi', '--name', 'waldo']
+print(Settings(_cli_settings_source=cli_settings(args=True)).model_dump())
+#> {'name': 'waldo'}
+
+# Load CLI settings from pre-parsed arguments. i.e., the parsing occurs elsewhere and we
+# just need to load the pre-parsed args into the settings source.
+parsed_args = parser.parse_args(['--food', 'kiwi', '--name', 'ralph'])
+print(Settings(_cli_settings_source=cli_settings(parsed_args=parsed_args)).model_dump())
+#> {'name': 'ralph'}
+```
+
+A `CliSettingsSource` connects with a `root_parser` object by using parser methods to add `settings_cls` fields as
+command line arguments. The `CliSettingsSource` internal parser representation is based on the `argparse` library, and
+therefore, requires parser methods that support the same attributes as their `argparse` counterparts. The available
+parser methods that can be customised, along with their argparse counterparts (the defaults), are listed below:
+
+* `parse_args_method` - argparse.ArgumentParser.parse_args
+* `add_argument_method` - argparse.ArgumentParser.add_argument
+* `add_argument_group_method` - argparse.ArgumentParser.add\_argument_group
+* `add_parser_method` - argparse.\_SubParsersAction.add_parser
+* `add_subparsers_method` - argparse.ArgumentParser.add_subparsers
+* `formatter_class` - argparse.HelpFormatter
+
+For a non-argparse parser the parser methods can be set to `None` if not supported. The CLI settings will only raise an
+error when connecting to the root parser if a parser method is necessary but set to `None`.
+
 ## Secrets
 
 Placing secret values in files is a common pattern to provide sensitive configuration to an application.
@@ -539,9 +1125,10 @@ docker service create --name pydantic-with-secrets --secret my_secret_data pydan
 
 Other settings sources are available for common configuration files:
 
+- `JsonConfigSettingsSource` using `json_file` and `json_file_encoding` arguments
+- `PyprojectTomlConfigSettingsSource` using *(optional)* `pyproject_toml_depth` and *(optional)* `pyproject_toml_table_header` arguments
 - `TomlConfigSettingsSource` using `toml_file` argument
 - `YamlConfigSettingsSource` using `yaml_file` and yaml_file_encoding arguments
-- `JsonConfigSettingsSource` using `json_file` and `json_file_encoding` arguments
 
 You can also provide multiple files by providing a list of path:
 ```py
@@ -592,16 +1179,138 @@ foobar = "Hello"
 nested_field = "world!"
 ```
 
+### pyproject.toml
+
+"pyproject.toml" is a standardized file for providing configuration values in Python projects.
+[PEP 518](https://peps.python.org/pep-0518/#tool-table) defines a `[tool]` table that can be used to provide arbitrary tool configuration.
+While encouraged to use the `[tool]` table, `PyprojectTomlConfigSettingsSource` can be used to load variables from any location with in "pyproject.toml" file.
+
+This is controlled by providing `SettingsConfigDict(pyproject_toml_table_header=tuple[str, ...])` where the value is a tuple of header parts.
+By default, `pyproject_toml_table_header=('tool', 'pydantic-settings')` which will load variables from the `[tool.pydantic-settings]` table.
+
+```python
+from typing import Tuple, Type
+
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    PyprojectTomlConfigSettingsSource,
+    SettingsConfigDict,
+)
+
+
+class Settings(BaseSettings):
+    """Example loading values from the table used by default."""
+
+    field: str
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        return (PyprojectTomlConfigSettingsSource(settings_cls),)
+
+
+class SomeTableSettings(Settings):
+    """Example loading values from a user defined table."""
+
+    model_config = SettingsConfigDict(
+        pyproject_toml_table_header=('tool', 'some-table')
+    )
+
+
+class RootSettings(Settings):
+    """Example loading values from the root of a pyproject.toml file."""
+
+    model_config = SettingsConfigDict(extra='ignore', pyproject_toml_table_header=())
+```
+
+This will be able to read the following "pyproject.toml" file, located in your working directory, resulting in `Settings(field='default-table')`, `SomeTableSettings(field='some-table')`, & `RootSettings(field='root')`:
+
+```toml
+field = "root"
+
+[tool.pydantic-settings]
+field = "default-table"
+
+[tool.some-table]
+field = "some-table"
+```
+
+By default, `PyprojectTomlConfigSettingsSource` will only look for a "pyproject.toml" in the your current working directory.
+However, there are two options to change this behavior.
+
+* `SettingsConfigDict(pyproject_toml_depth=<int>)` can be provided to check `<int>` number of directories **up** in the directory tree for a "pyproject.toml" if one is not found in the current working directory.
+  By default, no parent directories are checked.
+* An explicit file path can be provided to the source when it is instantiated (e.g. `PyprojectTomlConfigSettingsSource(settings_cls, Path('~/.config').resolve() / 'pyproject.toml')`).
+  If a file path is provided this way, it will be treated as absolute (no other locations are checked).
+
+```python
+from pathlib import Path
+from typing import Tuple, Type
+
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    PyprojectTomlConfigSettingsSource,
+    SettingsConfigDict,
+)
+
+
+class DiscoverSettings(BaseSettings):
+    """Example of discovering a pyproject.toml in parent directories in not in `Path.cwd()`."""
+
+    model_config = SettingsConfigDict(pyproject_toml_depth=2)
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        return (PyprojectTomlConfigSettingsSource(settings_cls),)
+
+
+class ExplicitFilePathSettings(BaseSettings):
+    """Example of explicitly providing the path to the file to load."""
+
+    field: str
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        return (
+            PyprojectTomlConfigSettingsSource(
+                settings_cls, Path('~/.config').resolve() / 'pyproject.toml'
+            ),
+        )
+```
+
 ## Field value priority
 
 In the case where a value is specified for the same `Settings` field in multiple ways,
 the selected value is determined as follows (in descending order of priority):
 
-1. Arguments passed to the `Settings` class initialiser.
-2. Environment variables, e.g. `my_prefix_special_function` as described above.
-3. Variables loaded from a dotenv (`.env`) file.
-4. Variables loaded from the secrets directory.
-5. The default field values for the `Settings` model.
+1. If `cli_parse_args` is enabled, arguments passed in at the CLI.
+2. Arguments passed to the `Settings` class initialiser.
+3. Environment variables, e.g. `my_prefix_special_function` as described above.
+4. Variables loaded from a dotenv (`.env`) file.
+5. Variables loaded from the secrets directory.
+6. The default field values for the `Settings` model.
 
 ## Customise settings sources
 
