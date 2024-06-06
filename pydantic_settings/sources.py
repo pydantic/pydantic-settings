@@ -1407,6 +1407,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             elif field_info.default_factory is not None:
                 default = f'(default: {field_info.default_factory})'
             _help += f' {default}' if _help else default
+        _help = _help.replace('%', '%%')
         return _help
 
 
