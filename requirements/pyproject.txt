@@ -4,9 +4,9 @@
 #
 #    pip-compile --extra=azure-key-vault --extra=toml --extra=yaml --no-emit-index-url --output-file=requirements/pyproject.txt pyproject.toml
 #
-annotated-types==0.6.0
+annotated-types==0.7.0
     # via pydantic
-azure-core==1.30.1
+azure-core==1.30.2
     # via
     #   azure-identity
     #   azure-keyvault-secrets
@@ -14,13 +14,13 @@ azure-identity==1.16.0
     # via pydantic-settings (pyproject.toml)
 azure-keyvault-secrets==4.8.0
     # via pydantic-settings (pyproject.toml)
-certifi==2024.2.2
+certifi==2024.6.2
     # via requests
 cffi==1.16.0
     # via cryptography
 charset-normalizer==3.3.2
     # via requests
-cryptography==42.0.5
+cryptography==42.0.8
     # via
     #   azure-identity
     #   msal
@@ -41,9 +41,9 @@ portalocker==2.8.2
     # via msal-extensions
 pycparser==2.22
     # via cffi
-pydantic==2.7.1
+pydantic==2.7.3
     # via pydantic-settings (pyproject.toml)
-pydantic-core==2.18.2
+pydantic-core==2.18.4
     # via pydantic
 pyjwt[crypto]==2.8.0
     # via
@@ -53,7 +53,7 @@ python-dotenv==1.0.1
     # via pydantic-settings (pyproject.toml)
 pyyaml==6.0.1
     # via pydantic-settings (pyproject.toml)
-requests==2.31.0
+requests==2.32.3
     # via
     #   azure-core
     #   msal
@@ -63,7 +63,7 @@ six==1.16.0
     #   isodate
 tomli==2.0.1
     # via pydantic-settings (pyproject.toml)
-typing-extensions==4.11.0
+typing-extensions==4.12.1
     # via
     #   annotated-types
     #   azure-core
