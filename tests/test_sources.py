@@ -5,8 +5,8 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING
 
-from pydantic import Field
 import pytest
+from pydantic import Field
 from pydantic.fields import FieldInfo
 
 from pydantic_settings.main import BaseSettings, SettingsConfigDict
