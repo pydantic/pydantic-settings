@@ -1304,7 +1304,7 @@ class ExplicitFilePathSettings(BaseSettings):
 ### Azure Key Vault
 
 You simply set the `AZURE_KEY_VAULT__URL` environment variable and use your role assignement (from the system identity, user managed identity or executing `az login`) to access to the secrets.
-Optionally you can provide the url and the credentials using the constructor.
+Optionally you can provide the URL and the credentials using the constructor.
 
 ```
 import os
