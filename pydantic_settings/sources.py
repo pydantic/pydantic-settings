@@ -1576,7 +1576,7 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
         import_azure_key_vault()
         super().__init__(settings_cls)
         vault_url = url if url is not None else os.environ['AZURE_KEY_VAULT__URL']
-        vault_credential = credential if credential is not None else DefaultAzureCredential() # type: ignore
+        vault_credential = credential if credential is not None else DefaultAzureCredential()  # type: ignore
         self._secret_client = SecretClient(vault_url=vault_url, credential=vault_credential)  # type: ignore
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
@@ -1618,9 +1618,7 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
                         field_info.append((alias, alias, True if len(alias) > 1 else False))
                     elif isinstance(alias, list):  # AliasChoices
                         first_arg = cast(str, alias[0])  # first item of an AliasChoices must be a str
-                        field_info.append(
-                            (first_arg, first_arg, True if len(alias) > 1 else False)
-                        )
+                        field_info.append((first_arg, first_arg, True if len(alias) > 1 else False))
             else:  # string validation alias
                 field_info.append((v_alias, v_alias, False))
         elif origin_is_union(get_origin(field.annotation)) and _union_is_complex(field.annotation, field.metadata):
