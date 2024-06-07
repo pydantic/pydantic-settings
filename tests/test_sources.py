@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING
 
+from pydantic import Field
 import pytest
 from pydantic.fields import FieldInfo
 
@@ -175,6 +176,8 @@ class TestAzureKeyVaultSettingsSource:
         class AzureKeyVaultSettings(BaseSettings):
             my_password: str
             sql_server__password: str
+            sqlserverpassword: str = Field(..., alias='THESQLSERVER--PASSWORD')
+            sqlserver__password: str = Field(..., alias='THESQLSERVER--PASSWORD')
 
             @classmethod
             def settings_customise_sources(
@@ -199,3 +202,5 @@ class TestAzureKeyVaultSettingsSource:
 
         assert settings.my_password == expected_secret_value
         assert settings.sql_server__password == expected_secret_value
+        assert settings.sqlserverpassword == expected_secret_value
+        assert settings.sqlserver__password == expected_secret_value

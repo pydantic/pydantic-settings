@@ -87,9 +87,11 @@ def import_azure_key_vault() -> None:
     global TokenCredential
     global ResourceNotFoundError
     global SecretClient
+    global DefaultAzureCredential
 
     try:
         from azure.core.credentials import TokenCredential
+        from azure.identity import DefaultAzureCredential
         from azure.core.exceptions import ResourceNotFoundError
         from azure.keyvault.secrets import SecretClient
     except ImportError as e:
@@ -1568,18 +1570,20 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
     def __init__(
         self,
         settings_cls: type[BaseSettings],
-        url: str,
-        credential: TokenCredential,  # type: ignore
+        url: str | None = None,
+        credential: TokenCredential | None = None,  # type: ignore
     ) -> None:
         import_azure_key_vault()
         super().__init__(settings_cls)
-        self._secret_client = SecretClient(vault_url=url, credential=credential)  # type: ignore
+        vault_url = url if url is not None else os.environ['AZURE_KEY_VAULT__URL']
+        vault_credential = credential if credential is not None else DefaultAzureCredential()
+        self._secret_client = SecretClient(vault_url=vault_url, credential=vault_credential)  # type: ignore
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         field_value: Any | None = None
-
-        # Azure Key Vault uses "-" instead of "_"
-        secret_name = field_name.replace('_', '-')
+        
+        field_key, env_name, value_is_complex = self._extract_field_info(field, field_name)[0]
+        secret_name = env_name.replace('_', '-')
 
         try:
             secret = self._secret_client.get_secret(secret_name)
@@ -1587,7 +1591,7 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
         except ResourceNotFoundError:  # type: ignore
             field_value = None
 
-        return field_value, field_name, self.field_is_complex(field)
+        return field_value, env_name, self.field_is_complex(field)
 
     def __call__(self) -> dict[str, Any]:
         data: dict[str, Any] = {}
@@ -1600,6 +1604,32 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
                 data[field_key] = field_value
 
         return data
+
+    def _extract_field_info(self, field: FieldInfo, field_name: str) -> list[tuple[str, str, bool]]:
+        field_info: list[tuple[str, str, bool]] = []
+        if isinstance(field.validation_alias, (AliasChoices, AliasPath)):
+            v_alias: str | list[str | int] | list[list[str | int]] | None = field.validation_alias.convert_to_aliases()
+        else:
+            v_alias = field.validation_alias
+
+        if v_alias:
+            if isinstance(v_alias, list):  # AliasChoices, AliasPath
+                for alias in v_alias:
+                    if isinstance(alias, str):  # AliasPath
+                        field_info.append((alias, alias, True if len(alias) > 1 else False))
+                    elif isinstance(alias, list):  # AliasChoices
+                        first_arg = cast(str, alias[0])  # first item of an AliasChoices must be a str
+                        field_info.append(
+                            (first_arg, first_arg, True if len(alias) > 1 else False)
+                        )
+            else:  # string validation alias
+                field_info.append((v_alias, v_alias, False))
+        elif origin_is_union(get_origin(field.annotation)) and _union_is_complex(field.annotation, field.metadata):
+            field_info.append((field_name, field_name, True))
+        else:
+            field_info.append((field_name, field_name, False))
+
+        return field_info
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
