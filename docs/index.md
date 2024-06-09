@@ -669,6 +669,38 @@ print(Settings().model_dump())
 #> {'fruit': <Fruit.lime: 2>, 'pet': 'cat'}
 ```
 
+#### Aliases
+
+Pydantic field aliases are added as CLI argument aliases.
+
+```py
+import sys
+
+from pydantic import AliasChoices, AliasPath, Field
+
+from pydantic_settings import BaseSettings
+
+
+class User(BaseSettings, cli_parse_args=True):
+    first_name: str = Field(
+        validation_alias=AliasChoices('fname', AliasPath('name', 0))
+    )
+    last_name: str = Field(validation_alias=AliasChoices('lname', AliasPath('name', 1)))
+
+
+sys.argv = ['example.py', '--fname', 'John', '--lname', 'Doe']
+print(User().model_dump())
+#> {'first_name': 'John', 'last_name': 'Doe'}
+
+sys.argv = ['example.py', '--name', 'John,Doe']
+print(User().model_dump())
+#> {'first_name': 'John', 'last_name': 'Doe'}
+
+sys.argv = ['example.py', '--name', 'John', '--lname', 'Doe']
+print(User().model_dump())
+#> {'first_name': 'John', 'last_name': 'Doe'}
+```
+
 ### Subcommands and Positional Arguments
 
 Subcommands and positional arguments are expressed using the `CliSubCommand` and `CliPositionalArg` annotations. These
@@ -680,6 +712,9 @@ subcommands must be a valid type derived from the pydantic `BaseModel` class.
     are grouped under a single subparser; it does not allow for multiple subparsers with each subparser having its own
     set of subcommands. For more information on subparsers, see [argparse
     subcommands](https://docs.python.org/3/library/argparse.html#sub-commands).
+
+!!! note
+    `CliSubCommand` and `CliPositionalArg` are always case sensitive and do not support aliases.
 
 ```py
 import sys
