@@ -597,8 +597,11 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
         return True, allow_parse_failure
 
+    # Default value of `case_sensitive` is `False`, because we don't want to break existing behavior.
+    # We have to change the method to a non-static method and use
+    # `self.case_sensitive` instead in V3.
     @staticmethod
-    def next_field(field: FieldInfo | Any | None, key: str) -> FieldInfo | None:
+    def next_field(field: FieldInfo | Any | None, key: str, case_sensitive: bool | None = None) -> FieldInfo | None:
         """
         Find the field in a sub model by key(env name)
 
@@ -623,6 +626,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         Args:
             field: The field.
             key: The key (env name).
+            case_sensitive: Whether to search for key case sensitively.
 
         Returns:
             Field if it finds the next field otherwise `None`.
@@ -633,11 +637,18 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         annotation = field.annotation if isinstance(field, FieldInfo) else field
         if origin_is_union(get_origin(annotation)) or isinstance(annotation, WithArgsTypes):
             for type_ in get_args(annotation):
-                type_has_key = EnvSettingsSource.next_field(type_, key)
+                type_has_key = EnvSettingsSource.next_field(type_, key, case_sensitive)
                 if type_has_key:
                     return type_has_key
-        elif is_model_class(annotation) and annotation.model_fields.get(key):
-            return annotation.model_fields[key]
+        elif is_model_class(annotation):
+            # `case_sensitive is None` is here to be compatible with the old behavior.
+            # Has to be removed in V3.
+            if (case_sensitive is None or case_sensitive) and annotation.model_fields.get(key):
+                return annotation.model_fields[key]
+            elif not case_sensitive:
+                for field_name, f in annotation.model_fields.items():
+                    if field_name.lower() == key.lower():
+                        return f
 
         return None
 
@@ -670,12 +681,12 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             env_var = result
             target_field: FieldInfo | None = field
             for key in keys:
-                target_field = self.next_field(target_field, key)
+                target_field = self.next_field(target_field, key, self.case_sensitive)
                 if isinstance(env_var, dict):
                     env_var = env_var.setdefault(key, {})
 
             # get proper field with last_key
-            target_field = self.next_field(target_field, last_key)
+            target_field = self.next_field(target_field, last_key, self.case_sensitive)
 
             # check if env_val maps to a complex field and if so, parse the env_val
             if (target_field or is_dict) and env_val:

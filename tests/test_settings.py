@@ -3859,3 +3859,17 @@ def test_case_insensitive_nested_optional(env):
     env.set('nested__bar', '123')
     s = Settings()
     assert s.model_dump() == {'nested': {'BaR': 123, 'FOO': 'string'}}
+
+
+def test_case_insensitive_nested_list(env):
+    class NestedSettings(BaseModel):
+        FOO: List[str]
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', case_sensitive=False)
+
+        nested: Optional[NestedSettings]
+
+    env.set('nested__FOO', '["string1", "string2"]')
+    s = Settings()
+    assert s.model_dump() == {'nested': {'FOO': ['string1', 'string2']}}
