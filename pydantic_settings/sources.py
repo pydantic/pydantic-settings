@@ -1407,7 +1407,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             elif field_info.default_factory is not None:
                 default = f'(default: {field_info.default_factory})'
             _help += f' {default}' if _help else default
-        return _help
+        return _help.replace('%', '%%') if issubclass(type(self._root_parser), ArgumentParser) else _help
 
 
 class ConfigFileSourceMixin(ABC):
