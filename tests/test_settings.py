@@ -2261,6 +2261,29 @@ def test_cli_help_differentiation(capsys, monkeypatch):
         )
 
 
+def test_cli_help_string_format(capsys, monkeypatch):
+    class Cfg(BaseSettings):
+        date_str: str = '%Y-%m-%d'
+
+    argparse_options_text = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Cfg(_cli_parse_args=True)
+
+        assert (
+            re.sub(r'0x\w+', '0xffffffff', capsys.readouterr().out, re.MULTILINE)
+            == f"""usage: example.py [-h] [--date_str str]
+
+{argparse_options_text}:
+  -h, --help      show this help message and exit
+  --date_str str  (default: %Y-%m-%d)
+"""
+        )
+
+
 def test_cli_nested_dataclass_arg():
     @pydantic_dataclasses.dataclass
     class MyDataclass:
