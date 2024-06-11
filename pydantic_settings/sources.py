@@ -597,7 +597,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
         return True, allow_parse_failure
 
-    # Default value of `case_sensitive` is `False`, because we don't want to break existing behavior.
+    # Default value of `case_sensitive` is `None`, because we don't want to break existing behavior.
     # We have to change the method to a non-static method and use
     # `self.case_sensitive` instead in V3.
     @staticmethod
