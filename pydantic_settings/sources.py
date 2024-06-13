@@ -87,12 +87,10 @@ def import_azure_key_vault() -> None:
     global TokenCredential
     global ResourceNotFoundError
     global SecretClient
-    global DefaultAzureCredential
 
     try:
         from azure.core.credentials import TokenCredential
         from azure.core.exceptions import ResourceNotFoundError
-        from azure.identity import DefaultAzureCredential
         from azure.keyvault.secrets import SecretClient
     except ImportError as e:
         raise ImportError(
@@ -1581,14 +1579,12 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
     def __init__(
         self,
         settings_cls: type[BaseSettings],
-        url: str | None = None,
-        credential: TokenCredential | None = None,  # type: ignore
+        url: str,
+        credential: TokenCredential,  # type: ignore
     ) -> None:
         import_azure_key_vault()
         super().__init__(settings_cls)
-        vault_url = url if url is not None else os.environ['AZURE_KEY_VAULT__URL']
-        vault_credential = credential if credential is not None else DefaultAzureCredential()  # type: ignore
-        self._secret_client = SecretClient(vault_url=vault_url, credential=vault_credential)  # type: ignore
+        self._secret_client = SecretClient(vault_url=url, credential=credential)  # type: ignore
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         field_value: Any | None = None

@@ -1303,9 +1303,10 @@ class ExplicitFilePathSettings(BaseSettings):
 
 ### Azure Key Vault
 
-You simply set the `AZURE_KEY_VAULT__URL` environment variable and use your identity (in local you can execute `az login`) with a role assignement (the recommended one is `Key Vault Secrets User`).
+You must set two parameters:
 
-Optionally you can provide the Key Vault URL and identification mechanism using the constructor.
+- `url`: For example, `https://my-resource.vault.azure.net/`.
+- `credential`: If you use `DefaultAzureCredential`, in local you can execute `az login` to get your identity credentials. The identity must have a role assignement (the recommended one is `Key Vault Secrets User`), so you can have access to the secrets.
 
 ```
 import os
@@ -1316,9 +1317,6 @@ from pydantic_settings import (
     PydanticBaseSettingsSource
 )
 from pydantic_settings.sources import AzureKeyVaultSettingsSource
-
-
-os.environ['AZURE_KEY_VAULT__URL'] = 'https://my-resource.vault.azure.net/'
 
 
 class AzureKeyVaultSettings(BaseSettings):
@@ -1334,8 +1332,11 @@ class AzureKeyVaultSettings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        return (
-            AzureKeyVaultSettingsSource(settings_cls),
+        return(
+            AzureKeyVaultSettingsSource(
+                settings_cls,
+                os.environ['AZURE_KEY_VAULT__URL'],
+                DefaultAzureCredential()
         )
 ```
 
