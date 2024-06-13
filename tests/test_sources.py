@@ -6,7 +6,7 @@ import sys
 from typing import TYPE_CHECKING
 
 import pytest
-from pydantic import BaseModel, Field
+from pydantic import Field
 from pydantic.fields import FieldInfo
 
 from pydantic_settings.main import BaseSettings, SettingsConfigDict
