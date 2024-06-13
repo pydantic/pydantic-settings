@@ -1767,6 +1767,26 @@ def test_discriminated_union_with_callable_discriminator(env):
     assert s.a_or_b.y == 'foo'
 
 
+def test_json_field_with_discriminated_union(env):
+    class A(BaseModel):
+        x: Literal['a'] = 'a'
+
+    class B(BaseModel):
+        x: Literal['b'] = 'b'
+
+    A_OR_B = Annotated[Union[A, B], Field(discriminator='x')]
+
+    class Settings(BaseSettings):
+        a_or_b: Optional[Json[A_OR_B]] = None
+
+    # Set up environment so that the discriminator is 'a'.
+    env.set('a_or_b', '{"x": "a"}')
+
+    s = Settings()
+
+    assert s.a_or_b.x == 'a'
+
+
 def test_nested_model_case_insensitive(env):
     class SubSubSub(BaseModel):
         VaL3: str

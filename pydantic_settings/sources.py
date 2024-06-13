@@ -1597,8 +1597,8 @@ def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) ->
     # Check if annotation is of the form Annotated[type, metadata].
     if isinstance(annotation, _AnnotatedAlias):
         # Return result of recursive call on inner type.
-        inner, meta = get_args(annotation)
-        return _annotation_is_complex(inner, [meta])
+        inner, *meta = get_args(annotation)
+        return _annotation_is_complex(inner, meta)
     origin = get_origin(annotation)
     return (
         _annotation_is_complex_inner(annotation)
