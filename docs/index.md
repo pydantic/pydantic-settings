@@ -1529,18 +1529,19 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    foo: str = Field('foo')
+    foo: str = Field("foo")
+
 
 mutable_settings = Settings()
 
 print(mutable_settings.foo)
-#> 'foo'
+# > 'foo'
 
-os.environ['foo'] = 'bar'
+os.environ["foo"] = "bar"
 print(mutable_settings.foo)
-#> 'foo'
+# > 'foo'
 
 mutable_settings.__init__()
 print(mutable_settings.foo)
-#> 'bar'
+# > 'bar'
 ```
