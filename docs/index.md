@@ -1544,4 +1544,9 @@ print(mutable_settings.foo)
 mutable_settings.__init__()
 print(mutable_settings.foo)
 #> bar
+
+os.environ.pop('foo')
+mutable_settings.__init__()
+print(mutable_settings.foo)
+#> foo
 ```
