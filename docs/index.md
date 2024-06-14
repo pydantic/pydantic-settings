@@ -1518,7 +1518,7 @@ except ValidationError as exc_info:
 
 ## In-place reloading
 
-In case you want to reload in-place an existing setting, you can do it by using its `__ini__` method :
+In case you want to reload in-place an existing setting, you can do it by using its `__init__` method :
 
 ```py
 import os
@@ -1535,13 +1535,13 @@ class Settings(BaseSettings):
 mutable_settings = Settings()
 
 print(mutable_settings.foo)
-#> 'foo'
+#> foo
 
 os.environ['foo'] = 'bar'
 print(mutable_settings.foo)
-#> 'foo'
+#> foo
 
 mutable_settings.__init__()
 print(mutable_settings.foo)
-#> 'bar'
+#> bar
 ```
