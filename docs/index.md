@@ -1514,3 +1514,39 @@ except ValidationError as exc_info:
         For further information visit https://errors.pydantic.dev/2/v/missing
     """
 ```
+
+
+## In-place reloading
+
+In case you want to reload in-place an existing setting, you can do it by using its `__init__` method :
+
+```py
+import os
+
+from pydantic import Field
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    foo: str = Field('foo')
+
+
+mutable_settings = Settings()
+
+print(mutable_settings.foo)
+#> foo
+
+os.environ['foo'] = 'bar'
+print(mutable_settings.foo)
+#> foo
+
+mutable_settings.__init__()
+print(mutable_settings.foo)
+#> bar
+
+os.environ.pop('foo')
+mutable_settings.__init__()
+print(mutable_settings.foo)
+#> foo
+```
