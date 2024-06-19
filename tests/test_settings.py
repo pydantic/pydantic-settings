@@ -669,14 +669,21 @@ def test_case_sensitive(monkeypatch):
 
 def test_nested_dataclass(env):
     @pydantic_dataclasses.dataclass
+    class DeepNestedDataclass:
+        boo: int
+        rar: str
+
+    @pydantic_dataclasses.dataclass
     class MyDataclass:
         foo: int
         bar: str
+        deep: DeepNestedDataclass
 
-    class Settings(BaseSettings):
+    class Settings(BaseSettings, env_nested_delimiter='__'):
         n: MyDataclass
 
     env.set('N', '{"foo": 123, "bar": "bar value"}')
+    env.set('N__DEEP', '{"boo": 1, "rar": "eek"}')
     s = Settings()
     assert isinstance(s.n, MyDataclass)
     assert s.n.foo == 123
@@ -2717,13 +2724,16 @@ def test_cli_nested_dict_arg():
 
 
 def test_cli_subcommand_with_positionals():
-    class FooPlugin(BaseModel):
+    @pydantic_dataclasses.dataclass
+    class FooPlugin:
         my_feature: bool = False
 
-    class BarPlugin(BaseModel):
+    @pydantic_dataclasses.dataclass
+    class BarPlugin:
         my_feature: bool = False
 
-    class Plugins(BaseModel):
+    @pydantic_dataclasses.dataclass
+    class Plugins:
         foo: CliSubCommand[FooPlugin]
         bar: CliSubCommand[BarPlugin]
 
