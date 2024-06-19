@@ -1088,7 +1088,7 @@ parser methods that can be customised, along with their argparse counterparts (t
 
 * `parse_args_method` - (`argparse.ArgumentParser.parse_args`)
 * `add_argument_method` - (`argparse.ArgumentParser.add_argument`)
-* `add_argument_group_method` - (`argparse.ArgumentParser.add\_argument_group`)
+* `add_argument_group_method` - (`argparse.ArgumentParser.add_argument_group`)
 * `add_parser_method` - (`argparse._SubParsersAction.add_parser`)
 * `add_subparsers_method` - (`argparse.ArgumentParser.add_subparsers`)
 * `formatter_class` - (`argparse.HelpFormatter`)
