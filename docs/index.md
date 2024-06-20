@@ -1129,7 +1129,7 @@ Other settings sources are available for common configuration files:
 - `PyprojectTomlConfigSettingsSource` using *(optional)* `pyproject_toml_depth` and *(optional)* `pyproject_toml_table_header` arguments
 - `TomlConfigSettingsSource` using `toml_file` argument
 - `YamlConfigSettingsSource` using `yaml_file` and yaml_file_encoding arguments
-- `AzureKeyVaultSettingsSource`.
+- `AzureKeyVaultSettingsSource` using `url` and `credential` arguments
 
 You can also provide multiple files by providing a list of path:
 ```py
@@ -1308,6 +1308,14 @@ You must set two parameters:
 - `url`: For example, `https://my-resource.vault.azure.net/`.
 - `credential`: If you use `DefaultAzureCredential`, in local you can execute `az login` to get your identity credentials. The identity must have a role assignement (the recommended one is `Key Vault Secrets User`), so you can have access to the secrets.
 
+You must have the same naming convention in the field name as in the Key Vault secret name. For example, if the secret is named `SqlServerPassword`, the field name must be the same. You can use an alias too.
+
+Nested models are supported with the `--` separator. For example, `SqlServer--Password`.
+
+JSON objects and Key Vault arrays (e.g. `MySecret--0`, `MySecret--1`) are not supported.
+
+```python
+
 ```
 import os
 from azure.identity import DefaultAzureCredential
@@ -1319,9 +1327,14 @@ from pydantic_settings import (
 from pydantic_settings.sources import AzureKeyVaultSettingsSource
 
 
+class SqlServer(BaseModel):
+    password: str = Field(..., alias='Password')
+
 class AzureKeyVaultSettings(BaseSettings):
-    my_password: str
-    sql_server__password: str
+
+    SqlServerPassword: str
+    sql_server_password: str = Field(..., alias='SqlServerPassword')
+    sql_server: SqlServer = Field(..., alias='SqlServer')
 
     @classmethod
     def settings_customise_sources(

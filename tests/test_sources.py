@@ -6,8 +6,7 @@ import sys
 from typing import TYPE_CHECKING
 
 import pytest
-from pydantic import Field
-from pydantic.fields import FieldInfo
+from pydantic import BaseModel, Field
 
 from pydantic_settings.main import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources import (
@@ -119,65 +118,63 @@ class TestPyprojectTomlConfigSettingsSource:
 class TestAzureKeyVaultSettingsSource:
     """Test AzureKeyVaultSettingsSource."""
 
-    def test___init__(self) -> None:
+    def test___init__(self, mocker: MockerFixture) -> None:
         """Test __init__."""
 
         class AzureKeyVaultSettings(BaseSettings):
             """AzureKeyVault settings."""
 
+        mocker.patch(f'{MODULE}.SecretClient.list_properties_of_secrets', return_value=[])
+
         AzureKeyVaultSettingsSource(
             AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential()
         )
 
-    def test_get_field_value(self, mocker: MockerFixture) -> None:
-        """Test _get_field_value."""
-
-        class AzureKeyVaultSettings(BaseSettings):
-            """AzureKeyVault settings."""
-
-        expected_secret_value = 'SecretValue'
-        key_vault_secret = KeyVaultSecret(SecretProperties(), expected_secret_value)
-
-        obj = AzureKeyVaultSettingsSource(
-            AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential()
-        )
-        mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
-
-        secret_value = obj.get_field_value(field=FieldInfo(), field_name='sqlserverpassword')[0]
-
-        assert secret_value == expected_secret_value
-
     def test___call__(self, mocker: MockerFixture) -> None:
-        """Test __cal__."""
+        """Test __call__."""
+
+        class SqlServer(BaseModel):
+            password: str = Field(..., alias='Password')
 
         class AzureKeyVaultSettings(BaseSettings):
             """AzureKeyVault settings."""
 
-            sqlserverpassword: str
-            SQLSERVERPASSWORD: str
-            sql_server__password: str
+            SqlServerUser: str
+            sql_server_user: str = Field(..., alias='SqlServerUser')
+            sql_server: SqlServer = Field(..., alias='SqlServer')
 
+        expected_secrets = [
+            type('', (), {'name': 'SqlServerUser'}),
+            type('', (), {'name': 'SqlServer--Password'})
+        ]
         expected_secret_value = 'SecretValue'
+        mocker.patch(
+            f'{MODULE}.SecretClient.list_properties_of_secrets',
+            return_value=expected_secrets
+        )
         key_vault_secret = KeyVaultSecret(SecretProperties(), expected_secret_value)
+        mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
         obj = AzureKeyVaultSettingsSource(
             AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential()
         )
-        mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
 
         settings = obj()
 
-        assert settings['sqlserverpassword'] == expected_secret_value
-        assert settings['SQLSERVERPASSWORD'] == expected_secret_value
-        assert settings['sql_server__password'] == expected_secret_value
+        assert settings['SqlServerUser'] == expected_secret_value
+        assert settings['SqlServer']['Password'] == expected_secret_value
 
     def test_azure_key_vault_settings_source(self, mocker: MockerFixture) -> None:
         """Test AzureKeyVaultSettingsSource."""
 
+        class SqlServer(BaseModel):
+            password: str = Field(..., alias='Password')
+
         class AzureKeyVaultSettings(BaseSettings):
-            my_password: str
-            sql_server__password: str
-            sqlserverpassword: str = Field(..., alias='THESQLSERVER--PASSWORD')
-            sqlserver__password: str = Field(..., alias='THESQLSERVER--PASSWORD')
+            """AzureKeyVault settings."""
+
+            SqlServerUser: str
+            sql_server_user: str = Field(..., alias='SqlServerUser')
+            sql_server: SqlServer = Field(..., alias='SqlServer')
 
             @classmethod
             def settings_customise_sources(
@@ -194,13 +191,20 @@ class TestAzureKeyVaultSettingsSource:
                     ),
                 )
 
+        expected_secrets = [
+            type('', (), {'name': 'SqlServerUser'}),
+            type('', (), {'name': 'SqlServer--Password'})
+        ]
         expected_secret_value = 'SecretValue'
+        mocker.patch(
+            f'{MODULE}.SecretClient.list_properties_of_secrets',
+            return_value=expected_secrets
+        )
         key_vault_secret = KeyVaultSecret(SecretProperties(), expected_secret_value)
         mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
 
         settings = AzureKeyVaultSettings()  # type: ignore
 
-        assert settings.my_password == expected_secret_value
-        assert settings.sql_server__password == expected_secret_value
-        assert settings.sqlserverpassword == expected_secret_value
-        assert settings.sqlserver__password == expected_secret_value
+        assert settings.SqlServerUser == expected_secret_value
+        assert settings.sql_server_user == expected_secret_value
+        assert settings.sql_server.password == expected_secret_value

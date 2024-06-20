@@ -1573,7 +1573,9 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
             return yaml.safe_load(yaml_file)
 
 
-class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
+class AzureKeyVaultSettingsSource(EnvSettingsSource):
+    _url: str
+    _credential: TokenCredential  # type: ignore
     _secret_client: SecretClient  # type: ignore
 
     def __init__(
@@ -1581,60 +1583,45 @@ class AzureKeyVaultSettingsSource(PydanticBaseSettingsSource):
         settings_cls: type[BaseSettings],
         url: str,
         credential: TokenCredential,  # type: ignore
+        env_prefix: str | None = None,
+        env_parse_none_str: str | None = None,
+        env_parse_enums: bool | None = None,
     ) -> None:
         import_azure_key_vault()
-        super().__init__(settings_cls)
-        self._secret_client = SecretClient(vault_url=url, credential=credential)  # type: ignore
+        self._url = url
+        self._credential = credential
+        super().__init__(
+            settings_cls,
+            case_sensitive=True,
+            env_prefix=env_prefix,
+            env_nested_delimiter='__',
+            env_ignore_empty=False,
+            env_parse_none_str=env_parse_none_str,
+            env_parse_enums=env_parse_enums,
+        )
+    
+    def _load_env_vars(self) -> Mapping[str, str | None]:
+        self._secret_client = SecretClient(vault_url=self._url, credential=self._credential)  # type: ignore
+        secret_names: list[str] = [secret.name for secret in self._secret_client.list_properties_of_secrets()]
+        env_vars: dict[str, str | None] = {}
+        
+        for secret_name in secret_names:
+            try:
+                secret = self._secret_client.get_secret(secret_name)
+                secret_value = secret.value
+            except ResourceNotFoundError:  # type: ignore
+                secret_value = None
+            
+            secret_name_with_hierarchy = secret_name.replace('--', '__')
+            env_vars[secret_name_with_hierarchy] = secret_value
 
-    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
-        field_value: Any | None = None
-        field_key, env_name, value_is_complex = self._extract_field_info(field, field_name)[0]
-        secret_name = env_name.replace('_', '-')
-
-        try:
-            secret = self._secret_client.get_secret(secret_name)
-            field_value = secret.value
-        except ResourceNotFoundError:  # type: ignore
-            field_value = None
-
-        return field_value, env_name, self.field_is_complex(field)
-
-    def __call__(self) -> dict[str, Any]:
-        data: dict[str, Any] = {}
-
-        for field_name, field in self.settings_cls.model_fields.items():
-            field_value, field_key, value_is_complex = self.get_field_value(field, field_name)
-            field_value = self.prepare_field_value(field_name, field, field_value, value_is_complex)
-
-            if field_value is not None:
-                data[field_key] = field_value
-
-        return data
-
-    def _extract_field_info(self, field: FieldInfo, field_name: str) -> list[tuple[str, str, bool]]:
-        field_info: list[tuple[str, str, bool]] = []
-        if isinstance(field.validation_alias, (AliasChoices, AliasPath)):
-            v_alias: str | list[str | int] | list[list[str | int]] | None = field.validation_alias.convert_to_aliases()
-        else:
-            v_alias = field.validation_alias
-
-        if v_alias:
-            if isinstance(v_alias, list):  # AliasChoices, AliasPath
-                for alias in v_alias:
-                    if isinstance(alias, str):  # AliasPath
-                        field_info.append((alias, alias, True if len(alias) > 1 else False))
-                    elif isinstance(alias, list):  # AliasChoices
-                        first_arg = cast(str, alias[0])  # first item of an AliasChoices must be a str
-                        field_info.append((first_arg, first_arg, True if len(alias) > 1 else False))
-            else:  # string validation alias
-                field_info.append((v_alias, v_alias, False))
-        elif origin_is_union(get_origin(field.annotation)) and _union_is_complex(field.annotation, field.metadata):
-            field_info.append((field_name, field_name, True))
-        else:
-            field_info.append((field_name, field_name, False))
-
-        return field_info
-
+        return env_vars
+    
+    def __repr__(self) -> str:
+        return (
+            f'AzureKeyVaultSettingsSource(env_file={self._url!r}, '
+            f'env_nested_delimiter={self.env_nested_delimiter!r}, env_prefix_len={self.env_prefix_len!r})'
+        )
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
     return key if case_sensitive else key.lower()
