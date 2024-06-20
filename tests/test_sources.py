@@ -143,15 +143,9 @@ class TestAzureKeyVaultSettingsSource:
             sql_server_user: str = Field(..., alias='SqlServerUser')
             sql_server: SqlServer = Field(..., alias='SqlServer')
 
-        expected_secrets = [
-            type('', (), {'name': 'SqlServerUser'}),
-            type('', (), {'name': 'SqlServer--Password'})
-        ]
+        expected_secrets = [type('', (), {'name': 'SqlServerUser'}), type('', (), {'name': 'SqlServer--Password'})]
         expected_secret_value = 'SecretValue'
-        mocker.patch(
-            f'{MODULE}.SecretClient.list_properties_of_secrets',
-            return_value=expected_secrets
-        )
+        mocker.patch(f'{MODULE}.SecretClient.list_properties_of_secrets', return_value=expected_secrets)
         key_vault_secret = KeyVaultSecret(SecretProperties(), expected_secret_value)
         mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
         obj = AzureKeyVaultSettingsSource(
@@ -191,15 +185,9 @@ class TestAzureKeyVaultSettingsSource:
                     ),
                 )
 
-        expected_secrets = [
-            type('', (), {'name': 'SqlServerUser'}),
-            type('', (), {'name': 'SqlServer--Password'})
-        ]
+        expected_secrets = [type('', (), {'name': 'SqlServerUser'}), type('', (), {'name': 'SqlServer--Password'})]
         expected_secret_value = 'SecretValue'
-        mocker.patch(
-            f'{MODULE}.SecretClient.list_properties_of_secrets',
-            return_value=expected_secrets
-        )
+        mocker.patch(f'{MODULE}.SecretClient.list_properties_of_secrets', return_value=expected_secrets)
         key_vault_secret = KeyVaultSecret(SecretProperties(), expected_secret_value)
         mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
 

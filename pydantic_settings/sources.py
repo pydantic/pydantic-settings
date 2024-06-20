@@ -1721,29 +1721,30 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
             env_parse_none_str=env_parse_none_str,
             env_parse_enums=env_parse_enums,
         )
-    
+
     def _load_env_vars(self) -> Mapping[str, str | None]:
         self._secret_client = SecretClient(vault_url=self._url, credential=self._credential)  # type: ignore
         secret_names: list[str] = [secret.name for secret in self._secret_client.list_properties_of_secrets()]
         env_vars: dict[str, str | None] = {}
-        
+
         for secret_name in secret_names:
             try:
                 secret = self._secret_client.get_secret(secret_name)
                 secret_value = secret.value
             except ResourceNotFoundError:  # type: ignore
                 secret_value = None
-            
+
             secret_name_with_hierarchy = secret_name.replace('--', '__')
             env_vars[secret_name_with_hierarchy] = secret_value
 
         return env_vars
-    
+
     def __repr__(self) -> str:
         return (
             f'AzureKeyVaultSettingsSource(env_file={self._url!r}, '
             f'env_nested_delimiter={self.env_nested_delimiter!r}, env_prefix_len={self.env_prefix_len!r})'
         )
+
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
     return key if case_sensitive else key.lower()
