@@ -49,7 +49,7 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
     YamlConfigSettingsSource,
 )
-from pydantic_settings.sources import CliPositionalArg, CliSettingsSource, CliSubCommand, SettingsError, read_env_file
+from pydantic_settings.sources import CliPositionalArg, CliSettingsSource, CliSubCommand, SettingsError, _read_env_file
 
 try:
     import dotenv
@@ -1039,15 +1039,15 @@ def test_read_env_file_case_sensitive(tmp_path):
     p = tmp_path / '.env'
     p.write_text('a="test"\nB=123')
 
-    assert read_env_file(p) == {'a': 'test', 'b': '123'}
-    assert read_env_file(p, case_sensitive=True) == {'a': 'test', 'B': '123'}
+    assert _read_env_file(p) == {'a': 'test', 'b': '123'}
+    assert _read_env_file(p, case_sensitive=True) == {'a': 'test', 'B': '123'}
 
 
 def test_read_env_file_syntax_wrong(tmp_path):
     p = tmp_path / '.env'
     p.write_text('NOT_AN_ASSIGNMENT')
 
-    assert read_env_file(p, case_sensitive=True) == {'NOT_AN_ASSIGNMENT': None}
+    assert _read_env_file(p, case_sensitive=True) == {'NOT_AN_ASSIGNMENT': None}
 
 
 def test_env_file_example(tmp_path):
