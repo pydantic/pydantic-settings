@@ -10,7 +10,7 @@ azure-core==1.30.2
     # via
     #   azure-identity
     #   azure-keyvault-secrets
-azure-identity==1.16.0
+azure-identity==1.17.0
     # via pydantic-settings (pyproject.toml)
 azure-keyvault-secrets==4.8.0
     # via pydantic-settings (pyproject.toml)
@@ -29,19 +29,19 @@ idna==3.7
     # via requests
 isodate==0.6.1
     # via azure-keyvault-secrets
-msal==1.28.0
+msal==1.28.1
     # via
     #   azure-identity
     #   msal-extensions
 msal-extensions==1.1.0
     # via azure-identity
-packaging==24.0
+packaging==24.1
     # via msal-extensions
 portalocker==2.8.2
     # via msal-extensions
 pycparser==2.22
     # via cffi
-pydantic==2.7.3
+pydantic==2.7.4
     # via pydantic-settings (pyproject.toml)
 pydantic-core==2.18.4
     # via pydantic
@@ -63,12 +63,13 @@ six==1.16.0
     #   isodate
 tomli==2.0.1
     # via pydantic-settings (pyproject.toml)
-typing-extensions==4.12.1
+typing-extensions==4.12.2
     # via
     #   annotated-types
     #   azure-core
+    #   azure-identity
     #   azure-keyvault-secrets
     #   pydantic
     #   pydantic-core
-urllib3==2.2.1
+urllib3==2.2.2
     # via requests

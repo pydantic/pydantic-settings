@@ -20,7 +20,7 @@ mdurl==0.1.2
     # via markdown-it-py
 mypy-extensions==1.0.0
     # via black
-packaging==24.0
+packaging==24.1
     # via
     #   black
     #   pytest
@@ -46,14 +46,14 @@ pytest-pretty==1.2.0
     # via -r requirements/testing.in
 rich==13.7.1
     # via pytest-pretty
-ruff==0.4.8
+ruff==0.4.10
     # via pytest-examples
 tomli==2.0.1
     # via
     #   black
     #   coverage
     #   pytest
-typing-extensions==4.12.1
+typing-extensions==4.12.2
     # via
     #   black
     #   rich
