@@ -473,13 +473,13 @@ models. There are two primary use cases for Pydantic settings CLI:
 2. When using Pydantic models to define CLIs.
 
 By default, the experience is tailored towards use case #1 and builds on the foundations established in [parsing
-environment variables](#parsing-environment-variables). If your use case primarily falls into #2, you will likely want
-to enable [enforcing required arguments at the CLI](#enforce-required-arguments-at-cli).
+environment variables](#parsing-environment-variable-values). If your use case primarily falls into #2, you will likely
+want to enable [enforcing required arguments at the CLI](#enforce-required-arguments-at-cli).
 
 ### The Basics
 
-To get started, let's revisit the example presented in [parsing environment variables](#parsing-environment-variables)
-but using a Pydantic settings CLI:
+To get started, let's revisit the example presented in [parsing environment
+variables](#parsing-environment-variable-values) but using a Pydantic settings CLI:
 
 ```py
 import sys
@@ -528,16 +528,16 @@ print(Settings().model_dump())
 To enable CLI parsing, we simply set the `cli_parse_args` flag to a valid value, which retains similar conotations as
 defined in `argparse`. Alternatively, we can also directly provided the args to parse at time of instantiation:
 
-```py test="skip" lint="skip"
-Settings(
-    _cli_parse_args=[
-        '--v0=0',
-        '--sub_model={"v1": "json-1", "v2": "json-2"}',
-        '--sub_model.v2=nested-2',
-        '--sub_model.v3=3',
-        '--sub_model.deep.v4=v4',
-    ]
-)
+```py
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    this_foo: str
+
+
+print(Settings(_cli_parse_args=['--this_foo', 'is such a foo']).model_dump())
+#> {'this_foo': 'is such a foo'}
 ```
 
 Note that a CLI settings source is [**the topmost source**](#field-value-priority) by default unless its [priority value
@@ -705,7 +705,7 @@ print(User().model_dump())
 
 Subcommands and positional arguments are expressed using the `CliSubCommand` and `CliPositionalArg` annotations. These
 annotations can only be applied to required fields (i.e. fields that do not have a default value). Furthermore,
-subcommands must be a valid type derived from the pydantic `BaseModel` class.
+subcommands must be a valid type derived from either a pydantic `BaseModel` or pydantic.dataclasses `dataclass`.
 
 !!! note
     CLI settings subcommands are limited to a single subparser per model. In other words, all subcommands for a model
@@ -720,6 +720,7 @@ subcommands must be a valid type derived from the pydantic `BaseModel` class.
 import sys
 
 from pydantic import BaseModel, Field
+from pydantic.dataclasses import dataclass
 
 from pydantic_settings import (
     BaseSettings,
@@ -728,51 +729,45 @@ from pydantic_settings import (
 )
 
 
-class FooPlugin(BaseModel):
+@dataclass
+class FooPlugin:
     """git-plugins-foo - Extra deep foo plugin command"""
 
-    my_feature: bool = Field(
-        default=False, description='Enable my feature on foo plugin'
-    )
+    x_feature: bool = Field(default=False, description='Enable "X" feature')
 
 
-class BarPlugin(BaseModel):
+@dataclass
+class BarPlugin:
     """git-plugins-bar - Extra deep bar plugin command"""
 
-    my_feature: bool = Field(
-        default=False, description='Enable my feature on bar plugin'
-    )
+    y_feature: bool = Field(default=False, description='Enable "Y" feature')
 
 
-class Plugins(BaseModel):
+@dataclass
+class Plugins:
     """git-plugins - Fake plugins for GIT"""
 
     foo: CliSubCommand[FooPlugin] = Field(description='Foo is fake plugin')
 
-    bar: CliSubCommand[BarPlugin] = Field(description='Bar is also a fake plugin')
+    bar: CliSubCommand[BarPlugin] = Field(description='Bar is fake plugin')
 
 
 class Clone(BaseModel):
     """git-clone - Clone a repository into a new directory"""
 
-    repository: CliPositionalArg[str] = Field(description='The repository to clone')
+    repository: CliPositionalArg[str] = Field(description='The repo ...')
 
-    directory: CliPositionalArg[str] = Field(description='The directory to clone into')
+    directory: CliPositionalArg[str] = Field(description='The dir ...')
 
-    local: bool = Field(
-        default=False,
-        description='When the resposity to clone from is on a local machine, bypass ...',
-    )
+    local: bool = Field(default=False, description='When the repo ...')
 
 
 class Git(BaseSettings, cli_parse_args=True, cli_prog_name='git'):
     """git - The stupid content tracker"""
 
-    clone: CliSubCommand[Clone] = Field(
-        description='Clone a repository into a new directory'
-    )
+    clone: CliSubCommand[Clone] = Field(description='Clone a repo ...')
 
-    plugins: CliSubCommand[Plugins] = Field(description='Fake GIT plugin commands')
+    plugins: CliSubCommand[Plugins] = Field(description='Fake GIT plugins')
 
 
 try:
@@ -787,12 +782,12 @@ usage: git [-h] {clone,plugins} ...
 git - The stupid content tracker
 
 options:
-  -h, --help            show this help message and exit
+  -h, --help       show this help message and exit
 
 subcommands:
   {clone,plugins}
-    clone               Clone a repository into a new directory
-    plugins             Fake GIT plugin commands
+    clone          Clone a repo ...
+    plugins        Fake GIT plugins
 """
 
 
@@ -808,12 +803,12 @@ usage: git clone [-h] [--local bool] [--shared bool] REPOSITORY DIRECTORY
 git-clone - Clone a repository into a new directory
 
 positional arguments:
-  REPOSITORY     The repository to clone
-  DIRECTORY      The directory to clone into
+  REPOSITORY    The repo ...
+  DIRECTORY     The dir ...
 
 options:
-  -h, --help     show this help message and exit
-  --local bool   When the resposity to clone from is on a local machine, bypass ... (default: False)
+  -h, --help    show this help message and exit
+  --local bool  When the repo ... (default: False)
 """
 
 
@@ -829,8 +824,8 @@ usage: git plugins bar [-h] [--my_feature bool]
 git-plugins-bar - Extra deep bar plugin command
 
 options:
-  -h, --help         show this help message and exit
-  --my_feature bool  Enable my feature on bar plugin (default: False)
+  -h, --help        show this help message and exit
+  --y_feature bool  Enable "Y" feature (default: False)
 """
 ```
 
@@ -843,7 +838,7 @@ The below flags can be used to customise the CLI experience to your needs.
 Change the default program name displayed in the help text usage by setting `cli_prog_name`. By default, it will derive
 the name of the currently executing program from `sys.argv[0]`, just like argparse.
 
-```py test="skip"
+```py
 import sys
 
 from pydantic_settings import BaseSettings
@@ -853,8 +848,12 @@ class Settings(BaseSettings, cli_parse_args=True, cli_prog_name='appdantic'):
     pass
 
 
-sys.argv = ['example.py', '--help']
-Settings()
+try:
+    sys.argv = ['example.py', '--help']
+    Settings()
+except SystemExit as e:
+    print(e)
+    #> 0
 """
 usage: appdantic [-h]
 
@@ -870,7 +869,7 @@ is required is not strictly required from any single source (e.g. the CLI). Inst
 sources provides the required value.
 
 However, if your use case [aligns more with #2](#command-line-support), using Pydantic models to define CLIs, you will
-likely want required fields to be _strictly required at the CLI_. We can enable this behavior by using the
+likely want required fields to be _strictly required at the CLI_. We can enable this behavior by using
 `cli_enforce_required`.
 
 ```py
@@ -902,7 +901,7 @@ example.py: error: the following arguments are required: --my_required_field
 
 #### Change the None Type Parse String
 
-Change the CLI string value that will be parsed (e.g. "null", "void", "None", etc.) into `None` type(None) by setting
+Change the CLI string value that will be parsed (e.g. "null", "void", "None", etc.) into `None` by setting
 `cli_parse_none_str`. By default it will use the `env_parse_none_str` value if set. Otherwise, it will default to "null"
 if `cli_avoid_json` is `False`, and "None" if `cli_avoid_json` is `True`.
 
@@ -928,7 +927,7 @@ print(Settings().model_dump())
 
 Hide `None` values from the CLI help text by enabling `cli_hide_none_type`.
 
-```py test="skip"
+```py
 import sys
 from typing import Optional
 
@@ -941,8 +940,12 @@ class Settings(BaseSettings, cli_parse_args=True, cli_hide_none_type=True):
     v0: Optional[str] = Field(description='the top level v0 option')
 
 
-sys.argv = ['example.py', '--help']
-Settings()
+try:
+    sys.argv = ['example.py', '--help']
+    Settings()
+except SystemExit as e:
+    print(e)
+    #> 0
 """
 usage: example.py [-h] [--v0 str]
 
@@ -956,7 +959,7 @@ options:
 
 Avoid adding complex fields that result in JSON strings at the CLI by enabling `cli_avoid_json`.
 
-```py test="skip"
+```py
 import sys
 
 from pydantic import BaseModel, Field
@@ -974,8 +977,12 @@ class Settings(BaseSettings, cli_parse_args=True, cli_avoid_json=True):
     )
 
 
-sys.argv = ['example.py', '--help']
-Settings()
+try:
+    sys.argv = ['example.py', '--help']
+    Settings()
+except SystemExit as e:
+    print(e)
+    #> 0
 """
 usage: example.py [-h] [--sub_model.v1 int]
 
@@ -998,7 +1005,7 @@ Alternatively, we can also configure CLI settings to pull from the class docstri
     If the field is a union of nested models the group help text will always be pulled from the field description;
     even if `cli_use_class_docs_for_groups` is set to `True`.
 
-```py test="skip"
+```py
 import sys
 
 from pydantic import BaseModel, Field
@@ -1018,8 +1025,12 @@ class Settings(BaseSettings, cli_parse_args=True, cli_use_class_docs_for_groups=
     sub_model: SubModel = Field(description='The help text from the field description')
 
 
-sys.argv = ['example.py', '--help']
-Settings()
+try:
+    sys.argv = ['example.py', '--help']
+    Settings()
+except SystemExit as e:
+    print(e)
+    #> 0
 """
 usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
 
@@ -1075,12 +1086,12 @@ command line arguments. The `CliSettingsSource` internal parser representation i
 therefore, requires parser methods that support the same attributes as their `argparse` counterparts. The available
 parser methods that can be customised, along with their argparse counterparts (the defaults), are listed below:
 
-* `parse_args_method` - argparse.ArgumentParser.parse_args
-* `add_argument_method` - argparse.ArgumentParser.add_argument
-* `add_argument_group_method` - argparse.ArgumentParser.add\_argument_group
-* `add_parser_method` - argparse.\_SubParsersAction.add_parser
-* `add_subparsers_method` - argparse.ArgumentParser.add_subparsers
-* `formatter_class` - argparse.HelpFormatter
+* `parse_args_method` - (`argparse.ArgumentParser.parse_args`)
+* `add_argument_method` - (`argparse.ArgumentParser.add_argument`)
+* `add_argument_group_method` - (`argparse.ArgumentParser.add_argument_group`)
+* `add_parser_method` - (`argparse._SubParsersAction.add_parser`)
+* `add_subparsers_method` - (`argparse.ArgumentParser.add_subparsers`)
+* `formatter_class` - (`argparse.HelpFormatter`)
 
 For a non-argparse parser the parser methods can be set to `None` if not supported. The CLI settings will only raise an
 error when connecting to the root parser if a parser method is necessary but set to `None`.

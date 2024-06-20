@@ -640,13 +640,18 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                 type_has_key = EnvSettingsSource.next_field(type_, key, case_sensitive)
                 if type_has_key:
                     return type_has_key
-        elif is_model_class(annotation):
+        elif is_model_class(annotation) or is_pydantic_dataclass(annotation):
+            fields = (
+                annotation.__pydantic_fields__
+                if is_pydantic_dataclass(annotation)
+                else cast(BaseModel, annotation).model_fields
+            )
             # `case_sensitive is None` is here to be compatible with the old behavior.
             # Has to be removed in V3.
-            if (case_sensitive is None or case_sensitive) and annotation.model_fields.get(key):
-                return annotation.model_fields[key]
+            if (case_sensitive is None or case_sensitive) and fields.get(key):
+                return fields[key]
             elif not case_sensitive:
-                for field_name, f in annotation.model_fields.items():
+                for field_name, f in fields.items():
                     if field_name.lower() == key.lower():
                         return f
 
@@ -1205,7 +1210,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     field_types = [type_ for type_ in get_args(field_info.annotation) if type_ is not type(None)]
                     if len(field_types) != 1:
                         raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has multiple types')
-                    elif not is_model_class(field_types[0]):
+                    elif not (is_model_class(field_types[0]) or is_pydantic_dataclass(field_types[0])):
                         raise SettingsError(
                             f'subcommand argument {model.__name__}.{field_name} is not derived from BaseModel'
                         )
