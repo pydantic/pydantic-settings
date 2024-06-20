@@ -71,6 +71,7 @@ def foobar(a, b, c=4):
 
 
 T = TypeVar('T')
+ARGPARSE_OPTIONS_TEXT = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
 
 
 class FruitsEnum(IntEnum):
@@ -669,14 +670,21 @@ def test_case_sensitive(monkeypatch):
 
 def test_nested_dataclass(env):
     @pydantic_dataclasses.dataclass
+    class DeepNestedDataclass:
+        boo: int
+        rar: str
+
+    @pydantic_dataclasses.dataclass
     class MyDataclass:
         foo: int
         bar: str
+        deep: DeepNestedDataclass
 
-    class Settings(BaseSettings):
+    class Settings(BaseSettings, env_nested_delimiter='__'):
         n: MyDataclass
 
     env.set('N', '{"foo": 123, "bar": "bar value"}')
+    env.set('N__DEEP', '{"boo": 1, "rar": "eek"}')
     s = Settings()
     assert isinstance(s.n, MyDataclass)
     assert s.n.foo == 123
@@ -1850,6 +1858,26 @@ def test_discriminated_union_with_callable_discriminator(env):
     assert s.a_or_b.y == 'foo'
 
 
+def test_json_field_with_discriminated_union(env):
+    class A(BaseModel):
+        x: Literal['a'] = 'a'
+
+    class B(BaseModel):
+        x: Literal['b'] = 'b'
+
+    A_OR_B = Annotated[Union[A, B], Field(discriminator='x')]
+
+    class Settings(BaseSettings):
+        a_or_b: Optional[Json[A_OR_B]] = None
+
+    # Set up environment so that the discriminator is 'a'.
+    env.set('a_or_b', '{"x": "a"}')
+
+    s = Settings()
+
+    assert s.a_or_b.x == 'a'
+
+
 def test_nested_model_case_insensitive(env):
     class SubSubSub(BaseModel):
         VaL3: str
@@ -2283,17 +2311,94 @@ def test_cli_source_prioritization(env):
     assert cfg.model_dump() == {'foo': 'FOO FROM ENV'}
 
 
-def test_cli_alias_arg():
-    class Animal(BaseModel):
-        name: str
+@pytest.mark.parametrize('avoid_json', [True, False])
+def test_cli_alias_arg(capsys, monkeypatch, avoid_json):
+    class Cfg(BaseSettings, cli_avoid_json=avoid_json):
+        alias_choice_w_path: str = Field(validation_alias=AliasChoices('a', AliasPath('path0', 1)))
+        alias_choice_w_only_path: str = Field(validation_alias=AliasChoices(AliasPath('path1', 1)))
+        alias_choice_no_path: str = Field(validation_alias=AliasChoices('b', 'c'))
+        alias_path: str = Field(validation_alias=AliasPath('path2', 'deep', 1))
+        alias_str: str = Field(validation_alias='str')
 
-    class Cfg(BaseSettings):
-        apple: str = Field(alias='alias')
-        pet: Animal = Field(alias='critter')
+    cfg = Cfg(
+        _cli_parse_args=[
+            '--a',
+            'a',
+            '--b',
+            'b',
+            '--str',
+            'str',
+            '--path0',
+            'a0,b0,c0',
+            '--path1',
+            'a1,b1,c1',
+            '--path2',
+            '{"deep": ["a2","b2","c2"]}',
+        ]
+    )
+    assert cfg.model_dump() == {
+        'alias_choice_w_path': 'a',
+        'alias_choice_w_only_path': 'b1',
+        'alias_choice_no_path': 'b',
+        'alias_path': 'b2',
+        'alias_str': 'str',
+    }
 
-    cfg = Cfg(_cli_parse_args=['--alias', 'foo', '--critter.name', 'harry'])
-    assert cfg.model_dump() == {'apple': 'foo', 'pet': {'name': 'harry'}}
-    assert cfg.model_dump(by_alias=True) == {'alias': 'foo', 'critter': {'name': 'harry'}}
+
+@pytest.mark.parametrize('avoid_json', [True, False])
+def test_cli_alias_nested_arg(capsys, monkeypatch, avoid_json):
+    class Nested(BaseModel):
+        alias_choice_w_path: str = Field(validation_alias=AliasChoices('a', AliasPath('path0', 1)))
+        alias_choice_w_only_path: str = Field(validation_alias=AliasChoices(AliasPath('path1', 1)))
+        alias_choice_no_path: str = Field(validation_alias=AliasChoices('b', 'c'))
+        alias_path: str = Field(validation_alias=AliasPath('path2', 'deep', 1))
+        alias_str: str = Field(validation_alias='str')
+
+    class Cfg(BaseSettings, cli_avoid_json=avoid_json):
+        nest: Nested
+
+    cfg = Cfg(
+        _cli_parse_args=[
+            '--nest.a',
+            'a',
+            '--nest.b',
+            'b',
+            '--nest.str',
+            'str',
+            '--nest',
+            '{"path0": ["a0","b0","c0"], "path1": ["a1","b1","c1"], "path2": {"deep": ["a2","b2","c2"]}}',
+        ]
+    )
+    assert cfg.model_dump() == {
+        'nest': {
+            'alias_choice_w_path': 'a',
+            'alias_choice_w_only_path': 'b1',
+            'alias_choice_no_path': 'b',
+            'alias_path': 'b2',
+            'alias_str': 'str',
+        }
+    }
+
+
+def test_cli_alias_exceptions(capsys, monkeypatch):
+    with pytest.raises(SettingsError) as exc_info:
+
+        class SubCmd(BaseModel):
+            v0: int
+
+        class BadCliSubCommand(BaseSettings):
+            foo: CliSubCommand[SubCmd] = Field(alias='bar')
+
+        BadCliSubCommand(_cli_parse_args=True)
+    assert str(exc_info.value) == 'subcommand argument BadCliSubCommand.foo has an alias'
+
+    with pytest.raises(SettingsError) as exc_info:
+
+        class BadCliPositionalArg(BaseSettings):
+            foo: CliPositionalArg[int] = Field(alias='bar')
+
+        BadCliPositionalArg(_cli_parse_args=True)
+    assert str(exc_info.value) == 'positional argument BadCliPositionalArg.foo has an alias'
 
 
 def test_cli_case_insensitve_arg():
@@ -2321,8 +2426,6 @@ def test_cli_help_differentiation(capsys, monkeypatch):
         bar: int = 123
         boo: int = Field(default_factory=lambda: 456)
 
-    argparse_options_text = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
-
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
 
@@ -2333,13 +2436,36 @@ def test_cli_help_differentiation(capsys, monkeypatch):
             re.sub(r'0x\w+', '0xffffffff', capsys.readouterr().out, re.MULTILINE)
             == f"""usage: example.py [-h] [--foo str] [--bar int] [--boo int]
 
-{argparse_options_text}:
+{ARGPARSE_OPTIONS_TEXT}:
   -h, --help  show this help message and exit
   --foo str   (required)
   --bar int   (default: 123)
   --boo int   (default: <function
               test_cli_help_differentiation.<locals>.Cfg.<lambda> at
               0xffffffff>)
+"""
+        )
+
+
+def test_cli_help_string_format(capsys, monkeypatch):
+    class Cfg(BaseSettings):
+        date_str: str = '%Y-%m-%d'
+
+    argparse_options_text = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Cfg(_cli_parse_args=True)
+
+        assert (
+            re.sub(r'0x\w+', '0xffffffff', capsys.readouterr().out, re.MULTILINE)
+            == f"""usage: example.py [-h] [--date_str str]
+
+{argparse_options_text}:
+  -h, --help      show this help message and exit
+  --date_str str  (default: %Y-%m-%d)
 """
         )
 
@@ -2681,13 +2807,16 @@ def test_cli_nested_dict_arg():
 
 
 def test_cli_subcommand_with_positionals():
-    class FooPlugin(BaseModel):
+    @pydantic_dataclasses.dataclass
+    class FooPlugin:
         my_feature: bool = False
 
-    class BarPlugin(BaseModel):
+    @pydantic_dataclasses.dataclass
+    class BarPlugin:
         my_feature: bool = False
 
-    class Plugins(BaseModel):
+    @pydantic_dataclasses.dataclass
+    class Plugins:
         foo: CliSubCommand[FooPlugin]
         bar: CliSubCommand[BarPlugin]
 
@@ -2868,8 +2997,6 @@ def test_cli_avoid_json(capsys, monkeypatch):
 
         model_config = SettingsConfigDict(cli_parse_args=True)
 
-    argparse_options_text = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
-
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
 
@@ -2880,7 +3007,7 @@ def test_cli_avoid_json(capsys, monkeypatch):
             capsys.readouterr().out
             == f"""usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
 
-{argparse_options_text}:
+{ARGPARSE_OPTIONS_TEXT}:
   -h, --help          show this help message and exit
 
 sub_model options:
@@ -2896,7 +3023,7 @@ sub_model options:
             capsys.readouterr().out
             == f"""usage: example.py [-h] [--sub_model.v1 int]
 
-{argparse_options_text}:
+{ARGPARSE_OPTIONS_TEXT}:
   -h, --help          show this help message and exit
 
 sub_model options:
@@ -2914,8 +3041,6 @@ def test_cli_remove_empty_groups(capsys, monkeypatch):
 
         model_config = SettingsConfigDict(cli_parse_args=True)
 
-    argparse_options_text = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
-
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
 
@@ -2926,7 +3051,7 @@ def test_cli_remove_empty_groups(capsys, monkeypatch):
             capsys.readouterr().out
             == f"""usage: example.py [-h] [--sub_model JSON]
 
-{argparse_options_text}:
+{ARGPARSE_OPTIONS_TEXT}:
   -h, --help        show this help message and exit
 
 sub_model options:
@@ -2941,7 +3066,7 @@ sub_model options:
             capsys.readouterr().out
             == f"""usage: example.py [-h]
 
-{argparse_options_text}:
+{ARGPARSE_OPTIONS_TEXT}:
   -h, --help  show this help message and exit
 """
         )
@@ -2953,8 +3078,6 @@ def test_cli_hide_none_type(capsys, monkeypatch):
 
         model_config = SettingsConfigDict(cli_parse_args=True)
 
-    argparse_options_text = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
-
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
 
@@ -2965,7 +3088,7 @@ def test_cli_hide_none_type(capsys, monkeypatch):
             capsys.readouterr().out
             == f"""usage: example.py [-h] [--v0 {{str,null}}]
 
-{argparse_options_text}:
+{ARGPARSE_OPTIONS_TEXT}:
   -h, --help       show this help message and exit
   --v0 {{str,null}}  (required)
 """
@@ -2978,7 +3101,7 @@ def test_cli_hide_none_type(capsys, monkeypatch):
             capsys.readouterr().out
             == f"""usage: example.py [-h] [--v0 str]
 
-{argparse_options_text}:
+{ARGPARSE_OPTIONS_TEXT}:
   -h, --help  show this help message and exit
   --v0 str    (required)
 """
@@ -2998,8 +3121,6 @@ def test_cli_use_class_docs_for_groups(capsys, monkeypatch):
 
         model_config = SettingsConfigDict(cli_parse_args=True)
 
-    argparse_options_text = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
-
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
 
@@ -3012,7 +3133,7 @@ def test_cli_use_class_docs_for_groups(capsys, monkeypatch):
 
 My application help text.
 
-{argparse_options_text}:
+{ARGPARSE_OPTIONS_TEXT}:
   -h, --help          show this help message and exit
 
 sub_model options:
@@ -3032,7 +3153,7 @@ sub_model options:
 
 My application help text.
 
-{argparse_options_text}:
+{ARGPARSE_OPTIONS_TEXT}:
   -h, --help          show this help message and exit
 
 sub_model options:
@@ -3919,3 +4040,17 @@ def test_case_insensitive_nested_optional(env):
     env.set('nested__bar', '123')
     s = Settings()
     assert s.model_dump() == {'nested': {'BaR': 123, 'FOO': 'string'}}
+
+
+def test_case_insensitive_nested_list(env):
+    class NestedSettings(BaseModel):
+        FOO: List[str]
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', case_sensitive=False)
+
+        nested: Optional[NestedSettings]
+
+    env.set('nested__FOO', '["string1", "string2"]')
+    s = Settings()
+    assert s.model_dump() == {'nested': {'FOO': ['string1', 'string2']}}

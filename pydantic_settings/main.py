@@ -258,22 +258,6 @@ class BaseSettings(BaseModel):
 
         # Configure built-in sources
         init_settings = InitSettingsSource(self.__class__, init_kwargs=init_kwargs)
-        cli_settings = (
-            CliSettingsSource(
-                self.__class__,
-                cli_prog_name=cli_prog_name,
-                cli_parse_args=cli_parse_args,
-                cli_parse_none_str=cli_parse_none_str,
-                cli_hide_none_type=cli_hide_none_type,
-                cli_avoid_json=cli_avoid_json,
-                cli_enforce_required=cli_enforce_required,
-                cli_use_class_docs_for_groups=cli_use_class_docs_for_groups,
-                cli_prefix=cli_prefix,
-                case_sensitive=case_sensitive,
-            )
-            if cli_settings_source is None
-            else cli_settings_source
-        )
         env_settings = EnvSettingsSource(
             self.__class__,
             case_sensitive=case_sensitive,
@@ -307,7 +291,23 @@ class BaseSettings(BaseModel):
             file_secret_settings=file_secret_settings,
         )
         if not any([source for source in sources if isinstance(source, CliSettingsSource)]):
-            if cli_parse_args or cli_settings_source:
+            if cli_parse_args is not None or cli_settings_source is not None:
+                cli_settings = (
+                    CliSettingsSource(
+                        self.__class__,
+                        cli_prog_name=cli_prog_name,
+                        cli_parse_args=cli_parse_args,
+                        cli_parse_none_str=cli_parse_none_str,
+                        cli_hide_none_type=cli_hide_none_type,
+                        cli_avoid_json=cli_avoid_json,
+                        cli_enforce_required=cli_enforce_required,
+                        cli_use_class_docs_for_groups=cli_use_class_docs_for_groups,
+                        cli_prefix=cli_prefix,
+                        case_sensitive=case_sensitive,
+                    )
+                    if cli_settings_source is None
+                    else cli_settings_source
+                )
                 sources = (cli_settings,) + sources
         if sources:
             return BaseSettings._deep_update(*reversed([source() for source in sources]))
