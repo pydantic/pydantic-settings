@@ -1716,7 +1716,7 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
             settings_cls,
             case_sensitive=True,
             env_prefix=env_prefix,
-            env_nested_delimiter='__',
+            env_nested_delimiter='--',
             env_ignore_empty=False,
             env_parse_none_str=env_parse_none_str,
             env_parse_enums=env_parse_enums,
@@ -1734,8 +1734,7 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
             except ResourceNotFoundError:  # type: ignore
                 secret_value = None
 
-            secret_name_with_hierarchy = secret_name.replace('--', '__')
-            env_vars[secret_name_with_hierarchy] = secret_value
+            env_vars[secret_name] = secret_value
 
         return env_vars
 
