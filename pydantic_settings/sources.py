@@ -85,12 +85,10 @@ def import_toml() -> None:
 
 def import_azure_key_vault() -> None:
     global TokenCredential
-    global ResourceNotFoundError
     global SecretClient
 
     try:
         from azure.core.credentials import TokenCredential
-        from azure.core.exceptions import ResourceNotFoundError
         from azure.keyvault.secrets import SecretClient
     except ImportError as e:
         raise ImportError(
