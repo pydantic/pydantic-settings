@@ -1356,9 +1356,9 @@ You must set two parameters:
 
 You must have the same naming convention in the field name as in the Key Vault secret name. For example, if the secret is named `SqlServerPassword`, the field name must be the same. You can use an alias too.
 
-Nested models are supported with the `--` separator. For example, `SqlServer--Password`.
+In Key Vault, nested models are supported with the `--` separator. For example, `SqlServer--Password`.
 
-JSON objects and Key Vault arrays (e.g. `MySecret--0`, `MySecret--1`) are not supported.
+JSON objects, Key Vault arrays (e.g. `MySecret--0`, `MySecret--1`) and prefixes are not supported.
 
 ```python
 
@@ -1394,7 +1394,7 @@ class AzureKeyVaultSettings(BaseSettings):
         return(
             AzureKeyVaultSettingsSource(
                 settings_cls,
-                os.environ['AZURE_KEY_VAULT__URL'],
+                os.environ['AZURE_KEY_VAULT_URL'],
                 DefaultAzureCredential()
         )
 ```

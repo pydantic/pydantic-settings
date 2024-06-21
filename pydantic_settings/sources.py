@@ -1705,7 +1705,6 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
         settings_cls: type[BaseSettings],
         url: str,
         credential: TokenCredential,  # type: ignore
-        env_prefix: str | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
     ) -> None:
@@ -1715,7 +1714,7 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
         super().__init__(
             settings_cls,
             case_sensitive=True,
-            env_prefix=env_prefix,
+            env_prefix='',
             env_nested_delimiter='--',
             env_ignore_empty=False,
             env_parse_none_str=env_parse_none_str,
@@ -1728,21 +1727,14 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
         env_vars: dict[str, str | None] = {}
 
         for secret_name in secret_names:
-            try:
-                secret = self._secret_client.get_secret(secret_name)
-                secret_value = secret.value
-            except ResourceNotFoundError:  # type: ignore
-                secret_value = None
-
+            secret = self._secret_client.get_secret(secret_name)
+            secret_value = secret.value
             env_vars[secret_name] = secret_value
 
         return env_vars
 
     def __repr__(self) -> str:
-        return (
-            f'AzureKeyVaultSettingsSource(env_file={self._url!r}, '
-            f'env_nested_delimiter={self.env_nested_delimiter!r}, env_prefix_len={self.env_prefix_len!r})'
-        )
+        return f'AzureKeyVaultSettingsSource(url={self._url!r}, ' f'env_nested_delimiter={self.env_nested_delimiter!r})'
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
