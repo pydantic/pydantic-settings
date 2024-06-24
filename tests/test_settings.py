@@ -6,6 +6,7 @@ import re
 import sys
 import typing
 import uuid
+from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import IntEnum
 from pathlib import Path
@@ -711,6 +712,88 @@ def test_env_takes_precedence(env):
     s = Settings(foo='123', bar='argument')
     assert s.foo == 123
     assert s.bar == 'env setting'
+
+
+def test_env_deep_override(env):
+    class DeepSubModel(BaseModel):
+        v4: str
+
+    class SubModel(BaseModel):
+        v1: str
+        v2: bytes
+        v3: int
+        deep: DeepSubModel
+
+    class Settings(BaseSettings, env_nested_delimiter='__'):
+        v0: str
+        sub_model: SubModel
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            return env_settings, dotenv_settings, init_settings, file_secret_settings
+
+    env.set('SUB_MODEL__DEEP__V4', 'override-v4')
+
+    s_final = {'v0': '0', 'sub_model': {'v1': 'init-v1', 'v2': b'init-v2', 'v3': 3, 'deep': {'v4': 'override-v4'}}}
+
+    s = Settings(v0='0', sub_model={'v1': 'init-v1', 'v2': b'init-v2', 'v3': 3, 'deep': {'v4': 'init-v4'}})
+    assert s.model_dump() == s_final
+
+    s = Settings(v0='0', sub_model=SubModel(v1='init-v1', v2=b'init-v2', v3=3, deep=DeepSubModel(v4='init-v4')))
+    assert s.model_dump() == s_final
+
+    s = Settings(v0='0', sub_model=SubModel(v1='init-v1', v2=b'init-v2', v3=3, deep={'v4': 'init-v4'}))
+    assert s.model_dump() == s_final
+
+    s = Settings(v0='0', sub_model={'v1': 'init-v1', 'v2': b'init-v2', 'v3': 3, 'deep': DeepSubModel(v4='init-v4')})
+    assert s.model_dump() == s_final
+
+
+def test_env_deep_override_copy_by_reference(env):
+    class BaseAuth(ABC, BaseModel):
+        @property
+        @abstractmethod
+        def token(self) -> str:
+            """returns authentication token for XYZ"""
+            pass
+
+    class CustomAuth(BaseAuth):
+        url: HttpUrl
+        username: str
+        password: SecretStr
+
+        _token: SecretStr
+
+        @property
+        def token(self):
+            ...  # (re)fetch token
+            return self._token.get_secret_value()
+
+    class Settings(BaseSettings, env_nested_delimiter='__'):
+        auth: BaseAuth
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            return env_settings, init_settings, file_secret_settings
+
+    auth_orig = CustomAuth(url='https://127.0.0.1', username='some-username', password='some-password')
+
+    s = Settings(auth=auth_orig)
+    assert s.auth is auth_orig
+
+    env.set('AUTH__URL', 'https://123.4.5.6')
+
+    s = Settings(auth=auth_orig)
+    assert s.auth is not auth_orig
+    assert type(s.auth) is CustomAuth
+    assert s.auth.username is auth_orig.username
+    assert s.auth.password is auth_orig.password
+    assert s.auth.url is not auth_orig.url
+    assert s.auth.url == HttpUrl('https://123.4.5.6')
 
 
 def test_config_file_settings_nornir(env):
