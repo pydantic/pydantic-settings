@@ -5,15 +5,32 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING
 
+from pydantic import BaseModel
 import pytest
 
 from pydantic_settings.main import BaseSettings, SettingsConfigDict
-from pydantic_settings.sources import PyprojectTomlConfigSettingsSource
+from pydantic_settings.sources import (
+    AzureAppConfigurationSettingsSource,
+    PyprojectTomlConfigSettingsSource,
+    import_azure_app_configuration,
+)
 
 try:
     import tomli
 except ImportError:
     tomli = None
+
+try:
+    azure_app_configuration = True
+    import_azure_app_configuration()
+    from azure.appconfiguration import (
+        ConfigurationSetting,
+        SecretReferenceConfigurationSetting,
+    )
+    from azure.identity import DefaultAzureCredential
+    from azure.keyvault.secrets import KeyVaultSecret, SecretProperties
+except:
+    azure_app_configuration = False
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -97,3 +114,88 @@ class TestPyprojectTomlConfigSettingsSource:
         assert obj.toml_table_header == ('some', 'table')
         assert obj.toml_data == {'field': 'some'}
         assert obj.toml_file_path == tmp_path / 'pyproject.toml'
+
+
+@pytest.mark.skipif(not azure_app_configuration, reason='pydantic-settings[azure-app-configuration] is not installed')
+class TestAzureAppConfigurationSettingsSource:
+    def test___init__(self, mocker: MockerFixture) -> None:
+        class Settings(BaseSettings):
+            pass
+
+        mocker.patch(f'{MODULE}.AzureAppConfigurationClient.list_configuration_settings', return_value=[])
+
+        AzureAppConfigurationSettingsSource(
+            Settings,
+            lambda app_configuration_options: app_configuration_options.connect_with_url(
+                'https://my-resource.azconfig.io', DefaultAzureCredential()
+            ),
+        )
+
+    def test_get_all_configurations(self, mocker: MockerFixture) -> None:
+        class Nested(BaseModel):
+            nested_field: str
+
+        class Settings(BaseSettings):
+            not_nested: str
+            nested: Nested
+
+        expected_configuration_value = 'Value'
+        configurations = [
+            ConfigurationSetting(key='not_nested', value=expected_configuration_value),
+            ConfigurationSetting(key='nested__nested_field', value=expected_configuration_value),
+        ]
+        mocker.patch(f'{MODULE}.AzureAppConfigurationClient.list_configuration_settings', return_value=configurations)
+
+        settings = AzureAppConfigurationSettingsSource(
+            Settings,
+            lambda app_configuration_options: app_configuration_options.connect_with_url(
+                'https://my-resource.azconfig.io', DefaultAzureCredential()
+            ),
+        )()
+
+        assert settings['not_nested'] == expected_configuration_value
+        assert settings['nested']['nested_field'] == expected_configuration_value
+
+    def test_trim_selected_key(self, mocker: MockerFixture) -> None:
+        class Settings(BaseSettings):
+            not_nested: str
+
+        expected_configuration_value = 'Value'
+        configurations = [
+            ConfigurationSetting(key='prefix__not_nested', value=expected_configuration_value),
+        ]
+        mocker.patch(f'{MODULE}.AzureAppConfigurationClient.list_configuration_settings', return_value=configurations)
+
+        settings = AzureAppConfigurationSettingsSource(
+            Settings,
+            lambda app_configuration_options: app_configuration_options.connect_with_url(
+                'https://my-resource.azconfig.io', DefaultAzureCredential()
+            )
+            .select_key('prefix__*')
+            .trim_key_prefix('prefix__'),
+        )()
+
+        assert settings['not_nested'] == expected_configuration_value
+
+    def test_retrieve_key_vault_reference(self, mocker: MockerFixture) -> None:
+        class Settings(BaseSettings):
+            password: str
+
+        expected_key_vault_value = 'SecretValue'
+        configurations = [
+            SecretReferenceConfigurationSetting(
+                key='password', secret_id='https://my-resource.vault.azure.net/secrets/Password'
+            ),
+        ]
+        mocker.patch(f'{MODULE}.AzureAppConfigurationClient.list_configuration_settings', return_value=configurations)
+        key_vault_value = KeyVaultSecret(SecretProperties(), expected_key_vault_value)  #'SecretValue'
+        mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_value)
+
+        settings = AzureAppConfigurationSettingsSource(
+            Settings,
+            lambda app_configuration_options: app_configuration_options.connect_with_url(
+                'https://my-resource.azconfig.io', DefaultAzureCredential()
+            ).configure_key_vault(lambda key_vault_options: key_vault_options.set_credential(DefaultAzureCredential())),
+        )()
+
+        assert settings['password'] == expected_key_vault_value

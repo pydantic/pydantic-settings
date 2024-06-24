@@ -21,6 +21,7 @@ from typing import (
     Generic,
     List,
     Mapping,
+    Optional,
     Sequence,
     Tuple,
     TypeVar,
@@ -81,6 +82,29 @@ def import_toml() -> None:
         if tomllib is not None:
             return
         import tomllib
+
+
+def import_azure_app_configuration() -> None:
+    global TokenCredential
+    global AzureAppConfigurationClient
+    global ConfigurationSetting
+    global SecretReferenceConfigurationSetting
+    global SecretClient
+    global FeatureFlagConfigurationSetting
+
+    try:
+        from azure.appconfiguration import (
+            AzureAppConfigurationClient,
+            ConfigurationSetting,
+            SecretReferenceConfigurationSetting,
+            FeatureFlagConfigurationSetting,
+        )
+        from azure.core.credentials import TokenCredential
+        from azure.keyvault.secrets import SecretClient
+    except ImportError as e:
+        raise ImportError(
+            'Azure App Configuration dependencies are not installed, run `pip install pydantic-settings[azure-app-configuration]`'
+        ) from e
 
 
 DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
@@ -1678,6 +1702,164 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         import_yaml()
         with open(file_path, encoding=self.yaml_file_encoding) as yaml_file:
             return yaml.safe_load(yaml_file)
+
+
+class _AzureAppConfigurationKeySelector(BaseModel):
+    key_filter: str
+    label_filter: Optional[str] = None
+
+
+class AzureAppConfigurationKeyFilter:
+    ANY: str = '*'
+
+
+class AzureAppConfigurationKeyVaultOptions:
+    _credential: TokenCredential | None = None  # type: ignore
+
+    def set_credential(
+        self,
+        credential: TokenCredential,  # type: ignore
+    ) -> AzureAppConfigurationKeyVaultOptions:
+        self._credential = credential
+        return self
+
+
+class AzureAppConfigurationOptions:
+    _url: str | None = None
+    _credential: TokenCredential | None = None  # type: ignore
+    _connection_string: str | None = None
+    _key_selectors: list[_AzureAppConfigurationKeySelector] = []
+    _prefixes_to_trim: list[str] = []
+    _key_vault_options: AzureAppConfigurationKeyVaultOptions | None = None
+
+    def connect_with_url(
+        self,
+        url: str,
+        credential: TokenCredential,  # type: ignore
+    ) -> AzureAppConfigurationOptions:
+        self._url = url
+        self._credential = credential
+        return self
+
+    def connect_with_connection_string(self, connection_string: str) -> AzureAppConfigurationOptions:
+        self._connection_string = connection_string
+        return self
+
+    def select_key(self, key_filter: str, label_filter: str | None = None) -> AzureAppConfigurationOptions:
+        self._key_selectors.append(_AzureAppConfigurationKeySelector(key_filter=key_filter, label_filter=label_filter))
+        return self
+
+    def trim_key_prefix(self, prefix: str) -> AzureAppConfigurationOptions:
+        self._prefixes_to_trim.append(prefix)
+        return self
+
+    def configure_key_vault(
+        self, configure: Callable[[AzureAppConfigurationKeyVaultOptions], AzureAppConfigurationKeyVaultOptions]
+    ) -> AzureAppConfigurationOptions:
+        self._key_vault_options = AzureAppConfigurationKeyVaultOptions()
+        configure(self._key_vault_options)
+        return self
+
+
+class AzureAppConfigurationSettingsSource(EnvSettingsSource):
+    _configure: Callable[[AzureAppConfigurationOptions], AzureAppConfigurationOptions]
+    _options: AzureAppConfigurationOptions | None = None
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        configure: Callable[[AzureAppConfigurationOptions], AzureAppConfigurationOptions],
+        env_parse_none_str: str | None = None,
+        env_parse_enums: bool | None = None,
+    ) -> None:
+        import_azure_app_configuration()
+        self._configure = configure
+        super().__init__(
+            settings_cls,
+            case_sensitive=True,
+            env_prefix='',
+            env_nested_delimiter='__',
+            env_ignore_empty=False,
+            env_parse_none_str=env_parse_none_str,
+            env_parse_enums=env_parse_enums,
+        )
+
+    def __repr__(self) -> str:
+        return f'AzureAppConfigurationSettingsSource(env_nested_delimiter={self.env_nested_delimiter!r})'
+
+    def _load_env_vars(self) -> Mapping[str, str | None]:
+        self._options = AzureAppConfigurationOptions()
+        self._configure(self._options)
+        app_configuration_client = self._get_configuration_client()
+        default_key_selector = _AzureAppConfigurationKeySelector(key_filter=AzureAppConfigurationKeyFilter.ANY)
+        key_selectors = (
+            self._options._key_selectors if len(self._options._key_selectors) > 0 else [default_key_selector]
+        )
+        env_vars: dict[str, str | None] = {}
+
+        for key_selector in key_selectors:
+            settings = app_configuration_client.list_configuration_settings(
+                key_filter=key_selector.key_filter, label_filter=key_selector.label_filter
+            )
+
+            for setting in settings:
+                setting_key = self._get_setting_key(setting)
+                setting_value = self._get_setting_value(setting)
+                env_vars[setting_key] = setting_value
+
+        return env_vars
+
+    def _get_configuration_client(self) -> AzureAppConfigurationClient:  # type: ignore
+        assert self._options is not None
+
+        if self._options._url is not None and self._options._credential is not None:
+            return AzureAppConfigurationClient(base_url=self._options._url, credential=self._options._credential)  # type: ignore
+        elif self._options._connection_string is not None:
+            return AzureAppConfigurationClient.from_connection_string(options._connection_string)  # type: ignore
+
+        raise SettingsError(
+            f'Use {AzureAppConfigurationOptions.connect_with_url.__name__} or {AzureAppConfigurationOptions.connect_with_connection_string.__name__} to specify how to connect to Azure App Configuration'
+        )
+
+    def _get_setting_key(
+        self,
+        setting: ConfigurationSetting,  # type: ignore
+    ) -> str:
+        key = setting.key
+        assert self._options is not None
+
+        for prefix in self._options._prefixes_to_trim:
+            if setting.key.startswith(prefix):
+                return key[len(prefix) :]
+
+        return key
+
+    def _get_setting_value(
+        self,
+        setting: ConfigurationSetting,  # type: ignore
+    ) -> str:
+        if isinstance(setting, SecretReferenceConfigurationSetting):  # type: ignore
+            secret_id = setting.secret_id
+            assert secret_id is not None
+            return self._get_key_vault_secret_value(secret_id)
+        elif isinstance(setting, FeatureFlagConfigurationSetting):  # type: ignore
+            raise SettingsError('Feature flags are not supported')
+        elif isinstance(setting, ConfigurationSetting):  # type: ignore
+            return setting.value
+
+        raise SettingsError('Unknown configuration setting type')
+
+    def _get_key_vault_secret_value(self, secret_id: str) -> str:
+        assert self._options is not None
+        assert self._options._key_vault_options is not None
+        assert self._options._key_vault_options._credential is not None
+        key_vault_url, secret_name = secret_id.split('/secrets/')
+        secret_client = SecretClient(  # type: ignore
+            vault_url=key_vault_url, credential=self._options._key_vault_options._credential
+        )
+        secret = secret_client.get_secret(secret_name)
+        assert secret.value is not None
+        return secret.value
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
