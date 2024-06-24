@@ -836,7 +836,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             Otherwse, defaults to sys.argv[0].
         cli_parse_args: The list of CLI arguments to parse. Defaults to None.
             If set to `True`, defaults to sys.argv[1:].
-        cli_settings_source: Override the default CLI settings source with a user defined instance. Defaults to `None`.
         cli_parse_none_str: The CLI string value that should be parsed (e.g. "null", "void", "None", etc.) into `None`
             type(None). Defaults to "null" if cli_avoid_json is `False`, and "None" if cli_avoid_json is `True`.
         cli_hide_none_type: Hide `None` values in CLI help text. Defaults to `False`.
