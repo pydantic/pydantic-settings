@@ -96,8 +96,8 @@ def import_azure_app_configuration() -> None:
         from azure.appconfiguration import (
             AzureAppConfigurationClient,
             ConfigurationSetting,
-            SecretReferenceConfigurationSetting,
             FeatureFlagConfigurationSetting,
+            SecretReferenceConfigurationSetting,
         )
         from azure.core.credentials import TokenCredential
         from azure.keyvault.secrets import SecretClient
@@ -1815,7 +1815,7 @@ class AzureAppConfigurationSettingsSource(EnvSettingsSource):
         if self._options._url is not None and self._options._credential is not None:
             return AzureAppConfigurationClient(base_url=self._options._url, credential=self._options._credential)  # type: ignore
         elif self._options._connection_string is not None:
-            return AzureAppConfigurationClient.from_connection_string(options._connection_string)  # type: ignore
+            return AzureAppConfigurationClient.from_connection_string(self._options._connection_string)  # type: ignore
 
         raise SettingsError(
             f'Use {AzureAppConfigurationOptions.connect_with_url.__name__} or {AzureAppConfigurationOptions.connect_with_connection_string.__name__} to specify how to connect to Azure App Configuration'

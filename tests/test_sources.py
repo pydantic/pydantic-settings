@@ -5,8 +5,8 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel
 import pytest
+from pydantic import BaseModel
 
 from pydantic_settings.main import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources import (
@@ -29,7 +29,7 @@ try:
     )
     from azure.identity import DefaultAzureCredential
     from azure.keyvault.secrets import KeyVaultSecret, SecretProperties
-except:
+except ImportError:
     azure_app_configuration = False
 
 if TYPE_CHECKING:
