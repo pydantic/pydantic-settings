@@ -28,7 +28,7 @@ try:
     from azure.identity import DefaultAzureCredential
     from azure.keyvault.secrets import KeyVaultSecret, SecretProperties
 except ImportError:
-    azure_key_vault = None
+    azure_key_vault = False
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -114,7 +114,7 @@ class TestPyprojectTomlConfigSettingsSource:
         assert obj.toml_file_path == tmp_path / 'pyproject.toml'
 
 
-@pytest.mark.skipif(azure_key_vault is None, reason='azure-keyvault-secrets and azure-identity are not installed')
+@pytest.mark.skipif(not azure_key_vault, reason='pydantic-settings[azure-key-vault] is not installed')
 class TestAzureKeyVaultSettingsSource:
     """Test AzureKeyVaultSettingsSource."""
 
