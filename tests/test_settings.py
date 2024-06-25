@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import IntEnum
 from pathlib import Path
-from typing import Any, Callable, Dict, Generic, Hashable, List, Optional, Set, Tuple, Type, TypeVar, Union, override
+from typing import Any, Callable, Dict, Generic, Hashable, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 import pytest
 import typing_extensions
@@ -34,7 +34,7 @@ from pydantic import (
 from pydantic._internal._repr import Representation
 from pydantic.fields import FieldInfo
 from pytest_mock import MockerFixture
-from typing_extensions import Annotated, Literal
+from typing_extensions import Annotated, Literal, override
 
 from pydantic_settings import (
     BaseSettings,
