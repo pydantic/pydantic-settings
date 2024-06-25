@@ -753,11 +753,23 @@ class DotEnvSettingsSource(EnvSettingsSource):
     def _load_env_vars(self) -> Mapping[str, str | None]:
         return self._read_env_files()
 
+    @staticmethod
+    def _static_read_env_file(
+        file_path: Path,
+        *,
+        encoding: str | None = None,
+        case_sensitive: bool = False,
+        ignore_empty: bool = False,
+        parse_none_str: str | None = None,
+    ) -> Mapping[str, str | None]:
+        file_vars: dict[str, str | None] = dotenv_values(file_path, encoding=encoding or 'utf8')
+        return parse_env_vars(file_vars, case_sensitive, ignore_empty, parse_none_str)
+
     def _read_env_file(
         self,
         file_path: Path,
     ) -> Mapping[str, str | None]:
-        return _read_env_file(
+        return self._static_read_env_file(
             file_path,
             encoding=self.env_file_encoding,
             case_sensitive=self.case_sensitive,
@@ -1713,28 +1725,16 @@ def read_env_file(
     parse_none_str: str | None = None,
 ) -> Mapping[str, str | None]:
     warnings.warn(
-        'read_env_file will be removed in the next version, use DotEnvSettingsSource._read_env_file instead',
+        'read_env_file will be removed in the next version, use DotEnvSettingsSource._static_read_env_file if you must',
         DeprecationWarning,
     )
-    return _read_env_file(
+    return DotEnvSettingsSource._static_read_env_file(
         file_path,
         encoding=encoding,
         case_sensitive=case_sensitive,
         ignore_empty=ignore_empty,
         parse_none_str=parse_none_str,
     )
-
-
-def _read_env_file(
-    file_path: Path,
-    *,
-    encoding: str | None = None,
-    case_sensitive: bool = False,
-    ignore_empty: bool = False,
-    parse_none_str: str | None = None,
-) -> Mapping[str, str | None]:
-    file_vars: dict[str, str | None] = dotenv_values(file_path, encoding=encoding or 'utf8')
-    return parse_env_vars(file_vars, case_sensitive, ignore_empty, parse_none_str)
 
 
 def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:

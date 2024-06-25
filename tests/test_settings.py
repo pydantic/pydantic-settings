@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import IntEnum
 from pathlib import Path
-from typing import Any, Callable, Dict, Generic, Hashable, List, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Dict, Generic, Hashable, List, Optional, Set, Tuple, Type, TypeVar, Union, override
 
 import pytest
 import typing_extensions
@@ -49,7 +49,7 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
     YamlConfigSettingsSource,
 )
-from pydantic_settings.sources import CliPositionalArg, CliSettingsSource, CliSubCommand, SettingsError, _read_env_file
+from pydantic_settings.sources import CliPositionalArg, CliSettingsSource, CliSubCommand, SettingsError
 
 try:
     import dotenv
@@ -1039,15 +1039,15 @@ def test_read_env_file_case_sensitive(tmp_path):
     p = tmp_path / '.env'
     p.write_text('a="test"\nB=123')
 
-    assert _read_env_file(p) == {'a': 'test', 'b': '123'}
-    assert _read_env_file(p, case_sensitive=True) == {'a': 'test', 'B': '123'}
+    assert DotEnvSettingsSource._static_read_env_file(p) == {'a': 'test', 'b': '123'}
+    assert DotEnvSettingsSource._static_read_env_file(p, case_sensitive=True) == {'a': 'test', 'B': '123'}
 
 
 def test_read_env_file_syntax_wrong(tmp_path):
     p = tmp_path / '.env'
     p.write_text('NOT_AN_ASSIGNMENT')
 
-    assert _read_env_file(p, case_sensitive=True) == {'NOT_AN_ASSIGNMENT': None}
+    assert DotEnvSettingsSource._static_read_env_file(p, case_sensitive=True) == {'NOT_AN_ASSIGNMENT': None}
 
 
 def test_env_file_example(tmp_path):
@@ -1186,6 +1186,21 @@ def test_read_dotenv_vars_when_env_file_is_none():
         )._read_env_files()
         == {}
     )
+
+
+def test_dotenvsource_override(env):
+    class StdinDotEnvSettingsSource(DotEnvSettingsSource):
+        @override
+        def _read_env_file(self, file_path: Path) -> Dict[str, str]:
+            assert str(file_path) == '-'
+            return {'foo': 'stdin_foo', 'bar': 'stdin_bar'}
+
+        @override
+        def _read_env_files(self) -> Dict[str, str]:
+            return self._read_env_file(Path('-'))
+
+    source = StdinDotEnvSettingsSource(BaseSettings())
+    assert source._read_env_files() == {'foo': 'stdin_foo', 'bar': 'stdin_bar'}
 
 
 @pytest.mark.skipif(yaml, reason='PyYAML is installed')
