@@ -3992,7 +3992,7 @@ def test_settings_source_previous_state(env):
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: type[BaseSettings],
+            settings_cls: Type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
