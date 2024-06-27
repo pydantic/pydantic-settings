@@ -3971,3 +3971,35 @@ def test_case_insensitive_nested_list(env):
     env.set('nested__FOO', '["string1", "string2"]')
     s = Settings()
     assert s.model_dump() == {'nested': {'FOO': ['string1', 'string2']}}
+
+
+def test_settings_source_previous_state(env):
+    class SettingsSource(PydanticBaseSettingsSource):
+        def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+            pass
+
+        def __call__(self) -> dict[str, Any]:
+            previous_state = self.previous_state
+            if previous_state.get('one') == '1':
+                return {'two': '1'}
+
+            return {}
+
+    class Settings(BaseSettings):
+        one: bool = False
+        two: bool = False
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (SettingsSource(settings_cls), env_settings)
+
+    env.set('one', '1')
+    s = Settings()
+    assert s.two is True
