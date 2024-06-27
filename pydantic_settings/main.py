@@ -308,7 +308,12 @@ class BaseSettings(BaseModel):
                 )
                 sources = (cli_settings,) + sources
         if sources:
-            return deep_update(*reversed([source() for source in sources]))
+            state: dict[str, Any] = {}
+            for source in reversed(sources):
+                if isinstance(source, PydanticBaseSettingsSource):
+                    source._PydanticBaseSettingsSource__set_previous_state(state)  # type: ignore[attr-defined]
+                state = deep_update(state, source())
+            return state
         else:
             # no one should mean to do this, but I think returning an empty dict is marginally preferable
             # to an informative error and much better than a confusing error
