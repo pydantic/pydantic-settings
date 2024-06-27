@@ -3998,7 +3998,7 @@ def test_settings_source_previous_state(env):
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
-            return (SettingsSource(settings_cls), env_settings)
+            return (env_settings, SettingsSource(settings_cls))
 
     env.set('one', '1')
     s = Settings()

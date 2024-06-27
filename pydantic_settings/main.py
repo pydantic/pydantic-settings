@@ -309,10 +309,10 @@ class BaseSettings(BaseModel):
                 sources = (cli_settings,) + sources
         if sources:
             state: dict[str, Any] = {}
-            for source in reversed(sources):
+            for source in sources:
                 if isinstance(source, PydanticBaseSettingsSource):
                     source._PydanticBaseSettingsSource__set_previous_state(state)  # type: ignore[attr-defined]
-                state = deep_update(state, source())
+                state = deep_update(source(), state)
             return state
         else:
             # no one should mean to do this, but I think returning an empty dict is marginally preferable
