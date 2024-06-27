@@ -137,6 +137,9 @@ class PydanticBaseSettingsSource(ABC):
 
     @property
     def previous_state(self) -> dict[str, Any]:
+        """
+        The current state of the settings, populated by the previous settings sources.
+        """
         return self.__previous_state
 
     @abstractmethod
