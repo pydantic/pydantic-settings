@@ -3978,7 +3978,7 @@ def test_settings_source_previous_state(env):
         def get_field_value(self, field: FieldInfo, field_name: str) -> Any:
             pass
 
-        def __call__(self) -> dict[str, Any]:
+        def __call__(self) -> Dict[str, Any]:
             previous_state = self.previous_state
             if previous_state.get('one') == '1':
                 return {'two': '1'}
@@ -3997,7 +3997,7 @@ def test_settings_source_previous_state(env):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> tuple[PydanticBaseSettingsSource, ...]:
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
             return (env_settings, SettingsSource(settings_cls))
 
     env.set('one', '1')
