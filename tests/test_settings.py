@@ -3975,7 +3975,7 @@ def test_case_insensitive_nested_list(env):
 
 def test_settings_source_previous_state(env):
     class SettingsSource(PydanticBaseSettingsSource):
-        def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        def get_field_value(self, field: FieldInfo, field_name: str) -> Any:
             pass
 
         def __call__(self) -> dict[str, Any]:
