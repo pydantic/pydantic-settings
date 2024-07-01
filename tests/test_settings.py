@@ -1203,6 +1203,22 @@ def test_dotenvsource_override(env):
     assert source._read_env_files() == {'foo': 'stdin_foo', 'bar': 'stdin_bar'}
 
 
+# test that calling read_env_file issues a DeprecationWarning
+# TODO: remove this test once read_env_file is removed
+def test_read_env_file_deprecation(tmp_path):
+    from pydantic_settings.sources import read_env_file
+
+    base_env = tmp_path / '.env'
+    base_env.write_text(test_default_env_file)
+
+    with pytest.deprecated_call():
+        assert read_env_file(base_env) == {
+            'debug_mode': 'true',
+            'host': 'localhost',
+            'port': '8000',
+        }
+
+
 @pytest.mark.skipif(yaml, reason='PyYAML is installed')
 def test_yaml_not_installed(tmp_path):
     p = tmp_path / '.env'
