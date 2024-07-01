@@ -2350,7 +2350,7 @@ def test_cli_help_differentiation(capsys, monkeypatch):
             Cfg(_cli_parse_args=True)
 
         assert (
-            re.sub(r'0x\w+', '0xffffffff', capsys.readouterr().out, re.MULTILINE)
+            re.sub(r'0x\w+', '0xffffffff', capsys.readouterr().out, flags=re.MULTILINE)
             == f"""usage: example.py [-h] [--foo str] [--bar int] [--boo int]
 
 {ARGPARSE_OPTIONS_TEXT}:
@@ -2377,7 +2377,7 @@ def test_cli_help_string_format(capsys, monkeypatch):
             Cfg(_cli_parse_args=True)
 
         assert (
-            re.sub(r'0x\w+', '0xffffffff', capsys.readouterr().out, re.MULTILINE)
+            re.sub(r'0x\w+', '0xffffffff', capsys.readouterr().out, flags=re.MULTILINE)
             == f"""usage: example.py [-h] [--date_str str]
 
 {argparse_options_text}:
