@@ -1167,6 +1167,55 @@ Last, run your application inside a Docker container and supply your newly creat
 docker service create --name pydantic-with-secrets --secret my_secret_data pydantic-app:latest
 ```
 
+## Azure App Configuration
+
+Azure App Configuration is a service that allows you to centralize your application settings and secrets.
+
+By default, it loads all the values from Azure App Configuration, but you can assign a prefix to your application (e.g. `my_api__`) and load only the values for it using the `select_key` method. You can also use the `trim_key_prefix` method to remove the prefix from the value names.
+
+Furthermore, if some value references a secret stored in Azure Key Vault, you can use the `configure_key_vault` method to retrieve it.
+
+If you use Entra ID authentication, you can use the role `App Configuration Data Reader` to access the configurations and `Key Vault Secrets User` to access the secrets.
+
+The configuration of this settings source is almost idental to the the provided by ASP.NET Core, in case you want to read the official documentation to inform you about more complex uses, best practices, etc.
+
+```
+class Nested(BaseModel):
+    nested_field: str
+
+
+class Settings(BaseSettings):
+    not_nested: str
+    nested: Nested
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Any,
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource]:
+        return (
+            AzureAppConfigurationSettingsSource(
+                settings_cls,
+                lambda app_configuration_options: app_configuration_options.connect_with_url(
+                    os.environ['AZURE_APP_CONFIGURATION_URL'], DefaultAzureCredential()
+                )
+                .select_key('my_api__*')
+                .trim_key_prefix('my_api__')
+                .configure_key_vault(
+                    lambda key_vault_options: key_vault_options.set_credential(
+                        DefaultAzureCredential()
+                    )
+                ),
+            ),
+        )
+```
+
+
+
 ## Other settings source
 
 Other settings sources are available for common configuration files:
