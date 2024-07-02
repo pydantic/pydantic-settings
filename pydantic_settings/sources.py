@@ -1725,8 +1725,7 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
 
         for secret_name in secret_names:
             secret = self._secret_client.get_secret(secret_name)
-            secret_value = secret.value
-            env_vars[secret_name] = secret_value
+            env_vars[secret_name] = secret.value
 
         return env_vars
 
