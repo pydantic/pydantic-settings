@@ -34,7 +34,7 @@ from pydantic import (
 from pydantic._internal._repr import Representation
 from pydantic.fields import FieldInfo
 from pytest_mock import MockerFixture
-from typing_extensions import Annotated, Literal
+from typing_extensions import Annotated, Literal, override
 
 from pydantic_settings import (
     BaseSettings,
@@ -49,7 +49,7 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
     YamlConfigSettingsSource,
 )
-from pydantic_settings.sources import CliPositionalArg, CliSettingsSource, CliSubCommand, SettingsError, read_env_file
+from pydantic_settings.sources import CliPositionalArg, CliSettingsSource, CliSubCommand, SettingsError
 
 try:
     import dotenv
@@ -1039,15 +1039,15 @@ def test_read_env_file_case_sensitive(tmp_path):
     p = tmp_path / '.env'
     p.write_text('a="test"\nB=123')
 
-    assert read_env_file(p) == {'a': 'test', 'b': '123'}
-    assert read_env_file(p, case_sensitive=True) == {'a': 'test', 'B': '123'}
+    assert DotEnvSettingsSource._static_read_env_file(p) == {'a': 'test', 'b': '123'}
+    assert DotEnvSettingsSource._static_read_env_file(p, case_sensitive=True) == {'a': 'test', 'B': '123'}
 
 
 def test_read_env_file_syntax_wrong(tmp_path):
     p = tmp_path / '.env'
     p.write_text('NOT_AN_ASSIGNMENT')
 
-    assert read_env_file(p, case_sensitive=True) == {'NOT_AN_ASSIGNMENT': None}
+    assert DotEnvSettingsSource._static_read_env_file(p, case_sensitive=True) == {'NOT_AN_ASSIGNMENT': None}
 
 
 def test_env_file_example(tmp_path):
@@ -1186,6 +1186,37 @@ def test_read_dotenv_vars_when_env_file_is_none():
         )._read_env_files()
         == {}
     )
+
+
+def test_dotenvsource_override(env):
+    class StdinDotEnvSettingsSource(DotEnvSettingsSource):
+        @override
+        def _read_env_file(self, file_path: Path) -> Dict[str, str]:
+            assert str(file_path) == '-'
+            return {'foo': 'stdin_foo', 'bar': 'stdin_bar'}
+
+        @override
+        def _read_env_files(self) -> Dict[str, str]:
+            return self._read_env_file(Path('-'))
+
+    source = StdinDotEnvSettingsSource(BaseSettings())
+    assert source._read_env_files() == {'foo': 'stdin_foo', 'bar': 'stdin_bar'}
+
+
+# test that calling read_env_file issues a DeprecationWarning
+# TODO: remove this test once read_env_file is removed
+def test_read_env_file_deprecation(tmp_path):
+    from pydantic_settings.sources import read_env_file
+
+    base_env = tmp_path / '.env'
+    base_env.write_text(test_default_env_file)
+
+    with pytest.deprecated_call():
+        assert read_env_file(base_env) == {
+            'debug_mode': 'true',
+            'host': 'localhost',
+            'port': '8000',
+        }
 
 
 @pytest.mark.skipif(yaml, reason='PyYAML is installed')
