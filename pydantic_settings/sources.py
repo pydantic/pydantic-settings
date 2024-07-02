@@ -83,6 +83,19 @@ def import_toml() -> None:
         import tomllib
 
 
+def import_azure_key_vault() -> None:
+    global TokenCredential
+    global SecretClient
+
+    try:
+        from azure.core.credentials import TokenCredential
+        from azure.keyvault.secrets import SecretClient
+    except ImportError as e:
+        raise ImportError(
+            'Azure Key Vault dependencies are not installed, run `pip install pydantic-settings[azure-key-vault]`'
+        ) from e
+
+
 DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
 PathType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
 DEFAULT_PATH: PathType = Path('')
@@ -1693,6 +1706,47 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         import_yaml()
         with open(file_path, encoding=self.yaml_file_encoding) as yaml_file:
             return yaml.safe_load(yaml_file)
+
+
+class AzureKeyVaultSettingsSource(EnvSettingsSource):
+    _url: str
+    _credential: TokenCredential  # type: ignore
+    _secret_client: SecretClient  # type: ignore
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        url: str,
+        credential: TokenCredential,  # type: ignore
+        env_parse_none_str: str | None = None,
+        env_parse_enums: bool | None = None,
+    ) -> None:
+        import_azure_key_vault()
+        self._url = url
+        self._credential = credential
+        super().__init__(
+            settings_cls,
+            case_sensitive=True,
+            env_prefix='',
+            env_nested_delimiter='--',
+            env_ignore_empty=False,
+            env_parse_none_str=env_parse_none_str,
+            env_parse_enums=env_parse_enums,
+        )
+
+    def _load_env_vars(self) -> Mapping[str, str | None]:
+        self._secret_client = SecretClient(vault_url=self._url, credential=self._credential)  # type: ignore
+        secret_names: list[str] = [secret.name for secret in self._secret_client.list_properties_of_secrets()]
+        env_vars: dict[str, str | None] = {}
+
+        for secret_name in secret_names:
+            secret = self._secret_client.get_secret(secret_name)
+            env_vars[secret_name] = secret.value
+
+        return env_vars
+
+    def __repr__(self) -> str:
+        return f'AzureKeyVaultSettingsSource(url={self._url!r}, ' f'env_nested_delimiter={self.env_nested_delimiter!r})'
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
