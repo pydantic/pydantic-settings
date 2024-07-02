@@ -1676,8 +1676,7 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
     def _read_file(self, file_path: Path) -> dict[str, Any]:
         import_yaml()
         with open(file_path, encoding=self.yaml_file_encoding) as yaml_file:
-            yaml_doc = yaml.safe_load(yaml_file)
-            return yaml_doc if yaml_doc is not None else {}
+            return yaml.safe_load(yaml_file) or {}
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
