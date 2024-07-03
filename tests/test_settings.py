@@ -3485,6 +3485,29 @@ def test_yaml_no_file():
     assert s.model_dump() == {}
 
 
+@pytest.mark.skipif(yaml is None, reason='pyYaml is not installed')
+def test_yaml_empty_file(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(yaml_file=p)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.model_dump() == {}
+
+
 @pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
 def test_toml_file(tmp_path):
     p = tmp_path / '.env'
