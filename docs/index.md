@@ -1488,30 +1488,32 @@ print(Settings())
 
 #### Accesing the result of previous sources
 
-Each source of settings can access the output of the previous ones:
+Each source of settings can access the output of the previous ones.
 
 ```python
 from typing import Any, Dict, Tuple
 
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
+from pydantic.fields import FieldInfo
+
+from pydantic_settings import PydanticBaseSettingsSource
 
 
 class MyCustomSource(PydanticBaseSettingsSource):
     def get_field_value(
         self, field: FieldInfo, field_name: str
-    ) -> Tuple[Any, str, bool]:
-        ...
+    ) -> Tuple[Any, str, bool]: ...
 
     def __call__(self) -> Dict[str, Any]:
         # Retrieve the aggregated settings from previous sources
         previous_state = self.previous_state
+        previous_state.get('some_setting')
 
         # Retrive settings from all sources individually
         # self.previous_state["SettingsSourceName"]: Dict[str, Any]
-        previous_states = self.previous_state
+        previous_states = self.previous_states
+        previous_states['SomeSettingsSource'].get('some_setting')
 
         # Your code here...
-
 ```
 
 ### Removing sources
