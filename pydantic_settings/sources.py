@@ -766,6 +766,30 @@ class DotEnvSettingsSource(EnvSettingsSource):
     def _load_env_vars(self) -> Mapping[str, str | None]:
         return self._read_env_files()
 
+    @staticmethod
+    def _static_read_env_file(
+        file_path: Path,
+        *,
+        encoding: str | None = None,
+        case_sensitive: bool = False,
+        ignore_empty: bool = False,
+        parse_none_str: str | None = None,
+    ) -> Mapping[str, str | None]:
+        file_vars: dict[str, str | None] = dotenv_values(file_path, encoding=encoding or 'utf8')
+        return parse_env_vars(file_vars, case_sensitive, ignore_empty, parse_none_str)
+
+    def _read_env_file(
+        self,
+        file_path: Path,
+    ) -> Mapping[str, str | None]:
+        return self._static_read_env_file(
+            file_path,
+            encoding=self.env_file_encoding,
+            case_sensitive=self.case_sensitive,
+            ignore_empty=self.env_ignore_empty,
+            parse_none_str=self.env_parse_none_str,
+        )
+
     def _read_env_files(self) -> Mapping[str, str | None]:
         env_files = self.env_file
         if env_files is None:
@@ -778,15 +802,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
         for env_file in env_files:
             env_path = Path(env_file).expanduser()
             if env_path.is_file():
-                dotenv_vars.update(
-                    read_env_file(
-                        env_path,
-                        encoding=self.env_file_encoding,
-                        case_sensitive=self.case_sensitive,
-                        ignore_empty=self.env_ignore_empty,
-                        parse_none_str=self.env_parse_none_str,
-                    )
-                )
+                dotenv_vars.update(self._read_env_file(env_path))
 
         return dotenv_vars
 
@@ -1689,7 +1705,7 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
     def _read_file(self, file_path: Path) -> dict[str, Any]:
         import_yaml()
         with open(file_path, encoding=self.yaml_file_encoding) as yaml_file:
-            return yaml.safe_load(yaml_file)
+            return yaml.safe_load(yaml_file) or {}
 
 
 class AzureKeyVaultSettingsSource(EnvSettingsSource):
@@ -1762,8 +1778,17 @@ def read_env_file(
     ignore_empty: bool = False,
     parse_none_str: str | None = None,
 ) -> Mapping[str, str | None]:
-    file_vars: dict[str, str | None] = dotenv_values(file_path, encoding=encoding or 'utf8')
-    return parse_env_vars(file_vars, case_sensitive, ignore_empty, parse_none_str)
+    warnings.warn(
+        'read_env_file will be removed in the next version, use DotEnvSettingsSource._static_read_env_file if you must',
+        DeprecationWarning,
+    )
+    return DotEnvSettingsSource._static_read_env_file(
+        file_path,
+        encoding=encoding,
+        case_sensitive=case_sensitive,
+        ignore_empty=ignore_empty,
+        parse_none_str=parse_none_str,
+    )
 
 
 def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
