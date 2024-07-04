@@ -1486,6 +1486,34 @@ print(Settings())
 #> foobar='test'
 ```
 
+#### Accesing the result of previous sources
+
+Each source of settings can access the output of the previous ones:
+
+```python
+from typing import Any, Dict, Tuple
+
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
+
+
+class MyCustomSource(PydanticBaseSettingsSource):
+    def get_field_value(
+        self, field: FieldInfo, field_name: str
+    ) -> Tuple[Any, str, bool]:
+        ...
+
+    def __call__(self) -> Dict[str, Any]:
+        # Retrieve the aggregated settings from previous sources
+        previous_state = self.previous_state
+
+        # Retrive settings from all sources individually
+        # self.previous_state["SettingsSourceName"]: Dict[str, Any]
+        previous_states = self.previous_state
+
+        # Your code here...
+
+```
+
 ### Removing sources
 
 You might also want to disable a source:
