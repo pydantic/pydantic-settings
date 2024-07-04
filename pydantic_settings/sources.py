@@ -126,21 +126,21 @@ class PydanticBaseSettingsSource(ABC):
     def __init__(self, settings_cls: type[BaseSettings]):
         self.settings_cls = settings_cls
         self.config = settings_cls.model_config
-        self.__previous_state: dict[str, Any] = {}
+        self._previous_state: dict[str, Any] = {}
 
-    def __set_previous_state(self, state: dict[str, Any]) -> None:
+    def _set_previous_state(self, state: dict[str, Any]) -> None:
         """
         Record the state of settings from the previous settings sources. This should
         be called right before __call__.
         """
-        self.__previous_state = state
+        self._previous_state = state
 
     @property
     def previous_state(self) -> dict[str, Any]:
         """
         The current state of the settings, populated by the previous settings sources.
         """
-        return self.__previous_state
+        return self._previous_state
 
     @abstractmethod
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:

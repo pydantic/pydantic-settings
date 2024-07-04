@@ -311,7 +311,7 @@ class BaseSettings(BaseModel):
             state: dict[str, Any] = {}
             for source in sources:
                 if isinstance(source, PydanticBaseSettingsSource):
-                    source._PydanticBaseSettingsSource__set_previous_state(state)  # type: ignore[attr-defined]
+                    source._set_previous_state(state)
                 state = deep_update(source(), state)
             return state
         else:
