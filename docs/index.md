@@ -1505,13 +1505,13 @@ class MyCustomSource(PydanticBaseSettingsSource):
 
     def __call__(self) -> Dict[str, Any]:
         # Retrieve the aggregated settings from previous sources
-        previous_state = self.previous_state
-        previous_state.get('some_setting')
+        current_state = self.current_state
+        current_state.get('some_setting')
 
         # Retrive settings from all sources individually
-        # self.previous_state["SettingsSourceName"]: Dict[str, Any]
-        previous_states = self.previous_states
-        previous_states['SomeSettingsSource'].get('some_setting')
+        # self.settings_sources_data["SettingsSourceName"]: Dict[str, Any]
+        settings_sources_data = self.settings_sources_data
+        settings_sources_data['SomeSettingsSource'].get('some_setting')
 
         # Your code here...
 ```
