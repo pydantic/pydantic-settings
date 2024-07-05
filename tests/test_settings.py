@@ -4027,14 +4027,14 @@ def test_case_insensitive_nested_list(env):
     assert s.model_dump() == {'nested': {'FOO': ['string1', 'string2']}}
 
 
-def test_settings_source_previous_state(env):
+def test_settings_source_current_state(env):
     class SettingsSource(PydanticBaseSettingsSource):
         def get_field_value(self, field: FieldInfo, field_name: str) -> Any:
             pass
 
         def __call__(self) -> Dict[str, Any]:
-            previous_state = self.previous_state
-            if previous_state.get('one') == '1':
+            current_state = self.current_state
+            if current_state.get('one') == '1':
                 return {'two': '1'}
 
             return {}
@@ -4059,14 +4059,14 @@ def test_settings_source_previous_state(env):
     assert s.two is True
 
 
-def test_settings_source_previous_states(env):
+def test_settings_source_settings_sources_data(env):
     class SettingsSource(PydanticBaseSettingsSource):
         def get_field_value(self, field: FieldInfo, field_name: str) -> Any:
             pass
 
         def __call__(self) -> Dict[str, Any]:
-            previous_states = self.previous_states
-            if previous_states == {
+            settings_sources_data = self.settings_sources_data
+            if settings_sources_data == {
                 'InitSettingsSource': {'one': True, 'two': True},
                 'EnvSettingsSource': {'one': '1'},
                 'function_settings_source': {'three': 'false'},

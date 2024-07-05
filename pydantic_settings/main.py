@@ -312,8 +312,8 @@ class BaseSettings(BaseModel):
             states: dict[str, dict[str, Any]] = {}
             for source in sources:
                 if isinstance(source, PydanticBaseSettingsSource):
-                    source._set_previous_state(state)
-                    source._set_previous_states(states)
+                    source._set_current_state(state)
+                    source._set_settings_sources_data(states)
 
                 source_name = source.__name__ if hasattr(source, '__name__') else type(source).__name__
                 source_state = source()
