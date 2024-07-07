@@ -126,6 +126,36 @@ class PydanticBaseSettingsSource(ABC):
     def __init__(self, settings_cls: type[BaseSettings]):
         self.settings_cls = settings_cls
         self.config = settings_cls.model_config
+        self._current_state: dict[str, Any] = {}
+        self._settings_sources_data: dict[str, dict[str, Any]] = {}
+
+    def _set_current_state(self, state: dict[str, Any]) -> None:
+        """
+        Record the state of settings from the previous settings sources. This should
+        be called right before __call__.
+        """
+        self._current_state = state
+
+    def _set_settings_sources_data(self, states: dict[str, dict[str, Any]]) -> None:
+        """
+        Record the state of settings from all previous settings sources. This should
+        be called right before __call__.
+        """
+        self._settings_sources_data = states
+
+    @property
+    def current_state(self) -> dict[str, Any]:
+        """
+        The current state of the settings, populated by the previous settings sources.
+        """
+        return self._current_state
+
+    @property
+    def settings_sources_data(self) -> dict[str, dict[str, Any]]:
+        """
+        The state of all previous settings sources.
+        """
+        return self._settings_sources_data
 
     @abstractmethod
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
