@@ -873,8 +873,7 @@ import sys
 from pydantic_settings import BaseSettings, SettingsError
 
 
-class Settings(BaseSettings, cli_parse_args=True, cli_exit_on_error=False):
-    ...
+class Settings(BaseSettings, cli_parse_args=True, cli_exit_on_error=False): ...
 
 
 try:
