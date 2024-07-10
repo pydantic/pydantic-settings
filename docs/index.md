@@ -1175,6 +1175,7 @@ Other settings sources are available for common configuration files:
 - `PyprojectTomlConfigSettingsSource` using *(optional)* `pyproject_toml_depth` and *(optional)* `pyproject_toml_table_header` arguments
 - `TomlConfigSettingsSource` using `toml_file` argument
 - `YamlConfigSettingsSource` using `yaml_file` and yaml_file_encoding arguments
+- `EnvYamlConfigSettingsSource` using `yaml_file` and strict arguments
 
 You can also provide multiple files by providing a list of path:
 ```py

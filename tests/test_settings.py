@@ -40,6 +40,7 @@ from pydantic_settings import (
     BaseSettings,
     DotEnvSettingsSource,
     EnvSettingsSource,
+    EnvYamlConfigSettingsSource,
     InitSettingsSource,
     JsonConfigSettingsSource,
     PydanticBaseSettingsSource,
@@ -59,6 +60,10 @@ try:
     import yaml
 except ImportError:
     yaml = None
+try:
+    import envyaml
+except ImportError:
+    envyaml = None
 try:
     import tomli
 except ImportError:
@@ -1244,6 +1249,34 @@ def test_yaml_not_installed(tmp_path):
             return (YamlConfigSettingsSource(settings_cls),)
 
     with pytest.raises(ImportError, match=r'^PyYAML is not installed, run `pip install pydantic-settings\[yaml\]`$'):
+        Settings()
+
+
+@pytest.mark.skipif(envyaml, reason='Envyaml is installed')
+def test_envyaml_not_installed(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text(
+        """
+    foobar: "Hello"
+    """
+    )
+
+    class Settings(BaseSettings):
+        foobar: str
+        model_config = SettingsConfigDict(yaml_file=p)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (EnvYamlConfigSettingsSource(settings_cls),)
+
+    with pytest.raises(ImportError, match=r'^Envyaml is not installed, run `pip install pydantic-settings\[yaml\]`$'):
         Settings()
 
 
@@ -3466,6 +3499,87 @@ def test_yaml_file(tmp_path):
 
 
 @pytest.mark.skipif(yaml is None, reason='pyYaml is not installed')
+def test_envyaml_file(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text(
+        """
+    foobar: ${FOOBAR}
+    null_field:
+    nested:
+        nested_field: ${NESTED_FIELD}
+    """
+    )
+    os.environ['FOOBAR'] = 'Hello'
+    os.environ['NESTED_FIELD'] = 'world!'
+
+    class Nested(BaseModel):
+        nested_field: str
+
+    class Settings(BaseSettings):
+        foobar: str
+        nested: Nested
+        null_field: Union[str, None]
+        model_config = SettingsConfigDict(yaml_file=p)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (EnvYamlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.foobar == 'Hello'
+    assert s.nested.nested_field == 'world!'
+
+    del os.environ['FOOBAR']
+    del os.environ['NESTED_FIELD']
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYaml is not installed')
+def test_envyaml_file_env_not_defined(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text(
+        """
+    foobar: ${FOOBAR}
+    null_field:
+    nested:
+        nested_field: ${NESTED_FIELD}
+    """
+    )
+    os.environ['FOOBAR'] = 'Hello'
+
+    class Nested(BaseModel):
+        nested_field: str
+
+    class Settings(BaseSettings):
+        foobar: str
+        nested: Nested
+        null_field: Union[str, None]
+        model_config = SettingsConfigDict(yaml_file=p)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (EnvYamlConfigSettingsSource(settings_cls),)
+
+    with pytest.raises(ValueError):
+        Settings()
+
+    del os.environ['FOOBAR']
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYaml is not installed')
 def test_yaml_no_file():
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(yaml_file=None)
@@ -3480,6 +3594,26 @@ def test_yaml_no_file():
             file_secret_settings: PydanticBaseSettingsSource,
         ) -> Tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.model_dump() == {}
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYaml is not installed')
+def test_envyaml_no_file():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(yaml_file=None)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (EnvYamlConfigSettingsSource(settings_cls),)
 
     s = Settings()
     assert s.model_dump() == {}
@@ -3503,6 +3637,29 @@ def test_yaml_empty_file(tmp_path):
             file_secret_settings: PydanticBaseSettingsSource,
         ) -> Tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.model_dump() == {}
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYaml is not installed')
+def test_envyaml_empty_file(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(yaml_file=p)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (EnvYamlConfigSettingsSource(settings_cls),)
 
     s = Settings()
     assert s.model_dump() == {}
@@ -3849,6 +4006,45 @@ def test_multiple_file_yaml(tmp_path):
 
     s = Settings()
     assert s.model_dump() == {'yaml3': 3, 'yaml4': 4}
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
+def test_multiple_file_envyaml(tmp_path):
+    p3 = tmp_path / '.env.yaml3'
+    p4 = tmp_path / '.env.yaml4'
+    p3.write_text(
+        """
+    yaml3: ${YAML3}
+    """
+    )
+    p4.write_text(
+        """
+    yaml4: ${YAML4}
+    """
+    )
+    os.environ['YAML3'] = '3'
+    os.environ['YAML4'] = '4'
+
+    class Settings(BaseSettings):
+        yaml3: int
+        yaml4: int
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (EnvYamlConfigSettingsSource(settings_cls, yaml_file=[p3, p4]),)
+
+    s = Settings()
+    assert s.model_dump() == {'yaml3': 3, 'yaml4': 4}
+
+    del os.environ['YAML3']
+    del os.environ['YAML4']
 
 
 def test_multiple_file_json(tmp_path):

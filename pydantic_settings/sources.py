@@ -47,12 +47,14 @@ if TYPE_CHECKING:
         import tomllib
     else:
         tomllib = None
+    import envyaml
     import tomli
     import yaml
 
     from pydantic_settings.main import BaseSettings
 else:
     yaml = None
+    envyaml = None
     tomllib = None
     tomli = None
 
@@ -65,6 +67,16 @@ def import_yaml() -> None:
         import yaml
     except ImportError as e:
         raise ImportError('PyYAML is not installed, run `pip install pydantic-settings[yaml]`') from e
+
+
+def import_envyaml() -> None:
+    global envyaml
+    if envyaml is not None:
+        return
+    try:
+        import envyaml
+    except ImportError as e:
+        raise ImportError('Envyaml is not installed, run `pip install pydantic-settings[yaml]`') from e
 
 
 def import_toml() -> None:
@@ -737,7 +749,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                         if not allow_json_failure:
                             raise e
             if isinstance(env_var, dict):
-                if last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] is {}:
+                if last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] == {}:
                     env_var[last_key] = env_val
 
         return result
@@ -1723,6 +1735,32 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         import_yaml()
         with open(file_path, encoding=self.yaml_file_encoding) as yaml_file:
             return yaml.safe_load(yaml_file) or {}
+
+
+class EnvYamlConfigSettingsSource(YamlConfigSettingsSource):
+    """
+    A source class that loads variables from a yaml file with env substitution
+    """
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        yaml_file: PathType | None = DEFAULT_PATH,
+        strict: bool = True,
+    ):
+        self._strict = strict
+        super().__init__(settings_cls, yaml_file)
+
+    def _read_file(self, file_path: Path) -> dict[str, Any]:
+        import_yaml()
+        import_envyaml()
+        return dict(
+            envyaml.EnvYAML._EnvYAML__read_yaml_file(
+                file_path=file_path,
+                cfg=os.environ,
+                strict=self._strict,
+            )
+        )
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:

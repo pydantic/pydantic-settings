@@ -46,7 +46,7 @@ dependencies = [
 dynamic = ['version']
 
 [project.optional-dependencies]
-yaml = ["pyyaml>=6.0.1"]
+yaml = ["pyyaml>=6.0.1", "envyaml>=1.10.211231"]
 toml = ["tomli>=2.0.1"]
 
 [project.urls]
@@ -128,6 +128,7 @@ disallow_untyped_defs = true
 [[tool.mypy.overrides]]
 module = [
     'dotenv.*',
+    'envyaml.*'
 ]
 ignore_missing_imports = true
 

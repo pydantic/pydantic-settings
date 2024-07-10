@@ -5,6 +5,7 @@ from .sources import (
     CliSubCommand,
     DotEnvSettingsSource,
     EnvSettingsSource,
+    EnvYamlConfigSettingsSource,
     InitSettingsSource,
     JsonConfigSettingsSource,
     PydanticBaseSettingsSource,
@@ -30,6 +31,7 @@ __all__ = (
     'SettingsConfigDict',
     'TomlConfigSettingsSource',
     'YamlConfigSettingsSource',
+    'EnvYamlConfigSettingsSource',
     '__version__',
 )
 
