@@ -93,6 +93,10 @@ DEFAULT_PATH: PathType = Path('')
 ENV_FILE_SENTINEL: DotenvType = Path('')
 
 
+class SettingsError(ValueError):
+    pass
+
+
 class _CliSubCommand:
     pass
 
@@ -102,7 +106,8 @@ class _CliPositionalArg:
 
 
 class _CliInternalArgParser(ArgumentParser):
-    pass
+    def error(self, message):
+        raise SettingsError(f'error parsing CLI: {message}')
 
 
 T = TypeVar('T')
@@ -111,10 +116,6 @@ CliPositionalArg = Annotated[T, _CliPositionalArg]
 
 
 class EnvNoneType(str):
-    pass
-
-
-class SettingsError(ValueError):
     pass
 
 

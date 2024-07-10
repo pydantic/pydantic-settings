@@ -878,7 +878,7 @@ import sys
 
 from pydantic import Field
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsError
 
 
 class Settings(BaseSettings, cli_parse_args=True, cli_enforce_required=True):
@@ -890,13 +890,9 @@ os.environ['MY_REQUIRED_FIELD'] = 'hello from environment'
 try:
     sys.argv = ['example.py']
     Settings()
-except SystemExit as e:
+except SettingsError as e:
     print(e)
-    #> 2
-"""
-usage: example.py [-h] --my_required_field str
-example.py: error: the following arguments are required: --my_required_field
-"""
+    #> error parsing CLI: the following arguments are required: --my_required_field
 ```
 
 #### Change the None Type Parse String
