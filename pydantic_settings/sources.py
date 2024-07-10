@@ -106,7 +106,7 @@ class _CliPositionalArg:
 
 
 class _CliInternalArgParser(ArgumentParser):
-    def error(self, message):
+    def error(self, message: str):
         raise SettingsError(f'error parsing CLI: {message}')
 
 
