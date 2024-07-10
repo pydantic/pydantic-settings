@@ -2358,7 +2358,7 @@ def test_cli_case_insensitve_arg():
     cfg = Cfg(_cli_parse_args=['--Foo=--VAL', '--Bar', '"--VAL"'], _case_sensitive=True)
     assert cfg.model_dump() == {'Foo': '--VAL', 'Bar': '"--VAL"'}
 
-    with pytest.raises(SettingsError):
+    with pytest.raises(SettingsError, match='error parsing CLI: unrecognized arguments: --FOO=--VAL --BAR "--VAL"'):
         Cfg(_cli_parse_args=['--FOO=--VAL', '--BAR', '"--VAL"'], _case_sensitive=True)
 
     with pytest.raises(SettingsError, match='Case-insensitive matching is only supported on the internal root parser'):
