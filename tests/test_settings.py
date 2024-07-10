@@ -3126,8 +3126,7 @@ def test_cli_enforce_required(env):
 
 
 def test_cli_exit_on_error(capsys, monkeypatch):
-    class Settings(BaseSettings, cli_parse_args=True):
-        ...
+    class Settings(BaseSettings, cli_parse_args=True): ...
 
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--bad-arg'])
