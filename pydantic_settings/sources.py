@@ -21,6 +21,7 @@ from typing import (
     Generic,
     List,
     Mapping,
+    NoReturn,
     Sequence,
     Tuple,
     TypeVar,
@@ -106,7 +107,7 @@ class _CliPositionalArg:
 
 
 class _CliInternalArgParser(ArgumentParser):
-    def error(self, message: str):
+    def error(self, message: str) -> NoReturn:
         raise SettingsError(f'error parsing CLI: {message}')
 
 
