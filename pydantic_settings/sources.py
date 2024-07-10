@@ -21,7 +21,6 @@ from typing import (
     Generic,
     List,
     Mapping,
-    NoReturn,
     Sequence,
     Tuple,
     TypeVar,
@@ -107,8 +106,14 @@ class _CliPositionalArg:
 
 
 class _CliInternalArgParser(ArgumentParser):
-    def error(self, message: str) -> NoReturn:
-        raise SettingsError(f'error parsing CLI: {message}')
+    def __init__(self, cli_exit_on_error: bool = True, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._cli_exit_on_error = cli_exit_on_error
+
+    def error(self, message: str) -> None:
+        if not self._cli_exit_on_error:
+            raise SettingsError(f'error parsing CLI: {message}')
+        super().error(message)
 
 
 T = TypeVar('T')
@@ -878,6 +883,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_enforce_required: Enforce required fields at the CLI. Defaults to `False`.
         cli_use_class_docs_for_groups: Use class docstrings in CLI group help text instead of field descriptions.
             Defaults to `False`.
+        cli_exit_on_error: Determines whether or not the internal parser exits with error info when an error occurs.
+            Defaults to `True`.
         cli_prefix: Prefix for command line arguments added under the root parser. Defaults to "".
         case_sensitive: Whether CLI "--arg" names should be read with case-sensitivity. Defaults to `True`.
             Note: Case-insensitive matching is only supported on the internal root parser and does not apply to CLI
@@ -904,6 +911,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_avoid_json: bool | None = None,
         cli_enforce_required: bool | None = None,
         cli_use_class_docs_for_groups: bool | None = None,
+        cli_exit_on_error: bool | None = None,
         cli_prefix: str | None = None,
         case_sensitive: bool | None = True,
         root_parser: Any = None,
@@ -938,6 +946,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if cli_use_class_docs_for_groups is not None
             else settings_cls.model_config.get('cli_use_class_docs_for_groups', False)
         )
+        self.cli_exit_on_error = (
+            cli_exit_on_error
+            if cli_exit_on_error is not None
+            else settings_cls.model_config.get('cli_exit_on_error', True)
+        )
         self.cli_prefix = cli_prefix if cli_prefix is not None else settings_cls.model_config.get('cli_prefix', '')
         if self.cli_prefix:
             if cli_prefix.startswith('.') or cli_prefix.endswith('.') or not cli_prefix.replace('.', '').isidentifier():  # type: ignore
@@ -958,7 +971,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         )
 
         root_parser = (
-            _CliInternalArgParser(prog=self.cli_prog_name, description=settings_cls.__doc__)
+            _CliInternalArgParser(
+                cli_exit_on_error=self.cli_exit_on_error, prog=self.cli_prog_name, description=settings_cls.__doc__
+            )
             if root_parser is None
             else root_parser
         )

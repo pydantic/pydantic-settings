@@ -2347,8 +2347,8 @@ def test_cli_alias_exceptions(capsys, monkeypatch):
         BadCliPositionalArg(_cli_parse_args=True)
 
 
-def test_cli_case_insensitve_arg():
-    class Cfg(BaseSettings):
+def test_cli_case_insensitive_arg():
+    class Cfg(BaseSettings, cli_exit_on_error=False):
         Foo: str
         Bar: str
 
@@ -3110,7 +3110,7 @@ sub_model options:
 
 
 def test_cli_enforce_required(env):
-    class Settings(BaseSettings):
+    class Settings(BaseSettings, cli_exit_on_error=False):
         my_required_field: str
 
     env.set('MY_REQUIRED_FIELD', 'hello from environment')
@@ -3123,6 +3123,26 @@ def test_cli_enforce_required(env):
         SettingsError, match='error parsing CLI: the following arguments are required: --my_required_field'
     ):
         Settings(_cli_parse_args=[], _cli_enforce_required=True).model_dump()
+
+
+def test_cli_exit_on_error(capsys, monkeypatch):
+    class Settings(BaseSettings, cli_parse_args=True):
+        ...
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--bad-arg'])
+
+        with pytest.raises(SystemExit):
+            Settings()
+        assert (
+            capsys.readouterr().err
+            == """usage: example.py [-h]
+example.py: error: unrecognized arguments: --bad-arg
+"""
+        )
+
+        with pytest.raises(SettingsError, match='error parsing CLI: unrecognized arguments: --bad-arg'):
+            Settings(_cli_exit_on_error=False)
 
 
 @pytest.mark.parametrize('parser_type', [pytest.Parser, argparse.ArgumentParser, CliDummyParser])
