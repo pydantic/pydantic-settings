@@ -2270,9 +2270,9 @@ def test_cli_alias_arg(capsys, monkeypatch, avoid_json):
 
     cfg = Cfg(
         _cli_parse_args=[
-            '--a',
+            '-a',
             'a',
-            '--b',
+            '-b',
             'b',
             '--str',
             'str',

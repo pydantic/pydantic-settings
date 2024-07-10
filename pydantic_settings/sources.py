@@ -1428,10 +1428,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     if isinstance(group, dict):
                         group = self._add_argument_group(parser, **group)
                     added_args += list(arg_names)
-                    self._add_argument(group, *(f'{arg_flag}{name}' for name in arg_names), **kwargs)
+                    self._add_argument(group, *(f'{arg_flag[:len(name)]}{name}' for name in arg_names), **kwargs)
                 else:
                     added_args += list(arg_names)
-                    self._add_argument(parser, *(f'{arg_flag}{name}' for name in arg_names), **kwargs)
+                    self._add_argument(parser, *(f'{arg_flag[:len(name)]}{name}' for name in arg_names), **kwargs)
 
         self._add_parser_alias_paths(parser, alias_path_args, added_args, arg_prefix, subcommand_prefix, group)
         return parser
