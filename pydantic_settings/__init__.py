@@ -12,6 +12,7 @@ from .sources import (
     SecretsSettingsSource,
     TomlConfigSettingsSource,
     YamlConfigSettingsSource,
+    get_subcommand,
 )
 from .version import VERSION
 
@@ -30,6 +31,7 @@ __all__ = (
     'SettingsConfigDict',
     'TomlConfigSettingsSource',
     'YamlConfigSettingsSource',
+    'get_subcommand',
     '__version__',
 )
 

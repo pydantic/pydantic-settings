@@ -110,6 +110,19 @@ CliSubCommand = Annotated[Union[T, None], _CliSubCommand]
 CliPositionalArg = Annotated[T, _CliPositionalArg]
 
 
+def get_subcommand(model: BaseModel, is_required: bool=False) -> Any:
+    subcommands: list[str] = []
+    fields = model.__pydantic_fields__ if is_pydantic_dataclass(type(model)) else model.model_fields
+    for field_name, field_info in fields.items():
+        if _CliSubCommand in field_info.metadata:
+            if getattr(model, field_name) is not None:
+                return getattr(model, field_name)
+            subcommands.append(field_name)
+    if is_required:
+        raise SettingsError(f'CLI subcommand is required {{{", ".join(subcommands)}}}')
+    return None
+
+
 class EnvNoneType(str):
     pass
 
