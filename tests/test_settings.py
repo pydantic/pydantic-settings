@@ -2790,7 +2790,7 @@ def test_cli_subcommand_with_positionals():
         'init': None,
         'plugins': None,
     }
-    assert get_subcommand(git) == None
+    assert get_subcommand(git) is None
     with pytest.raises(SettingsError):
         get_subcommand(git, is_required=True)
 
