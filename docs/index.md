@@ -713,6 +713,9 @@ Subcommands and positional arguments are expressed using the `CliSubCommand` and
 annotations can only be applied to required fields (i.e. fields that do not have a default value). Furthermore,
 subcommands must be a valid type derived from either a pydantic `BaseModel` or pydantic.dataclasses `dataclass`.
 
+Parsed subcommands can be retrieved from model instances using the `get_subcommand` function. If a subcommand is
+required, use the `is_required` flag to raise a `SettingsError` if no subcommand is found.
+
 !!! note
     CLI settings subcommands are limited to a single subparser per model. In other words, all subcommands for a model
     are grouped under a single subparser; it does not allow for multiple subparsers with each subparser having its own
@@ -726,113 +729,65 @@ subcommands must be a valid type derived from either a pydantic `BaseModel` or p
 import sys
 
 from pydantic import BaseModel, Field
-from pydantic.dataclasses import dataclass
 
 from pydantic_settings import (
     BaseSettings,
     CliPositionalArg,
     CliSubCommand,
+    get_subcommand,
 )
 
 
-@dataclass
-class FooPlugin:
+class FooPlugin(BaseModel):
     """git-plugins-foo - Extra deep foo plugin command"""
 
-    x_feature: bool = Field(default=False, description='Enable "X" feature')
+    feature: bool = Field(default=False, description='Enable feature')
+
+    def plugin_main(self) -> BaseModel:
+        """Run this method if selected and return self"""
+        return self
 
 
-@dataclass
-class BarPlugin:
-    """git-plugins-bar - Extra deep bar plugin command"""
-
-    y_feature: bool = Field(default=False, description='Enable "Y" feature')
-
-
-@dataclass
-class Plugins:
+class Plugins(BaseModel):
     """git-plugins - Fake plugins for GIT"""
 
     foo: CliSubCommand[FooPlugin] = Field(description='Foo is fake plugin')
 
-    bar: CliSubCommand[BarPlugin] = Field(description='Bar is fake plugin')
+    def sub_main(self) -> BaseModel:
+        """Run this method if selected and return fake plugin command"""
+        return get_subcommand(self, is_required=True).plugin_main()
 
 
 class Clone(BaseModel):
     """git-clone - Clone a repository into a new directory"""
 
     repository: CliPositionalArg[str] = Field(description='The repo ...')
-
     directory: CliPositionalArg[str] = Field(description='The dir ...')
-
     local: bool = Field(default=False, description='When the repo ...')
+
+    def sub_main(self) -> BaseModel:
+        """Run this method if selected and return self"""
+        return self
 
 
 class Git(BaseSettings, cli_parse_args=True, cli_prog_name='git'):
     """git - The stupid content tracker"""
 
     clone: CliSubCommand[Clone] = Field(description='Clone a repo ...')
-
     plugins: CliSubCommand[Plugins] = Field(description='Fake GIT plugins')
 
-
-try:
-    sys.argv = ['example.py', '--help']
-    Git()
-except SystemExit as e:
-    print(e)
-    #> 0
-"""
-usage: git [-h] {clone,plugins} ...
-
-git - The stupid content tracker
-
-options:
-  -h, --help       show this help message and exit
-
-subcommands:
-  {clone,plugins}
-    clone          Clone a repo ...
-    plugins        Fake GIT plugins
-"""
+    def main(self) -> BaseModel:
+        """Run CLI main method and return sub cmd"""
+        return get_subcommand(self, is_required=True).sub_main()
 
 
-try:
-    sys.argv = ['example.py', 'clone', '--help']
-    Git()
-except SystemExit as e:
-    print(e)
-    #> 0
-"""
-usage: git clone [-h] [--local bool] [--shared bool] REPOSITORY DIRECTORY
+sys.argv = ['example.py', 'clone', 'repo', 'dest']
+print(Git().main().model_dump())
+#> {'repository': 'repo', 'directory': 'dest', 'local': False}
 
-git-clone - Clone a repository into a new directory
-
-positional arguments:
-  REPOSITORY    The repo ...
-  DIRECTORY     The dir ...
-
-options:
-  -h, --help    show this help message and exit
-  --local bool  When the repo ... (default: False)
-"""
-
-
-try:
-    sys.argv = ['example.py', 'plugins', 'bar', '--help']
-    Git()
-except SystemExit as e:
-    print(e)
-    #> 0
-"""
-usage: git plugins bar [-h] [--my_feature bool]
-
-git-plugins-bar - Extra deep bar plugin command
-
-options:
-  -h, --help        show this help message and exit
-  --y_feature bool  Enable "Y" feature (default: False)
-"""
+sys.argv = ['example.py', 'plugins', 'foo', '--feature', 'true']
+print(Git().main().model_dump())
+#> {'feature': True}
 ```
 
 ### Customizing the CLI Experience
