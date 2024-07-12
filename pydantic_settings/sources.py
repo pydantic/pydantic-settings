@@ -110,7 +110,27 @@ CliSubCommand = Annotated[Union[T, None], _CliSubCommand]
 CliPositionalArg = Annotated[T, _CliPositionalArg]
 
 
-def get_subcommand(model: BaseModel, is_required: bool = False) -> Any:
+def get_subcommand(model: BaseModel, is_required: bool = False, is_exit_on_error: bool = True) -> Any:
+    """
+    Get the subcommand from a model.
+
+    Args:
+        model: The model to get the subcommand from.
+        is_required: Determines whether a model must have subcommand set and raises error if not
+            found. Defaults to `False`.
+        is_exit_on_error: Determines whether this function exits with error if no subcommand is found.
+            Defaults to `True`.
+
+    Returns:
+        The subcommand model if found, otherwise `None`.
+
+    Raises:
+        SystemExit: When no subcommand is found and is_required=`True` and is_exit_on_error=`True`
+            (the default).
+        SettingsError: When no subcommand is found and is_required=`True` and
+            is_exit_on_error=`False`.
+    """
+
     model_cls = type(model)
     subcommands: list[str] = []
     fields = model_cls.__pydantic_fields__ if is_pydantic_dataclass(model_cls) else model.model_fields
@@ -120,7 +140,8 @@ def get_subcommand(model: BaseModel, is_required: bool = False) -> Any:
                 return getattr(model, field_name)
             subcommands.append(field_name)
     if is_required:
-        raise SettingsError(f'CLI subcommand is required {{{", ".join(subcommands)}}}')
+        error_message = f'CLI subcommand is required {{{", ".join(subcommands)}}}'
+        raise SystemExit(error_message) if is_exit_on_error else SettingsError(error_message)
     return None
 
 

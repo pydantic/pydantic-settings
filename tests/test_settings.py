@@ -2791,8 +2791,10 @@ def test_cli_subcommand_with_positionals():
         'plugins': None,
     }
     assert get_subcommand(git) is None
-    with pytest.raises(SettingsError):
+    with pytest.raises(SystemExit, match='CLI subcommand is required {clone, init, plugins}'):
         get_subcommand(git, is_required=True)
+    with pytest.raises(SettingsError, match='CLI subcommand is required {clone, init, plugins}'):
+        get_subcommand(git, is_required=True, is_exit_on_error=False)
 
     git = Git(_cli_parse_args=['init', '--quiet', 'true', 'dir/path'])
     assert git.model_dump() == {
