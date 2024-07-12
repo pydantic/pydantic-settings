@@ -140,7 +140,7 @@ def get_subcommand(model: BaseModel, is_required: bool = False, is_exit_on_error
                 return getattr(model, field_name)
             subcommands.append(field_name)
     if is_required:
-        error_message = f'CLI subcommand is required {{{", ".join(subcommands)}}}'
+        error_message = f'Error: CLI subcommand is required {{{", ".join(subcommands)}}}'
         raise SystemExit(error_message) if is_exit_on_error else SettingsError(error_message)
     return None
 
