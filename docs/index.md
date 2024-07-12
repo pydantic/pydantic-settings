@@ -714,7 +714,7 @@ annotations can only be applied to required fields (i.e. fields that do not have
 subcommands must be a valid type derived from either a pydantic `BaseModel` or pydantic.dataclasses `dataclass`.
 
 Parsed subcommands can be retrieved from model instances using the `get_subcommand` function. If a subcommand is
-required, use the `is_required` flag to raise a `SettingsError` if no subcommand is found.
+required, use the `is_required` flag to raise an error if no subcommand is found.
 
 !!! note
     CLI settings subcommands are limited to a single subparser per model. In other words, all subcommands for a model
