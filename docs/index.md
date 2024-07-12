@@ -526,7 +526,7 @@ print(Settings().model_dump())
 ```
 
 To enable CLI parsing, we simply set the `cli_parse_args` flag to a valid value, which retains similar conotations as
-defined in `argparse`. Alternatively, we can also directly provided the args to parse at time of instantiation:
+defined in `argparse`. Alternatively, we can also directly provide the args to parse at time of instantiation:
 
 ```py
 from pydantic_settings import BaseSettings
@@ -619,7 +619,7 @@ CLI argument parsing of dictionaries supports intermixing of any of the below tw
 
 These can be used in conjunction with list forms as well, e.g:
 
-  * `--field k1=1,k2=2 --field k3=3 --field '{"k4: 4}'` etc.
+  * `--field k1=1,k2=2 --field k3=3 --field '{"k4": 4}'` etc.
 
 ```py
 import sys
@@ -671,7 +671,7 @@ print(Settings().model_dump())
 
 #### Aliases
 
-Pydantic field aliases are added as CLI argument aliases.
+Pydantic field aliases are added as CLI argument aliases. Aliases of length one are converted into short options.
 
 ```py
 import sys
@@ -683,12 +683,18 @@ from pydantic_settings import BaseSettings
 
 class User(BaseSettings, cli_parse_args=True):
     first_name: str = Field(
-        validation_alias=AliasChoices('fname', AliasPath('name', 0))
+        validation_alias=AliasChoices('f', 'fname', AliasPath('name', 0))
     )
-    last_name: str = Field(validation_alias=AliasChoices('lname', AliasPath('name', 1)))
+    last_name: str = Field(
+        validation_alias=AliasChoices('l', 'lname', AliasPath('name', 1))
+    )
 
 
 sys.argv = ['example.py', '--fname', 'John', '--lname', 'Doe']
+print(User().model_dump())
+#> {'first_name': 'John', 'last_name': 'Doe'}
+
+sys.argv = ['example.py', '-f', 'John', '-l', 'Doe']
 print(User().model_dump())
 #> {'first_name': 'John', 'last_name': 'Doe'}
 
