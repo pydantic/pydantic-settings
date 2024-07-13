@@ -31,7 +31,7 @@ from typing import (
 
 import typing_extensions
 from dotenv import dotenv_values
-from pydantic import AliasChoices, AliasPath, BaseModel, Json
+from pydantic import AliasChoices, AliasPath, BaseModel, Json, RootModel
 from pydantic._internal._repr import Representation
 from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union, typing_base
 from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
@@ -183,6 +183,8 @@ class PydanticBaseSettingsSource(ABC):
         Returns:
             Whether the field is complex.
         """
+        if issubclass(field.annotation, RootModel):
+            return _annotation_is_complex(field.annotation.__annotations__['root'], field.metadata)
         return _annotation_is_complex(field.annotation, field.metadata)
 
     def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
