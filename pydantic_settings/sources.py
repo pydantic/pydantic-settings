@@ -183,7 +183,7 @@ class PydanticBaseSettingsSource(ABC):
         Returns:
             Whether the field is complex.
         """
-        if issubclass(field.annotation, RootModel):
+        if field.annotation is not None and issubclass(field.annotation, RootModel):
             return _annotation_is_complex(field.annotation.__annotations__['root'], field.metadata)
         return _annotation_is_complex(field.annotation, field.metadata)
 
