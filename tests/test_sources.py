@@ -151,6 +151,7 @@ class TestAzureAppConfigurationSettingsSource:
             lambda app_configuration_options: app_configuration_options.connect_with_url(
                 'https://my-resource.azconfig.io', DefaultAzureCredential()
             ),
+            env_nested_delimiter='__',
         )()
 
         assert settings['not_nested'] == expected_configuration_value
@@ -173,6 +174,7 @@ class TestAzureAppConfigurationSettingsSource:
             )
             .select_key('prefix__*')
             .trim_key_prefix('prefix__'),
+            env_nested_delimiter='__',
         )()
 
         assert settings['not_nested'] == expected_configuration_value
@@ -196,6 +198,7 @@ class TestAzureAppConfigurationSettingsSource:
             lambda app_configuration_options: app_configuration_options.connect_with_url(
                 'https://my-resource.azconfig.io', DefaultAzureCredential()
             ).configure_key_vault(lambda key_vault_options: key_vault_options.set_credential(DefaultAzureCredential())),
+            env_nested_delimiter='__',
         )()
 
         assert settings['password'] == expected_key_vault_value
