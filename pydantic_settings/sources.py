@@ -1744,6 +1744,8 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
 
 class AzureKeyVaultMapping(Mapping[str, Optional[str]]):
     _loaded_secrets: dict[str, str | None]
+    _secret_client: SecretClient  # type: ignore
+    _secret_names: list[str]
 
     def __init__(
         self,
@@ -1758,7 +1760,7 @@ class AzureKeyVaultMapping(Mapping[str, Optional[str]]):
             try:
                 self._loaded_secrets[key] = self._secret_client.get_secret(key).value
             except ResourceNotFoundError:  # type: ignore
-                return None
+                raise KeyError
 
         return self._loaded_secrets[key]
 

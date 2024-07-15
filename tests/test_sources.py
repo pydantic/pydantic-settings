@@ -25,6 +25,7 @@ except ImportError:
 try:
     azure_key_vault = True
     import_azure_key_vault()
+    from azure.core.exceptions import ResourceNotFoundError
     from azure.identity import DefaultAzureCredential
     from azure.keyvault.secrets import KeyVaultSecret, SecretProperties
 except ImportError:
@@ -146,8 +147,10 @@ class TestAzureKeyVaultSettingsSource:
         expected_secrets = [type('', (), {'name': 'SqlServerUser'}), type('', (), {'name': 'SqlServer--Password'})]
         expected_secret_value = 'SecretValue'
         mocker.patch(f'{MODULE}.SecretClient.list_properties_of_secrets', return_value=expected_secrets)
-        key_vault_secret = KeyVaultSecret(SecretProperties(), expected_secret_value)
-        mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
+        mocker.patch(
+            f'{MODULE}.SecretClient.get_secret',
+            side_effect=self._raise_resource_not_found_when_getting_parent_secret_name,
+        )
         obj = AzureKeyVaultSettingsSource(
             AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential()
         )
@@ -188,11 +191,22 @@ class TestAzureKeyVaultSettingsSource:
         expected_secrets = [type('', (), {'name': 'SqlServerUser'}), type('', (), {'name': 'SqlServer--Password'})]
         expected_secret_value = 'SecretValue'
         mocker.patch(f'{MODULE}.SecretClient.list_properties_of_secrets', return_value=expected_secrets)
-        key_vault_secret = KeyVaultSecret(SecretProperties(), expected_secret_value)
-        mocker.patch(f'{MODULE}.SecretClient.get_secret', return_value=key_vault_secret)
+        mocker.patch(
+            f'{MODULE}.SecretClient.get_secret',
+            side_effect=self._raise_resource_not_found_when_getting_parent_secret_name,
+        )
 
         settings = AzureKeyVaultSettings()  # type: ignore
 
         assert settings.SqlServerUser == expected_secret_value
         assert settings.sql_server_user == expected_secret_value
         assert settings.sql_server.password == expected_secret_value
+
+    def _raise_resource_not_found_when_getting_parent_secret_name(self, secret_name: str) -> KeyVaultSecret:
+        expected_secret_value = 'SecretValue'
+        key_vault_secret = KeyVaultSecret(SecretProperties(), expected_secret_value)
+
+        if secret_name == 'SqlServer':
+            raise ResourceNotFoundError()
+
+        return key_vault_secret
