@@ -1760,7 +1760,7 @@ class AzureKeyVaultMapping(Mapping[str, Optional[str]]):
             try:
                 self._loaded_secrets[key] = self._secret_client.get_secret(key).value
             except ResourceNotFoundError:  # type: ignore
-                raise KeyError
+                raise KeyError(key)
 
         return self._loaded_secrets[key]
 
@@ -1781,6 +1781,7 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
         settings_cls: type[BaseSettings],
         url: str,
         credential: TokenCredential,  # type: ignore
+        env_prefix: str | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
     ) -> None:
@@ -1790,7 +1791,7 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
         super().__init__(
             settings_cls,
             case_sensitive=True,
-            env_prefix='',
+            env_prefix=env_prefix,
             env_nested_delimiter='--',
             env_ignore_empty=False,
             env_parse_none_str=env_parse_none_str,

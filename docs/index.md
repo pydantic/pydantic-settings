@@ -1184,7 +1184,7 @@ You must have the same naming convention in the field name as in the Key Vault s
 
 In Key Vault, nested models are supported with the `--` separator. For example, `SqlServer--Password`.
 
-JSON objects, Key Vault arrays (e.g. `MySecret--0`, `MySecret--1`) and prefixes are not supported.
+Key Vault arrays (e.g. `MySecret--0`, `MySecret--1`) are not supported.
 
 ```python
 
