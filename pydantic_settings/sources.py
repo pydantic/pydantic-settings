@@ -1759,7 +1759,7 @@ class AzureAppConfigurationKeyFilter:
 
 
 class AzureAppConfigurationKeyVaultOptions:
-    _credential: TokenCredential | None = None  # type: ignore
+    _credential: TokenCredential | None  # type: ignore
 
     def set_credential(
         self,
@@ -1771,11 +1771,19 @@ class AzureAppConfigurationKeyVaultOptions:
 
 class AzureAppConfigurationOptions:
     _url: str | None = None
-    _credential: TokenCredential | None = None  # type: ignore
-    _connection_string: str | None = None
-    _key_selectors: list[_AzureAppConfigurationKeySelector] = []
-    _prefixes_to_trim: list[str] = []
-    _key_vault_options: AzureAppConfigurationKeyVaultOptions | None = None
+    _credential: TokenCredential | None  # type: ignore
+    _connection_string: str | None
+    _key_selectors: list[_AzureAppConfigurationKeySelector]
+    _prefixes_to_trim: list[str]
+    _key_vault_options: AzureAppConfigurationKeyVaultOptions | None
+
+    def __init__(self) -> None:
+        self._url = None
+        self._credential = None
+        self._connection_string = None
+        self._key_selectors = []
+        self._prefixes_to_trim = []
+        self._key_vault_options = None
 
     def connect_with_url(
         self,
@@ -1820,6 +1828,7 @@ class AzureAppConfigurationSettingsSource(EnvSettingsSource):
     ) -> None:
         import_azure_app_configuration()
         self._configure = configure
+        self._options = None
         super().__init__(
             settings_cls,
             case_sensitive=True,
