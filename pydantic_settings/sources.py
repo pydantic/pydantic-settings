@@ -19,8 +19,10 @@ from typing import (
     Any,
     Callable,
     Generic,
+    Iterator,
     List,
     Mapping,
+    Optional,
     Sequence,
     Tuple,
     TypeVar,
@@ -86,9 +88,11 @@ def import_toml() -> None:
 def import_azure_key_vault() -> None:
     global TokenCredential
     global SecretClient
+    global ResourceNotFoundError
 
     try:
         from azure.core.credentials import TokenCredential
+        from azure.core.exceptions import ResourceNotFoundError
         from azure.keyvault.secrets import SecretClient
     except ImportError as e:
         raise ImportError(
@@ -1738,6 +1742,33 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
             return yaml.safe_load(yaml_file) or {}
 
 
+class AzureKeyVaultMapping(Mapping[str, Optional[str]]):
+    _loaded_secrets: dict[str, str | None]
+
+    def __init__(
+        self,
+        secret_client: SecretClient,  # type: ignore
+    ) -> None:
+        self._loaded_secrets = {}
+        self._secret_client = secret_client
+        self._secret_names: list[str] = [secret.name for secret in self._secret_client.list_properties_of_secrets()]
+
+    def __getitem__(self, key: str) -> str | None:
+        if key not in self._loaded_secrets:
+            try:
+                self._loaded_secrets[key] = self._secret_client.get_secret(key).value
+            except ResourceNotFoundError:  # type: ignore
+                return None
+
+        return self._loaded_secrets[key]
+
+    def __len__(self) -> int:
+        return len(self._secret_names)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._secret_names)
+
+
 class AzureKeyVaultSettingsSource(EnvSettingsSource):
     _url: str
     _credential: TokenCredential  # type: ignore
@@ -1764,16 +1795,9 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
             env_parse_enums=env_parse_enums,
         )
 
-    def _load_env_vars(self) -> Mapping[str, str | None]:
-        self._secret_client = SecretClient(vault_url=self._url, credential=self._credential)  # type: ignore
-        secret_names: list[str] = [secret.name for secret in self._secret_client.list_properties_of_secrets()]
-        env_vars: dict[str, str | None] = {}
-
-        for secret_name in secret_names:
-            secret = self._secret_client.get_secret(secret_name)
-            env_vars[secret_name] = secret.value
-
-        return env_vars
+    def _load_env_vars(self) -> Mapping[str, Optional[str]]:
+        secret_client = SecretClient(vault_url=self._url, credential=self._credential)  # type: ignore
+        return AzureKeyVaultMapping(secret_client)
 
     def __repr__(self) -> str:
         return f'AzureKeyVaultSettingsSource(url={self._url!r}, ' f'env_nested_delimiter={self.env_nested_delimiter!r})'
