@@ -1814,6 +1814,7 @@ class AzureAppConfigurationSettingsSource(EnvSettingsSource):
         self,
         settings_cls: type[BaseSettings],
         configure: Callable[[AzureAppConfigurationOptions], AzureAppConfigurationOptions],
+        env_nested_delimiter: str | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
     ) -> None:
@@ -1823,7 +1824,7 @@ class AzureAppConfigurationSettingsSource(EnvSettingsSource):
             settings_cls,
             case_sensitive=True,
             env_prefix='',
-            env_nested_delimiter='__',
+            env_nested_delimiter=env_nested_delimiter,
             env_ignore_empty=False,
             env_parse_none_str=env_parse_none_str,
             env_parse_enums=env_parse_enums,

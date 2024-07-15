@@ -1183,6 +1183,8 @@ Furthermore, if some value references a secret stored in Azure Key Vault, you ca
 
 If you use Entra ID authentication, you can use the role `App Configuration Data Reader` to access the configurations and `Key Vault Secrets User` to access the secrets.
 
+To nest models you have to define a `env_nested_delimiter` (e.g. `__`), either in the source constructor or in the `model_config` class.
+
 The configuration of this settings source is almost idental to the the provided by ASP.NET Core, in case you want to read the official documentation to inform you about more complex uses, best practices, etc.
 
 ```
@@ -1216,6 +1218,7 @@ class Settings(BaseSettings):
                         DefaultAzureCredential()
                     )
                 ),
+                env_nested_delimiter='__',
             ),
         )
 ```
