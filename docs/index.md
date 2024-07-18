@@ -1194,7 +1194,7 @@ from azure.identity import DefaultAzureCredential
 from pydantic import BaseModel
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
-from pydantic_settings.sources import AzureKeyVaultSettingsSource
+from pydantic_settings import AzureKeyVaultSettingsSource
 
 
 class SubModel(BaseModel):

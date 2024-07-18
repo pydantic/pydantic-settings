@@ -1,5 +1,6 @@
 from .main import BaseSettings, SettingsConfigDict
 from .sources import (
+    AzureKeyVaultSettingsSource,
     CliPositionalArg,
     CliSettingsSource,
     CliSubCommand,
@@ -30,6 +31,7 @@ __all__ = (
     'SettingsConfigDict',
     'TomlConfigSettingsSource',
     'YamlConfigSettingsSource',
+    'AzureKeyVaultSettingsSource',
     '__version__',
 )
 
