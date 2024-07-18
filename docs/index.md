@@ -1188,6 +1188,7 @@ Key Vault arrays (e.g. `MySecret--0`, `MySecret--1`) are not supported.
 
 ```python
 import os
+from typing import Tuple, Type
 
 from azure.identity import DefaultAzureCredential
 from pydantic import BaseModel
@@ -1208,12 +1209,12 @@ class AzureKeyVaultSettings(BaseSettings):
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: type[BaseSettings],
+        settings_cls: Type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
-    ) -> tuple[PydanticBaseSettingsSource, ...]:
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
         az_key_vault_settings = AzureKeyVaultSettingsSource(
             settings_cls,
             os.environ['AZURE_KEY_VAULT_URL'],
