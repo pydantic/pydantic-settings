@@ -1186,7 +1186,7 @@ In Key Vault, nested models are supported with the `--` separator. For example, 
 
 Key Vault arrays (e.g. `MySecret--0`, `MySecret--1`) are not supported.
 
-```python
+```
 import os
 from typing import Tuple, Type
 
