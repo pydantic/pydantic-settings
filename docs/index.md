@@ -1178,7 +1178,7 @@ docker service create --name pydantic-with-secrets --secret my_secret_data pydan
 You must set two parameters:
 
 - `url`: For example, `https://my-resource.vault.azure.net/`.
-- `credential`: If you use `DefaultAzureCredential`, in local you can execute `az login` to get your identity credentials. The identity must have a role assignement (the recommended one is `Key Vault Secrets User`), so you can have access to the secrets.
+- `credential`: If you use `DefaultAzureCredential`, in local you can execute `az login` to get your identity credentials. The identity must have a role assignment (the recommended one is `Key Vault Secrets User`), so you can access the secrets.
 
 You must have the same naming convention in the field name as in the Key Vault secret name. For example, if the secret is named `SqlServerPassword`, the field name must be the same. You can use an alias too.
 
