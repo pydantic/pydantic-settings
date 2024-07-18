@@ -1187,26 +1187,23 @@ In Key Vault, nested models are supported with the `--` separator. For example, 
 Key Vault arrays (e.g. `MySecret--0`, `MySecret--1`) are not supported.
 
 ```python
-
-```
 import os
+
 from azure.identity import DefaultAzureCredential
 from pydantic import BaseModel
-from pydantic_settings import (
-    BaseSettings,
-    PydanticBaseSettingsSource
-)
+
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 from pydantic_settings.sources import AzureKeyVaultSettingsSource
 
 
-class SqlServer(BaseModel):
-    password: str = Field(..., alias='Password')
+class SubModel(BaseModel):
+    a: str
+
 
 class AzureKeyVaultSettings(BaseSettings):
-
-    SqlServerPassword: str
-    sql_server_password: str = Field(..., alias='SqlServerPassword')
-    sql_server: SqlServer = Field(..., alias='SqlServer')
+    foo: str
+    bar: int
+    sub: SubModel
 
     @classmethod
     def settings_customise_sources(
@@ -1217,11 +1214,17 @@ class AzureKeyVaultSettings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        return(
-            AzureKeyVaultSettingsSource(
-                settings_cls,
-                os.environ['AZURE_KEY_VAULT_URL'],
-                DefaultAzureCredential()
+        az_key_vault_settings = AzureKeyVaultSettingsSource(
+            settings_cls,
+            os.environ['AZURE_KEY_VAULT_URL'],
+            DefaultAzureCredential(),
+        )
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+            az_key_vault_settings,
         )
 ```
 
