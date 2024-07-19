@@ -868,6 +868,28 @@ options:
 """
 ```
 
+#### Change Whether CLI Should Exit on Error
+
+Change whether the CLI internal parser will exit on error or raise a `SettingsError` exception by using
+`cli_exit_on_error`. By default, the CLI internal parser will exit on error.
+
+```py
+import sys
+
+from pydantic_settings import BaseSettings, SettingsError
+
+
+class Settings(BaseSettings, cli_parse_args=True, cli_exit_on_error=False): ...
+
+
+try:
+    sys.argv = ['example.py', '--bad-arg']
+    Settings()
+except SettingsError as e:
+    print(e)
+    #> error parsing CLI: unrecognized arguments: --bad-arg
+```
+
 #### Enforce Required Arguments at CLI
 
 Pydantic settings is designed to pull values in from various sources when instantating a model. This means a field that
@@ -884,10 +906,15 @@ import sys
 
 from pydantic import Field
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsError
 
 
-class Settings(BaseSettings, cli_parse_args=True, cli_enforce_required=True):
+class Settings(
+    BaseSettings,
+    cli_parse_args=True,
+    cli_enforce_required=True,
+    cli_exit_on_error=False,
+):
     my_required_field: str = Field(description='a top level required field')
 
 
@@ -896,13 +923,9 @@ os.environ['MY_REQUIRED_FIELD'] = 'hello from environment'
 try:
     sys.argv = ['example.py']
     Settings()
-except SystemExit as e:
+except SettingsError as e:
     print(e)
-    #> 2
-"""
-usage: example.py [-h] --my_required_field str
-example.py: error: the following arguments are required: --my_required_field
-"""
+    #> error parsing CLI: the following arguments are required: --my_required_field
 ```
 
 #### Change the None Type Parse String
