@@ -8,9 +8,9 @@ black==24.4.2
     # via pytest-examples
 click==8.1.7
     # via black
-coverage[toml]==7.5.4
+coverage[toml]==7.6.0
     # via -r requirements/testing.in
-exceptiongroup==1.2.1
+exceptiongroup==1.2.2
     # via pytest
 iniconfig==2.0.0
     # via pytest
@@ -38,7 +38,7 @@ pytest==8.2.2
     #   pytest-examples
     #   pytest-mock
     #   pytest-pretty
-pytest-examples==0.0.10
+pytest-examples==0.0.12
     # via -r requirements/testing.in
 pytest-mock==3.14.0
     # via -r requirements/testing.in
@@ -46,7 +46,7 @@ pytest-pretty==1.2.0
     # via -r requirements/testing.in
 rich==13.7.1
     # via pytest-pretty
-ruff==0.4.10
+ruff==0.5.3
     # via pytest-examples
 tomli==2.0.1
     # via

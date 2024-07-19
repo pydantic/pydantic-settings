@@ -9,9 +9,9 @@ path = 'pydantic_settings/version.py'
 name = 'pydantic-settings'
 description = 'Settings management using Pydantic'
 authors = [
-    {name = 'Samuel Colvin', email = 's@muelcolvin.com'},
-    {name = 'Eric Jolibois', email = 'em.jolibois@gmail.com'},
-    {name = 'Hasan Ramezani', email = 'hasan.r67@gmail.com'},
+    { name = 'Samuel Colvin', email = 's@muelcolvin.com' },
+    { name = 'Eric Jolibois', email = 'em.jolibois@gmail.com' },
+    { name = 'Hasan Ramezani', email = 'hasan.r67@gmail.com' },
 ]
 license = 'MIT'
 readme = 'README.md'
@@ -39,16 +39,18 @@ classifiers = [
     'Topic :: Internet',
 ]
 requires-python = '>=3.8'
-dependencies = [
-    'pydantic>=2.7.0',
-    'python-dotenv>=0.21.0',
-]
+dependencies = ['pydantic>=2.7.0', 'python-dotenv>=0.21.0']
 dynamic = ['version']
 
 [project.optional-dependencies]
 yaml = ["pyyaml>=6.0.1"]
 toml = ["tomli>=2.0.1"]
-azure-app-configuration = ["azure-appconfiguration>=1.6.0", "azure-keyvault-secrets>=4.8.0", "azure-identity>=1.16.0"]
+azure-key-vault = ["azure-keyvault-secrets>=4.8.0", "azure-identity>=1.16.0"]
+azure-app-configuration = [
+    "azure-appconfiguration>=1.6.0",
+    "azure-keyvault-secrets>=4.8.0",
+    "azure-identity>=1.16.0",
+]
 
 [project.urls]
 Homepage = 'https://github.com/pydantic/pydantic-settings'
@@ -80,9 +82,7 @@ exclude_lines = [
 ]
 
 [tool.coverage.paths]
-source = [
-    'pydantic_settings/',
-]
+source = ['pydantic_settings/']
 
 [tool.ruff]
 line-length = 120
@@ -93,7 +93,7 @@ keep-runtime-typing = true
 
 [tool.ruff.lint]
 extend-select = ['Q', 'RUF100', 'C90', 'UP', 'I']
-flake8-quotes = {inline-quotes = 'single', multiline-quotes = 'double'}
+flake8-quotes = { inline-quotes = 'single', multiline-quotes = 'double' }
 isort = { known-first-party = ['pydantic_settings', 'tests'] }
 mccabe = { max-complexity = 14 }
 pydocstyle = { convention = 'google' }
@@ -127,9 +127,7 @@ disallow_untyped_defs = true
 # ansi2html and devtools are required to avoid the need to install these packages when running linting,
 # they're used in the docs build script
 [[tool.mypy.overrides]]
-module = [
-    'dotenv.*',
-]
+module = ['dotenv.*']
 ignore_missing_imports = true
 
 # configuring https://github.com/pydantic/hooky

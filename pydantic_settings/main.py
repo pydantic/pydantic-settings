@@ -38,6 +38,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_avoid_json: bool
     cli_enforce_required: bool
     cli_use_class_docs_for_groups: bool
+    cli_exit_on_error: bool
     cli_prefix: str
     secrets_dir: str | Path | None
     json_file: PathType | None
@@ -110,6 +111,8 @@ class BaseSettings(BaseModel):
         _cli_enforce_required: Enforce required fields at the CLI. Defaults to `False`.
         _cli_use_class_docs_for_groups: Use class docstrings in CLI group help text instead of field descriptions.
             Defaults to `False`.
+        _cli_exit_on_error: Determines whether or not the internal parser exits with error info when an error occurs.
+            Defaults to `True`.
         _cli_prefix: The root parser command line arguments prefix. Defaults to "".
         _secrets_dir: The secret files directory. Defaults to `None`.
     """
@@ -132,6 +135,7 @@ class BaseSettings(BaseModel):
         _cli_avoid_json: bool | None = None,
         _cli_enforce_required: bool | None = None,
         _cli_use_class_docs_for_groups: bool | None = None,
+        _cli_exit_on_error: bool | None = None,
         _cli_prefix: str | None = None,
         _secrets_dir: str | Path | None = None,
         **values: Any,
@@ -156,6 +160,7 @@ class BaseSettings(BaseModel):
                 _cli_avoid_json=_cli_avoid_json,
                 _cli_enforce_required=_cli_enforce_required,
                 _cli_use_class_docs_for_groups=_cli_use_class_docs_for_groups,
+                _cli_exit_on_error=_cli_exit_on_error,
                 _cli_prefix=_cli_prefix,
                 _secrets_dir=_secrets_dir,
             )
@@ -204,6 +209,7 @@ class BaseSettings(BaseModel):
         _cli_avoid_json: bool | None = None,
         _cli_enforce_required: bool | None = None,
         _cli_use_class_docs_for_groups: bool | None = None,
+        _cli_exit_on_error: bool | None = None,
         _cli_prefix: str | None = None,
         _secrets_dir: str | Path | None = None,
     ) -> dict[str, Any]:
@@ -249,6 +255,9 @@ class BaseSettings(BaseModel):
             _cli_use_class_docs_for_groups
             if _cli_use_class_docs_for_groups is not None
             else self.model_config.get('cli_use_class_docs_for_groups')
+        )
+        cli_exit_on_error = (
+            _cli_exit_on_error if _cli_exit_on_error is not None else self.model_config.get('cli_exit_on_error')
         )
         cli_prefix = _cli_prefix if _cli_prefix is not None else self.model_config.get('cli_prefix')
 
@@ -300,6 +309,7 @@ class BaseSettings(BaseModel):
                         cli_avoid_json=cli_avoid_json,
                         cli_enforce_required=cli_enforce_required,
                         cli_use_class_docs_for_groups=cli_use_class_docs_for_groups,
+                        cli_exit_on_error=cli_exit_on_error,
                         cli_prefix=cli_prefix,
                         case_sensitive=case_sensitive,
                     )
@@ -346,6 +356,7 @@ class BaseSettings(BaseModel):
         cli_avoid_json=False,
         cli_enforce_required=False,
         cli_use_class_docs_for_groups=False,
+        cli_exit_on_error=True,
         cli_prefix='',
         json_file=None,
         json_file_encoding=None,
