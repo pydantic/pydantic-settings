@@ -1269,39 +1269,59 @@ To nest models you have to define a `env_nested_delimiter` (e.g. `__`), either i
 
 The configuration of this settings source is almost idental to the the provided by ASP.NET Core, in case you want to read the official documentation to inform you about more complex uses, best practices, etc.
 
-```
-class Nested(BaseModel):
-    nested_field: str
+```py
+import os
+from typing import Tuple, Type
+
+from azure.identity import DefaultAzureCredential
+from pydantic import BaseModel
+
+from pydantic_settings import (
+    AzureAppConfigurationSettingsSource,
+    BaseSettings,
+    PydanticBaseSettingsSource,
+)
 
 
-class Settings(BaseSettings):
-    not_nested: str
-    nested: Nested
+class SubModel(BaseModel):
+    a: str
+
+
+class AzureKeyVaultSettings(BaseSettings):
+    foo: str
+    bar: int
+    sub: SubModel
 
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: Any,
+        settings_cls: Type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> Tuple[PydanticBaseSettingsSource]:
-        return (
-            AzureAppConfigurationSettingsSource(
-                settings_cls,
-                lambda app_configuration_options: app_configuration_options.connect_with_url(
-                    os.environ['AZURE_APP_CONFIGURATION_URL'], DefaultAzureCredential()
+        az_credential = DefaultAzureCredential()
+        az_app_configuration_settings = AzureAppConfigurationSettingsSource(
+            settings_cls,
+            lambda app_configuration_options: app_configuration_options.connect_with_url(
+                os.environ['AZURE_APP_CONFIGURATION_URL'], az_credential
+            )
+            .select_key('my_api__*')
+            .trim_key_prefix('my_api__')
+            .configure_key_vault(
+                lambda key_vault_options: key_vault_options.set_credential(
+                    az_credential
                 )
-                .select_key('my_api__*')
-                .trim_key_prefix('my_api__')
-                .configure_key_vault(
-                    lambda key_vault_options: key_vault_options.set_credential(
-                        DefaultAzureCredential()
-                    )
-                ),
-                env_nested_delimiter='__',
             ),
+            env_nested_delimiter='__',
+        )
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+            az_app_configuration_settings,
         )
 ```
 
