@@ -1186,15 +1186,18 @@ In Key Vault, nested models are supported with the `--` separator. For example, 
 
 Key Vault arrays (e.g. `MySecret--0`, `MySecret--1`) are not supported.
 
-```
+```py
 import os
 from typing import Tuple, Type
 
 from azure.identity import DefaultAzureCredential
 from pydantic import BaseModel
 
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
-from pydantic_settings import AzureKeyVaultSettingsSource
+from pydantic_settings import (
+    AzureKeyVaultSettingsSource,
+    BaseSettings,
+    PydanticBaseSettingsSource,
+)
 
 
 class SubModel(BaseModel):
