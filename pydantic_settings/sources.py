@@ -19,8 +19,10 @@ from typing import (
     Any,
     Callable,
     Generic,
+    Iterator,
     List,
     Mapping,
+    Optional,
     Sequence,
     Tuple,
     TypeVar,
@@ -81,6 +83,21 @@ def import_toml() -> None:
         if tomllib is not None:
             return
         import tomllib
+
+
+def import_azure_key_vault() -> None:
+    global TokenCredential
+    global SecretClient
+    global ResourceNotFoundError
+
+    try:
+        from azure.core.credentials import TokenCredential
+        from azure.core.exceptions import ResourceNotFoundError
+        from azure.keyvault.secrets import SecretClient
+    except ImportError as e:
+        raise ImportError(
+            'Azure Key Vault dependencies are not installed, run `pip install pydantic-settings[azure-key-vault]`'
+        ) from e
 
 
 DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
@@ -1723,6 +1740,70 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         import_yaml()
         with open(file_path, encoding=self.yaml_file_encoding) as yaml_file:
             return yaml.safe_load(yaml_file) or {}
+
+
+class AzureKeyVaultMapping(Mapping[str, Optional[str]]):
+    _loaded_secrets: dict[str, str | None]
+    _secret_client: SecretClient  # type: ignore
+    _secret_names: list[str]
+
+    def __init__(
+        self,
+        secret_client: SecretClient,  # type: ignore
+    ) -> None:
+        self._loaded_secrets = {}
+        self._secret_client = secret_client
+        self._secret_names: list[str] = [secret.name for secret in self._secret_client.list_properties_of_secrets()]
+
+    def __getitem__(self, key: str) -> str | None:
+        if key not in self._loaded_secrets:
+            try:
+                self._loaded_secrets[key] = self._secret_client.get_secret(key).value
+            except ResourceNotFoundError:  # type: ignore
+                raise KeyError(key)
+
+        return self._loaded_secrets[key]
+
+    def __len__(self) -> int:
+        return len(self._secret_names)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._secret_names)
+
+
+class AzureKeyVaultSettingsSource(EnvSettingsSource):
+    _url: str
+    _credential: TokenCredential  # type: ignore
+    _secret_client: SecretClient  # type: ignore
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        url: str,
+        credential: TokenCredential,  # type: ignore
+        env_prefix: str | None = None,
+        env_parse_none_str: str | None = None,
+        env_parse_enums: bool | None = None,
+    ) -> None:
+        import_azure_key_vault()
+        self._url = url
+        self._credential = credential
+        super().__init__(
+            settings_cls,
+            case_sensitive=True,
+            env_prefix=env_prefix,
+            env_nested_delimiter='--',
+            env_ignore_empty=False,
+            env_parse_none_str=env_parse_none_str,
+            env_parse_enums=env_parse_enums,
+        )
+
+    def _load_env_vars(self) -> Mapping[str, Optional[str]]:
+        secret_client = SecretClient(vault_url=self._url, credential=self._credential)  # type: ignore
+        return AzureKeyVaultMapping(secret_client)
+
+    def __repr__(self) -> str:
+        return f'AzureKeyVaultSettingsSource(url={self._url!r}, ' f'env_nested_delimiter={self.env_nested_delimiter!r})'
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
