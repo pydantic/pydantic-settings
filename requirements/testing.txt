@@ -46,7 +46,7 @@ pytest-pretty==1.2.0
     # via -r requirements/testing.in
 rich==13.7.1
     # via pytest-pretty
-ruff==0.5.3
+ruff==0.4.10
     # via pytest-examples
 tomli==2.0.1
     # via
