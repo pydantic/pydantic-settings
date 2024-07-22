@@ -13,11 +13,11 @@ azure-core==1.30.2
     #   azure-appconfiguration
     #   azure-identity
     #   azure-keyvault-secrets
-azure-identity==1.17.1
+azure-identity==1.17.0
     # via pydantic-settings (pyproject.toml)
 azure-keyvault-secrets==4.8.0
     # via pydantic-settings (pyproject.toml)
-certifi==2024.7.4
+certifi==2024.6.2
     # via requests
 cffi==1.16.0
     # via cryptography
@@ -34,19 +34,19 @@ isodate==0.6.1
     # via
     #   azure-appconfiguration
     #   azure-keyvault-secrets
-msal==1.30.0
+msal==1.28.1
     # via
     #   azure-identity
     #   msal-extensions
-msal-extensions==1.2.0
+msal-extensions==1.1.0
     # via azure-identity
-portalocker==2.10.1
+portalocker==2.8.2
     # via msal-extensions
 pycparser==2.22
     # via cffi
-pydantic==2.8.2
+pydantic==2.7.4
     # via pydantic-settings (pyproject.toml)
-pydantic-core==2.20.1
+pydantic-core==2.18.4
     # via pydantic
 pyjwt[crypto]==2.8.0
     # via msal

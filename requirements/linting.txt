@@ -12,9 +12,9 @@ click==8.1.7
     # via black
 distlib==0.3.8
     # via virtualenv
-filelock==3.15.4
+filelock==3.15.3
     # via virtualenv
-identify==2.6.0
+identify==2.5.36
     # via pre-commit
 mypy==1.10.1
     # via -r requirements/linting.in
@@ -54,5 +54,5 @@ typing-extensions==4.12.2
     # via
     #   black
     #   mypy
-virtualenv==20.26.3
+virtualenv==20.26.2
     # via pre-commit
