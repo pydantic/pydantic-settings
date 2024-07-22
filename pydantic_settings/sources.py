@@ -311,7 +311,7 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
         return self.defaults
 
     def __repr__(self) -> str:
-        return f'DefaultSettingsSource(init_kwargs={self.defaults!r})'
+        return f'DefaultSettingsSource()'
 
 
 class InitSettingsSource(PydanticBaseSettingsSource):
