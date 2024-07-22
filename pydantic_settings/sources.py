@@ -10,7 +10,7 @@ import warnings
 from abc import ABC, abstractmethod
 from argparse import SUPPRESS, ArgumentParser, HelpFormatter, Namespace, _SubParsersAction
 from collections import deque
-from dataclasses import asdict, is_dataclass
+from dataclasses import is_dataclass
 from enum import Enum
 from pathlib import Path
 from types import FunctionType
@@ -265,12 +265,7 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
                 if field_info.validate_default is not False:
                     resolved_name = self._get_resolved_name(field_name, field_info)
                     if field_info.default not in (PydanticUndefined, None):
-                        if is_model_class(field_info.annotation):
-                            defaults[resolved_name] = field_info.default.model_dump()
-                        elif is_dataclass(field_info.annotation):
-                            defaults[resolved_name] = asdict(field_info.default)
-                        else:
-                            defaults[resolved_name] = field_info.default
+                        defaults[resolved_name] = field_info.default
                     elif field_info.default_factory is not None:
                         defaults[resolved_name] = field_info.default_factory
         return defaults
@@ -311,7 +306,7 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
         return self.defaults
 
     def __repr__(self) -> str:
-        return f'DefaultSettingsSource()'
+        return 'DefaultSettingsSource()'
 
 
 class InitSettingsSource(PydanticBaseSettingsSource):
