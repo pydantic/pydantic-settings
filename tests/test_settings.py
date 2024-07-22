@@ -491,6 +491,26 @@ def test_annotated(env):
     ]
 
 
+def test_env_default_settings(env):
+    class NestedA(BaseModel):
+        v0: bool
+        v1: bool
+
+    class NestedB(BaseModel):
+        v0: bool = False
+        v1: bool = True
+
+    class SettingsDefaultsA(BaseSettings, env_nested_delimiter='__'):
+        nested: NestedB = NestedB()
+
+    class SettingsDefaultsB(BaseSettings, env_nested_delimiter='__'):
+        nested: NestedA = NestedA(v0=False, v1=True)
+
+    env.set('NESTED__V0', 'True')
+    assert SettingsDefaultsA().model_dump() == {'nested': {'v0': True, 'v1': True}}
+    assert SettingsDefaultsB().model_dump() == {'nested': {'v0': True, 'v1': True}}
+
+
 def test_env_str(env):
     class Settings(BaseSettings):
         apple: str = Field(None, validation_alias='BOOM')

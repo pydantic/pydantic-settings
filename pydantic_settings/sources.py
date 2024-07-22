@@ -10,7 +10,7 @@ import warnings
 from abc import ABC, abstractmethod
 from argparse import SUPPRESS, ArgumentParser, HelpFormatter, Namespace, _SubParsersAction
 from collections import deque
-from dataclasses import is_dataclass
+from dataclasses import asdict, is_dataclass
 from enum import Enum
 from pathlib import Path
 from types import FunctionType
@@ -244,6 +244,74 @@ class PydanticBaseSettingsSource(ABC):
     @abstractmethod
     def __call__(self) -> dict[str, Any]:
         pass
+
+
+class DefaultSettingsSource(PydanticBaseSettingsSource):
+    """
+    Source class for loading default values.
+    """
+
+    def __init__(self, settings_cls: type[BaseSettings]):
+        super().__init__(settings_cls)
+        self.defaults = self._get_defaults(settings_cls)
+
+    def _get_defaults(self, settings_cls: type[BaseSettings]) -> dict[str, Any]:
+        defaults: dict[str, Any] = {}
+        if self.config.get('validate_default'):
+            fields = (
+                settings_cls.__pydantic_fields__ if is_pydantic_dataclass(settings_cls) else settings_cls.model_fields
+            )
+            for field_name, field_info in fields.items():
+                if field_info.validate_default is not False:
+                    resolved_name = self._get_resolved_name(field_name, field_info)
+                    if field_info.default not in (PydanticUndefined, None):
+                        if is_model_class(field_info.annotation):
+                            defaults[resolved_name] = field_info.default.model_dump()
+                        elif is_dataclass(field_info.annotation):
+                            defaults[resolved_name] = asdict(field_info.default)
+                        else:
+                            defaults[resolved_name] = field_info.default
+                    elif field_info.default_factory is not None:
+                        defaults[resolved_name] = field_info.default_factory
+        return defaults
+
+    def _get_resolved_name(self, field_name: str, field_info: FieldInfo) -> str:
+        if not any((field_info.alias, field_info.validation_alias)):
+            return field_name
+
+        resolved_names: list[str] = []
+        is_alias_path_only: bool = True
+        new_alias_paths: list[AliasPath] = []
+        for alias in (field_info.alias, field_info.validation_alias):
+            if alias is None:
+                continue
+            elif isinstance(alias, str):
+                resolved_names.append(alias)
+                is_alias_path_only = False
+            elif isinstance(alias, AliasChoices):
+                for name in alias.choices:
+                    if isinstance(name, str):
+                        resolved_names.append(name)
+                        is_alias_path_only = False
+                    else:
+                        new_alias_paths.append(name)
+            else:
+                new_alias_paths.append(alias)
+        for alias_path in new_alias_paths:
+            name = cast(str, alias_path.path[0])
+            if not resolved_names and is_alias_path_only:
+                resolved_names.append(name)
+        return tuple(dict.fromkeys(resolved_names))[0]
+
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        # Nothing to do here. Only implement the return statement to make mypy happy
+        return None, '', False
+
+    def __call__(self) -> dict[str, Any]:
+        return self.defaults
+
+    def __repr__(self) -> str:
+        return f'DefaultSettingsSource(init_kwargs={self.defaults!r})'
 
 
 class InitSettingsSource(PydanticBaseSettingsSource):

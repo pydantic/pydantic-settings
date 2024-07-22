@@ -11,6 +11,7 @@ from pydantic.main import BaseModel
 from .sources import (
     ENV_FILE_SENTINEL,
     CliSettingsSource,
+    DefaultSettingsSource,
     DotEnvSettingsSource,
     DotenvType,
     EnvSettingsSource,
@@ -264,6 +265,7 @@ class BaseSettings(BaseModel):
         secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
         # Configure built-in sources
+        default_settings = DefaultSettingsSource(self.__class__)
         init_settings = InitSettingsSource(self.__class__, init_kwargs=init_kwargs)
         env_settings = EnvSettingsSource(
             self.__class__,
@@ -296,7 +298,7 @@ class BaseSettings(BaseModel):
             env_settings=env_settings,
             dotenv_settings=dotenv_settings,
             file_secret_settings=file_secret_settings,
-        )
+        ) + (default_settings,)
         if not any([source for source in sources if isinstance(source, CliSettingsSource)]):
             if cli_parse_args is not None or cli_settings_source is not None:
                 cli_settings = (
