@@ -138,6 +138,13 @@ class BaseSettings(BaseModel):
         _cli_exit_on_error: bool | None = None,
         _cli_prefix: str | None = None,
         _secrets_dir: str | Path | None = None,
+        _settings_customize_instance: (
+            Callable[
+                [tuple[PydanticBaseSettingsSource, ...]],
+                tuple[PydanticBaseSettingsSource, ...],
+            ]
+            | None
+        ) = None,
         **values: Any,
     ) -> None:
         # Uses something other than `self` the first arg to allow "self" as a settable attribute
@@ -163,6 +170,7 @@ class BaseSettings(BaseModel):
                 _cli_exit_on_error=_cli_exit_on_error,
                 _cli_prefix=_cli_prefix,
                 _secrets_dir=_secrets_dir,
+                _settings_customize_instance=_settings_customize_instance,
             )
         )
 

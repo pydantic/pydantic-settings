@@ -4110,3 +4110,43 @@ def test_settings_source_settings_sources_data(env):
     env.set('one', '1')
     s = Settings(one=True, two=True)
     assert s.four is True
+
+
+def test_settings_build_values_customize_instance():
+    """Test the ``_settings_customize_instance`` keyword argument of
+    ``_settings_build_values``."""
+
+    class SillySource(PydanticBaseSettingsSource):
+        def get_field_value(self, field: FieldInfo, field_name: str) -> Any:
+            pass
+
+        def __call__(self) -> Dict[str, Any]:
+            return {'whatever': 'it is'}
+
+    class SillySettings(BaseSettings):
+        whatever: str
+
+    def customize_null(_):
+        return tuple()
+
+    def customize_silly(_):
+        return (SillySource(SillySettings),)
+
+    # NOTE: Returning an empty tuple should result in an empty dict when the
+    #       method is called. Test directly the use of the keyword argument.
+    instance = SillySettings(whatever='the heck')
+    data = instance._settings_build_values({}, _settings_customize_instance=customize_null)
+    assert not data
+
+    data = instance._settings_build_values({}, _settings_customize_instance=customize_silly)
+    assert data == {'whatever': 'it is'}
+
+    # NOTE: No sources == error
+    with pytest.raises(ValidationError) as err:
+        SillySettings(_settings_customize_instance=customize_null)
+
+    assert err.value.error_count() == 1
+
+    # NOTE: Init ignored, silly source used.
+    instance = SillySettings(whatever='the heck', _settings_customize_instance=customize_silly)
+    assert instance.whatever == 'it is'
