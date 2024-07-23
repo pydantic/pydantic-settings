@@ -46,7 +46,7 @@ dependencies = [
 dynamic = ['version']
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-mock", "pytest-examples"]
+test = ["pytest>=8.3.0", "pytest-mock>=3.14.0", "pytest-examples>=0.0.12"]
 yaml = ["pyyaml>=6.0.1"]
 toml = ["tomli>=2.0.1"]
 azure-key-vault = ["azure-keyvault-secrets>=4.8.0", "azure-identity>=1.16.0"]
