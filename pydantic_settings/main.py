@@ -1,6 +1,5 @@
 from __future__ import annotations as _annotations
 
-from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Callable, ClassVar
 
@@ -222,106 +221,54 @@ class BaseSettings(BaseModel):
         ) = None,
     ) -> dict[str, Any]:
         # Determine settings config values
-        case_sensitive = (
-            _case_sensitive
-            if _case_sensitive is not None
-            else self.model_config.get("case_sensitive")
-        )
-        env_prefix = (
-            _env_prefix
-            if _env_prefix is not None
-            else self.model_config.get("env_prefix")
-        )
-        env_file = (
-            _env_file
-            if _env_file != ENV_FILE_SENTINEL
-            else self.model_config.get("env_file")
-        )
+        case_sensitive = _case_sensitive if _case_sensitive is not None else self.model_config.get('case_sensitive')
+        env_prefix = _env_prefix if _env_prefix is not None else self.model_config.get('env_prefix')
+        env_file = _env_file if _env_file != ENV_FILE_SENTINEL else self.model_config.get('env_file')
         env_file_encoding = (
-            _env_file_encoding
-            if _env_file_encoding is not None
-            else self.model_config.get("env_file_encoding")
+            _env_file_encoding if _env_file_encoding is not None else self.model_config.get('env_file_encoding')
         )
         env_ignore_empty = (
-            _env_ignore_empty
-            if _env_ignore_empty is not None
-            else self.model_config.get("env_ignore_empty")
+            _env_ignore_empty if _env_ignore_empty is not None else self.model_config.get('env_ignore_empty')
         )
         env_nested_delimiter = (
             _env_nested_delimiter
             if _env_nested_delimiter is not None
-            else self.model_config.get("env_nested_delimiter")
+            else self.model_config.get('env_nested_delimiter')
         )
         env_parse_none_str = (
-            _env_parse_none_str
-            if _env_parse_none_str is not None
-            else self.model_config.get("env_parse_none_str")
+            _env_parse_none_str if _env_parse_none_str is not None else self.model_config.get('env_parse_none_str')
         )
-        env_parse_enums = (
-            _env_parse_enums
-            if _env_parse_enums is not None
-            else self.model_config.get("env_parse_enums")
-        )
+        env_parse_enums = _env_parse_enums if _env_parse_enums is not None else self.model_config.get('env_parse_enums')
 
-        cli_prog_name = (
-            _cli_prog_name
-            if _cli_prog_name is not None
-            else self.model_config.get("cli_prog_name")
-        )
-        cli_parse_args = (
-            _cli_parse_args
-            if _cli_parse_args is not None
-            else self.model_config.get("cli_parse_args")
-        )
+        cli_prog_name = _cli_prog_name if _cli_prog_name is not None else self.model_config.get('cli_prog_name')
+        cli_parse_args = _cli_parse_args if _cli_parse_args is not None else self.model_config.get('cli_parse_args')
         cli_settings_source = (
-            _cli_settings_source
-            if _cli_settings_source is not None
-            else self.model_config.get("cli_settings_source")
+            _cli_settings_source if _cli_settings_source is not None else self.model_config.get('cli_settings_source')
         )
         cli_parse_none_str = (
-            _cli_parse_none_str
-            if _cli_parse_none_str is not None
-            else self.model_config.get("cli_parse_none_str")
+            _cli_parse_none_str if _cli_parse_none_str is not None else self.model_config.get('cli_parse_none_str')
         )
-        cli_parse_none_str = (
-            cli_parse_none_str if not env_parse_none_str else env_parse_none_str
-        )
+        cli_parse_none_str = cli_parse_none_str if not env_parse_none_str else env_parse_none_str
         cli_hide_none_type = (
-            _cli_hide_none_type
-            if _cli_hide_none_type is not None
-            else self.model_config.get("cli_hide_none_type")
+            _cli_hide_none_type if _cli_hide_none_type is not None else self.model_config.get('cli_hide_none_type')
         )
-        cli_avoid_json = (
-            _cli_avoid_json
-            if _cli_avoid_json is not None
-            else self.model_config.get("cli_avoid_json")
-        )
+        cli_avoid_json = _cli_avoid_json if _cli_avoid_json is not None else self.model_config.get('cli_avoid_json')
         cli_enforce_required = (
             _cli_enforce_required
             if _cli_enforce_required is not None
-            else self.model_config.get("cli_enforce_required")
+            else self.model_config.get('cli_enforce_required')
         )
         cli_use_class_docs_for_groups = (
             _cli_use_class_docs_for_groups
             if _cli_use_class_docs_for_groups is not None
-            else self.model_config.get("cli_use_class_docs_for_groups")
+            else self.model_config.get('cli_use_class_docs_for_groups')
         )
         cli_exit_on_error = (
-            _cli_exit_on_error
-            if _cli_exit_on_error is not None
-            else self.model_config.get("cli_exit_on_error")
+            _cli_exit_on_error if _cli_exit_on_error is not None else self.model_config.get('cli_exit_on_error')
         )
-        cli_prefix = (
-            _cli_prefix
-            if _cli_prefix is not None
-            else self.model_config.get("cli_prefix")
-        )
+        cli_prefix = _cli_prefix if _cli_prefix is not None else self.model_config.get('cli_prefix')
 
-        secrets_dir = (
-            _secrets_dir
-            if _secrets_dir is not None
-            else self.model_config.get("secrets_dir")
-        )
+        secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
         # Configure built-in sources
         init_settings = InitSettingsSource(self.__class__, init_kwargs=init_kwargs)
@@ -347,10 +294,7 @@ class BaseSettings(BaseModel):
         )
 
         file_secret_settings = SecretsSettingsSource(
-            self.__class__,
-            secrets_dir=secrets_dir,
-            case_sensitive=case_sensitive,
-            env_prefix=env_prefix,
+            self.__class__, secrets_dir=secrets_dir, case_sensitive=case_sensitive, env_prefix=env_prefix
         )
         # Provide a hook to set built-in sources priority and add / remove sources
         sources = self.settings_customise_sources(
@@ -365,9 +309,7 @@ class BaseSettings(BaseModel):
         if _settings_customize_instance is not None:
             sources = _settings_customize_instance(sources)
 
-        if not any(
-            [source for source in sources if isinstance(source, CliSettingsSource)]
-        ):
+        if not any([source for source in sources if isinstance(source, CliSettingsSource)]):
             if cli_parse_args is not None or cli_settings_source is not None:
                 cli_settings = (
                     CliSettingsSource(
@@ -395,11 +337,7 @@ class BaseSettings(BaseModel):
                     source._set_current_state(state)
                     source._set_settings_sources_data(states)
 
-                source_name = (
-                    source.__name__
-                    if hasattr(source, "__name__")
-                    else type(source).__name__
-                )
+                source_name = source.__name__ if hasattr(source, '__name__') else type(source).__name__
                 source_state = source()
 
                 states[source_name] = source_state
@@ -411,11 +349,11 @@ class BaseSettings(BaseModel):
             return {}
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
-        extra="forbid",
+        extra='forbid',
         arbitrary_types_allowed=True,
         validate_default=True,
         case_sensitive=False,
-        env_prefix="",
+        env_prefix='',
         env_file=None,
         env_file_encoding=None,
         env_ignore_empty=False,
@@ -431,12 +369,12 @@ class BaseSettings(BaseModel):
         cli_enforce_required=False,
         cli_use_class_docs_for_groups=False,
         cli_exit_on_error=True,
-        cli_prefix="",
+        cli_prefix='',
         json_file=None,
         json_file_encoding=None,
         yaml_file=None,
         yaml_file_encoding=None,
         toml_file=None,
         secrets_dir=None,
-        protected_namespaces=("model_", "settings_"),
+        protected_namespaces=('model_', 'settings_'),
     )
