@@ -1659,7 +1659,7 @@ class Settings(BaseSettings):
     my_api_key: str
 
 
-def settings_use_only_env(sources: tuple[PydanticBaseSettingsSource, ...]):
+def settings_use_only_env(sources: tuple):
     # Do not use unpacking, look for the ``EnvSettingSource`` since it might
     # not be included if ``settings_customise_sources`` is defined.
     _ = (source for source in sources if isinstance(source, EnvSettingsSource))
