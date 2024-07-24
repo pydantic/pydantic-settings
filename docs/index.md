@@ -1645,6 +1645,49 @@ except ValidationError as exc_info:
 ```
 
 
+### Instance Level Source Customization
+
+To modify your sources on an instance level, use ``_settings_customize_instance``.
+The following example will instantiate ``Settings`` using only the environment as a source:
+
+~~~py
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
+from pydantic_settings.sources import EnvSettingsSource
+
+
+class Settings(BaseSettings):
+    my_api_key: str
+
+
+def settings_use_only_env(sources: tuple[PydanticBaseSettingsSource, ...]):
+    # Do not use unpacking, look for the ``EnvSettingSource`` since it might
+    # not be included if ``settings_customise_sources`` is defined.
+    _ = (source for source in sources if isinstance(source, EnvSettingsSource))
+
+    if (source_env := next(_, None)) is None:
+        raise ValueError(
+            'Could not find ``EnvSettingsSource``. Check that ``settings_customise_sources`` returns this source.'
+        )
+
+    return (source_env,)
+
+
+# Should fail if not specified in env, even with init argument defined.
+# To run the assertion do ``export MY_API_KEY='5678efgh'``.
+settings = Settings(
+    my_api_key='1234abcd',
+    _settings_customize_instance=settings_use_only_env,
+)
+# assert settings.my_api_key == '5678efgh'
+
+settings = Settings(my_api_key='1234abcd')
+~~~
+
+Note that ``sources`` will be the output of ``settings_customise_sources`` so
+the size of the tuple is not set, thus why the env source must be searched for
+and has potential of not being found.
+
+
 ## In-place reloading
 
 In case you want to reload in-place an existing setting, you can do it by using its `__init__` method :

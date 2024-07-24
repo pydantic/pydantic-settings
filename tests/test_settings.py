@@ -4150,3 +4150,34 @@ def test_settings_build_values_customize_instance():
     # NOTE: Init ignored, silly source used.
     instance = SillySettings(whatever='the heck', _settings_customize_instance=customize_silly)
     assert instance.whatever == 'it is'
+
+
+def test_settings_customize_instance_env_only(env):
+    """This is the example from the documentation added for this."""
+
+    class Settings(BaseSettings):
+        my_api_key: str
+
+    def settings_use_only_env(sources: tuple[PydanticBaseSettingsSource, ...]):
+        # Do not use unpacking, look for the ``EnvSettingSource`` since it might
+        # not be included if ``settings_customise_sources`` is defined.
+        _ = (source for source in sources if isinstance(source, EnvSettingsSource))
+
+        if (source_env := next(_, None)) is None:
+            raise ValueError(
+                'Could not find ``EnvSettingsSource``. Check that ``settings_customise_sources`` returns this source.'
+            )
+
+        return (source_env,)
+
+    # Should fail if not specified in env, even with init argument defined.
+    env.set('MY_API_KEY', '5678efgh')
+    settings = Settings(
+        my_api_key='1234abcd',
+        _settings_customize_instance=settings_use_only_env,
+    )
+    assert settings.my_api_key == '5678efgh'
+
+    # Should work normally without specifying
+    settings = Settings(my_api_key='1234abcd')
+    assert settings.my_api_key == '1234abcd'
