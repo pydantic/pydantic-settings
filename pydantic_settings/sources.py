@@ -698,7 +698,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         elif is_model_class(annotation) or is_pydantic_dataclass(annotation):
             fields = (
                 annotation.__pydantic_fields__
-                if is_pydantic_dataclass(annotation)
+                if is_pydantic_dataclass(annotation) and hasattr(annotation, '__pydantic_fields__')
                 else cast(BaseModel, annotation).model_fields
             )
             # `case_sensitive is None` is here to be compatible with the old behavior.
