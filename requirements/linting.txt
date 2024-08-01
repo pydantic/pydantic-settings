@@ -12,11 +12,11 @@ click==8.1.7
     # via black
 distlib==0.3.8
     # via virtualenv
-filelock==3.15.3
+filelock==3.15.4
     # via virtualenv
-identify==2.5.36
+identify==2.6.0
     # via pre-commit
-mypy==1.10.0
+mypy==1.11.1
     # via -r requirements/linting.in
 mypy-extensions==1.0.0
     # via
@@ -40,7 +40,7 @@ pyyaml==6.0.1
     # via
     #   -r requirements/linting.in
     #   pre-commit
-ruff==0.4.10
+ruff==0.5.5
     # via -r requirements/linting.in
 tokenize-rt==5.2.0
     # via pyupgrade
@@ -48,11 +48,11 @@ tomli==2.0.1
     # via
     #   black
     #   mypy
-types-pyyaml==6.0.12.20240311
+types-pyyaml==6.0.12.20240724
     # via -r requirements/linting.in
 typing-extensions==4.12.2
     # via
     #   black
     #   mypy
-virtualenv==20.26.2
+virtualenv==20.26.3
     # via pre-commit

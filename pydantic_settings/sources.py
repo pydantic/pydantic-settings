@@ -374,7 +374,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             args = get_args(annotation)
             if origin_is_union(get_origin(field.annotation)) and len(args) == 2 and type(None) in args:
                 for arg in args:
-                    if arg != type(None):
+                    if arg is not type(None):
                         annotation = arg
                         break
 
@@ -762,7 +762,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                         if not allow_json_failure:
                             raise e
             if isinstance(env_var, dict):
-                if last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] is {}:
+                if last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] == {}:
                     env_var[last_key] = env_val
 
         return result
