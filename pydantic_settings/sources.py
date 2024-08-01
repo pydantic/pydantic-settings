@@ -374,7 +374,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             args = get_args(annotation)
             if origin_is_union(get_origin(field.annotation)) and len(args) == 2 and type(None) in args:
                 for arg in args:
-                    if arg is not type(None):
+                    if arg is not None:
                         annotation = arg
                         break
 
