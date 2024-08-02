@@ -164,7 +164,7 @@ def get_subcommand(model: BaseModel, is_required: bool = True, is_exit_on_error:
     subcommands: list[str] = []
     fields = (
         model_cls.__pydantic_fields__
-        if is_pydantic_dataclass(model_cls) and hasattr(model_cls, '__pydantic_fields__')
+        if hasattr(model_cls, '__pydantic_fields__') and is_pydantic_dataclass(model_cls)
         else model.model_fields
     )
     for field_name, field_info in fields.items():
