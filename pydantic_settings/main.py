@@ -1,11 +1,14 @@
 from __future__ import annotations as _annotations
 
+import inspect
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, Callable, ClassVar, TypeVar, cast, get_args
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, create_model
 from pydantic._internal._config import config_keys
+from pydantic._internal._decorators import unwrap_wrapped_function
 from pydantic._internal._utils import deep_update
+from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.main import BaseModel
 
 from .sources import (
@@ -18,7 +21,12 @@ from .sources import (
     PathType,
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
+    SettingsError,
+    _CliSubCommand,
+    get_subcommand,
 )
+
+Model = TypeVar('Model', bound='BaseModel')
 
 
 class SettingsConfigDict(ConfigDict, total=False):
@@ -366,3 +374,112 @@ class BaseSettings(BaseModel):
         secrets_dir=None,
         protected_namespaces=('model_', 'settings_'),
     )
+
+
+class CliApp:
+    @staticmethod
+    def _get_command_entrypoint(model_cls: type[Model]) -> Callable[[Any], None]:
+        for _, function in inspect.getmembers(model_cls, predicate=inspect.isfunction):
+            if hasattr(unwrap_wrapped_function(function), '_cli_app_command_entrypoint'):
+                return function
+        if hasattr(model_cls, 'cli_cmd'):
+            return getattr(model_cls, 'cli_cmd')
+        raise SettingsError(f'Error: {model_cls.__name__} class is missing AppCli.command entrypoint')
+
+    @staticmethod
+    def _cli_settings_source(model_cls: type[Model]) -> CliSettingsSource[Any]:
+        fields = model_cls.__pydantic_fields__ if is_pydantic_dataclass(model_cls) else model_cls.model_fields
+        field_definitions: dict[str, tuple[type, Any]] = {
+            name: (info.annotation, info) for name, info in fields.items() if info.annotation is not None
+        }
+        base_settings = create_model('CliAppBaseSettings', __base__=BaseSettings, **field_definitions)  # type: ignore
+        return CliSettingsSource(base_settings)
+
+    @staticmethod
+    def _validate_main_subcommands(model_cls: type[Model]) -> None:
+        fields = (
+            model_cls.__pydantic_fields__
+            if hasattr(model_cls, '__pydantic_fields__') and is_pydantic_dataclass(model_cls)
+            else model_cls.model_fields
+        )
+        for _, field_info in fields.items():
+            if _CliSubCommand in field_info.metadata:
+                field_types = [type_ for type_ in get_args(field_info.annotation) if type_ is not type(None)]
+                for subcommand_cls in field_types:
+                    if hasattr(subcommand_cls.__init__, '_cli_app_main_entrypoint'):
+                        raise SettingsError(
+                            f'Error: CliApp.main "{model_cls.__name__}" cannot have a '
+                            f'subcommand of CliApp.main "{subcommand_cls.__name__}"'
+                        )
+
+    @staticmethod
+    def main(cli_app_main_cls: type[Model]) -> type[Model]:
+        if cli_app_main_cls.__init__.__name__ != '_cli_app_init':
+            original_init = cli_app_main_cls.__init__
+            CliApp._validate_main_subcommands(cli_app_main_cls)
+
+            def _cli_app_init(*args: Any, **kwargs: Any) -> None:
+                if issubclass(cli_app_main_cls, BaseSettings):
+                    if (
+                        cli_app_main_cls.model_config.get('cli_settings_source') is None
+                        and cli_app_main_cls.model_config.get('cli_parse_args') is not False
+                        and kwargs.get('_cli_settings_source') is None
+                        and kwargs.get('_cli_parse_args') is not False
+                    ):
+                        kwargs.setdefault('_cli_parse_args', True)
+                else:
+                    cli_settings_source = CliApp._cli_settings_source(cli_app_main_cls)(args=True)
+                    kwargs = deep_update(cli_settings_source(), kwargs)
+                original_init(*args, **kwargs)
+                command_entry_point = CliApp._get_command_entrypoint(cli_app_main_cls)
+                command_entry_point(args[0])
+
+            setattr(_cli_app_init, '_cli_app_main_entrypoint', True)
+            setattr(cli_app_main_cls, '__init__', _cli_app_init)
+        return cli_app_main_cls
+
+    @staticmethod
+    def command(function: Callable[[Any], Any]) -> Callable[[Any], Any]:
+        setattr(unwrap_wrapped_function(function), '_cli_app_command_entrypoint', True)
+        return function
+
+    @staticmethod
+    def run(
+        model_cls: type[Model],
+        cli_args: list[str] | None = None,
+        cli_settings_source: CliSettingsSource[Any] | None = None,
+        **model_args: Any,
+    ) -> None:
+        init_kwargs = model_args
+        cli_parse_args: list[str] | bool = True if cli_args is None else cli_args
+        if issubclass(model_cls, BaseSettings):
+            if cli_settings_source is None:
+                cli_settings_source = model_args.get('_cli_settings_source')
+                if cli_settings_source is None:
+                    cli_settings_source = cast(
+                        CliSettingsSource[Any], model_cls.model_config.get('cli_settings_source')
+                    )
+            if cli_settings_source is not None:
+                init_kwargs.setdefault('_cli_settings_source', cli_settings_source(args=cli_parse_args))
+            else:
+                init_kwargs.setdefault('_cli_parse_args', cli_parse_args)
+        else:
+            if cli_settings_source is None:
+                cli_settings_source = CliApp._cli_settings_source(model_cls)
+            cli_settings_source = cli_settings_source(args=cli_parse_args)
+            init_kwargs = deep_update(cli_settings_source(), init_kwargs)
+        if hasattr(model_cls.__init__, '_cli_app_main_entrypoint'):
+            model_cls(**init_kwargs)
+        else:
+            command_entry_point = CliApp._get_command_entrypoint(model_cls)
+            command_entry_point(model_cls(**init_kwargs))
+
+    @staticmethod
+    def run_subcommand(model: BaseModel, is_exit_on_error: bool | None = None) -> None:
+        try:
+            subcommand = get_subcommand(model, is_required=True, is_exit_on_error=False)
+            CliApp._get_command_entrypoint(subcommand.__class__)(subcommand)
+        except SettingsError as err:
+            if (is_exit_on_error is not None and is_exit_on_error) or model.model_config.get('cli_exit_on_error'):
+                raise SystemExit(err)
+            raise err
