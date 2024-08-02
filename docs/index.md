@@ -714,7 +714,7 @@ annotations can only be applied to required fields (i.e. fields that do not have
 subcommands must be a valid type derived from either a pydantic `BaseModel` or pydantic.dataclasses `dataclass`.
 
 Parsed subcommands can be retrieved from model instances using the `get_subcommand` function. If a subcommand is
-required, use the `is_required` flag to raise an error if no subcommand is found.
+not required, set the `is_required` flag to `False` to disable raising an error if no subcommand is found.
 
 !!! note
     CLI settings subcommands are limited to a single subparser per model. In other words, all subcommands for a model
@@ -755,7 +755,7 @@ class Plugins(BaseModel):
 
     def sub_main(self) -> BaseModel:
         """Run this method if selected and return fake plugin command"""
-        return get_subcommand(self, is_required=True).plugin_main()
+        return get_subcommand(self).plugin_main()
 
 
 class Clone(BaseModel):
@@ -778,7 +778,7 @@ class Git(BaseSettings, cli_parse_args=True, cli_prog_name='git'):
 
     def main(self) -> BaseModel:
         """Run CLI main method and return sub cmd"""
-        return get_subcommand(self, is_required=True).sub_main()
+        return get_subcommand(self).sub_main()
 
 
 sys.argv = ['example.py', 'clone', 'repo', 'dest']
