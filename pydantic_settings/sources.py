@@ -13,6 +13,7 @@ from collections import deque
 from dataclasses import is_dataclass
 from enum import Enum
 from pathlib import Path
+from textwrap import dedent
 from types import FunctionType
 from typing import (
     TYPE_CHECKING,
@@ -136,7 +137,7 @@ class _CliInternalArgParser(ArgumentParser):
 
 T = TypeVar('T')
 CliSubCommand = Annotated[Union[T, None], _CliSubCommand]
-CliPositionalArg = Annotated[T, _CliPositionalArg]
+CliPositionalArg = Annotated[Union[T, None], _CliPositionalArg]
 
 
 class EnvNoneType(str):
@@ -1103,12 +1104,14 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if isinstance(val, list):
                 parsed_args[field_name] = self._merge_parsed_list(val, field_name)
             elif field_name.endswith(':subcommand') and val is not None:
-                selected_subcommands.append(field_name.split(':')[0] + val)
+                subcommand_name = field_name.split(':')[0] + val
+                subcommand_dest = self._cli_subcommands[field_name][subcommand_name]
+                selected_subcommands.append(subcommand_dest)
 
         for subcommands in self._cli_subcommands.values():
-            for subcommand in subcommands:
-                if subcommand not in selected_subcommands:
-                    parsed_args[subcommand] = self.cli_parse_none_str
+            for subcommand_dest in subcommands.values():
+                if subcommand_dest not in selected_subcommands:
+                    parsed_args[subcommand_dest] = self.cli_parse_none_str
 
         parsed_args = {key: val for key, val in parsed_args.items() if not key.endswith(':subcommand')}
         if selected_subcommands:
@@ -1288,22 +1291,24 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if _CliSubCommand in field_info.metadata:
                 if not field_info.is_required():
                     raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has a default value')
-                elif any((field_info.alias, field_info.validation_alias)):
-                    raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has an alias')
                 else:
+                    resolved_names, *_ = self._get_resolved_names(field_name, field_info, {})
+                    if len(resolved_names) > 1:
+                        raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has multiple aliases')
                     field_types = [type_ for type_ in get_args(field_info.annotation) if type_ is not type(None)]
-                    if len(field_types) != 1:
-                        raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has multiple types')
-                    elif not (is_model_class(field_types[0]) or is_pydantic_dataclass(field_types[0])):
-                        raise SettingsError(
-                            f'subcommand argument {model.__name__}.{field_name} is not derived from BaseModel'
-                        )
+                    for field_type in field_types:
+                        if not (is_model_class(field_type) or is_pydantic_dataclass(field_type)):
+                            raise SettingsError(
+                                f'subcommand argument {model.__name__}.{field_name} is not derived from BaseModel'
+                            )
                 subcommand_args.append((field_name, field_info))
             elif _CliPositionalArg in field_info.metadata:
                 if not field_info.is_required():
                     raise SettingsError(f'positional argument {model.__name__}.{field_name} has a default value')
-                elif any((field_info.alias, field_info.validation_alias)):
-                    raise SettingsError(f'positional argument {model.__name__}.{field_name} has an alias')
+                else:
+                    resolved_names, *_ = self._get_resolved_names(field_name, field_info, {})
+                    if len(resolved_names) > 1:
+                        raise SettingsError(f'positional argument {model.__name__}.{field_name} has multiple aliases')
                 positional_args.append((field_name, field_info))
             else:
                 optional_args.append((field_name, field_info))
@@ -1369,7 +1374,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self._add_subparsers = self._connect_parser_method(add_subparsers_method, 'add_subparsers_method')
         self._formatter_class = formatter_class
         self._cli_dict_args: dict[str, type[Any] | None] = {}
-        self._cli_subcommands: dict[str, list[str]] = {}
+        self._cli_subcommands: dict[str, dict[str, str]] = {}
         self._add_parser_args(
             parser=self.root_parser,
             model=self.settings_cls,
@@ -1395,33 +1400,51 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         for field_name, field_info in self._sort_arg_fields(model):
             sub_models: list[type[BaseModel]] = self._get_sub_models(model, field_name, field_info)
             if _CliSubCommand in field_info.metadata:
-                if subparsers is None:
-                    subparsers = self._add_subparsers(
-                        parser, title='subcommands', dest=f'{arg_prefix}:subcommand', required=self.cli_enforce_required
+                for model in sub_models:
+                    derived_name = model.__name__ if len(sub_models) > 1 else field_name
+                    subcommand_name = f'{arg_prefix}{derived_name}'
+                    subcommand_dest = f'{arg_prefix}{field_name}'
+                    subcommand_help = (
+                        None if model.__doc__ is None else dedent(model.__doc__)
+                        if self.cli_use_class_docs_for_groups
+                        else field_info.description
+                        if len(sub_models) == 1
+                        else None
                     )
-                    self._cli_subcommands[f'{arg_prefix}:subcommand'] = [f'{arg_prefix}{field_name}']
-                else:
-                    self._cli_subcommands[f'{arg_prefix}:subcommand'].append(f'{arg_prefix}{field_name}')
-                if hasattr(subparsers, 'metavar'):
-                    metavar = ','.join(self._cli_subcommands[f'{arg_prefix}:subcommand'])
-                    subparsers.metavar = f'{{{metavar}}}'
+                    if subparsers is None:
+                        subparsers = self._add_subparsers(
+                            parser,
+                            title='subcommands',
+                            dest=f'{arg_prefix}:subcommand',
+                            required=self.cli_enforce_required,
+                            description=field_info.description if len(sub_models) > 1 else None,
+                        )
+                        self._cli_subcommands[f'{arg_prefix}:subcommand'] = {subcommand_name: subcommand_dest}
+                    else:
+                        self._cli_subcommands[f'{arg_prefix}:subcommand'][subcommand_name] = subcommand_dest
 
-                model = sub_models[0]
-                self._add_parser_args(
-                    parser=self._add_parser(
-                        subparsers,
-                        field_name,
-                        help=field_info.description,
-                        formatter_class=self._formatter_class,
-                        description=model.__doc__,
-                    ),
-                    model=model,
-                    added_args=[],
-                    arg_prefix=f'{arg_prefix}{field_name}.',
-                    subcommand_prefix=f'{subcommand_prefix}{field_name}.',
-                    group=None,
-                    alias_prefixes=[],
-                )
+                    if hasattr(subparsers, 'metavar'):
+                        subparsers.metavar = (
+                            f'{subparsers.metavar[:-1]},{derived_name}}}'
+                            if subparsers.metavar
+                            else f'{{{derived_name}}}'
+                        )
+
+                    self._add_parser_args(
+                        parser=self._add_parser(
+                            subparsers,
+                            derived_name,
+                            help=subcommand_help,
+                            formatter_class=self._formatter_class,
+                            description=model.__doc__,
+                        ),
+                        model=model,
+                        added_args=[],
+                        arg_prefix=f'{arg_prefix}{field_name}.',
+                        subcommand_prefix=f'{subcommand_prefix}{field_name}.',
+                        group=None,
+                        alias_prefixes=[],
+                    )
             else:
                 resolved_names, is_alias_path_only = self._get_resolved_names(field_name, field_info, alias_path_args)
                 arg_flag: str = '--'

@@ -2905,15 +2905,6 @@ def test_cli_annotation_exceptions(monkeypatch):
             SubCommandHasDefault()
 
         with pytest.raises(
-            SettingsError, match='subcommand argument SubCommandMultipleTypes.subcmd has multiple types'
-        ):
-
-            class SubCommandMultipleTypes(BaseSettings, cli_parse_args=True):
-                subcmd: CliSubCommand[Union[SubCmd, SubCmdAlt]]
-
-            SubCommandMultipleTypes()
-
-        with pytest.raises(
             SettingsError, match='subcommand argument SubCommandNotModel.subcmd is not derived from BaseModel'
         ):
 
