@@ -1509,7 +1509,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         model_group_kwargs: dict[str, Any] = {}
         model_group_kwargs['title'] = f'{arg_names[0]} options'
         model_group_kwargs['description'] = (
-            None if sub_models[0].__doc__ is None else dedent(sub_models[0].__doc__)
+            None
+            if sub_models[0].__doc__ is None
+            else dedent(sub_models[0].__doc__)
             if self.cli_use_class_docs_for_groups and len(sub_models) == 1
             else field_info.description
         )
