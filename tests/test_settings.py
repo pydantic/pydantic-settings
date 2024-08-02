@@ -2756,6 +2756,12 @@ def test_cli_subcommand_with_positionals():
     class BarPlugin:
         my_feature: bool = False
 
+    bar = BarPlugin()
+    with pytest.raises(SystemExit, match='Error: CLI subcommand is required but no subcommands were found.'):
+        get_subcommand(bar)
+    with pytest.raises(SettingsError, match='Error: CLI subcommand is required but no subcommands were found.'):
+        get_subcommand(bar, is_exit_on_error=False)
+
     @pydantic_dataclasses.dataclass
     class Plugins:
         foo: CliSubCommand[FooPlugin]

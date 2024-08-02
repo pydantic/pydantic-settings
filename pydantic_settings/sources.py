@@ -165,7 +165,7 @@ def get_subcommand(model: BaseModel, is_required: bool = True, is_exit_on_error:
     fields = (
         model_cls.__pydantic_fields__
         if hasattr(model_cls, '__pydantic_fields__') and is_pydantic_dataclass(model_cls)
-        else model.model_fields
+        else model_cls.model_fields
     )
     for field_name, field_info in fields.items():
         if _CliSubCommand in field_info.metadata:
@@ -173,7 +173,11 @@ def get_subcommand(model: BaseModel, is_required: bool = True, is_exit_on_error:
                 return getattr(model, field_name)
             subcommands.append(field_name)
     if is_required:
-        error_message = f'Error: CLI subcommand is required {{{", ".join(subcommands)}}}'
+        error_message = (
+            f'Error: CLI subcommand is required {{{", ".join(subcommands)}}}'
+            if subcommands
+            else 'Error: CLI subcommand is required but no subcommands were found.'
+        )
         raise SystemExit(error_message) if is_exit_on_error else SettingsError(error_message)
     return None
 
