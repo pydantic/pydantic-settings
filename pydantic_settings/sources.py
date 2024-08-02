@@ -139,14 +139,14 @@ CliSubCommand = Annotated[Union[T, None], _CliSubCommand]
 CliPositionalArg = Annotated[T, _CliPositionalArg]
 
 
-def get_subcommand(model: BaseModel, is_required: bool = False, is_exit_on_error: bool = True) -> Any:
+def get_subcommand(model: BaseModel, is_required: bool = True, is_exit_on_error: bool = True) -> Any:
     """
     Get the subcommand from a model.
 
     Args:
         model: The model to get the subcommand from.
         is_required: Determines whether a model must have subcommand set and raises error if not
-            found. Defaults to `False`.
+            found. Defaults to `True`.
         is_exit_on_error: Determines whether this function exits with error if no subcommand is found.
             Defaults to `True`.
 

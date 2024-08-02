@@ -2783,11 +2783,11 @@ def test_cli_subcommand_with_positionals():
         'init': None,
         'plugins': None,
     }
-    assert get_subcommand(git) is None
+    assert get_subcommand(git, is_required=False) is None
     with pytest.raises(SystemExit, match='Error: CLI subcommand is required {clone, init, plugins}'):
-        get_subcommand(git, is_required=True)
+        get_subcommand(git)
     with pytest.raises(SettingsError, match='Error: CLI subcommand is required {clone, init, plugins}'):
-        get_subcommand(git, is_required=True, is_exit_on_error=False)
+        get_subcommand(git, is_exit_on_error=False)
 
     git = Git(_cli_parse_args=['init', '--quiet', 'true', 'dir/path'])
     assert git.model_dump() == {
@@ -2796,7 +2796,7 @@ def test_cli_subcommand_with_positionals():
         'plugins': None,
     }
     assert get_subcommand(git) == git.init
-    assert get_subcommand(git, is_required=True) == git.init
+    assert get_subcommand(git, is_required=False) == git.init
 
     git = Git(_cli_parse_args=['clone', 'repo', '.', '--shared', 'true'])
     assert git.model_dump() == {
@@ -2805,7 +2805,7 @@ def test_cli_subcommand_with_positionals():
         'plugins': None,
     }
     assert get_subcommand(git) == git.clone
-    assert get_subcommand(git, is_required=True) == git.clone
+    assert get_subcommand(git, is_required=False) == git.clone
 
     git = Git(_cli_parse_args=['plugins', 'bar'])
     assert git.model_dump() == {
@@ -2814,9 +2814,9 @@ def test_cli_subcommand_with_positionals():
         'plugins': {'foo': None, 'bar': {'my_feature': False}},
     }
     assert get_subcommand(git) == git.plugins
-    assert get_subcommand(git, is_required=True) == git.plugins
+    assert get_subcommand(git, is_required=False) == git.plugins
     assert get_subcommand(get_subcommand(git)) == git.plugins.bar
-    assert get_subcommand(get_subcommand(git), is_required=True) == git.plugins.bar
+    assert get_subcommand(get_subcommand(git), is_required=False) == git.plugins.bar
 
 
 def test_cli_union_similar_sub_models():
