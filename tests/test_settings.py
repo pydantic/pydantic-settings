@@ -690,6 +690,24 @@ def test_nested_dataclass(env):
     assert s.n.bar == 'bar value'
 
 
+def test_nested_vanila_dataclass(env):
+    @dataclasses.dataclass
+    class MyDataclass:
+        value: str
+
+    class NestedSettings(BaseSettings, MyDataclass):
+        pass
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+        sub: NestedSettings
+
+    env.set('SUB__VALUE', 'something')
+    s = Settings()
+    assert s.sub.value == 'something'
+
+
 def test_env_takes_precedence(env):
     class Settings(BaseSettings):
         foo: int

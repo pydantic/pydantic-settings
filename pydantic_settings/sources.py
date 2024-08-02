@@ -698,7 +698,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         elif is_model_class(annotation) or is_pydantic_dataclass(annotation):
             fields = (
                 annotation.__pydantic_fields__
-                if is_pydantic_dataclass(annotation)
+                if is_pydantic_dataclass(annotation) and hasattr(annotation, '__pydantic_fields__')
                 else cast(BaseModel, annotation).model_fields
             )
             # `case_sensitive is None` is here to be compatible with the old behavior.
@@ -1279,7 +1279,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, FieldInfo]]:
         positional_args, subcommand_args, optional_args = [], [], []
-        fields = model.__pydantic_fields__ if is_pydantic_dataclass(model) else model.model_fields
+        fields = (
+            model.__pydantic_fields__
+            if hasattr(model, '__pydantic_fields__') and is_pydantic_dataclass(model)
+            else model.model_fields
+        )
         for field_name, field_info in fields.items():
             if _CliSubCommand in field_info.metadata:
                 if not field_info.is_required():
