@@ -1,5 +1,6 @@
 from .main import BaseSettings, SettingsConfigDict
 from .sources import (
+    AzureKeyVaultSettingsSource,
     CliPositionalArg,
     CliSettingsSource,
     CliSubCommand,
@@ -10,6 +11,7 @@ from .sources import (
     PydanticBaseSettingsSource,
     PyprojectTomlConfigSettingsSource,
     SecretsSettingsSource,
+    SettingsError,
     TomlConfigSettingsSource,
     YamlConfigSettingsSource,
     get_subcommand,
@@ -29,8 +31,10 @@ __all__ = (
     'PydanticBaseSettingsSource',
     'SecretsSettingsSource',
     'SettingsConfigDict',
+    'SettingsError',
     'TomlConfigSettingsSource',
     'YamlConfigSettingsSource',
+    'AzureKeyVaultSettingsSource',
     'get_subcommand',
     '__version__',
 )

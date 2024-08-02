@@ -19,8 +19,11 @@ from typing import (
     Any,
     Callable,
     Generic,
+    Iterator,
     List,
     Mapping,
+    NoReturn,
+    Optional,
     Sequence,
     Tuple,
     TypeVar,
@@ -83,6 +86,21 @@ def import_toml() -> None:
         import tomllib
 
 
+def import_azure_key_vault() -> None:
+    global TokenCredential
+    global SecretClient
+    global ResourceNotFoundError
+
+    try:
+        from azure.core.credentials import TokenCredential
+        from azure.core.exceptions import ResourceNotFoundError
+        from azure.keyvault.secrets import SecretClient
+    except ImportError as e:
+        raise ImportError(
+            'Azure Key Vault dependencies are not installed, run `pip install pydantic-settings[azure-key-vault]`'
+        ) from e
+
+
 DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
 PathType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
 DEFAULT_PATH: PathType = Path('')
@@ -91,6 +109,10 @@ DEFAULT_PATH: PathType = Path('')
 # `env_file` in `DotEnvSettingsSource` so the default can be distinguished from `None`.
 # See the docstring of `BaseSettings` for more details.
 ENV_FILE_SENTINEL: DotenvType = Path('')
+
+
+class SettingsError(ValueError):
+    pass
 
 
 class _CliSubCommand:
@@ -102,7 +124,14 @@ class _CliPositionalArg:
 
 
 class _CliInternalArgParser(ArgumentParser):
-    pass
+    def __init__(self, cli_exit_on_error: bool = True, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._cli_exit_on_error = cli_exit_on_error
+
+    def error(self, message: str) -> NoReturn:
+        if not self._cli_exit_on_error:
+            raise SettingsError(f'error parsing CLI: {message}')
+        super().error(message)
 
 
 T = TypeVar('T')
@@ -146,10 +175,6 @@ def get_subcommand(model: BaseModel, is_required: bool = False, is_exit_on_error
 
 
 class EnvNoneType(str):
-    pass
-
-
-class SettingsError(ValueError):
     pass
 
 
@@ -384,7 +409,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             args = get_args(annotation)
             if origin_is_union(get_origin(field.annotation)) and len(args) == 2 and type(None) in args:
                 for arg in args:
-                    if arg != type(None):
+                    if arg is not None:
                         annotation = arg
                         break
 
@@ -772,7 +797,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                         if not allow_json_failure:
                             raise e
             if isinstance(env_var, dict):
-                if last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] is {}:
+                if last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] == {}:
                     env_var[last_key] = env_val
 
         return result
@@ -911,6 +936,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_enforce_required: Enforce required fields at the CLI. Defaults to `False`.
         cli_use_class_docs_for_groups: Use class docstrings in CLI group help text instead of field descriptions.
             Defaults to `False`.
+        cli_exit_on_error: Determines whether or not the internal parser exits with error info when an error occurs.
+            Defaults to `True`.
         cli_prefix: Prefix for command line arguments added under the root parser. Defaults to "".
         case_sensitive: Whether CLI "--arg" names should be read with case-sensitivity. Defaults to `True`.
             Note: Case-insensitive matching is only supported on the internal root parser and does not apply to CLI
@@ -937,6 +964,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_avoid_json: bool | None = None,
         cli_enforce_required: bool | None = None,
         cli_use_class_docs_for_groups: bool | None = None,
+        cli_exit_on_error: bool | None = None,
         cli_prefix: str | None = None,
         case_sensitive: bool | None = True,
         root_parser: Any = None,
@@ -971,6 +999,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if cli_use_class_docs_for_groups is not None
             else settings_cls.model_config.get('cli_use_class_docs_for_groups', False)
         )
+        self.cli_exit_on_error = (
+            cli_exit_on_error
+            if cli_exit_on_error is not None
+            else settings_cls.model_config.get('cli_exit_on_error', True)
+        )
         self.cli_prefix = cli_prefix if cli_prefix is not None else settings_cls.model_config.get('cli_prefix', '')
         if self.cli_prefix:
             if cli_prefix.startswith('.') or cli_prefix.endswith('.') or not cli_prefix.replace('.', '').isidentifier():  # type: ignore
@@ -991,7 +1024,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         )
 
         root_parser = (
-            _CliInternalArgParser(prog=self.cli_prog_name, description=settings_cls.__doc__)
+            _CliInternalArgParser(
+                cli_exit_on_error=self.cli_exit_on_error, prog=self.cli_prog_name, description=settings_cls.__doc__
+            )
             if root_parser is None
             else root_parser
         )
@@ -1758,6 +1793,70 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         import_yaml()
         with open(file_path, encoding=self.yaml_file_encoding) as yaml_file:
             return yaml.safe_load(yaml_file) or {}
+
+
+class AzureKeyVaultMapping(Mapping[str, Optional[str]]):
+    _loaded_secrets: dict[str, str | None]
+    _secret_client: SecretClient  # type: ignore
+    _secret_names: list[str]
+
+    def __init__(
+        self,
+        secret_client: SecretClient,  # type: ignore
+    ) -> None:
+        self._loaded_secrets = {}
+        self._secret_client = secret_client
+        self._secret_names: list[str] = [secret.name for secret in self._secret_client.list_properties_of_secrets()]
+
+    def __getitem__(self, key: str) -> str | None:
+        if key not in self._loaded_secrets:
+            try:
+                self._loaded_secrets[key] = self._secret_client.get_secret(key).value
+            except ResourceNotFoundError:  # type: ignore
+                raise KeyError(key)
+
+        return self._loaded_secrets[key]
+
+    def __len__(self) -> int:
+        return len(self._secret_names)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._secret_names)
+
+
+class AzureKeyVaultSettingsSource(EnvSettingsSource):
+    _url: str
+    _credential: TokenCredential  # type: ignore
+    _secret_client: SecretClient  # type: ignore
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        url: str,
+        credential: TokenCredential,  # type: ignore
+        env_prefix: str | None = None,
+        env_parse_none_str: str | None = None,
+        env_parse_enums: bool | None = None,
+    ) -> None:
+        import_azure_key_vault()
+        self._url = url
+        self._credential = credential
+        super().__init__(
+            settings_cls,
+            case_sensitive=True,
+            env_prefix=env_prefix,
+            env_nested_delimiter='--',
+            env_ignore_empty=False,
+            env_parse_none_str=env_parse_none_str,
+            env_parse_enums=env_parse_enums,
+        )
+
+    def _load_env_vars(self) -> Mapping[str, Optional[str]]:
+        secret_client = SecretClient(vault_url=self._url, credential=self._credential)  # type: ignore
+        return AzureKeyVaultMapping(secret_client)
+
+    def __repr__(self) -> str:
+        return f'AzureKeyVaultSettingsSource(url={self._url!r}, ' f'env_nested_delimiter={self.env_nested_delimiter!r})'
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
