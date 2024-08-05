@@ -8,7 +8,7 @@ import sys
 import typing
 import warnings
 from abc import ABC, abstractmethod
-from argparse import SUPPRESS, ArgumentParser, HelpFormatter, Namespace, _SubParsersAction
+from argparse import SUPPRESS, ArgumentParser, Namespace, RawDescriptionHelpFormatter, _SubParsersAction
 from collections import deque
 from dataclasses import is_dataclass
 from enum import Enum
@@ -917,7 +917,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             Defaults to `argparse._SubParsersAction.add_parser`.
         add_subparsers_method: The root parser add subparsers (sub-commands) method.
             Defaults to `argparse.ArgumentParser.add_subparsers`.
-        formatter_class: A class for customizing the root parser help text. Defaults to `argparse.HelpFormatter`.
+        formatter_class: A class for customizing the root parser help text. Defaults to `argparse.RawDescriptionHelpFormatter`.
     """
 
     def __init__(
@@ -939,7 +939,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         add_argument_group_method: Callable[..., Any] | None = ArgumentParser.add_argument_group,
         add_parser_method: Callable[..., Any] | None = _SubParsersAction.add_parser,
         add_subparsers_method: Callable[..., Any] | None = ArgumentParser.add_subparsers,
-        formatter_class: Any = HelpFormatter,
+        formatter_class: Any = RawDescriptionHelpFormatter,
     ) -> None:
         self.cli_prog_name = (
             cli_prog_name if cli_prog_name is not None else settings_cls.model_config.get('cli_prog_name', sys.argv[0])
@@ -991,7 +991,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
         root_parser = (
             _CliInternalArgParser(
-                cli_exit_on_error=self.cli_exit_on_error, prog=self.cli_prog_name, description=settings_cls.__doc__
+                cli_exit_on_error=self.cli_exit_on_error,
+                prog=self.cli_prog_name,
+                description=None if settings_cls.__doc__ is None else dedent(settings_cls.__doc__),
+                formatter_class=formatter_class,
             )
             if root_parser is None
             else root_parser
@@ -1364,7 +1367,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         add_argument_group_method: Callable[..., Any] | None = ArgumentParser.add_argument_group,
         add_parser_method: Callable[..., Any] | None = _SubParsersAction.add_parser,
         add_subparsers_method: Callable[..., Any] | None = ArgumentParser.add_subparsers,
-        formatter_class: Any = HelpFormatter,
+        formatter_class: Any = RawDescriptionHelpFormatter,
     ) -> None:
         self._root_parser = root_parser
         self._parse_args = self._connect_parser_method(parse_args_method, 'parsed_args_method')
@@ -1436,7 +1439,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                             derived_name,
                             help=subcommand_help,
                             formatter_class=self._formatter_class,
-                            description=model.__doc__,
+                            description=None if model.__doc__ is None else dedent(model.__doc__),
                         ),
                         model=model,
                         added_args=[],
@@ -1528,7 +1531,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         model_group_kwargs: dict[str, Any] = {}
         model_group_kwargs['title'] = f'{arg_names[0]} options'
         model_group_kwargs['description'] = (
-            sub_models[0].__doc__
+            None
+            if sub_models[0].__doc__ is None
+            else dedent(sub_models[0].__doc__)
             if self.cli_use_class_docs_for_groups and len(sub_models) == 1
             else field_info.description
         )
