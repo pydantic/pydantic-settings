@@ -1120,7 +1120,7 @@ parser methods that can be customised, along with their argparse counterparts (t
 * `add_argument_group_method` - (`argparse.ArgumentParser.add_argument_group`)
 * `add_parser_method` - (`argparse._SubParsersAction.add_parser`)
 * `add_subparsers_method` - (`argparse.ArgumentParser.add_subparsers`)
-* `formatter_class` - (`argparse.HelpFormatter`)
+* `formatter_class` - (`argparse.RawDescriptionHelpFormatter`)
 
 For a non-argparse parser the parser methods can be set to `None` if not supported. The CLI settings will only raise an
 error when connecting to the root parser if a parser method is necessary but set to `None`.
