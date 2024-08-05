@@ -8,11 +8,12 @@ import sys
 import typing
 import warnings
 from abc import ABC, abstractmethod
-from argparse import SUPPRESS, ArgumentParser, HelpFormatter, Namespace, _SubParsersAction
+from argparse import SUPPRESS, ArgumentParser, Namespace, RawDescriptionHelpFormatter, _SubParsersAction
 from collections import deque
 from dataclasses import is_dataclass
 from enum import Enum
 from pathlib import Path
+from textwrap import dedent
 from types import FunctionType
 from typing import (
     TYPE_CHECKING,
@@ -741,7 +742,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         elif is_model_class(annotation) or is_pydantic_dataclass(annotation):
             fields = (
                 annotation.__pydantic_fields__
-                if is_pydantic_dataclass(annotation)
+                if is_pydantic_dataclass(annotation) and hasattr(annotation, '__pydantic_fields__')
                 else cast(BaseModel, annotation).model_fields
             )
             # `case_sensitive is None` is here to be compatible with the old behavior.
@@ -959,7 +960,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             Defaults to `argparse._SubParsersAction.add_parser`.
         add_subparsers_method: The root parser add subparsers (sub-commands) method.
             Defaults to `argparse.ArgumentParser.add_subparsers`.
-        formatter_class: A class for customizing the root parser help text. Defaults to `argparse.HelpFormatter`.
+        formatter_class: A class for customizing the root parser help text. Defaults to `argparse.RawDescriptionHelpFormatter`.
     """
 
     def __init__(
@@ -981,7 +982,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         add_argument_group_method: Callable[..., Any] | None = ArgumentParser.add_argument_group,
         add_parser_method: Callable[..., Any] | None = _SubParsersAction.add_parser,
         add_subparsers_method: Callable[..., Any] | None = ArgumentParser.add_subparsers,
-        formatter_class: Any = HelpFormatter,
+        formatter_class: Any = RawDescriptionHelpFormatter,
     ) -> None:
         self.cli_prog_name = (
             cli_prog_name if cli_prog_name is not None else settings_cls.model_config.get('cli_prog_name', sys.argv[0])
@@ -1033,7 +1034,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
         root_parser = (
             _CliInternalArgParser(
-                cli_exit_on_error=self.cli_exit_on_error, prog=self.cli_prog_name, description=settings_cls.__doc__
+                cli_exit_on_error=self.cli_exit_on_error,
+                prog=self.cli_prog_name,
+                description=None if settings_cls.__doc__ is None else dedent(settings_cls.__doc__),
+                formatter_class=formatter_class,
             )
             if root_parser is None
             else root_parser
@@ -1322,7 +1326,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, FieldInfo]]:
         positional_args, subcommand_args, optional_args = [], [], []
-        fields = model.__pydantic_fields__ if is_pydantic_dataclass(model) else model.model_fields
+        fields = (
+            model.__pydantic_fields__
+            if hasattr(model, '__pydantic_fields__') and is_pydantic_dataclass(model)
+            else model.model_fields
+        )
         for field_name, field_info in fields.items():
             if _CliSubCommand in field_info.metadata:
                 if not field_info.is_required():
@@ -1398,7 +1406,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         add_argument_group_method: Callable[..., Any] | None = ArgumentParser.add_argument_group,
         add_parser_method: Callable[..., Any] | None = _SubParsersAction.add_parser,
         add_subparsers_method: Callable[..., Any] | None = ArgumentParser.add_subparsers,
-        formatter_class: Any = HelpFormatter,
+        formatter_class: Any = RawDescriptionHelpFormatter,
     ) -> None:
         self._root_parser = root_parser
         self._parse_args = self._connect_parser_method(parse_args_method, 'parsed_args_method')
@@ -1435,9 +1443,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             sub_models: list[type[BaseModel]] = self._get_sub_models(model, field_name, field_info)
             if _CliSubCommand in field_info.metadata:
                 if subparsers is None:
-                    subparsers = self._add_subparsers(
-                        parser, title='subcommands', dest=f'{arg_prefix}:subcommand', required=self.cli_enforce_required
-                    )
+                    subparsers = self._add_subparsers(parser, title='subcommands', dest=f'{arg_prefix}:subcommand')
                     self._cli_subcommands[f'{arg_prefix}:subcommand'] = [f'{arg_prefix}{field_name}']
                 else:
                     self._cli_subcommands[f'{arg_prefix}:subcommand'].append(f'{arg_prefix}{field_name}')
@@ -1452,7 +1458,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         field_name,
                         help=field_info.description,
                         formatter_class=self._formatter_class,
-                        description=model.__doc__,
+                        description=None if model.__doc__ is None else dedent(model.__doc__),
                     ),
                     model=model,
                     added_args=[],
@@ -1544,7 +1550,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         model_group_kwargs: dict[str, Any] = {}
         model_group_kwargs['title'] = f'{arg_names[0]} options'
         model_group_kwargs['description'] = (
-            sub_models[0].__doc__
+            None
+            if sub_models[0].__doc__ is None
+            else dedent(sub_models[0].__doc__)
             if self.cli_use_class_docs_for_groups and len(sub_models) == 1
             else field_info.description
         )
