@@ -2467,7 +2467,7 @@ My Multiline Doc
         )
 
 
-def test_cli_help_default_object(capsys, monkeypatch):
+def test_cli_help_default_or_none_model(capsys, monkeypatch):
     class DeeperSubModel(BaseModel):
         flag: bool
 
