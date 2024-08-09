@@ -1517,28 +1517,24 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         model_group: Any = None
         model_group_kwargs: dict[str, Any] = {}
         model_group_kwargs['title'] = f'{arg_names[0]} options'
-        model_group_kwargs['description'] = (
-            None
-            if sub_models[0].__doc__ is None
-            else dedent(sub_models[0].__doc__)
-            if self.cli_use_class_docs_for_groups and len(sub_models) == 1
-            else field_info.description
-        )
+        model_group_kwargs['description'] = field_info.description
+        if self.cli_use_class_docs_for_groups and len(sub_models) == 1:
+            model_group_kwargs['description'] = None if sub_models[0].__doc__ is None else dedent(sub_models[0].__doc__)
 
-        if model_default is not PydanticUndefined:
-            if model_default is not None:
+        if model_default not in (PydanticUndefined, None):
+            if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
                 model_default = getattr(model_default, field_name)
-            else:
-                desc_header = f'default: {self.cli_parse_none_str} (undefined)'
-                if model_group_kwargs['description'] is not None:
-                    model_group_kwargs['description'] = f'{desc_header}\n\n{model_group_kwargs["description"]}'
-                else:
-                    model_group_kwargs['description'] = desc_header
         else:
             if field_info.default is not PydanticUndefined:
                 model_default = field_info.default
             elif field_info.default_factory is not None:
                 model_default = field_info.default_factory
+        if model_default is None:
+            desc_header = f'default: {self.cli_parse_none_str} (undefined)'
+            if model_group_kwargs['description'] is not None:
+                model_group_kwargs['description'] = dedent(f'{desc_header}\n{model_group_kwargs["description"]}')
+            else:
+                model_group_kwargs['description'] = desc_header
 
         if not self.cli_avoid_json:
             added_args.append(arg_names[0])
@@ -1652,8 +1648,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 _help += f' ({ifdef}required)' if _help else f'({ifdef}required)'
         else:
             default = f'(default: {self.cli_parse_none_str})'
-            if model_default not in (PydanticUndefined, None):
+            if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
                 default = f'(default: {getattr(model_default, field_name)})'
+            elif model_default not in (PydanticUndefined, None) and callable(model_default):
+                default = f'(default factory: {self._metavar_format(model_default)})'
             elif field_info.default not in (PydanticUndefined, None):
                 default = f'(default: {field_info.default})'
             elif field_info.default_factory is not None:
