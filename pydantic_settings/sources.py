@@ -140,6 +140,49 @@ CliSubCommand = Annotated[Union[T, None], _CliSubCommand]
 CliPositionalArg = Annotated[T, _CliPositionalArg]
 
 
+def get_subcommand(model: BaseModel, is_required: bool = True, is_exit_on_error: bool = True) -> Any:
+    """
+    Get the subcommand from a model.
+
+    Args:
+        model: The model to get the subcommand from.
+        is_required: Determines whether a model must have subcommand set and raises error if not
+            found. Defaults to `True`.
+        is_exit_on_error: Determines whether this function exits with error if no subcommand is found.
+            Defaults to `True`.
+
+    Returns:
+        The subcommand model if found, otherwise `None`.
+
+    Raises:
+        SystemExit: When no subcommand is found and is_required=`True` and is_exit_on_error=`True`
+            (the default).
+        SettingsError: When no subcommand is found and is_required=`True` and
+            is_exit_on_error=`False`.
+    """
+
+    model_cls = type(model)
+    subcommands: list[str] = []
+    fields = (
+        model_cls.__pydantic_fields__
+        if hasattr(model_cls, '__pydantic_fields__') and is_pydantic_dataclass(model_cls)
+        else model_cls.model_fields
+    )
+    for field_name, field_info in fields.items():
+        if _CliSubCommand in field_info.metadata:
+            if getattr(model, field_name) is not None:
+                return getattr(model, field_name)
+            subcommands.append(field_name)
+    if is_required:
+        error_message = (
+            f'Error: CLI subcommand is required {{{", ".join(subcommands)}}}'
+            if subcommands
+            else 'Error: CLI subcommand is required but no subcommands were found.'
+        )
+        raise SystemExit(error_message) if is_exit_on_error else SettingsError(error_message)
+    return None
+
+
 class EnvNoneType(str):
     pass
 
@@ -1402,9 +1445,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             sub_models: list[type[BaseModel]] = self._get_sub_models(model, field_name, field_info)
             if _CliSubCommand in field_info.metadata:
                 if subparsers is None:
-                    subparsers = self._add_subparsers(
-                        parser, title='subcommands', dest=f'{arg_prefix}:subcommand', required=self.cli_enforce_required
-                    )
+                    subparsers = self._add_subparsers(parser, title='subcommands', dest=f'{arg_prefix}:subcommand')
                     self._cli_subcommands[f'{arg_prefix}:subcommand'] = [f'{arg_prefix}{field_name}']
                 else:
                     self._cli_subcommands[f'{arg_prefix}:subcommand'].append(f'{arg_prefix}{field_name}')
