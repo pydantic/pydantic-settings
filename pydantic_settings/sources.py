@@ -1571,7 +1571,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         if self.cli_use_class_docs_for_groups and len(sub_models) == 1:
             model_group_kwargs['description'] = None if sub_models[0].__doc__ is None else dedent(sub_models[0].__doc__)
 
-        if model_default not in (PydanticUndefined, None):
+        if model_default is not PydanticUndefined:
             if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
                 model_default = getattr(model_default, field_name)
         else:
