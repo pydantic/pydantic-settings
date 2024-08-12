@@ -8,11 +8,12 @@ import sys
 import typing
 import warnings
 from abc import ABC, abstractmethod
-from argparse import SUPPRESS, ArgumentParser, HelpFormatter, Namespace, _SubParsersAction
+from argparse import SUPPRESS, ArgumentParser, Namespace, RawDescriptionHelpFormatter, _SubParsersAction
 from collections import deque
 from dataclasses import asdict, is_dataclass
 from enum import Enum
 from pathlib import Path
+from textwrap import dedent
 from types import FunctionType
 from typing import (
     TYPE_CHECKING,
@@ -424,7 +425,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             args = get_args(annotation)
             if origin_is_union(get_origin(field.annotation)) and len(args) == 2 and type(None) in args:
                 for arg in args:
-                    if arg != type(None):
+                    if arg is not None:
                         annotation = arg
                         break
 
@@ -748,7 +749,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         elif is_model_class(annotation) or is_pydantic_dataclass(annotation):
             fields = (
                 annotation.__pydantic_fields__
-                if is_pydantic_dataclass(annotation)
+                if is_pydantic_dataclass(annotation) and hasattr(annotation, '__pydantic_fields__')
                 else cast(BaseModel, annotation).model_fields
             )
             # `case_sensitive is None` is here to be compatible with the old behavior.
@@ -812,7 +813,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                         if not allow_json_failure:
                             raise e
             if isinstance(env_var, dict):
-                if last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] is {}:
+                if last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] == {}:
                     env_var[last_key] = env_val
 
         return result
@@ -966,7 +967,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             Defaults to `argparse._SubParsersAction.add_parser`.
         add_subparsers_method: The root parser add subparsers (sub-commands) method.
             Defaults to `argparse.ArgumentParser.add_subparsers`.
-        formatter_class: A class for customizing the root parser help text. Defaults to `argparse.HelpFormatter`.
+        formatter_class: A class for customizing the root parser help text. Defaults to `argparse.RawDescriptionHelpFormatter`.
     """
 
     def __init__(
@@ -988,7 +989,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         add_argument_group_method: Callable[..., Any] | None = ArgumentParser.add_argument_group,
         add_parser_method: Callable[..., Any] | None = _SubParsersAction.add_parser,
         add_subparsers_method: Callable[..., Any] | None = ArgumentParser.add_subparsers,
-        formatter_class: Any = HelpFormatter,
+        formatter_class: Any = RawDescriptionHelpFormatter,
     ) -> None:
         self.cli_prog_name = (
             cli_prog_name if cli_prog_name is not None else settings_cls.model_config.get('cli_prog_name', sys.argv[0])
@@ -1040,7 +1041,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
         root_parser = (
             _CliInternalArgParser(
-                cli_exit_on_error=self.cli_exit_on_error, prog=self.cli_prog_name, description=settings_cls.__doc__
+                cli_exit_on_error=self.cli_exit_on_error,
+                prog=self.cli_prog_name,
+                description=None if settings_cls.__doc__ is None else dedent(settings_cls.__doc__),
+                formatter_class=formatter_class,
             )
             if root_parser is None
             else root_parser
@@ -1329,7 +1333,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, FieldInfo]]:
         positional_args, subcommand_args, optional_args = [], [], []
-        fields = model.__pydantic_fields__ if is_pydantic_dataclass(model) else model.model_fields
+        fields = (
+            model.__pydantic_fields__
+            if hasattr(model, '__pydantic_fields__') and is_pydantic_dataclass(model)
+            else model.model_fields
+        )
         for field_name, field_info in fields.items():
             if _CliSubCommand in field_info.metadata:
                 if not field_info.is_required():
@@ -1405,7 +1413,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         add_argument_group_method: Callable[..., Any] | None = ArgumentParser.add_argument_group,
         add_parser_method: Callable[..., Any] | None = _SubParsersAction.add_parser,
         add_subparsers_method: Callable[..., Any] | None = ArgumentParser.add_subparsers,
-        formatter_class: Any = HelpFormatter,
+        formatter_class: Any = RawDescriptionHelpFormatter,
     ) -> None:
         self._root_parser = root_parser
         self._parse_args = self._connect_parser_method(parse_args_method, 'parsed_args_method')
@@ -1424,6 +1432,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             subcommand_prefix=self.env_prefix,
             group=None,
             alias_prefixes=[],
+            model_default=PydanticUndefined,
         )
 
     def _add_parser_args(
@@ -1435,6 +1444,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         subcommand_prefix: str,
         group: Any,
         alias_prefixes: list[str],
+        model_default: Any,
     ) -> ArgumentParser:
         subparsers: Any = None
         alias_path_args: dict[str, str] = {}
@@ -1459,7 +1469,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         field_name,
                         help=field_info.description,
                         formatter_class=self._formatter_class,
-                        description=model.__doc__,
+                        description=None if model.__doc__ is None else dedent(model.__doc__),
                     ),
                     model=model,
                     added_args=[],
@@ -1467,16 +1477,19 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     subcommand_prefix=f'{subcommand_prefix}{field_name}.',
                     group=None,
                     alias_prefixes=[],
+                    model_default=PydanticUndefined,
                 )
             else:
                 resolved_names, is_alias_path_only = self._get_resolved_names(field_name, field_info, alias_path_args)
                 arg_flag: str = '--'
                 kwargs: dict[str, Any] = {}
                 kwargs['default'] = SUPPRESS
-                kwargs['help'] = self._help_format(field_info)
+                kwargs['help'] = self._help_format(field_name, field_info, model_default)
                 kwargs['dest'] = f'{arg_prefix}{resolved_names[0]}'
                 kwargs['metavar'] = self._metavar_format(field_info.annotation)
-                kwargs['required'] = self.cli_enforce_required and field_info.is_required()
+                kwargs['required'] = (
+                    self.cli_enforce_required and field_info.is_required() and model_default is PydanticUndefined
+                )
                 if kwargs['dest'] in added_args:
                     continue
                 if _annotation_contains_types(
@@ -1504,8 +1517,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         arg_flag,
                         arg_names,
                         kwargs,
+                        field_name,
                         field_info,
                         resolved_names,
+                        model_default=model_default,
                     )
                 elif is_alias_path_only:
                     continue
@@ -1544,17 +1559,33 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         arg_flag: str,
         arg_names: list[str],
         kwargs: dict[str, Any],
+        field_name: str,
         field_info: FieldInfo,
         resolved_names: tuple[str, ...],
+        model_default: Any,
     ) -> None:
         model_group: Any = None
         model_group_kwargs: dict[str, Any] = {}
         model_group_kwargs['title'] = f'{arg_names[0]} options'
-        model_group_kwargs['description'] = (
-            sub_models[0].__doc__
-            if self.cli_use_class_docs_for_groups and len(sub_models) == 1
-            else field_info.description
-        )
+        model_group_kwargs['description'] = field_info.description
+        if self.cli_use_class_docs_for_groups and len(sub_models) == 1:
+            model_group_kwargs['description'] = None if sub_models[0].__doc__ is None else dedent(sub_models[0].__doc__)
+
+        if model_default not in (PydanticUndefined, None):
+            if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
+                model_default = getattr(model_default, field_name)
+        else:
+            if field_info.default is not PydanticUndefined:
+                model_default = field_info.default
+            elif field_info.default_factory is not None:
+                model_default = field_info.default_factory
+        if model_default is None:
+            desc_header = f'default: {self.cli_parse_none_str} (undefined)'
+            if model_group_kwargs['description'] is not None:
+                model_group_kwargs['description'] = dedent(f'{desc_header}\n{model_group_kwargs["description"]}')
+            else:
+                model_group_kwargs['description'] = desc_header
+
         if not self.cli_avoid_json:
             added_args.append(arg_names[0])
             kwargs['help'] = f'set {arg_names[0]} from JSON string'
@@ -1569,6 +1600,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 subcommand_prefix=subcommand_prefix,
                 group=model_group if model_group else model_group_kwargs,
                 alias_prefixes=[f'{arg_prefix}{name}.' for name in resolved_names[1:]],
+                model_default=model_default,
             )
 
     def _add_parser_alias_paths(
@@ -1658,14 +1690,19 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _metavar_format(self, obj: Any) -> str:
         return self._metavar_format_recurse(obj).replace(', ', ',')
 
-    def _help_format(self, field_info: FieldInfo) -> str:
+    def _help_format(self, field_name: str, field_info: FieldInfo, model_default: Any) -> str:
         _help = field_info.description if field_info.description else ''
-        if field_info.is_required():
+        if field_info.is_required() and model_default in (PydanticUndefined, None):
             if _CliPositionalArg not in field_info.metadata:
-                _help += ' (required)' if _help else '(required)'
+                ifdef = 'ifdef: ' if model_default is None else ''
+                _help += f' ({ifdef}required)' if _help else f'({ifdef}required)'
         else:
             default = f'(default: {self.cli_parse_none_str})'
-            if field_info.default not in (PydanticUndefined, None):
+            if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
+                default = f'(default: {getattr(model_default, field_name)})'
+            elif model_default not in (PydanticUndefined, None) and callable(model_default):
+                default = f'(default factory: {self._metavar_format(model_default)})'
+            elif field_info.default not in (PydanticUndefined, None):
                 default = f'(default: {field_info.default})'
             elif field_info.default_factory is not None:
                 default = f'(default: {field_info.default_factory})'

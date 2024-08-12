@@ -770,6 +770,24 @@ def test_nested_dataclass(env):
     assert s.n.bar == 'bar value'
 
 
+def test_nested_vanila_dataclass(env):
+    @dataclasses.dataclass
+    class MyDataclass:
+        value: str
+
+    class NestedSettings(BaseSettings, MyDataclass):
+        pass
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+        sub: NestedSettings
+
+    env.set('SUB__VALUE', 'something')
+    s = Settings()
+    assert s.sub.value == 'something'
+
+
 def test_env_takes_precedence(env):
     class Settings(BaseSettings):
         foo: int
@@ -2477,24 +2495,156 @@ def test_cli_help_differentiation(capsys, monkeypatch):
 
 
 def test_cli_help_string_format(capsys, monkeypatch):
-    class Cfg(BaseSettings):
+    class Cfg(BaseSettings, cli_parse_args=True):
         date_str: str = '%Y-%m-%d'
 
-    argparse_options_text = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
+    class MultilineDoc(BaseSettings, cli_parse_args=True):
+        """
+        My
+        Multiline
+        Doc
+        """
 
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
 
         with pytest.raises(SystemExit):
-            Cfg(_cli_parse_args=True)
+            Cfg()
 
         assert (
             re.sub(r'0x\w+', '0xffffffff', capsys.readouterr().out, flags=re.MULTILINE)
             == f"""usage: example.py [-h] [--date_str str]
 
-{argparse_options_text}:
+{ARGPARSE_OPTIONS_TEXT}:
   -h, --help      show this help message and exit
   --date_str str  (default: %Y-%m-%d)
+"""
+        )
+
+        with pytest.raises(SystemExit):
+            MultilineDoc()
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h]
+
+My
+Multiline
+Doc
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help  show this help message and exit
+"""
+        )
+
+        with pytest.raises(SystemExit):
+            cli_settings_source = CliSettingsSource(MultilineDoc, formatter_class=argparse.HelpFormatter)
+            MultilineDoc(_cli_settings_source=cli_settings_source(args=True))
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h]
+
+My Multiline Doc
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help  show this help message and exit
+"""
+        )
+
+
+def test_cli_help_default_or_none_model(capsys, monkeypatch):
+    class DeeperSubModel(BaseModel):
+        flag: bool
+
+    class DeepSubModel(BaseModel):
+        flag: bool
+        deeper: Optional[DeeperSubModel] = None
+
+    class SubModel(BaseModel):
+        flag: bool
+        deep: DeepSubModel = DeepSubModel(flag=True)
+
+    class Settings(BaseSettings, cli_parse_args=True):
+        flag: bool = True
+        sub_model: SubModel = SubModel(flag=False)
+        opt_model: Optional[DeepSubModel] = Field(None, description='Group Doc')
+        fact_model: SubModel = Field(default_factory=lambda: SubModel(flag=True))
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Settings()
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] [--flag bool] [--sub_model JSON]
+                  [--sub_model.flag bool] [--sub_model.deep JSON]
+                  [--sub_model.deep.flag bool]
+                  [--sub_model.deep.deeper {{JSON,null}}]
+                  [--sub_model.deep.deeper.flag bool]
+                  [--opt_model {{JSON,null}}] [--opt_model.flag bool]
+                  [--opt_model.deeper {{JSON,null}}]
+                  [--opt_model.deeper.flag bool] [--fact_model JSON]
+                  [--fact_model.flag bool] [--fact_model.deep JSON]
+                  [--fact_model.deep.flag bool]
+                  [--fact_model.deep.deeper {{JSON,null}}]
+                  [--fact_model.deep.deeper.flag bool]
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+  --flag bool           (default: True)
+
+sub_model options:
+  --sub_model JSON      set sub_model from JSON string
+  --sub_model.flag bool
+                        (default: False)
+
+sub_model.deep options:
+  --sub_model.deep JSON
+                        set sub_model.deep from JSON string
+  --sub_model.deep.flag bool
+                        (default: True)
+
+sub_model.deep.deeper options:
+  default: null (undefined)
+
+  --sub_model.deep.deeper {{JSON,null}}
+                        set sub_model.deep.deeper from JSON string
+  --sub_model.deep.deeper.flag bool
+                        (ifdef: required)
+
+opt_model options:
+  default: null (undefined)
+  Group Doc
+
+  --opt_model {{JSON,null}}
+                        set opt_model from JSON string
+  --opt_model.flag bool
+                        (ifdef: required)
+
+opt_model.deeper options:
+  default: null (undefined)
+
+  --opt_model.deeper {{JSON,null}}
+                        set opt_model.deeper from JSON string
+  --opt_model.deeper.flag bool
+                        (ifdef: required)
+
+fact_model options:
+  --fact_model JSON     set fact_model from JSON string
+  --fact_model.flag bool
+                        (default factory: <lambda>)
+
+fact_model.deep options:
+  --fact_model.deep JSON
+                        set fact_model.deep from JSON string
+  --fact_model.deep.flag bool
+                        (default factory: <lambda>)
+
+fact_model.deep.deeper options:
+  --fact_model.deep.deeper {{JSON,null}}
+                        set fact_model.deep.deeper from JSON string
+  --fact_model.deep.deeper.flag bool
+                        (default factory: <lambda>)
 """
         )
 
