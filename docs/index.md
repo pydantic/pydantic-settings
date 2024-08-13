@@ -371,20 +371,15 @@ print(Settings().model_dump())
 #> {'numbers': [1, 2, 3]}
 ```
 
-## Parsing default objects
+## Nested model partial updates
 
-Pydantic settings uses copy-by-reference when merging default `BaseModel` objects from different sources. This ensures
-the original object reference is maintained in the final object instantiation. However, due to an internal limitation,
-it is not possible to partially update a nested sub model field in a default object when using copy-by-reference; the
-entirety of the sub model must be provided.
-
-This behavior can be overriden by setting the `default_objects_copy_by_value` flag to `True`, which will allow partial
-updates to sub model fields. Note of course the original default object reference will not be retained.
+By default, Pydantic settings does not allow partial updates to nested models. This behavior can be overriden by setting
+the `nested_model_partial_update` flag to `True`, which will allow partial updates on nested model fields.
 
 ```py
 import os
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -394,41 +389,18 @@ class SubModel(BaseModel):
     flag: bool = False
 
 
-class SettingsCopyByReference(BaseSettings):
-    model_config = SettingsConfigDict(env_nested_delimiter='__')
-
-    default_object: SubModel = SubModel()
-
-
-class SettingsCopyByValue(BaseSettings):
+class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_nested_delimiter='__', default_objects_copy_by_value=True
+        env_nested_delimiter='__', nested_model_partial_update=True
     )
 
-    default_object: SubModel = SubModel()
+    nested_model: SubModel = SubModel()
 
-
-s = SettingsCopyByReference()
-assert s.model_dump() == {'default_object': {'val': 0, 'flag': False}}
 
 # Apply a partial update to the default object using environment variables
-os.environ['DEFAULT_OBJECT__FLAG'] = 'True'
+os.environ['NESTED_MODEL__FLAG'] = 'True'
 
-try:
-    # Copy by reference will fail
-    s = SettingsCopyByReference()
-except ValidationError as err:
-    print(err)
-    """
-    1 validation error for SettingsCopyByReference
-    nested.val
-      Field required [type=missing, input_value={'flag': 'TRUE'}, input_type=dict]
-        For further information visit https://errors.pydantic.dev/2/v/missing
-    """
-
-# Copy by value will pass
-s = SettingsCopyByValue()
-assert s.model_dump() == {'default_object': {'val': 0, 'flag': True}}
+assert Settings().model_dump() == {'nested_model': {'val': 0, 'flag': True}}
 ```
 
 ## Dotenv (.env) support

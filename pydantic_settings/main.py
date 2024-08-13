@@ -24,7 +24,7 @@ from .sources import (
 
 class SettingsConfigDict(ConfigDict, total=False):
     case_sensitive: bool
-    default_objects_copy_by_value: bool | None
+    nested_model_partial_update: bool | None
     env_prefix: str
     env_file: DotenvType | None
     env_file_encoding: str | None
@@ -90,8 +90,7 @@ class BaseSettings(BaseModel):
 
     Args:
         _case_sensitive: Whether environment variables names should be read with case-sensitivity. Defaults to `None`.
-        _default_objects_copy_by_value: Whether default `BaseModel` objects should use copy-by-value instead of
-            copy-by-reference when compiling sources. Defaults to `False`.
+        _nested_model_partial_update: Whether to allow partial updates on nested model fields. Defaults to `False`.
         _env_prefix: Prefix for all environment variables. Defaults to `None`.
         _env_file: The env file(s) to load settings values from. Defaults to `Path('')`, which
             means that the value from `model_config['env_file']` should be used. You can also pass
@@ -124,7 +123,7 @@ class BaseSettings(BaseModel):
     def __init__(
         __pydantic_self__,
         _case_sensitive: bool | None = None,
-        _default_objects_copy_by_value: bool | None = None,
+        _nested_model_partial_update: bool | None = None,
         _env_prefix: str | None = None,
         _env_file: DotenvType | None = ENV_FILE_SENTINEL,
         _env_file_encoding: str | None = None,
@@ -150,7 +149,7 @@ class BaseSettings(BaseModel):
             **__pydantic_self__._settings_build_values(
                 values,
                 _case_sensitive=_case_sensitive,
-                _default_objects_copy_by_value=_default_objects_copy_by_value,
+                _nested_model_partial_update=_nested_model_partial_update,
                 _env_prefix=_env_prefix,
                 _env_file=_env_file,
                 _env_file_encoding=_env_file_encoding,
@@ -200,7 +199,7 @@ class BaseSettings(BaseModel):
         self,
         init_kwargs: dict[str, Any],
         _case_sensitive: bool | None = None,
-        _default_objects_copy_by_value: bool | None = None,
+        _nested_model_partial_update: bool | None = None,
         _env_prefix: str | None = None,
         _env_file: DotenvType | None = None,
         _env_file_encoding: str | None = None,
@@ -223,10 +222,10 @@ class BaseSettings(BaseModel):
         # Determine settings config values
         case_sensitive = _case_sensitive if _case_sensitive is not None else self.model_config.get('case_sensitive')
         env_prefix = _env_prefix if _env_prefix is not None else self.model_config.get('env_prefix')
-        default_objects_copy_by_value = (
-            _default_objects_copy_by_value
-            if _default_objects_copy_by_value is not None
-            else self.model_config.get('default_objects_copy_by_value')
+        nested_model_partial_update = (
+            _nested_model_partial_update
+            if _nested_model_partial_update is not None
+            else self.model_config.get('nested_model_partial_update')
         )
         env_file = _env_file if _env_file != ENV_FILE_SENTINEL else self.model_config.get('env_file')
         env_file_encoding = (
@@ -277,10 +276,10 @@ class BaseSettings(BaseModel):
 
         # Configure built-in sources
         default_settings = DefaultSettingsSource(
-            self.__class__, default_objects_copy_by_value=default_objects_copy_by_value
+            self.__class__, nested_model_partial_update=nested_model_partial_update
         )
         init_settings = InitSettingsSource(
-            self.__class__, init_kwargs=init_kwargs, default_objects_copy_by_value=default_objects_copy_by_value
+            self.__class__, init_kwargs=init_kwargs, nested_model_partial_update=nested_model_partial_update
         )
         env_settings = EnvSettingsSource(
             self.__class__,
@@ -359,7 +358,7 @@ class BaseSettings(BaseModel):
         validate_default=True,
         case_sensitive=False,
         env_prefix='',
-        default_objects_copy_by_value=False,
+        nested_model_partial_update=False,
         env_file=None,
         env_file_encoding=None,
         env_ignore_empty=False,

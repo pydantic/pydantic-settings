@@ -254,15 +254,15 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
     Source class for loading default object values.
     """
 
-    def __init__(self, settings_cls: type[BaseSettings], default_objects_copy_by_value: bool | None = None):
+    def __init__(self, settings_cls: type[BaseSettings], nested_model_partial_update: bool | None = None):
         super().__init__(settings_cls)
         self.defaults: dict[str, Any] = {}
-        self.default_objects_copy_by_value = (
-            default_objects_copy_by_value
-            if default_objects_copy_by_value is not None
-            else self.config.get('default_objects_copy_by_value', False)
+        self.nested_model_partial_update = (
+            nested_model_partial_update
+            if nested_model_partial_update is not None
+            else self.config.get('nested_model_partial_update', False)
         )
-        if self.default_objects_copy_by_value:
+        if self.nested_model_partial_update:
             for field_name, field_info in settings_cls.model_fields.items():
                 if is_dataclass(type(field_info.default)):
                     self.defaults[_field_name_for_signature(field_name, field_info)] = asdict(field_info.default)
@@ -277,7 +277,7 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
         return self.defaults
 
     def __repr__(self) -> str:
-        return f'DefaultSettingsSource(default_objects_copy_by_value={self.default_objects_copy_by_value})'
+        return f'DefaultSettingsSource(nested_model_partial_update={self.nested_model_partial_update})'
 
 
 class InitSettingsSource(PydanticBaseSettingsSource):
@@ -289,14 +289,14 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         self,
         settings_cls: type[BaseSettings],
         init_kwargs: dict[str, Any],
-        default_objects_copy_by_value: bool | None = None,
+        nested_model_partial_update: bool | None = None,
     ):
         self.init_kwargs = init_kwargs
         super().__init__(settings_cls)
-        self.default_objects_copy_by_value = (
-            default_objects_copy_by_value
-            if default_objects_copy_by_value is not None
-            else self.config.get('default_objects_copy_by_value', False)
+        self.nested_model_partial_update = (
+            nested_model_partial_update
+            if nested_model_partial_update is not None
+            else self.config.get('nested_model_partial_update', False)
         )
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
@@ -306,7 +306,7 @@ class InitSettingsSource(PydanticBaseSettingsSource):
     def __call__(self) -> dict[str, Any]:
         return (
             TypeAdapter(Dict[str, Any]).dump_python(self.init_kwargs)
-            if self.default_objects_copy_by_value
+            if self.nested_model_partial_update
             else self.init_kwargs
         )
 
