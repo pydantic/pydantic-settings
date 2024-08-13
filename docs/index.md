@@ -371,6 +371,72 @@ print(Settings().model_dump())
 #> {'numbers': [1, 2, 3]}
 ```
 
+## Parsing default objects
+
+Pydantic settings uses copy-by-reference when merging default (`BaseModel`) objects from different sources. This ensures
+the original object reference is maintained in the final object instantiation. However, due to an internal limitation,
+it is not possible to partially update a nested sub model field in a default object when using copy-by-reference; the
+entirety of the sub model must be provided.
+
+This behavior can be overriden by setting the `default_objects_copy_by_value` flag to `True`, which will allow partial
+updates to sub model fields. Note of course the original default object reference will not be retained.
+
+```py
+import os
+
+from pydantic import BaseModel, ValidationError
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class SubModel(BaseModel):
+    val: int = 0
+    flag: bool = False
+
+
+ORIGINAL_OBJECT = SubModel()
+
+
+class SettingsCopyByReference(BaseSettings):
+    model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    default_object: SubModel = ORIGINAL_OBJECT
+
+
+class SettingsCopyByValue(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_nested_delimiter='__', default_objects_copy_by_value=True
+    )
+
+    default_object: SubModel = ORIGINAL_OBJECT
+
+
+by_ref = SettingsCopyByReference()
+assert by_ref.default_object is ORIGINAL_OBJECT
+
+# Apply a partial update to the default object using environment variables
+os.environ['DEFAULT_OBJECT__FLAG'] = 'True'
+
+try:
+    # Copy by reference will fail
+    SettingsCopyByReference()
+except ValidationError as err:
+    print(err)
+    """
+    1 validation error for SettingsCopyByReference
+    nested.val
+      Field required [type=missing, input_value={'flag': 'TRUE'}, input_type=dict]
+        For further information visit https://errors.pydantic.dev/2/v/missing
+    """
+
+# Copy by value will pass
+by_val = SettingsCopyByValue()
+assert by_val.default_object is not ORIGINAL_OBJECT
+
+print(by_val.model_dump())
+#> {'default_object': {'val': 0, 'flag': True}}
+```
+
 ## Dotenv (.env) support
 
 Dotenv files (generally named `.env`) are a common pattern that make it easy to use environment variables in a
@@ -464,72 +530,6 @@ class Settings(BaseSettings):
     So if you provide extra values in a dotenv file, whether they start with `env_prefix` or not,
     a `ValidationError` will be raised.
 
-## Parsing default objects
-
-Pydantic settings uses copy-by-reference when merging default (`BaseModel`) objects from different sources. This ensures
-the original object reference is maintained in the final object instantiation. However, due to an internal limitation,
-it is not possible to partially update a nested sub model field in a default object when using copy-by-reference; the
-entirety of the sub model must be provided.
-
-This behavior can be overriden by setting the `default_objects_copy_by_value` flag to `True`, which will allow partial
-updates to sub model fields. Note of course the original default object reference will not be retained.
-
-```py
-import os
-
-from pydantic import BaseModel, ValidationError
-
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class SubModel(BaseModel):
-    val: int = 0
-    flag: bool = False
-
-
-ORIGINAL_OBJECT = SubModel()
-
-
-class SettingsCopyByReference(BaseSettings):
-    model_config = SettingsConfigDict(env_nested_delimiter='__')
-
-    default_object: SubModel = ORIGINAL_OBJECT
-
-
-class SettingsCopyByValue(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_nested_delimiter='__', default_objects_copy_by_value=True
-    )
-
-    default_object: SubModel = ORIGINAL_OBJECT
-
-
-by_ref = SettingsCopyByReference()
-assert by_ref.default_object is ORIGINAL_OBJECT
-
-# Apply a partial update to the default object using environment variables
-os.environ['DEFAULT_OBJECT__FLAG'] = 'True'
-
-try:
-    # Copy by reference will fail
-    SettingsCopyByReference()
-except ValidationError as err:
-    print(err)
-    """
-    1 validation error for SettingsCopyByReference
-    nested.val
-      Field required [type=missing, input_value={'flag': 'TRUE'}, input_type=dict]
-        For further information visit https://errors.pydantic.dev/2/v/missing
-    """
-
-# Copy by value will pass
-by_val = SettingsCopyByValue()
-assert by_val.default_object is not ORIGINAL_OBJECT
-
-print(by_val.model_dump())
-#> {'default_object': {'val': 0, 'flag': True}}
-```
-
 ## Command Line Support
 
 Pydantic settings provides integrated CLI support, making it easy to quickly define CLI applications using Pydantic
@@ -540,7 +540,8 @@ models. There are two primary use cases for Pydantic settings CLI:
 
 By default, the experience is tailored towards use case #1 and builds on the foundations established in [parsing
 environment variables](#parsing-environment-variable-values). If your use case primarily falls into #2, you will likely
-want to enable [enforcing required arguments at the CLI](#enforce-required-arguments-at-cli).
+want to enable [enforcing required arguments at the CLI](#enforce-required-arguments-at-cli) and copy-by-value when
+[parsing default objects](#parsing-default-objects).
 
 ### The Basics
 
