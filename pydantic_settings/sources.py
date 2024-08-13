@@ -36,7 +36,7 @@ from typing import (
 
 import typing_extensions
 from dotenv import dotenv_values
-from pydantic import AliasChoices, AliasPath, BaseModel, Json, TypeAdapter
+from pydantic import AliasChoices, AliasPath, BaseModel, Json, RootModel, TypeAdapter
 from pydantic._internal._repr import Representation
 from pydantic._internal._signature import _field_name_for_signature
 from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union, typing_base
@@ -1956,6 +1956,16 @@ def read_env_file(
 
 
 def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
+    # If the model is a root model, the root annotation should be used to
+    # evaluate the complexity.
+    if isinstance(annotation, type) and issubclass(annotation, RootModel):
+        # In some rare cases (see test_root_model_as_field),
+        # the root attribute is not available. For these cases, python 3.8 and 3.9
+        # return 'RootModelRootType'.
+        root_annotation = annotation.__annotations__.get('root', None)
+        if root_annotation is not None and root_annotation != 'RootModelRootType':
+            annotation = root_annotation
+
     if any(isinstance(md, Json) for md in metadata):  # type: ignore[misc]
         return False
     # Check if annotation is of the form Annotated[type, metadata].
