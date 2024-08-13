@@ -2,6 +2,7 @@ import argparse
 import dataclasses
 import json
 import os
+import pathlib
 import re
 import sys
 import typing
@@ -2183,6 +2184,43 @@ def test_root_model_as_field(env):
     env.set('z', '[{"x": 1, "y": {"foo": 1}}, {"x": 2, "y": {"foo": 2}}]')
     s = Settings()
     assert s.model_dump() == {'z': [{'x': 1, 'y': {'foo': 1}}, {'x': 2, 'y': {'foo': 2}}]}
+
+
+def test_str_based_root_model(env):
+    """Testing to pass string directly to root model."""
+
+    class Foo(RootModel[str]):
+        root: str
+
+    class Settings(BaseSettings):
+        foo: Foo
+        plain: str
+
+    TEST_STR = 'hello world'
+    env.set('foo', TEST_STR)
+    env.set('plain', TEST_STR)
+    s = Settings()
+    assert s.model_dump() == {'foo': TEST_STR, 'plain': TEST_STR}
+
+
+def test_path_based_root_model(env):
+    """Testing to pass path directly to root model."""
+
+    class Foo(RootModel[pathlib.PurePosixPath]):
+        root: pathlib.PurePosixPath
+
+    class Settings(BaseSettings):
+        foo: Foo
+        plain: pathlib.PurePosixPath
+
+    TEST_PATH: str = '/hello/world'
+    env.set('foo', TEST_PATH)
+    env.set('plain', TEST_PATH)
+    s = Settings()
+    assert s.model_dump() == {
+        'foo': pathlib.PurePosixPath(TEST_PATH),
+        'plain': pathlib.PurePosixPath(TEST_PATH),
+    }
 
 
 def test_optional_field_from_env(env):
