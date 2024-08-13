@@ -262,12 +262,14 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
             if default_objects_copy_by_value is not None
             else self.config.get('default_objects_copy_by_value', False)
         )
-        if self.default_objects_copy_by_value:
-            for field_name, field_info in settings_cls.model_fields.items():
-                if is_dataclass(type(field_info.default)):
-                    self.defaults[_field_name_for_signature(field_name, field_info)] = asdict(field_info.default)
-                elif is_model_class(type(field_info.default)):
-                    self.defaults[_field_name_for_signature(field_name, field_info)] = field_info.default.model_dump()
+        for field_name, field_info in settings_cls.model_fields.items():
+            if not self.default_objects_copy_by_value:
+                if is_dataclass(type(field_info.default)) or is_model_class(type(field_info.default)):
+                    self.defaults[_field_name_for_signature(field_name, field_info)] = field_info.default
+            elif is_dataclass(type(field_info.default)):
+                self.defaults[_field_name_for_signature(field_name, field_info)] = asdict(field_info.default)
+            elif is_model_class(type(field_info.default)):
+                self.defaults[_field_name_for_signature(field_name, field_info)] = field_info.default.model_dump()
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         # Nothing to do here. Only implement the return statement to make mypy happy
