@@ -394,13 +394,10 @@ class SubModel(BaseModel):
     flag: bool = False
 
 
-ORIGINAL_OBJECT = SubModel()
-
-
 class SettingsCopyByReference(BaseSettings):
     model_config = SettingsConfigDict(env_nested_delimiter='__')
 
-    default_object: SubModel = ORIGINAL_OBJECT
+    default_object: SubModel = SubModel()
 
 
 class SettingsCopyByValue(BaseSettings):
@@ -408,18 +405,18 @@ class SettingsCopyByValue(BaseSettings):
         env_nested_delimiter='__', default_objects_copy_by_value=True
     )
 
-    default_object: SubModel = ORIGINAL_OBJECT
+    default_object: SubModel = SubModel()
 
 
-by_ref = SettingsCopyByReference()
-assert by_ref.default_object is ORIGINAL_OBJECT
+s = SettingsCopyByReference()
+assert s.model_dump() == {'default_object': {'val': 0, 'flag': False}}
 
 # Apply a partial update to the default object using environment variables
 os.environ['DEFAULT_OBJECT__FLAG'] = 'True'
 
 try:
     # Copy by reference will fail
-    SettingsCopyByReference()
+    s = SettingsCopyByReference()
 except ValidationError as err:
     print(err)
     """
@@ -430,11 +427,8 @@ except ValidationError as err:
     """
 
 # Copy by value will pass
-by_val = SettingsCopyByValue()
-assert by_val.default_object is not ORIGINAL_OBJECT
-
-print(by_val.model_dump())
-#> {'default_object': {'val': 0, 'flag': True}}
+s = SettingsCopyByValue()
+assert s.model_dump() == {'default_object': {'val': 0, 'flag': True}}
 ```
 
 ## Dotenv (.env) support

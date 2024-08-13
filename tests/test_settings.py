@@ -1654,7 +1654,7 @@ def test_builtins_settings_source_repr():
     )
     assert (
         repr(InitSettingsSource(BaseSettings, init_kwargs={'apple': 'value 0', 'banana': 'value 1'}))
-        == "InitSettingsSource(init_kwargs={'apple': 'value 0', 'banana': 'value 1'}, default_objects_copy_by_value=False)"
+        == "InitSettingsSource(init_kwargs={'apple': 'value 0', 'banana': 'value 1'})"
     )
     assert (
         repr(EnvSettingsSource(BaseSettings, env_nested_delimiter='__'))
