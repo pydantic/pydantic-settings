@@ -506,8 +506,8 @@ models. There are two primary use cases for Pydantic settings CLI:
 
 By default, the experience is tailored towards use case #1 and builds on the foundations established in [parsing
 environment variables](#parsing-environment-variable-values). If your use case primarily falls into #2, you will likely
-want to enable [enforcing required arguments at the CLI](#enforce-required-arguments-at-cli) and copy-by-value when
-[parsing default objects](#parsing-default-objects).
+want to enable [enforcing required arguments at the CLI](#enforce-required-arguments-at-cli) and [nested model partial
+updates](#nested-model-partial-updates).
 
 ### The Basics
 
