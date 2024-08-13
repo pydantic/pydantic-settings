@@ -373,7 +373,7 @@ print(Settings().model_dump())
 
 ## Parsing default objects
 
-Pydantic settings uses copy-by-reference when merging default (`BaseModel`) objects from different sources. This ensures
+Pydantic settings uses copy-by-reference when merging default `BaseModel` objects from different sources. This ensures
 the original object reference is maintained in the final object instantiation. However, due to an internal limitation,
 it is not possible to partially update a nested sub model field in a default object when using copy-by-reference; the
 entirety of the sub model must be provided.
