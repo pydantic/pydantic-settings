@@ -691,6 +691,24 @@ def test_nested_dataclass(env):
     assert s.n.bar == 'bar value'
 
 
+def test_nested_vanila_dataclass(env):
+    @dataclasses.dataclass
+    class MyDataclass:
+        value: str
+
+    class NestedSettings(BaseSettings, MyDataclass):
+        pass
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+        sub: NestedSettings
+
+    env.set('SUB__VALUE', 'something')
+    s = Settings()
+    assert s.sub.value == 'something'
+
+
 def test_env_takes_precedence(env):
     class Settings(BaseSettings):
         foo: int
@@ -2367,7 +2385,7 @@ def test_cli_alias_nested_arg(capsys, monkeypatch, avoid_json):
 
 
 def test_cli_alias_exceptions(capsys, monkeypatch):
-    with pytest.raises(SettingsError) as exc_info:
+    with pytest.raises(SettingsError, match='subcommand argument BadCliSubCommand.foo has an alias'):
 
         class SubCmd(BaseModel):
             v0: int
@@ -2376,19 +2394,17 @@ def test_cli_alias_exceptions(capsys, monkeypatch):
             foo: CliSubCommand[SubCmd] = Field(alias='bar')
 
         BadCliSubCommand(_cli_parse_args=True)
-    assert str(exc_info.value) == 'subcommand argument BadCliSubCommand.foo has an alias'
 
-    with pytest.raises(SettingsError) as exc_info:
+    with pytest.raises(SettingsError, match='positional argument BadCliPositionalArg.foo has an alias'):
 
         class BadCliPositionalArg(BaseSettings):
             foo: CliPositionalArg[int] = Field(alias='bar')
 
         BadCliPositionalArg(_cli_parse_args=True)
-    assert str(exc_info.value) == 'positional argument BadCliPositionalArg.foo has an alias'
 
 
-def test_cli_case_insensitve_arg():
-    class Cfg(BaseSettings):
+def test_cli_case_insensitive_arg():
+    class Cfg(BaseSettings, cli_exit_on_error=False):
         Foo: str
         Bar: str
 
@@ -2398,12 +2414,11 @@ def test_cli_case_insensitve_arg():
     cfg = Cfg(_cli_parse_args=['--Foo=--VAL', '--Bar', '"--VAL"'], _case_sensitive=True)
     assert cfg.model_dump() == {'Foo': '--VAL', 'Bar': '"--VAL"'}
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(SettingsError, match='error parsing CLI: unrecognized arguments: --FOO=--VAL --BAR "--VAL"'):
         Cfg(_cli_parse_args=['--FOO=--VAL', '--BAR', '"--VAL"'], _case_sensitive=True)
 
-    with pytest.raises(SettingsError) as exc_info:
+    with pytest.raises(SettingsError, match='Case-insensitive matching is only supported on the internal root parser'):
         CliSettingsSource(Cfg, root_parser=CliDummyParser(), case_sensitive=False)
-    assert str(exc_info.value) == 'Case-insensitive matching is only supported on the internal root parser'
 
 
 def test_cli_help_differentiation(capsys, monkeypatch):
@@ -2434,24 +2449,156 @@ def test_cli_help_differentiation(capsys, monkeypatch):
 
 
 def test_cli_help_string_format(capsys, monkeypatch):
-    class Cfg(BaseSettings):
+    class Cfg(BaseSettings, cli_parse_args=True):
         date_str: str = '%Y-%m-%d'
 
-    argparse_options_text = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
+    class MultilineDoc(BaseSettings, cli_parse_args=True):
+        """
+        My
+        Multiline
+        Doc
+        """
 
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
 
         with pytest.raises(SystemExit):
-            Cfg(_cli_parse_args=True)
+            Cfg()
 
         assert (
             re.sub(r'0x\w+', '0xffffffff', capsys.readouterr().out, flags=re.MULTILINE)
             == f"""usage: example.py [-h] [--date_str str]
 
-{argparse_options_text}:
+{ARGPARSE_OPTIONS_TEXT}:
   -h, --help      show this help message and exit
   --date_str str  (default: %Y-%m-%d)
+"""
+        )
+
+        with pytest.raises(SystemExit):
+            MultilineDoc()
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h]
+
+My
+Multiline
+Doc
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help  show this help message and exit
+"""
+        )
+
+        with pytest.raises(SystemExit):
+            cli_settings_source = CliSettingsSource(MultilineDoc, formatter_class=argparse.HelpFormatter)
+            MultilineDoc(_cli_settings_source=cli_settings_source(args=True))
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h]
+
+My Multiline Doc
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help  show this help message and exit
+"""
+        )
+
+
+def test_cli_help_default_or_none_model(capsys, monkeypatch):
+    class DeeperSubModel(BaseModel):
+        flag: bool
+
+    class DeepSubModel(BaseModel):
+        flag: bool
+        deeper: Optional[DeeperSubModel] = None
+
+    class SubModel(BaseModel):
+        flag: bool
+        deep: DeepSubModel = DeepSubModel(flag=True)
+
+    class Settings(BaseSettings, cli_parse_args=True):
+        flag: bool = True
+        sub_model: SubModel = SubModel(flag=False)
+        opt_model: Optional[DeepSubModel] = Field(None, description='Group Doc')
+        fact_model: SubModel = Field(default_factory=lambda: SubModel(flag=True))
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Settings()
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] [--flag bool] [--sub_model JSON]
+                  [--sub_model.flag bool] [--sub_model.deep JSON]
+                  [--sub_model.deep.flag bool]
+                  [--sub_model.deep.deeper {{JSON,null}}]
+                  [--sub_model.deep.deeper.flag bool]
+                  [--opt_model {{JSON,null}}] [--opt_model.flag bool]
+                  [--opt_model.deeper {{JSON,null}}]
+                  [--opt_model.deeper.flag bool] [--fact_model JSON]
+                  [--fact_model.flag bool] [--fact_model.deep JSON]
+                  [--fact_model.deep.flag bool]
+                  [--fact_model.deep.deeper {{JSON,null}}]
+                  [--fact_model.deep.deeper.flag bool]
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+  --flag bool           (default: True)
+
+sub_model options:
+  --sub_model JSON      set sub_model from JSON string
+  --sub_model.flag bool
+                        (default: False)
+
+sub_model.deep options:
+  --sub_model.deep JSON
+                        set sub_model.deep from JSON string
+  --sub_model.deep.flag bool
+                        (default: True)
+
+sub_model.deep.deeper options:
+  default: null (undefined)
+
+  --sub_model.deep.deeper {{JSON,null}}
+                        set sub_model.deep.deeper from JSON string
+  --sub_model.deep.deeper.flag bool
+                        (ifdef: required)
+
+opt_model options:
+  default: null (undefined)
+  Group Doc
+
+  --opt_model {{JSON,null}}
+                        set opt_model from JSON string
+  --opt_model.flag bool
+                        (ifdef: required)
+
+opt_model.deeper options:
+  default: null (undefined)
+
+  --opt_model.deeper {{JSON,null}}
+                        set opt_model.deeper from JSON string
+  --opt_model.deeper.flag bool
+                        (ifdef: required)
+
+fact_model options:
+  --fact_model JSON     set fact_model from JSON string
+  --fact_model.flag bool
+                        (default factory: <lambda>)
+
+fact_model.deep options:
+  --fact_model.deep JSON
+                        set fact_model.deep from JSON string
+  --fact_model.deep.flag bool
+                        (default factory: <lambda>)
+
+fact_model.deep.deeper options:
+  --fact_model.deep.deeper {{JSON,null}}
+                        set fact_model.deep.deeper from JSON string
+  --fact_model.deep.deeper.flag bool
+                        (default factory: <lambda>)
 """
         )
 
@@ -2639,13 +2786,11 @@ def test_cli_dict_arg(prefix):
         expected['child'] = None
     assert cfg.model_dump() == expected
 
-    with pytest.raises(SettingsError) as exc_info:
+    with pytest.raises(SettingsError, match=f'Parsing error encountered for {prefix}check_dict: Mismatched quotes'):
         cfg = Cfg(_cli_parse_args=[f'--{prefix}check_dict', 'k9="i'])
-    assert str(exc_info.value) == f'Parsing error encountered for {prefix}check_dict: Mismatched quotes'
 
-    with pytest.raises(SettingsError):
+    with pytest.raises(SettingsError, match=f'Parsing error encountered for {prefix}check_dict: Mismatched quotes'):
         cfg = Cfg(_cli_parse_args=[f'--{prefix}check_dict', 'k9=i"'])
-    assert str(exc_info.value) == f'Parsing error encountered for {prefix}check_dict: Mismatched quotes'
 
 
 def test_cli_union_dict_arg():
@@ -2778,18 +2923,16 @@ def test_cli_nested_dict_arg():
     cfg = Cfg(_cli_parse_args=args)
     assert cfg.model_dump() == {'check_dict': {'k1': {'a': 1}, 'k2': {'b': 2}}}
 
-    with pytest.raises(SettingsError) as exc_info:
+    with pytest.raises(
+        SettingsError,
+        match=re.escape('Parsing error encountered for check_dict: not enough values to unpack (expected 2, got 1)'),
+    ):
         args = ['--check_dict', '{"k1":{"a": 1}},"k2":{"b": 2}}']
         cfg = Cfg(_cli_parse_args=args)
-    assert (
-        str(exc_info.value)
-        == 'Parsing error encountered for check_dict: not enough values to unpack (expected 2, got 1)'
-    )
 
-    with pytest.raises(SettingsError) as exc_info:
+    with pytest.raises(SettingsError, match='Parsing error encountered for check_dict: Missing end delimiter "}"'):
         args = ['--check_dict', '{"k1":{"a": 1}},{"k2":{"b": 2}']
         cfg = Cfg(_cli_parse_args=args)
-    assert str(exc_info.value) == 'Parsing error encountered for check_dict: Missing end delimiter "}"'
 
 
 def test_cli_subcommand_with_positionals():
@@ -2915,63 +3058,66 @@ def test_cli_annotation_exceptions(monkeypatch):
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
 
-        with pytest.raises(SettingsError) as exc_info:
+        with pytest.raises(
+            SettingsError, match='CliSubCommand is not outermost annotation for SubCommandNotOutermost.subcmd'
+        ):
 
             class SubCommandNotOutermost(BaseSettings, cli_parse_args=True):
                 subcmd: Union[int, CliSubCommand[SubCmd]]
 
             SubCommandNotOutermost()
-        assert str(exc_info.value) == 'CliSubCommand is not outermost annotation for SubCommandNotOutermost.subcmd'
 
-        with pytest.raises(SettingsError) as exc_info:
+        with pytest.raises(SettingsError, match='subcommand argument SubCommandHasDefault.subcmd has a default value'):
 
             class SubCommandHasDefault(BaseSettings, cli_parse_args=True):
                 subcmd: CliSubCommand[SubCmd] = SubCmd()
 
             SubCommandHasDefault()
-        assert str(exc_info.value) == 'subcommand argument SubCommandHasDefault.subcmd has a default value'
 
-        with pytest.raises(SettingsError) as exc_info:
+        with pytest.raises(
+            SettingsError, match='subcommand argument SubCommandMultipleTypes.subcmd has multiple types'
+        ):
 
             class SubCommandMultipleTypes(BaseSettings, cli_parse_args=True):
                 subcmd: CliSubCommand[Union[SubCmd, SubCmdAlt]]
 
             SubCommandMultipleTypes()
-        assert str(exc_info.value) == 'subcommand argument SubCommandMultipleTypes.subcmd has multiple types'
 
-        with pytest.raises(SettingsError) as exc_info:
+        with pytest.raises(
+            SettingsError, match='subcommand argument SubCommandNotModel.subcmd is not derived from BaseModel'
+        ):
 
             class SubCommandNotModel(BaseSettings, cli_parse_args=True):
                 subcmd: CliSubCommand[str]
 
             SubCommandNotModel()
-        assert str(exc_info.value) == 'subcommand argument SubCommandNotModel.subcmd is not derived from BaseModel'
 
-        with pytest.raises(SettingsError) as exc_info:
+        with pytest.raises(
+            SettingsError, match='CliPositionalArg is not outermost annotation for PositionalArgNotOutermost.pos_arg'
+        ):
 
             class PositionalArgNotOutermost(BaseSettings, cli_parse_args=True):
                 pos_arg: Union[int, CliPositionalArg[str]]
 
             PositionalArgNotOutermost()
-        assert (
-            str(exc_info.value) == 'CliPositionalArg is not outermost annotation for PositionalArgNotOutermost.pos_arg'
-        )
 
-        with pytest.raises(SettingsError) as exc_info:
+        with pytest.raises(
+            SettingsError, match='positional argument PositionalArgHasDefault.pos_arg has a default value'
+        ):
 
             class PositionalArgHasDefault(BaseSettings, cli_parse_args=True):
                 pos_arg: CliPositionalArg[str] = 'bad'
 
             PositionalArgHasDefault()
-        assert str(exc_info.value) == 'positional argument PositionalArgHasDefault.pos_arg has a default value'
 
-    with pytest.raises(SettingsError) as exc_info:
+    with pytest.raises(
+        SettingsError, match=re.escape("cli_parse_args must be List[str] or Tuple[str, ...], recieved <class 'str'>")
+    ):
 
         class InvalidCliParseArgsType(BaseSettings, cli_parse_args='invalid type'):
             val: int
 
         InvalidCliParseArgsType()
-    assert str(exc_info.value) == "cli_parse_args must be List[str] or Tuple[str, ...], recieved <class 'str'>"
 
 
 def test_cli_avoid_json(capsys, monkeypatch):
@@ -3152,7 +3298,7 @@ sub_model options:
 
 
 def test_cli_enforce_required(env):
-    class Settings(BaseSettings):
+    class Settings(BaseSettings, cli_exit_on_error=False):
         my_required_field: str
 
     env.set('MY_REQUIRED_FIELD', 'hello from environment')
@@ -3161,8 +3307,29 @@ def test_cli_enforce_required(env):
         'my_required_field': 'hello from environment'
     }
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(
+        SettingsError, match='error parsing CLI: the following arguments are required: --my_required_field'
+    ):
         Settings(_cli_parse_args=[], _cli_enforce_required=True).model_dump()
+
+
+def test_cli_exit_on_error(capsys, monkeypatch):
+    class Settings(BaseSettings, cli_parse_args=True): ...
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--bad-arg'])
+
+        with pytest.raises(SystemExit):
+            Settings()
+        assert (
+            capsys.readouterr().err
+            == """usage: example.py [-h]
+example.py: error: unrecognized arguments: --bad-arg
+"""
+        )
+
+        with pytest.raises(SettingsError, match='error parsing CLI: unrecognized arguments: --bad-arg'):
+            Settings(_cli_exit_on_error=False)
 
 
 @pytest.mark.parametrize('parser_type', [pytest.Parser, argparse.ArgumentParser, CliDummyParser])
@@ -3295,24 +3462,20 @@ def test_cli_user_settings_source_exceptions():
     class Cfg(BaseSettings):
         pet: Literal['dog', 'cat', 'bird'] = 'bird'
 
-    with pytest.raises(SettingsError) as exc_info:
+    with pytest.raises(SettingsError, match='`args` and `parsed_args` are mutually exclusive'):
         args = ['--pet', 'dog']
         parsed_args = {'pet': 'dog'}
         cli_cfg_settings = CliSettingsSource(Cfg)
         Cfg(_cli_settings_source=cli_cfg_settings(args=args, parsed_args=parsed_args))
-    assert str(exc_info.value) == '`args` and `parsed_args` are mutually exclusive'
 
-    with pytest.raises(SettingsError) as exc_info:
+    with pytest.raises(SettingsError, match='CLI settings source prefix is invalid: .cfg'):
         CliSettingsSource(Cfg, cli_prefix='.cfg')
-    assert str(exc_info.value) == 'CLI settings source prefix is invalid: .cfg'
 
-    with pytest.raises(SettingsError) as exc_info:
+    with pytest.raises(SettingsError, match='CLI settings source prefix is invalid: cfg.'):
         CliSettingsSource(Cfg, cli_prefix='cfg.')
-    assert str(exc_info.value) == 'CLI settings source prefix is invalid: cfg.'
 
-    with pytest.raises(SettingsError) as exc_info:
+    with pytest.raises(SettingsError, match='CLI settings source prefix is invalid: 123'):
         CliSettingsSource(Cfg, cli_prefix='123')
-    assert str(exc_info.value) == 'CLI settings source prefix is invalid: 123'
 
     class Food(BaseModel):
         fruit: FruitsEnum = FruitsEnum.kiwi
@@ -3321,12 +3484,11 @@ def test_cli_user_settings_source_exceptions():
         pet: Literal['dog', 'cat', 'bird'] = 'bird'
         food: CliSubCommand[Food]
 
-    with pytest.raises(SettingsError) as exc_info:
+    with pytest.raises(
+        SettingsError,
+        match='cannot connect CLI settings source root parser: add_subparsers_method is set to `None` but is needed for connecting',
+    ):
         CliSettingsSource(CfgWithSubCommand, add_subparsers_method=None)
-    assert (
-        str(exc_info.value)
-        == 'cannot connect CLI settings source root parser: add_subparsers_method is set to `None` but is needed for connecting'
-    )
 
 
 @pytest.mark.parametrize(

@@ -868,6 +868,28 @@ options:
 """
 ```
 
+#### Change Whether CLI Should Exit on Error
+
+Change whether the CLI internal parser will exit on error or raise a `SettingsError` exception by using
+`cli_exit_on_error`. By default, the CLI internal parser will exit on error.
+
+```py
+import sys
+
+from pydantic_settings import BaseSettings, SettingsError
+
+
+class Settings(BaseSettings, cli_parse_args=True, cli_exit_on_error=False): ...
+
+
+try:
+    sys.argv = ['example.py', '--bad-arg']
+    Settings()
+except SettingsError as e:
+    print(e)
+    #> error parsing CLI: unrecognized arguments: --bad-arg
+```
+
 #### Enforce Required Arguments at CLI
 
 Pydantic settings is designed to pull values in from various sources when instantating a model. This means a field that
@@ -884,10 +906,15 @@ import sys
 
 from pydantic import Field
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsError
 
 
-class Settings(BaseSettings, cli_parse_args=True, cli_enforce_required=True):
+class Settings(
+    BaseSettings,
+    cli_parse_args=True,
+    cli_enforce_required=True,
+    cli_exit_on_error=False,
+):
     my_required_field: str = Field(description='a top level required field')
 
 
@@ -896,13 +923,9 @@ os.environ['MY_REQUIRED_FIELD'] = 'hello from environment'
 try:
     sys.argv = ['example.py']
     Settings()
-except SystemExit as e:
+except SettingsError as e:
     print(e)
-    #> 2
-"""
-usage: example.py [-h] --my_required_field str
-example.py: error: the following arguments are required: --my_required_field
-"""
+    #> error parsing CLI: the following arguments are required: --my_required_field
 ```
 
 #### Change the None Type Parse String
@@ -1097,7 +1120,7 @@ parser methods that can be customised, along with their argparse counterparts (t
 * `add_argument_group_method` - (`argparse.ArgumentParser.add_argument_group`)
 * `add_parser_method` - (`argparse._SubParsersAction.add_parser`)
 * `add_subparsers_method` - (`argparse.ArgumentParser.add_subparsers`)
-* `formatter_class` - (`argparse.HelpFormatter`)
+* `formatter_class` - (`argparse.RawDescriptionHelpFormatter`)
 
 For a non-argparse parser the parser methods can be set to `None` if not supported. The CLI settings will only raise an
 error when connecting to the root parser if a parser method is necessary but set to `None`.
@@ -1171,6 +1194,65 @@ printf "This is a secret" | docker secret create my_secret_data -
 Last, run your application inside a Docker container and supply your newly created secret
 ```bash
 docker service create --name pydantic-with-secrets --secret my_secret_data pydantic-app:latest
+```
+
+## Azure Key Vault
+
+You must set two parameters:
+
+- `url`: For example, `https://my-resource.vault.azure.net/`.
+- `credential`: If you use `DefaultAzureCredential`, in local you can execute `az login` to get your identity credentials. The identity must have a role assignment (the recommended one is `Key Vault Secrets User`), so you can access the secrets.
+
+You must have the same naming convention in the field name as in the Key Vault secret name. For example, if the secret is named `SqlServerPassword`, the field name must be the same. You can use an alias too.
+
+In Key Vault, nested models are supported with the `--` separator. For example, `SqlServer--Password`.
+
+Key Vault arrays (e.g. `MySecret--0`, `MySecret--1`) are not supported.
+
+```py
+import os
+from typing import Tuple, Type
+
+from azure.identity import DefaultAzureCredential
+from pydantic import BaseModel
+
+from pydantic_settings import (
+    AzureKeyVaultSettingsSource,
+    BaseSettings,
+    PydanticBaseSettingsSource,
+)
+
+
+class SubModel(BaseModel):
+    a: str
+
+
+class AzureKeyVaultSettings(BaseSettings):
+    foo: str
+    bar: int
+    sub: SubModel
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        az_key_vault_settings = AzureKeyVaultSettingsSource(
+            settings_cls,
+            os.environ['AZURE_KEY_VAULT_URL'],
+            DefaultAzureCredential(),
+        )
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+            az_key_vault_settings,
+        )
 ```
 
 ## Other settings source
