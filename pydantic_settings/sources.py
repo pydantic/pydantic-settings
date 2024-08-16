@@ -1303,6 +1303,23 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             resolved_names = [resolved_name.lower() for resolved_name in resolved_names]
         return tuple(dict.fromkeys(resolved_names)), is_alias_path_only
 
+    def _verify_cli_flag_annotations(self, model: type[BaseModel], field_name: str, field_info: FieldInfo) -> None:
+        if _CliImplicitFlag in field_info.metadata:
+            cli_flag_name = 'CliImplicitFlag'
+        elif _CliExplicitFlag in field_info.metadata:
+            cli_flag_name = 'CliExplicitFlag'
+        else:
+            return
+
+        if field_info.annotation is not bool:
+            raise SettingsError(f'{cli_flag_name} argument {model.__name__}.{field_name} is not of type bool')
+        elif sys.version_info < (3, 9) and (
+            field_info.default is PydanticUndefined or field_info.default_factory is None
+        ):
+            raise SettingsError(
+                f'{cli_flag_name} argument {model.__name__}.{field_name} must have default for python versions < 3.9'
+            )
+
     def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, FieldInfo]]:
         positional_args, subcommand_args, optional_args = [], [], []
         fields = (
@@ -1332,10 +1349,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     raise SettingsError(f'positional argument {model.__name__}.{field_name} has an alias')
                 positional_args.append((field_name, field_info))
             else:
-                if _CliImplicitFlag in field_info.metadata and field_info.annotation is not bool:
-                    raise SettingsError(f'CliImplicitFlag argument {model.__name__}.{field_name} is not of type bool')
-                elif _CliExplicitFlag in field_info.metadata and field_info.annotation is not bool:
-                    raise SettingsError(f'CliExplicitFlag argument {model.__name__}.{field_name} is not of type bool')
+                self._verify_cli_flag_annotations(model, field_name, field_info)
                 optional_args.append((field_name, field_info))
         return positional_args + subcommand_args + optional_args
 

@@ -868,6 +868,76 @@ options:
 """
 ```
 
+#### CLI Boolean Flags
+
+Change whether boolean fields should be explicit or implicit by default using the `cli_implicit_flags` setting. By
+default, boolean fields are "explicit", meaning a boolean value must be explicitly provided to the flag, e.g.
+`--flag=True`. Conversely, boolean fields that are "implicit" derive the value from the flag itself, e.g.
+`--flag,--no-flag`, without requiring an explicit value to be passed.
+
+Additionally, the provided `CliImplicitFlag` and `CliExplicitFlag` annotations can be used for more granular control
+when necessary.
+
+!!! note
+
+For `python < 3.9`:
+  * The `--no-flag` option will not be generated due to underlying `argparse` limitation.
+  * The `CliImplicitFlag` and `CliExplicitFlag` annotations can only be applied to optional bool fields.
+
+```py
+from pydantic_settings import BaseSettings, CliExplicitFlag, CliImplicitFlag
+
+
+class ExplicitSettings(BaseSettings, cli_parse_args=True):
+    """Boolean fields are explicit by default."""
+
+    explicit_req: bool
+    """
+    --explicit_req bool   (required)
+    """
+
+    explicit_opt: bool = False
+    """
+    --explicit_opt bool   (default: False)
+    """
+
+    # Booleans are explicit by default, so must override implicit flags with annotation
+    implicit_req: CliImplicitFlag[bool]
+    """
+    --implicit_req, --no-implicit_req (required)
+    """
+
+    implicit_opt: CliImplicitFlag[bool] = False
+    """
+    --implicit_opt, --no-implicit_opt (default: False)
+    """
+
+
+class ImplicitSettings(BaseSettings, cli_parse_args=True, cli_implicit_flags=True):
+    """With cli_implicit_flags=True, boolean fields are implicit by default."""
+
+    # Booleans are implicit by default, so must override explicit flags with annotation
+    explicit_req: CliExplicitFlag[bool]
+    """
+    --explicit_req bool   (required)
+    """
+
+    explicit_opt: CliExplicitFlag[bool] = False
+    """
+    --explicit_opt bool   (default: False)
+    """
+
+    implicit_req: bool
+    """
+    --implicit_req, --no-implicit_req (required)
+    """
+
+    implicit_opt: bool = False
+    """
+    --implicit_opt, --no-implicit_opt (default: False)
+    """
+```
+
 #### Change Whether CLI Should Exit on Error
 
 Change whether the CLI internal parser will exit on error or raise a `SettingsError` exception by using
