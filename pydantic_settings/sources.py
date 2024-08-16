@@ -1314,7 +1314,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         if field_info.annotation is not bool:
             raise SettingsError(f'{cli_flag_name} argument {model.__name__}.{field_name} is not of type bool')
         elif sys.version_info < (3, 9) and (
-            field_info.default is PydanticUndefined or field_info.default_factory is None
+            field_info.default is PydanticUndefined and field_info.default_factory is None
         ):
             raise SettingsError(
                 f'{cli_flag_name} argument {model.__name__}.{field_name} must have default for python versions < 3.9'
