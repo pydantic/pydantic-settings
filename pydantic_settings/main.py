@@ -115,8 +115,8 @@ class BaseSettings(BaseModel):
         _cli_exit_on_error: Determines whether or not the internal parser exits with error info when an error occurs.
             Defaults to `True`.
         _cli_prefix: The root parser command line arguments prefix. Defaults to "".
-        _cli_implicit_flags: Whether optional `bool` fields should be implicitly converted into CLI boolean flags.
-            Defaults to `False`.
+        _cli_implicit_flags: Whether `bool` fields should be implicitly converted into CLI boolean flags.
+            (e.g. --flag, --no-flag). Defaults to `False`.
         _secrets_dir: The secret files directory. Defaults to `None`.
     """
 

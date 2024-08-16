@@ -919,8 +919,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_exit_on_error: Determines whether or not the internal parser exits with error info when an error occurs.
             Defaults to `True`.
         cli_prefix: Prefix for command line arguments added under the root parser. Defaults to "".
-        cli_implicit_flags: Whether optional `bool` fields should be implicitly converted into CLI boolean flags.
-            Defaults to `False`.
+        cli_implicit_flags: Whether `bool` fields should be implicitly converted into CLI boolean flags.
+            (e.g. --flag, --no-flag). Defaults to `False`.
         case_sensitive: Whether CLI "--arg" names should be read with case-sensitivity. Defaults to `True`.
             Note: Case-insensitive matching is only supported on the internal root parser and does not apply to CLI
             subcommands.
