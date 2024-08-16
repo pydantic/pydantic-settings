@@ -871,17 +871,16 @@ options:
 #### CLI Boolean Flags
 
 Change whether boolean fields should be explicit or implicit by default using the `cli_implicit_flags` setting. By
-default, boolean fields are "explicit", meaning a boolean value must be explicitly provided to the flag, e.g.
+default, boolean fields are "explicit", meaning a boolean value must be explicitly provided on the CLI, e.g.
 `--flag=True`. Conversely, boolean fields that are "implicit" derive the value from the flag itself, e.g.
-`--flag,--no-flag`, without requiring an explicit value to be passed.
+`--flag,--no-flag`, which removes the need for an explicit value to be passed.
 
 Additionally, the provided `CliImplicitFlag` and `CliExplicitFlag` annotations can be used for more granular control
 when necessary.
 
 !!! note
-
 For `python < 3.9`:
-  * The `--no-flag` option will not be generated due to underlying `argparse` limitation.
+  * The `--no-flag` option is not generated due to an underlying `argparse` limitation.
   * The `CliImplicitFlag` and `CliExplicitFlag` annotations can only be applied to optional bool fields.
 
 ```py
