@@ -8,6 +8,9 @@ import sys
 import typing
 import warnings
 from abc import ABC, abstractmethod
+
+if sys.version_info >= (3, 9):
+    from argparse import BooleanOptionalAction
 from argparse import SUPPRESS, ArgumentParser, Namespace, RawDescriptionHelpFormatter, _SubParsersAction
 from collections import deque
 from dataclasses import is_dataclass
@@ -124,6 +127,14 @@ class _CliPositionalArg:
     pass
 
 
+class _CliImplicitFlag:
+    pass
+
+
+class _CliExplicitFlag:
+    pass
+
+
 class _CliInternalArgParser(ArgumentParser):
     def __init__(self, cli_exit_on_error: bool = True, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -138,6 +149,9 @@ class _CliInternalArgParser(ArgumentParser):
 T = TypeVar('T')
 CliSubCommand = Annotated[Union[T, None], _CliSubCommand]
 CliPositionalArg = Annotated[T, _CliPositionalArg]
+_CliBoolFlag = TypeVar('_CliBoolFlag', bound=bool)
+CliImplicitFlag = Annotated[_CliBoolFlag, _CliImplicitFlag]
+CliExplicitFlag = Annotated[_CliBoolFlag, _CliExplicitFlag]
 
 
 class EnvNoneType(str):
@@ -905,6 +919,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_exit_on_error: Determines whether or not the internal parser exits with error info when an error occurs.
             Defaults to `True`.
         cli_prefix: Prefix for command line arguments added under the root parser. Defaults to "".
+        cli_implicit_flags: Whether optional `bool` fields should be implicitly converted into CLI boolean flags.
+            Defaults to `False`.
         case_sensitive: Whether CLI "--arg" names should be read with case-sensitivity. Defaults to `True`.
             Note: Case-insensitive matching is only supported on the internal root parser and does not apply to CLI
             subcommands.
@@ -932,6 +948,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_use_class_docs_for_groups: bool | None = None,
         cli_exit_on_error: bool | None = None,
         cli_prefix: str | None = None,
+        cli_implicit_flags: bool | None = None,
         case_sensitive: bool | None = True,
         root_parser: Any = None,
         parse_args_method: Callable[..., Any] | None = ArgumentParser.parse_args,
@@ -975,6 +992,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if cli_prefix.startswith('.') or cli_prefix.endswith('.') or not cli_prefix.replace('.', '').isidentifier():  # type: ignore
                 raise SettingsError(f'CLI settings source prefix is invalid: {cli_prefix}')
             self.cli_prefix += '.'
+        self.cli_implicit_flags = (
+            cli_implicit_flags
+            if cli_implicit_flags is not None
+            else settings_cls.model_config.get('cli_implicit_flags', False)
+        )
 
         case_sensitive = case_sensitive if case_sensitive is not None else True
         if not case_sensitive and root_parser is not None:
@@ -1310,6 +1332,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     raise SettingsError(f'positional argument {model.__name__}.{field_name} has an alias')
                 positional_args.append((field_name, field_info))
             else:
+                if _CliImplicitFlag in field_info.metadata and field_info.annotation is not bool:
+                    raise SettingsError(f'CliImplicitFlag argument {model.__name__}.{field_name} is not of type bool')
+                elif _CliExplicitFlag in field_info.metadata and field_info.annotation is not bool:
+                    raise SettingsError(f'CliExplicitFlag argument {model.__name__}.{field_name} is not of type bool')
                 optional_args.append((field_name, field_info))
         return positional_args + subcommand_args + optional_args
 
@@ -1457,6 +1483,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     del kwargs['required']
                     arg_flag = ''
 
+                self._convert_bool_flag(kwargs, field_info, model_default)
+
                 if sub_models and kwargs.get('action') != 'append':
                     self._add_parser_submodels(
                         parser,
@@ -1485,6 +1513,22 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
         self._add_parser_alias_paths(parser, alias_path_args, added_args, arg_prefix, subcommand_prefix, group)
         return parser
+
+    def _convert_bool_flag(self, kwargs: dict[str, Any], field_info: FieldInfo, model_default: Any) -> None:
+        if kwargs['metavar'] == 'bool' and not kwargs['required']:
+            default = None
+            if field_info.default is not PydanticUndefined:
+                default = field_info.default
+            if model_default is not PydanticUndefined:
+                default = model_default
+            if sys.version_info >= (3, 9) or isinstance(default, bool):
+                if (self.cli_implicit_flags or _CliImplicitFlag in field_info.metadata) and (
+                    _CliExplicitFlag not in field_info.metadata
+                ):
+                    del kwargs['metavar']
+                    kwargs['action'] = (
+                        BooleanOptionalAction if sys.version_info >= (3, 9) else f'store_{str(not default).lower()}'
+                    )
 
     def _get_arg_names(
         self, arg_prefix: str, subcommand_prefix: str, alias_prefixes: list[str], resolved_names: tuple[str, ...]
