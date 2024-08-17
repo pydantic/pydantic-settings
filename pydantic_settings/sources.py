@@ -697,11 +697,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                 if type_has_key:
                     return type_has_key
         elif is_model_class(annotation) or is_pydantic_dataclass(annotation):
-            fields = (
-                annotation.__pydantic_fields__
-                if is_pydantic_dataclass(annotation) and hasattr(annotation, '__pydantic_fields__')
-                else cast(BaseModel, annotation).model_fields
-            )
+            fields = _get_model_fields(annotation)
             # `case_sensitive is None` is here to be compatible with the old behavior.
             # Has to be removed in V3.
             if (case_sensitive is None or case_sensitive) and fields.get(key):
@@ -1283,11 +1279,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, FieldInfo]]:
         positional_args, subcommand_args, optional_args = [], [], []
-        fields = (
-            model.__pydantic_fields__
-            if hasattr(model, '__pydantic_fields__') and is_pydantic_dataclass(model)
-            else model.model_fields
-        )
+        fields = _get_model_fields(model)
         for field_name, field_info in fields.items():
             if _CliSubCommand in field_info.metadata:
                 if not field_info.is_required():
@@ -1926,3 +1918,11 @@ def _strip_annotated(annotation: Any) -> Any:
     while get_origin(annotation) == Annotated:
         annotation = get_args(annotation)[0]
     return annotation
+
+
+def _get_model_fields(model_cls: type[Any]) -> dict[str, FieldInfo]:
+    if is_pydantic_dataclass(model_cls) and hasattr(model_cls, '__pydantic_fields__'):
+        return model_cls.__pydantic_fields__
+    if is_model_class(model_cls):
+        return model_cls.model_fields
+    raise SettingsError(f'Error: {model_cls.__name__} is not subclass of BaseModel or pydantic.dataclasses.dataclass')
