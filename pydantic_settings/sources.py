@@ -1529,7 +1529,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         return parser
 
     def _convert_bool_flag(self, kwargs: dict[str, Any], field_info: FieldInfo, model_default: Any) -> None:
-        if kwargs['metavar'] == 'bool' and not kwargs['required']:
+        if kwargs['metavar'] == 'bool':
             default = None
             if field_info.default is not PydanticUndefined:
                 default = field_info.default

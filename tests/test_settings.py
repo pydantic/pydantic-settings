@@ -3145,15 +3145,16 @@ def test_cli_annotation_exceptions(monkeypatch):
             CliFlag38NotOpt()
 
 
-def test_cli_bool_flags(capsys, monkeypatch):
+@pytest.mark.parametrize('enforce_required', [True, False])
+def test_cli_bool_flags(monkeypatch, enforce_required):
     if sys.version_info < (3, 9):
 
-        class ExplicitSettings(BaseSettings):
+        class ExplicitSettings(BaseSettings, cli_enforce_required=enforce_required):
             explicit_req: bool
             explicit_opt: bool = False
             implicit_opt: CliImplicitFlag[bool] = False
 
-        class ImplicitSettings(BaseSettings, cli_implicit_flags=True):
+        class ImplicitSettings(BaseSettings, cli_implicit_flags=True, cli_enforce_required=enforce_required):
             explicit_req: bool
             explicit_opt: CliExplicitFlag[bool] = False
             implicit_opt: bool = False
@@ -3168,13 +3169,13 @@ def test_cli_bool_flags(capsys, monkeypatch):
         assert ImplicitSettings(_cli_parse_args=['--explicit_req=True']).model_dump() == expected
     else:
 
-        class ExplicitSettings(BaseSettings):
+        class ExplicitSettings(BaseSettings, cli_enforce_required=enforce_required):
             explicit_req: bool
             explicit_opt: bool = False
             implicit_req: CliImplicitFlag[bool]
             implicit_opt: CliImplicitFlag[bool] = False
 
-        class ImplicitSettings(BaseSettings, cli_implicit_flags=True):
+        class ImplicitSettings(BaseSettings, cli_implicit_flags=True, cli_enforce_required=enforce_required):
             explicit_req: CliExplicitFlag[bool]
             explicit_opt: CliExplicitFlag[bool] = False
             implicit_req: bool
