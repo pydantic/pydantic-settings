@@ -612,9 +612,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             ValuesError: When There is an error in deserializing value for complex field.
         """
         is_complex, allow_parse_failure = self._field_is_complex(field)
-        if self.env_parse_enums and lenient_issubclass(field.annotation, Enum):
-            if value in tuple(val.name for val in field.annotation):  # type: ignore
-                value = field.annotation[value]  # type: ignore
+        if self.env_parse_enums:
+            enum_val = _annotation_enum_name_to_val(field.annotation, value)
+            value = value if enum_val is None else enum_val
 
         if is_complex or value_is_complex:
             if isinstance(value, EnvNoneType):
@@ -1653,7 +1653,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             elif model_default not in (PydanticUndefined, None) and callable(model_default):
                 default = f'(default factory: {self._metavar_format(model_default)})'
             elif field_info.default not in (PydanticUndefined, None):
-                default = f'(default: {field_info.default})'
+                enum_name = _annotation_enum_val_to_name(field_info.annotation, field_info.default)
+                default = f'(default: {field_info.default if enum_name is None else enum_name})'
             elif field_info.default_factory is not None:
                 default = f'(default: {field_info.default_factory})'
             _help += f' {default}' if _help else default
@@ -1963,3 +1964,19 @@ def _strip_annotated(annotation: Any) -> Any:
     while get_origin(annotation) == Annotated:
         annotation = get_args(annotation)[0]
     return annotation
+
+
+def _annotation_enum_val_to_name(annotation: type[Any] | None, value: Any) -> Optional[str]:
+    for type_ in (annotation, get_origin(annotation), *get_args(annotation)):
+        if lenient_issubclass(type_, Enum):
+            if value in tuple(val.value for val in type_):
+                return type_(value).name
+    return None
+
+
+def _annotation_enum_name_to_val(annotation: type[Any] | None, name: Any) -> Any:
+    for type_ in (annotation, get_origin(annotation), *get_args(annotation)):
+        if lenient_issubclass(type_, Enum):
+            if name in tuple(val.name for val in type_):
+                return type_[name]
+    return None

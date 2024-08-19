@@ -2030,9 +2030,11 @@ def test_env_json_field(env):
 def test_env_parse_enums(env):
     class Settings(BaseSettings):
         fruit: FruitsEnum
+        union_fruit: Optional[int | FruitsEnum] = None
 
     with pytest.raises(ValidationError) as exc_info:
         env.set('FRUIT', 'kiwi')
+        env.set('UNION_FRUIT', 'kiwi')
         s = Settings()
     assert exc_info.value.errors(include_url=False) == [
         {
@@ -2041,18 +2043,42 @@ def test_env_parse_enums(env):
             'msg': 'Input should be 0, 1 or 2',
             'input': 'kiwi',
             'ctx': {'expected': '0, 1 or 2'},
-        }
+        },
+        {
+            'input': 'kiwi',
+            'loc': (
+                'union_fruit',
+                'int',
+            ),
+            'msg': 'Input should be a valid integer, unable to parse string as an integer',
+            'type': 'int_parsing',
+        },
+        {
+            'ctx': {
+                'expected': '0, 1 or 2',
+            },
+            'input': 'kiwi',
+            'loc': (
+                'union_fruit',
+                'int-enum[FruitsEnum]',
+            ),
+            'msg': 'Input should be 0, 1 or 2',
+            'type': 'enum',
+        },
     ]
 
     env.set('FRUIT', str(FruitsEnum.lime.value))
+    env.set('UNION_FRUIT', str(FruitsEnum.lime.value))
     s = Settings()
     assert s.fruit == FruitsEnum.lime
 
     env.set('FRUIT', 'kiwi')
+    env.set('UNION_FRUIT', 'kiwi')
     s = Settings(_env_parse_enums=True)
     assert s.fruit == FruitsEnum.kiwi
 
     env.set('FRUIT', str(FruitsEnum.lime.value))
+    env.set('UNION_FRUIT', str(FruitsEnum.lime.value))
     s = Settings(_env_parse_enums=True)
     assert s.fruit == FruitsEnum.lime
 
@@ -3003,17 +3029,18 @@ def test_cli_union_similar_sub_models():
     assert cfg.model_dump() == {'child': {'name': 'new name a', 'diff_a': 'new diff a'}}
 
 
-def test_cli_enums():
+def test_cli_enums(capsys, monkeypatch):
     class Pet(IntEnum):
         dog = 0
         cat = 1
         bird = 2
 
     class Cfg(BaseSettings):
-        pet: Pet
+        pet: Pet = Pet.dog
+        union_pet: Pet | int = 43
 
-    cfg = Cfg(_cli_parse_args=['--pet', 'cat'])
-    assert cfg.model_dump() == {'pet': Pet.cat}
+    cfg = Cfg(_cli_parse_args=['--pet', 'cat', '--union_pet', 'dog'])
+    assert cfg.model_dump() == {'pet': Pet.cat, 'union_pet': Pet.dog}
 
     with pytest.raises(ValidationError) as exc_info:
         Cfg(_cli_parse_args=['--pet', 'rock'])
@@ -3026,6 +3053,24 @@ def test_cli_enums():
             'ctx': {'expected': '0, 1 or 2'},
         }
     ]
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Cfg(_cli_parse_args=True)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] [--pet {{dog,cat,bird}}]
+                  [--union_pet {{{{dog,cat,bird}},int}}]
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+  --pet {{dog,cat,bird}}  (default: dog)
+  --union_pet {{{{dog,cat,bird}},int}}
+                        (default: 43)
+"""
+        )
 
 
 def test_cli_literals():
