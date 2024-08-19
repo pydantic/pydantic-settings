@@ -2030,7 +2030,7 @@ def test_env_json_field(env):
 def test_env_parse_enums(env):
     class Settings(BaseSettings):
         fruit: FruitsEnum
-        union_fruit: Optional[int | FruitsEnum] = None
+        union_fruit: Optional[Union[int, FruitsEnum]] = None
 
     with pytest.raises(ValidationError) as exc_info:
         env.set('FRUIT', 'kiwi')
@@ -3037,7 +3037,7 @@ def test_cli_enums(capsys, monkeypatch):
 
     class Cfg(BaseSettings):
         pet: Pet = Pet.dog
-        union_pet: Pet | int = 43
+        union_pet: Union[Pet, int] = 43
 
     cfg = Cfg(_cli_parse_args=['--pet', 'cat', '--union_pet', 'dog'])
     assert cfg.model_dump() == {'pet': Pet.cat, 'union_pet': Pet.dog}
