@@ -50,7 +50,14 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
     YamlConfigSettingsSource,
 )
-from pydantic_settings.sources import CliPositionalArg, CliSettingsSource, CliSubCommand, SettingsError
+from pydantic_settings.sources import (
+    CliExplicitFlag,
+    CliImplicitFlag,
+    CliPositionalArg,
+    CliSettingsSource,
+    CliSubCommand,
+    SettingsError,
+)
 
 try:
     import dotenv
@@ -3118,6 +3125,71 @@ def test_cli_annotation_exceptions(monkeypatch):
             val: int
 
         InvalidCliParseArgsType()
+
+    with pytest.raises(SettingsError, match='CliExplicitFlag argument CliFlagNotBool.flag is not of type bool'):
+
+        class CliFlagNotBool(BaseSettings, cli_parse_args=True):
+            flag: CliExplicitFlag[int] = False
+
+        CliFlagNotBool()
+
+    if sys.version_info < (3, 9):
+        with pytest.raises(
+            SettingsError,
+            match='CliImplicitFlag argument CliFlag38NotOpt.flag must have default for python versions < 3.9',
+        ):
+
+            class CliFlag38NotOpt(BaseSettings, cli_parse_args=True):
+                flag: CliImplicitFlag[bool]
+
+            CliFlag38NotOpt()
+
+
+@pytest.mark.parametrize('enforce_required', [True, False])
+def test_cli_bool_flags(monkeypatch, enforce_required):
+    if sys.version_info < (3, 9):
+
+        class ExplicitSettings(BaseSettings, cli_enforce_required=enforce_required):
+            explicit_req: bool
+            explicit_opt: bool = False
+            implicit_opt: CliImplicitFlag[bool] = False
+
+        class ImplicitSettings(BaseSettings, cli_implicit_flags=True, cli_enforce_required=enforce_required):
+            explicit_req: bool
+            explicit_opt: CliExplicitFlag[bool] = False
+            implicit_opt: bool = False
+
+        expected = {
+            'explicit_req': True,
+            'explicit_opt': False,
+            'implicit_opt': False,
+        }
+
+        assert ExplicitSettings(_cli_parse_args=['--explicit_req=True']).model_dump() == expected
+        assert ImplicitSettings(_cli_parse_args=['--explicit_req=True']).model_dump() == expected
+    else:
+
+        class ExplicitSettings(BaseSettings, cli_enforce_required=enforce_required):
+            explicit_req: bool
+            explicit_opt: bool = False
+            implicit_req: CliImplicitFlag[bool]
+            implicit_opt: CliImplicitFlag[bool] = False
+
+        class ImplicitSettings(BaseSettings, cli_implicit_flags=True, cli_enforce_required=enforce_required):
+            explicit_req: CliExplicitFlag[bool]
+            explicit_opt: CliExplicitFlag[bool] = False
+            implicit_req: bool
+            implicit_opt: bool = False
+
+        expected = {
+            'explicit_req': True,
+            'explicit_opt': False,
+            'implicit_req': True,
+            'implicit_opt': False,
+        }
+
+        assert ExplicitSettings(_cli_parse_args=['--explicit_req=True', '--implicit_req']).model_dump() == expected
+        assert ImplicitSettings(_cli_parse_args=['--explicit_req=True', '--implicit_req']).model_dump() == expected
 
 
 def test_cli_avoid_json(capsys, monkeypatch):
