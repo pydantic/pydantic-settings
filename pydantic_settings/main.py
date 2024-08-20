@@ -441,6 +441,7 @@ class CliApp:
                     cli_hide_none_type=True,
                     cli_avoid_json=True,
                     cli_enforce_required=True,
+                    cli_implicit_flags=True,
                 )
 
             model = CliAppBaseSettings(**model_init_data)
