@@ -498,7 +498,7 @@ def test_annotated(env):
     ]
 
 
-def test_class_nested_model_partial_update(env):
+def test_class_nested_model_default_partial_update(env):
     class NestedA(BaseModel):
         v0: bool
         v1: bool
@@ -517,7 +517,7 @@ def test_class_nested_model_partial_update(env):
         v0: bool = False
         v1: bool = True
 
-    class SettingsDefaultsA(BaseSettings, env_nested_delimiter='__', nested_model_partial_update=True):
+    class SettingsDefaultsA(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
         nested_a: NestedA = NestedA(v0=False, v1=True)
         nested_b: NestedB = NestedB(v0=False, v1=True)
         nested_d: NestedC = NestedC(v0=False, v1=True)
@@ -535,7 +535,7 @@ def test_class_nested_model_partial_update(env):
     }
 
 
-def test_init_kwargs_nested_model_partial_update(env):
+def test_init_kwargs_nested_model_default_partial_update(env):
     class DeepSubModel(BaseModel):
         v4: str
 
@@ -545,7 +545,7 @@ def test_init_kwargs_nested_model_partial_update(env):
         v3: int
         deep: DeepSubModel
 
-    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_partial_update=True):
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
         v0: str
         sub_model: SubModel
 
@@ -1649,8 +1649,8 @@ def test_customise_sources_empty():
 
 def test_builtins_settings_source_repr():
     assert (
-        repr(DefaultSettingsSource(BaseSettings, nested_model_partial_update=True))
-        == 'DefaultSettingsSource(nested_model_partial_update=True)'
+        repr(DefaultSettingsSource(BaseSettings, nested_model_default_partial_update=True))
+        == 'DefaultSettingsSource(nested_model_default_partial_update=True)'
     )
     assert (
         repr(InitSettingsSource(BaseSettings, init_kwargs={'apple': 'value 0', 'banana': 'value 1'}))

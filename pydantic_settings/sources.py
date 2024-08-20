@@ -252,17 +252,22 @@ class PydanticBaseSettingsSource(ABC):
 class DefaultSettingsSource(PydanticBaseSettingsSource):
     """
     Source class for loading default object values.
+
+    Args:
+        settings_cls: The Settings class.
+        nested_model_default_partial_update: Whether to allow partial updates on nested model default object fields.
+            Defaults to `False`.
     """
 
-    def __init__(self, settings_cls: type[BaseSettings], nested_model_partial_update: bool | None = None):
+    def __init__(self, settings_cls: type[BaseSettings], nested_model_default_partial_update: bool | None = None):
         super().__init__(settings_cls)
         self.defaults: dict[str, Any] = {}
-        self.nested_model_partial_update = (
-            nested_model_partial_update
-            if nested_model_partial_update is not None
-            else self.config.get('nested_model_partial_update', False)
+        self.nested_model_default_partial_update = (
+            nested_model_default_partial_update
+            if nested_model_default_partial_update is not None
+            else self.config.get('nested_model_default_partial_update', False)
         )
-        if self.nested_model_partial_update:
+        if self.nested_model_default_partial_update:
             for field_name, field_info in settings_cls.model_fields.items():
                 if is_dataclass(type(field_info.default)):
                     self.defaults[_field_name_for_signature(field_name, field_info)] = asdict(field_info.default)
@@ -277,7 +282,7 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
         return self.defaults
 
     def __repr__(self) -> str:
-        return f'DefaultSettingsSource(nested_model_partial_update={self.nested_model_partial_update})'
+        return f'DefaultSettingsSource(nested_model_default_partial_update={self.nested_model_default_partial_update})'
 
 
 class InitSettingsSource(PydanticBaseSettingsSource):
@@ -289,14 +294,14 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         self,
         settings_cls: type[BaseSettings],
         init_kwargs: dict[str, Any],
-        nested_model_partial_update: bool | None = None,
+        nested_model_default_partial_update: bool | None = None,
     ):
         self.init_kwargs = init_kwargs
         super().__init__(settings_cls)
-        self.nested_model_partial_update = (
-            nested_model_partial_update
-            if nested_model_partial_update is not None
-            else self.config.get('nested_model_partial_update', False)
+        self.nested_model_default_partial_update = (
+            nested_model_default_partial_update
+            if nested_model_default_partial_update is not None
+            else self.config.get('nested_model_default_partial_update', False)
         )
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
@@ -306,7 +311,7 @@ class InitSettingsSource(PydanticBaseSettingsSource):
     def __call__(self) -> dict[str, Any]:
         return (
             TypeAdapter(Dict[str, Any]).dump_python(self.init_kwargs)
-            if self.nested_model_partial_update
+            if self.nested_model_default_partial_update
             else self.init_kwargs
         )
 
