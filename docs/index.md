@@ -747,7 +747,7 @@ Subcommands and positional arguments are expressed using the `CliSubCommand` and
 annotations can only be applied to required fields (i.e. fields that do not have a default value). Furthermore,
 subcommands must be a valid type derived from either a pydantic `BaseModel` or pydantic.dataclasses `dataclass`.
 
-Parsed subcommands can be retrieved from model instances using the `get_subcommand` function. If a subcommand is
+Parsed subcommands can be retrieved from model instances using the `get_subcommand` utility function. If a subcommand is
 not required, set the `is_required` flag to `False` to disable raising an error if no subcommand is found.
 
 !!! note
@@ -762,66 +762,59 @@ not required, set the `is_required` flag to `False` to disable raising an error 
 ```py
 import sys
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from pydantic_settings import (
     BaseSettings,
     CliPositionalArg,
     CliSubCommand,
+    SettingsError,
     get_subcommand,
 )
 
 
-class FooPlugin(BaseModel):
-    """git-plugins-foo - Extra deep foo plugin command"""
-
-    feature: bool = Field(default=False, description='Enable feature')
-
-    def plugin_main(self) -> BaseModel:
-        """Run this method if selected and return self"""
-        return self
-
-
-class Plugins(BaseModel):
-    """git-plugins - Fake plugins for GIT"""
-
-    foo: CliSubCommand[FooPlugin] = Field(description='Foo is fake plugin')
-
-    def sub_main(self) -> BaseModel:
-        """Run this method if selected and return fake plugin command"""
-        return get_subcommand(self).plugin_main()
+class Init(BaseModel):
+    directory: CliPositionalArg[str]
 
 
 class Clone(BaseModel):
-    """git-clone - Clone a repository into a new directory"""
-
-    repository: CliPositionalArg[str] = Field(description='The repo ...')
-    directory: CliPositionalArg[str] = Field(description='The dir ...')
-    local: bool = Field(default=False, description='When the repo ...')
-
-    def sub_main(self) -> BaseModel:
-        """Run this method if selected and return self"""
-        return self
+    repository: CliPositionalArg[str]
+    directory: CliPositionalArg[str]
 
 
-class Git(BaseSettings, cli_parse_args=True, cli_prog_name='git'):
-    """git - The stupid content tracker"""
-
-    clone: CliSubCommand[Clone] = Field(description='Clone a repo ...')
-    plugins: CliSubCommand[Plugins] = Field(description='Fake GIT plugins')
-
-    def main(self) -> BaseModel:
-        """Run CLI main method and return sub cmd"""
-        return get_subcommand(self).sub_main()
+class Git(BaseSettings, cli_parse_args=True, cli_exit_on_error=False):
+    clone: CliSubCommand[Clone]
+    init: CliSubCommand[Init]
 
 
+# Run without subcommands
+sys.argv = ['example.py']
+cmd = Git()
+assert cmd.model_dump() == {'clone': None, 'init': None}
+
+try:
+    # Will raise an error since no subcommand was provided
+    get_subcommand(cmd).model_dump()
+except SettingsError as err:
+    assert str(err) == 'Error: CLI subcommand is required {clone, init}'
+
+# Will not raise an error since subcommand is not required
+assert get_subcommand(cmd, is_required=False) is None
+
+
+# Run the clone subcommand
 sys.argv = ['example.py', 'clone', 'repo', 'dest']
-print(Git().main().model_dump())
-#> {'repository': 'repo', 'directory': 'dest', 'local': False}
+cmd = Git()
+assert cmd.model_dump() == {
+    'clone': {'repository': 'repo', 'directory': 'dest'},
+    'init': None,
+}
 
-sys.argv = ['example.py', 'plugins', 'foo', '--feature', 'true']
-print(Git().main().model_dump())
-#> {'feature': True}
+# Returns the subcommand model instance (in this case, 'clone')
+assert get_subcommand(cmd).model_dump() == {
+    'directory': 'dest',
+    'repository': 'repo',
+}
 ```
 
 ### Customizing the CLI Experience

@@ -156,7 +156,7 @@ CliImplicitFlag = Annotated[_CliBoolFlag, _CliImplicitFlag]
 CliExplicitFlag = Annotated[_CliBoolFlag, _CliExplicitFlag]
 
 
-def get_subcommand(model: BaseModel, is_required: bool = True, is_exit_on_error: bool = True) -> Any:
+def get_subcommand(model: BaseModel, is_required: bool = True, cli_exit_on_error: bool | None = None) -> Any:
     """
     Get the subcommand from a model.
 
@@ -164,38 +164,42 @@ def get_subcommand(model: BaseModel, is_required: bool = True, is_exit_on_error:
         model: The model to get the subcommand from.
         is_required: Determines whether a model must have subcommand set and raises error if not
             found. Defaults to `True`.
-        is_exit_on_error: Determines whether this function exits with error if no subcommand is found.
-            Defaults to `True`.
+        cli_exit_on_error: Determines whether this function exits with error if no subcommand is found.
+            Defaults to model_config `cli_exit_on_error` value if set. Otherwise, defaults to `True`.
 
     Returns:
         The subcommand model if found, otherwise `None`.
 
     Raises:
-        SystemExit: When no subcommand is found and is_required=`True` and is_exit_on_error=`True`
+        SystemExit: When no subcommand is found and is_required=`True` and cli_exit_on_error=`True`
             (the default).
         SettingsError: When no subcommand is found and is_required=`True` and
-            is_exit_on_error=`False`.
+            cli_exit_on_error=`False`.
     """
 
     model_cls = type(model)
+    if cli_exit_on_error is None and is_model_class(model_cls):
+        model_default = model.model_config.get('cli_exit_on_error')
+        if isinstance(model_default, bool):
+            cli_exit_on_error = model_default
+    if cli_exit_on_error is None:
+        cli_exit_on_error = True
+
     subcommands: list[str] = []
-    fields = (
-        model_cls.__pydantic_fields__
-        if hasattr(model_cls, '__pydantic_fields__') and is_pydantic_dataclass(model_cls)
-        else model_cls.model_fields
-    )
-    for field_name, field_info in fields.items():
+    for field_name, field_info in _get_model_fields(model_cls).items():
         if _CliSubCommand in field_info.metadata:
             if getattr(model, field_name) is not None:
                 return getattr(model, field_name)
             subcommands.append(field_name)
+
     if is_required:
         error_message = (
             f'Error: CLI subcommand is required {{{", ".join(subcommands)}}}'
             if subcommands
             else 'Error: CLI subcommand is required but no subcommands were found.'
         )
-        raise SystemExit(error_message) if is_exit_on_error else SettingsError(error_message)
+        raise SystemExit(error_message) if cli_exit_on_error else SettingsError(error_message)
+
     return None
 
 
@@ -806,11 +810,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                 if type_has_key:
                     return type_has_key
         elif is_model_class(annotation) or is_pydantic_dataclass(annotation):
-            fields = (
-                annotation.__pydantic_fields__
-                if is_pydantic_dataclass(annotation) and hasattr(annotation, '__pydantic_fields__')
-                else cast(BaseModel, annotation).model_fields
-            )
+            fields = _get_model_fields(annotation)
             # `case_sensitive is None` is here to be compatible with the old behavior.
             # Has to be removed in V3.
             if (case_sensitive is None or case_sensitive) and fields.get(key):
@@ -1419,12 +1419,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, FieldInfo]]:
         positional_args, subcommand_args, optional_args = [], [], []
-        fields = (
-            model.__pydantic_fields__
-            if hasattr(model, '__pydantic_fields__') and is_pydantic_dataclass(model)
-            else model.model_fields
-        )
-        for field_name, field_info in fields.items():
+        for field_name, field_info in _get_model_fields(model).items():
             if _CliSubCommand in field_info.metadata:
                 if not field_info.is_required():
                     raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has a default value')
@@ -2133,3 +2128,11 @@ def _annotation_enum_name_to_val(annotation: type[Any] | None, name: Any) -> Any
             if name in tuple(val.name for val in type_):
                 return type_[name]
     return None
+
+
+def _get_model_fields(model_cls: type[Any]) -> dict[str, FieldInfo]:
+    if is_pydantic_dataclass(model_cls) and hasattr(model_cls, '__pydantic_fields__'):
+        return model_cls.__pydantic_fields__
+    if is_model_class(model_cls):
+        return model_cls.model_fields
+    raise SettingsError(f'Error: {model_cls.__name__} is not subclass of BaseModel or pydantic.dataclasses.dataclass')

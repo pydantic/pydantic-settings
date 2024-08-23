@@ -19,6 +19,7 @@ from pydantic import (
     AliasChoices,
     AliasPath,
     BaseModel,
+    ConfigDict,
     DirectoryPath,
     Discriminator,
     Field,
@@ -3101,7 +3102,7 @@ def test_cli_subcommand_with_positionals():
     with pytest.raises(SystemExit, match='Error: CLI subcommand is required but no subcommands were found.'):
         get_subcommand(bar)
     with pytest.raises(SettingsError, match='Error: CLI subcommand is required but no subcommands were found.'):
-        get_subcommand(bar, is_exit_on_error=False)
+        get_subcommand(bar, cli_exit_on_error=False)
 
     @pydantic_dataclasses.dataclass
     class Plugins:
@@ -3134,7 +3135,7 @@ def test_cli_subcommand_with_positionals():
     with pytest.raises(SystemExit, match='Error: CLI subcommand is required {clone, init, plugins}'):
         get_subcommand(git)
     with pytest.raises(SettingsError, match='Error: CLI subcommand is required {clone, init, plugins}'):
-        get_subcommand(git, is_exit_on_error=False)
+        get_subcommand(git, cli_exit_on_error=False)
 
     git = Git(_cli_parse_args=['init', '--quiet', 'true', 'dir/path'])
     assert git.model_dump() == {
@@ -3164,6 +3165,22 @@ def test_cli_subcommand_with_positionals():
     assert get_subcommand(git, is_required=False) == git.plugins
     assert get_subcommand(get_subcommand(git)) == git.plugins.bar
     assert get_subcommand(get_subcommand(git), is_required=False) == git.plugins.bar
+
+    class NotModel: ...
+
+    with pytest.raises(
+        SettingsError, match='Error: NotModel is not subclass of BaseModel or pydantic.dataclasses.dataclass'
+    ):
+        get_subcommand(NotModel())
+
+    class NotSettingsConfigDict(BaseModel):
+        model_config = ConfigDict(cli_exit_on_error='not a bool')
+
+    with pytest.raises(SystemExit, match='Error: CLI subcommand is required but no subcommands were found.'):
+        get_subcommand(NotSettingsConfigDict())
+
+    with pytest.raises(SettingsError, match='Error: CLI subcommand is required but no subcommands were found.'):
+        get_subcommand(NotSettingsConfigDict(), cli_exit_on_error=False)
 
 
 def test_cli_union_similar_sub_models():
