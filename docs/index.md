@@ -371,6 +371,39 @@ print(Settings().model_dump())
 #> {'numbers': [1, 2, 3]}
 ```
 
+## Nested model default partial updates
+
+By default, Pydantic settings does not allow partial updates to nested model default objects. This behavior can be
+overriden by setting the `nested_model_default_partial_update` flag to `True`, which will allow partial updates on
+nested model default object fields.
+
+```py
+import os
+
+from pydantic import BaseModel
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class SubModel(BaseModel):
+    val: int = 0
+    flag: bool = False
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_nested_delimiter='__', nested_model_default_partial_update=True
+    )
+
+    nested_model: SubModel = SubModel()
+
+
+# Apply a partial update to the default object using environment variables
+os.environ['NESTED_MODEL__FLAG'] = 'True'
+
+assert Settings().model_dump() == {'nested_model': {'val': 0, 'flag': True}}
+```
+
 ## Dotenv (.env) support
 
 Dotenv files (generally named `.env`) are a common pattern that make it easy to use environment variables in a
@@ -474,7 +507,8 @@ models. There are two primary use cases for Pydantic settings CLI:
 
 By default, the experience is tailored towards use case #1 and builds on the foundations established in [parsing
 environment variables](#parsing-environment-variable-values). If your use case primarily falls into #2, you will likely
-want to enable [enforcing required arguments at the CLI](#enforce-required-arguments-at-cli).
+want to enable [enforcing required arguments at the CLI](#enforce-required-arguments-at-cli) and [nested model default
+partial updates](#nested-model-default-partial-updates).
 
 ### The Basics
 
