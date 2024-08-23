@@ -371,6 +371,39 @@ print(Settings().model_dump())
 #> {'numbers': [1, 2, 3]}
 ```
 
+## Nested model default partial updates
+
+By default, Pydantic settings does not allow partial updates to nested model default objects. This behavior can be
+overriden by setting the `nested_model_default_partial_update` flag to `True`, which will allow partial updates on
+nested model default object fields.
+
+```py
+import os
+
+from pydantic import BaseModel
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class SubModel(BaseModel):
+    val: int = 0
+    flag: bool = False
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_nested_delimiter='__', nested_model_default_partial_update=True
+    )
+
+    nested_model: SubModel = SubModel()
+
+
+# Apply a partial update to the default object using environment variables
+os.environ['NESTED_MODEL__FLAG'] = 'True'
+
+assert Settings().model_dump() == {'nested_model': {'val': 0, 'flag': True}}
+```
+
 ## Dotenv (.env) support
 
 Dotenv files (generally named `.env`) are a common pattern that make it easy to use environment variables in a
@@ -474,7 +507,8 @@ models. There are two primary use cases for Pydantic settings CLI:
 
 By default, the experience is tailored towards use case #1 and builds on the foundations established in [parsing
 environment variables](#parsing-environment-variable-values). If your use case primarily falls into #2, you will likely
-want to enable [enforcing required arguments at the CLI](#enforce-required-arguments-at-cli).
+want to enable [enforcing required arguments at the CLI](#enforce-required-arguments-at-cli) and [nested model default
+partial updates](#nested-model-default-partial-updates).
 
 ### The Basics
 
@@ -866,6 +900,75 @@ usage: appdantic [-h]
 options:
   -h, --help  show this help message and exit
 """
+```
+
+#### CLI Boolean Flags
+
+Change whether boolean fields should be explicit or implicit by default using the `cli_implicit_flags` setting. By
+default, boolean fields are "explicit", meaning a boolean value must be explicitly provided on the CLI, e.g.
+`--flag=True`. Conversely, boolean fields that are "implicit" derive the value from the flag itself, e.g.
+`--flag,--no-flag`, which removes the need for an explicit value to be passed.
+
+Additionally, the provided `CliImplicitFlag` and `CliExplicitFlag` annotations can be used for more granular control
+when necessary.
+
+!!! note
+For `python < 3.9`:
+  * The `--no-flag` option is not generated due to an underlying `argparse` limitation.
+  * The `CliImplicitFlag` and `CliExplicitFlag` annotations can only be applied to optional bool fields.
+
+```py
+from pydantic_settings import BaseSettings, CliExplicitFlag, CliImplicitFlag
+
+
+class ExplicitSettings(BaseSettings, cli_parse_args=True):
+    """Boolean fields are explicit by default."""
+
+    explicit_req: bool
+    """
+    --explicit_req bool   (required)
+    """
+
+    explicit_opt: bool = False
+    """
+    --explicit_opt bool   (default: False)
+    """
+
+    # Booleans are explicit by default, so must override implicit flags with annotation
+    implicit_req: CliImplicitFlag[bool]
+    """
+    --implicit_req, --no-implicit_req (required)
+    """
+
+    implicit_opt: CliImplicitFlag[bool] = False
+    """
+    --implicit_opt, --no-implicit_opt (default: False)
+    """
+
+
+class ImplicitSettings(BaseSettings, cli_parse_args=True, cli_implicit_flags=True):
+    """With cli_implicit_flags=True, boolean fields are implicit by default."""
+
+    # Booleans are implicit by default, so must override explicit flags with annotation
+    explicit_req: CliExplicitFlag[bool]
+    """
+    --explicit_req bool   (required)
+    """
+
+    explicit_opt: CliExplicitFlag[bool] = False
+    """
+    --explicit_opt bool   (default: False)
+    """
+
+    implicit_req: bool
+    """
+    --implicit_req, --no-implicit_req (required)
+    """
+
+    implicit_opt: bool = False
+    """
+    --implicit_opt, --no-implicit_opt (default: False)
+    """
 ```
 
 #### Change Whether CLI Should Exit on Error

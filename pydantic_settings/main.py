@@ -11,6 +11,7 @@ from pydantic.main import BaseModel
 from .sources import (
     ENV_FILE_SENTINEL,
     CliSettingsSource,
+    DefaultSettingsSource,
     DotEnvSettingsSource,
     DotenvType,
     EnvSettingsSource,
@@ -23,6 +24,7 @@ from .sources import (
 
 class SettingsConfigDict(ConfigDict, total=False):
     case_sensitive: bool
+    nested_model_default_partial_update: bool | None
     env_prefix: str
     env_file: DotenvType | None
     env_file_encoding: str | None
@@ -40,6 +42,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_use_class_docs_for_groups: bool
     cli_exit_on_error: bool
     cli_prefix: str
+    cli_implicit_flags: bool | None
     secrets_dir: str | Path | None
     json_file: PathType | None
     json_file_encoding: str | None
@@ -88,6 +91,8 @@ class BaseSettings(BaseModel):
 
     Args:
         _case_sensitive: Whether environment variables names should be read with case-sensitivity. Defaults to `None`.
+        _nested_model_default_partial_update: Whether to allow partial updates on nested model default object fields.
+            Defaults to `False`.
         _env_prefix: Prefix for all environment variables. Defaults to `None`.
         _env_file: The env file(s) to load settings values from. Defaults to `Path('')`, which
             means that the value from `model_config['env_file']` should be used. You can also pass
@@ -114,12 +119,15 @@ class BaseSettings(BaseModel):
         _cli_exit_on_error: Determines whether or not the internal parser exits with error info when an error occurs.
             Defaults to `True`.
         _cli_prefix: The root parser command line arguments prefix. Defaults to "".
+        _cli_implicit_flags: Whether `bool` fields should be implicitly converted into CLI boolean flags.
+            (e.g. --flag, --no-flag). Defaults to `False`.
         _secrets_dir: The secret files directory. Defaults to `None`.
     """
 
     def __init__(
         __pydantic_self__,
         _case_sensitive: bool | None = None,
+        _nested_model_default_partial_update: bool | None = None,
         _env_prefix: str | None = None,
         _env_file: DotenvType | None = ENV_FILE_SENTINEL,
         _env_file_encoding: str | None = None,
@@ -137,6 +145,7 @@ class BaseSettings(BaseModel):
         _cli_use_class_docs_for_groups: bool | None = None,
         _cli_exit_on_error: bool | None = None,
         _cli_prefix: str | None = None,
+        _cli_implicit_flags: bool | None = None,
         _secrets_dir: str | Path | None = None,
         **values: Any,
     ) -> None:
@@ -145,6 +154,7 @@ class BaseSettings(BaseModel):
             **__pydantic_self__._settings_build_values(
                 values,
                 _case_sensitive=_case_sensitive,
+                _nested_model_default_partial_update=_nested_model_default_partial_update,
                 _env_prefix=_env_prefix,
                 _env_file=_env_file,
                 _env_file_encoding=_env_file_encoding,
@@ -162,6 +172,7 @@ class BaseSettings(BaseModel):
                 _cli_use_class_docs_for_groups=_cli_use_class_docs_for_groups,
                 _cli_exit_on_error=_cli_exit_on_error,
                 _cli_prefix=_cli_prefix,
+                _cli_implicit_flags=_cli_implicit_flags,
                 _secrets_dir=_secrets_dir,
             )
         )
@@ -194,6 +205,7 @@ class BaseSettings(BaseModel):
         self,
         init_kwargs: dict[str, Any],
         _case_sensitive: bool | None = None,
+        _nested_model_default_partial_update: bool | None = None,
         _env_prefix: str | None = None,
         _env_file: DotenvType | None = None,
         _env_file_encoding: str | None = None,
@@ -211,11 +223,17 @@ class BaseSettings(BaseModel):
         _cli_use_class_docs_for_groups: bool | None = None,
         _cli_exit_on_error: bool | None = None,
         _cli_prefix: str | None = None,
+        _cli_implicit_flags: bool | None = None,
         _secrets_dir: str | Path | None = None,
     ) -> dict[str, Any]:
         # Determine settings config values
         case_sensitive = _case_sensitive if _case_sensitive is not None else self.model_config.get('case_sensitive')
         env_prefix = _env_prefix if _env_prefix is not None else self.model_config.get('env_prefix')
+        nested_model_default_partial_update = (
+            _nested_model_default_partial_update
+            if _nested_model_default_partial_update is not None
+            else self.model_config.get('nested_model_default_partial_update')
+        )
         env_file = _env_file if _env_file != ENV_FILE_SENTINEL else self.model_config.get('env_file')
         env_file_encoding = (
             _env_file_encoding if _env_file_encoding is not None else self.model_config.get('env_file_encoding')
@@ -260,11 +278,21 @@ class BaseSettings(BaseModel):
             _cli_exit_on_error if _cli_exit_on_error is not None else self.model_config.get('cli_exit_on_error')
         )
         cli_prefix = _cli_prefix if _cli_prefix is not None else self.model_config.get('cli_prefix')
+        cli_implicit_flags = (
+            _cli_implicit_flags if _cli_implicit_flags is not None else self.model_config.get('cli_implicit_flags')
+        )
 
         secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
         # Configure built-in sources
-        init_settings = InitSettingsSource(self.__class__, init_kwargs=init_kwargs)
+        default_settings = DefaultSettingsSource(
+            self.__class__, nested_model_default_partial_update=nested_model_default_partial_update
+        )
+        init_settings = InitSettingsSource(
+            self.__class__,
+            init_kwargs=init_kwargs,
+            nested_model_default_partial_update=nested_model_default_partial_update,
+        )
         env_settings = EnvSettingsSource(
             self.__class__,
             case_sensitive=case_sensitive,
@@ -296,7 +324,7 @@ class BaseSettings(BaseModel):
             env_settings=env_settings,
             dotenv_settings=dotenv_settings,
             file_secret_settings=file_secret_settings,
-        )
+        ) + (default_settings,)
         if not any([source for source in sources if isinstance(source, CliSettingsSource)]):
             if cli_parse_args is not None or cli_settings_source is not None:
                 cli_settings = (
@@ -311,6 +339,7 @@ class BaseSettings(BaseModel):
                         cli_use_class_docs_for_groups=cli_use_class_docs_for_groups,
                         cli_exit_on_error=cli_exit_on_error,
                         cli_prefix=cli_prefix,
+                        cli_implicit_flags=cli_implicit_flags,
                         case_sensitive=case_sensitive,
                     )
                     if cli_settings_source is None
@@ -342,6 +371,7 @@ class BaseSettings(BaseModel):
         validate_default=True,
         case_sensitive=False,
         env_prefix='',
+        nested_model_default_partial_update=False,
         env_file=None,
         env_file_encoding=None,
         env_ignore_empty=False,
@@ -358,6 +388,7 @@ class BaseSettings(BaseModel):
         cli_use_class_docs_for_groups=False,
         cli_exit_on_error=True,
         cli_prefix='',
+        cli_implicit_flags=False,
         json_file=None,
         json_file_encoding=None,
         yaml_file=None,

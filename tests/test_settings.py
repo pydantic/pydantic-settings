@@ -50,7 +50,15 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
     YamlConfigSettingsSource,
 )
-from pydantic_settings.sources import CliPositionalArg, CliSettingsSource, CliSubCommand, SettingsError
+from pydantic_settings.sources import (
+    CliExplicitFlag,
+    CliImplicitFlag,
+    CliPositionalArg,
+    CliSettingsSource,
+    CliSubCommand,
+    DefaultSettingsSource,
+    SettingsError,
+)
 
 try:
     import dotenv
@@ -490,6 +498,80 @@ def test_annotated(env):
             'type': 'int_parsing',
         }
     ]
+
+
+def test_class_nested_model_default_partial_update(env):
+    class NestedA(BaseModel):
+        v0: bool
+        v1: bool
+
+    @pydantic_dataclasses.dataclass
+    class NestedB:
+        v0: bool
+        v1: bool
+
+    @dataclasses.dataclass
+    class NestedC:
+        v0: bool
+        v1: bool
+
+    class NestedD(BaseModel):
+        v0: bool = False
+        v1: bool = True
+
+    class SettingsDefaultsA(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        nested_a: NestedA = NestedA(v0=False, v1=True)
+        nested_b: NestedB = NestedB(v0=False, v1=True)
+        nested_d: NestedC = NestedC(v0=False, v1=True)
+        nested_c: NestedD = NestedD()
+
+    env.set('NESTED_A__V0', 'True')
+    env.set('NESTED_B__V0', 'True')
+    env.set('NESTED_C__V0', 'True')
+    env.set('NESTED_D__V0', 'True')
+    assert SettingsDefaultsA().model_dump() == {
+        'nested_a': {'v0': True, 'v1': True},
+        'nested_b': {'v0': True, 'v1': True},
+        'nested_c': {'v0': True, 'v1': True},
+        'nested_d': {'v0': True, 'v1': True},
+    }
+
+
+def test_init_kwargs_nested_model_default_partial_update(env):
+    class DeepSubModel(BaseModel):
+        v4: str
+
+    class SubModel(BaseModel):
+        v1: str
+        v2: bytes
+        v3: int
+        deep: DeepSubModel
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        v0: str
+        sub_model: SubModel
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            return env_settings, dotenv_settings, init_settings, file_secret_settings
+
+    env.set('SUB_MODEL__DEEP__V4', 'override-v4')
+
+    s_final = {'v0': '0', 'sub_model': {'v1': 'init-v1', 'v2': b'init-v2', 'v3': 3, 'deep': {'v4': 'override-v4'}}}
+
+    s = Settings(v0='0', sub_model={'v1': 'init-v1', 'v2': b'init-v2', 'v3': 3, 'deep': {'v4': 'init-v4'}})
+    assert s.model_dump() == s_final
+
+    s = Settings(v0='0', sub_model=SubModel(v1='init-v1', v2=b'init-v2', v3=3, deep=DeepSubModel(v4='init-v4')))
+    assert s.model_dump() == s_final
+
+    s = Settings(v0='0', sub_model=SubModel(v1='init-v1', v2=b'init-v2', v3=3, deep={'v4': 'init-v4'}))
+    assert s.model_dump() == s_final
+
+    s = Settings(v0='0', sub_model={'v1': 'init-v1', 'v2': b'init-v2', 'v3': 3, 'deep': DeepSubModel(v4='init-v4')})
+    assert s.model_dump() == s_final
 
 
 def test_env_str(env):
@@ -1569,6 +1651,10 @@ def test_customise_sources_empty():
 
 def test_builtins_settings_source_repr():
     assert (
+        repr(DefaultSettingsSource(BaseSettings, nested_model_default_partial_update=True))
+        == 'DefaultSettingsSource(nested_model_default_partial_update=True)'
+    )
+    assert (
         repr(InitSettingsSource(BaseSettings, init_kwargs={'apple': 'value 0', 'banana': 'value 1'}))
         == "InitSettingsSource(init_kwargs={'apple': 'value 0', 'banana': 'value 1'})"
     )
@@ -2644,8 +2730,26 @@ def test_cli_nested_dataclass_arg():
     assert s.n.bar == 'bar value'
 
 
+def no_add_cli_arg_spaces(arg_str: str, has_quote_comma: bool = False) -> str:
+    return arg_str
+
+
+def add_cli_arg_spaces(arg_str: str, has_quote_comma: bool = False) -> str:
+    arg_str = arg_str.replace('[', ' [ ')
+    arg_str = arg_str.replace(']', ' ] ')
+    arg_str = arg_str.replace('{', ' { ')
+    arg_str = arg_str.replace('}', ' } ')
+    arg_str = arg_str.replace(':', ' : ')
+    if not has_quote_comma:
+        arg_str = arg_str.replace(',', ' , ')
+    else:
+        arg_str = arg_str.replace('",', '" , ')
+    return f' {arg_str} '
+
+
+@pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
 @pytest.mark.parametrize('prefix', ['', 'child.'])
-def test_cli_list_arg(prefix):
+def test_cli_list_arg(prefix, arg_spaces):
     class Obj(BaseModel):
         val: int
 
@@ -2676,8 +2780,8 @@ def test_cli_list_arg(prefix):
             assert cfg.model_dump() == expected
 
     args: List[str] = []
-    args = [f'--{prefix}num_list', '[1,2]']
-    args += [f'--{prefix}num_list', '3,4']
+    args = [f'--{prefix}num_list', arg_spaces('[1,2]')]
+    args += [f'--{prefix}num_list', arg_spaces('3,4')]
     args += [f'--{prefix}num_list', '5', f'--{prefix}num_list', '6']
     cfg = Cfg(_cli_parse_args=args)
     expected = {
@@ -2688,9 +2792,9 @@ def test_cli_list_arg(prefix):
     }
     check_answer(cfg, prefix, expected)
 
-    args = [f'--{prefix}obj_list', '[{"val":1},{"val":2}]']
-    args += [f'--{prefix}obj_list', '{"val":3},{"val":4}']
-    args += [f'--{prefix}obj_list', '{"val":5}', f'--{prefix}obj_list', '{"val":6}']
+    args = [f'--{prefix}obj_list', arg_spaces('[{"val":1},{"val":2}]')]
+    args += [f'--{prefix}obj_list', arg_spaces('{"val":3},{"val":4}')]
+    args += [f'--{prefix}obj_list', arg_spaces('{"val":5}'), f'--{prefix}obj_list', arg_spaces('{"val":6}')]
     cfg = Cfg(_cli_parse_args=args)
     expected = {
         'num_list': None,
@@ -2700,9 +2804,9 @@ def test_cli_list_arg(prefix):
     }
     check_answer(cfg, prefix, expected)
 
-    args = [f'--{prefix}union_list', '[{"val":1},2]', f'--{prefix}union_list', '[3,{"val":4}]']
-    args += [f'--{prefix}union_list', '{"val":5},6', f'--{prefix}union_list', '7,{"val":8}']
-    args += [f'--{prefix}union_list', '{"val":9}', f'--{prefix}union_list', '10']
+    args = [f'--{prefix}union_list', arg_spaces('[{"val":1},2]'), f'--{prefix}union_list', arg_spaces('[3,{"val":4}]')]
+    args += [f'--{prefix}union_list', arg_spaces('{"val":5},6'), f'--{prefix}union_list', arg_spaces('7,{"val":8}')]
+    args += [f'--{prefix}union_list', arg_spaces('{"val":9}'), f'--{prefix}union_list', '10']
     cfg = Cfg(_cli_parse_args=args)
     expected = {
         'num_list': None,
@@ -2712,9 +2816,14 @@ def test_cli_list_arg(prefix):
     }
     check_answer(cfg, prefix, expected)
 
-    args = [f'--{prefix}str_list', '["0,0","1,1"]']
-    args += [f'--{prefix}str_list', '"2,2","3,3"']
-    args += [f'--{prefix}str_list', '"4,4"', f'--{prefix}str_list', '"5,5"']
+    args = [f'--{prefix}str_list', arg_spaces('["0,0","1,1"]', has_quote_comma=True)]
+    args += [f'--{prefix}str_list', arg_spaces('"2,2","3,3"', has_quote_comma=True)]
+    args += [
+        f'--{prefix}str_list',
+        arg_spaces('"4,4"', has_quote_comma=True),
+        f'--{prefix}str_list',
+        arg_spaces('"5,5"', has_quote_comma=True),
+    ]
     cfg = Cfg(_cli_parse_args=args)
     expected = {
         'num_list': None,
@@ -2725,20 +2834,21 @@ def test_cli_list_arg(prefix):
     check_answer(cfg, prefix, expected)
 
 
-def test_cli_list_json_value_parsing():
+@pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
+def test_cli_list_json_value_parsing(arg_spaces):
     class Cfg(BaseSettings):
         json_list: List[Union[str, bool, None]]
 
     assert Cfg(
         _cli_parse_args=[
             '--json_list',
-            'true,"true"',
+            arg_spaces('true,"true"'),
             '--json_list',
-            'false,"false"',
+            arg_spaces('false,"false"'),
             '--json_list',
-            'null,"null"',
+            arg_spaces('null,"null"'),
             '--json_list',
-            'hi,"bye"',
+            arg_spaces('hi,"bye"'),
         ]
     ).model_dump() == {'json_list': [True, 'true', False, 'false', None, 'null', 'hi', 'bye']}
 
@@ -2746,8 +2856,9 @@ def test_cli_list_json_value_parsing():
     assert Cfg(_cli_parse_args=['--json_list', ',,,']).model_dump() == {'json_list': ['', '', '', '']}
 
 
+@pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
 @pytest.mark.parametrize('prefix', ['', 'child.'])
-def test_cli_dict_arg(prefix):
+def test_cli_dict_arg(prefix, arg_spaces):
     class Child(BaseModel):
         check_dict: Dict[str, str]
 
@@ -2756,19 +2867,34 @@ def test_cli_dict_arg(prefix):
         child: Optional[Child] = None
 
     args: List[str] = []
-    args = [f'--{prefix}check_dict', '{"k1":"a","k2":"b"}']
-    args += [f'--{prefix}check_dict', '{"k3":"c"},{"k4":"d"}']
-    args += [f'--{prefix}check_dict', '{"k5":"e"}', f'--{prefix}check_dict', '{"k6":"f"}']
-    args += [f'--{prefix}check_dict', '[k7=g,k8=h]']
-    args += [f'--{prefix}check_dict', 'k9=i,k10=j']
-    args += [f'--{prefix}check_dict', 'k11=k', f'--{prefix}check_dict', 'k12=l']
-    args += [f'--{prefix}check_dict', '[{"k13":"m"},k14=n]', f'--{prefix}check_dict', '[k15=o,{"k16":"p"}]']
-    args += [f'--{prefix}check_dict', '{"k17":"q"},k18=r', f'--{prefix}check_dict', 'k19=s,{"k20":"t"}']
-    args += [f'--{prefix}check_dict', '{"k21":"u"},k22=v,{"k23":"w"}']
-    args += [f'--{prefix}check_dict', 'k24=x,{"k25":"y"},k26=z']
-    args += [f'--{prefix}check_dict', '[k27="x,y",k28="x,y"]']
-    args += [f'--{prefix}check_dict', 'k29="x,y",k30="x,y"']
-    args += [f'--{prefix}check_dict', 'k31="x,y"', f'--{prefix}check_dict', 'k32="x,y"']
+    args = [f'--{prefix}check_dict', arg_spaces('{"k1":"a","k2":"b"}')]
+    args += [f'--{prefix}check_dict', arg_spaces('{"k3":"c"},{"k4":"d"}')]
+    args += [f'--{prefix}check_dict', arg_spaces('{"k5":"e"}'), f'--{prefix}check_dict', arg_spaces('{"k6":"f"}')]
+    args += [f'--{prefix}check_dict', arg_spaces('[k7=g,k8=h]')]
+    args += [f'--{prefix}check_dict', arg_spaces('k9=i,k10=j')]
+    args += [f'--{prefix}check_dict', arg_spaces('k11=k'), f'--{prefix}check_dict', arg_spaces('k12=l')]
+    args += [
+        f'--{prefix}check_dict',
+        arg_spaces('[{"k13":"m"},k14=n]'),
+        f'--{prefix}check_dict',
+        arg_spaces('[k15=o,{"k16":"p"}]'),
+    ]
+    args += [
+        f'--{prefix}check_dict',
+        arg_spaces('{"k17":"q"},k18=r'),
+        f'--{prefix}check_dict',
+        arg_spaces('k19=s,{"k20":"t"}'),
+    ]
+    args += [f'--{prefix}check_dict', arg_spaces('{"k21":"u"},k22=v,{"k23":"w"}')]
+    args += [f'--{prefix}check_dict', arg_spaces('k24=x,{"k25":"y"},k26=z')]
+    args += [f'--{prefix}check_dict', arg_spaces('[k27="x,y",k28="x,y"]', has_quote_comma=True)]
+    args += [f'--{prefix}check_dict', arg_spaces('k29="x,y",k30="x,y"', has_quote_comma=True)]
+    args += [
+        f'--{prefix}check_dict',
+        arg_spaces('k31="x,y"', has_quote_comma=True),
+        f'--{prefix}check_dict',
+        arg_spaces('k32="x,y"', has_quote_comma=True),
+    ]
     cfg = Cfg(_cli_parse_args=args)
     expected: Dict[str, Any] = {
         'check_dict': {
@@ -3163,6 +3289,71 @@ def test_cli_annotation_exceptions(monkeypatch):
             val: int
 
         InvalidCliParseArgsType()
+
+    with pytest.raises(SettingsError, match='CliExplicitFlag argument CliFlagNotBool.flag is not of type bool'):
+
+        class CliFlagNotBool(BaseSettings, cli_parse_args=True):
+            flag: CliExplicitFlag[int] = False
+
+        CliFlagNotBool()
+
+    if sys.version_info < (3, 9):
+        with pytest.raises(
+            SettingsError,
+            match='CliImplicitFlag argument CliFlag38NotOpt.flag must have default for python versions < 3.9',
+        ):
+
+            class CliFlag38NotOpt(BaseSettings, cli_parse_args=True):
+                flag: CliImplicitFlag[bool]
+
+            CliFlag38NotOpt()
+
+
+@pytest.mark.parametrize('enforce_required', [True, False])
+def test_cli_bool_flags(monkeypatch, enforce_required):
+    if sys.version_info < (3, 9):
+
+        class ExplicitSettings(BaseSettings, cli_enforce_required=enforce_required):
+            explicit_req: bool
+            explicit_opt: bool = False
+            implicit_opt: CliImplicitFlag[bool] = False
+
+        class ImplicitSettings(BaseSettings, cli_implicit_flags=True, cli_enforce_required=enforce_required):
+            explicit_req: bool
+            explicit_opt: CliExplicitFlag[bool] = False
+            implicit_opt: bool = False
+
+        expected = {
+            'explicit_req': True,
+            'explicit_opt': False,
+            'implicit_opt': False,
+        }
+
+        assert ExplicitSettings(_cli_parse_args=['--explicit_req=True']).model_dump() == expected
+        assert ImplicitSettings(_cli_parse_args=['--explicit_req=True']).model_dump() == expected
+    else:
+
+        class ExplicitSettings(BaseSettings, cli_enforce_required=enforce_required):
+            explicit_req: bool
+            explicit_opt: bool = False
+            implicit_req: CliImplicitFlag[bool]
+            implicit_opt: CliImplicitFlag[bool] = False
+
+        class ImplicitSettings(BaseSettings, cli_implicit_flags=True, cli_enforce_required=enforce_required):
+            explicit_req: CliExplicitFlag[bool]
+            explicit_opt: CliExplicitFlag[bool] = False
+            implicit_req: bool
+            implicit_opt: bool = False
+
+        expected = {
+            'explicit_req': True,
+            'explicit_opt': False,
+            'implicit_req': True,
+            'implicit_opt': False,
+        }
+
+        assert ExplicitSettings(_cli_parse_args=['--explicit_req=True', '--implicit_req']).model_dump() == expected
+        assert ImplicitSettings(_cli_parse_args=['--explicit_req=True', '--implicit_req']).model_dump() == expected
 
 
 def test_cli_avoid_json(capsys, monkeypatch):
