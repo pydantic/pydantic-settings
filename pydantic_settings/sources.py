@@ -13,7 +13,7 @@ if sys.version_info >= (3, 9):
     from argparse import BooleanOptionalAction
 from argparse import SUPPRESS, ArgumentParser, Namespace, RawDescriptionHelpFormatter, _SubParsersAction
 from collections import deque
-from dataclasses import is_dataclass
+from dataclasses import asdict, is_dataclass
 from enum import Enum
 from pathlib import Path
 from textwrap import dedent
@@ -22,6 +22,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Dict,
     Generic,
     Iterator,
     List,
@@ -38,8 +39,9 @@ from typing import (
 
 import typing_extensions
 from dotenv import dotenv_values
-from pydantic import AliasChoices, AliasPath, BaseModel, Json, RootModel
+from pydantic import AliasChoices, AliasPath, BaseModel, Json, RootModel, TypeAdapter
 from pydantic._internal._repr import Representation
+from pydantic._internal._signature import _field_name_for_signature
 from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union, typing_base
 from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
 from pydantic.dataclasses import is_pydantic_dataclass
@@ -261,21 +263,71 @@ class PydanticBaseSettingsSource(ABC):
         pass
 
 
-class InitSettingsSource(PydanticBaseSettingsSource):
+class DefaultSettingsSource(PydanticBaseSettingsSource):
     """
-    Source class for loading values provided during settings class initialization.
+    Source class for loading default object values.
+
+    Args:
+        settings_cls: The Settings class.
+        nested_model_default_partial_update: Whether to allow partial updates on nested model default object fields.
+            Defaults to `False`.
     """
 
-    def __init__(self, settings_cls: type[BaseSettings], init_kwargs: dict[str, Any]):
-        self.init_kwargs = init_kwargs
+    def __init__(self, settings_cls: type[BaseSettings], nested_model_default_partial_update: bool | None = None):
         super().__init__(settings_cls)
+        self.defaults: dict[str, Any] = {}
+        self.nested_model_default_partial_update = (
+            nested_model_default_partial_update
+            if nested_model_default_partial_update is not None
+            else self.config.get('nested_model_default_partial_update', False)
+        )
+        if self.nested_model_default_partial_update:
+            for field_name, field_info in settings_cls.model_fields.items():
+                if is_dataclass(type(field_info.default)):
+                    self.defaults[_field_name_for_signature(field_name, field_info)] = asdict(field_info.default)
+                elif is_model_class(type(field_info.default)):
+                    self.defaults[_field_name_for_signature(field_name, field_info)] = field_info.default.model_dump()
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         # Nothing to do here. Only implement the return statement to make mypy happy
         return None, '', False
 
     def __call__(self) -> dict[str, Any]:
-        return self.init_kwargs
+        return self.defaults
+
+    def __repr__(self) -> str:
+        return f'DefaultSettingsSource(nested_model_default_partial_update={self.nested_model_default_partial_update})'
+
+
+class InitSettingsSource(PydanticBaseSettingsSource):
+    """
+    Source class for loading values provided during settings class initialization.
+    """
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        init_kwargs: dict[str, Any],
+        nested_model_default_partial_update: bool | None = None,
+    ):
+        self.init_kwargs = init_kwargs
+        super().__init__(settings_cls)
+        self.nested_model_default_partial_update = (
+            nested_model_default_partial_update
+            if nested_model_default_partial_update is not None
+            else self.config.get('nested_model_default_partial_update', False)
+        )
+
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        # Nothing to do here. Only implement the return statement to make mypy happy
+        return None, '', False
+
+    def __call__(self) -> dict[str, Any]:
+        return (
+            TypeAdapter(Dict[str, Any]).dump_python(self.init_kwargs)
+            if self.nested_model_default_partial_update
+            else self.init_kwargs
+        )
 
     def __repr__(self) -> str:
         return f'InitSettingsSource(init_kwargs={self.init_kwargs!r})'
@@ -1581,7 +1633,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         if self.cli_use_class_docs_for_groups and len(sub_models) == 1:
             model_group_kwargs['description'] = None if sub_models[0].__doc__ is None else dedent(sub_models[0].__doc__)
 
-        if model_default not in (PydanticUndefined, None):
+        if model_default is not PydanticUndefined:
             if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
                 model_default = getattr(model_default, field_name)
         else:

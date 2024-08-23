@@ -56,6 +56,7 @@ from pydantic_settings.sources import (
     CliPositionalArg,
     CliSettingsSource,
     CliSubCommand,
+    DefaultSettingsSource,
     SettingsError,
 )
 
@@ -497,6 +498,80 @@ def test_annotated(env):
             'type': 'int_parsing',
         }
     ]
+
+
+def test_class_nested_model_default_partial_update(env):
+    class NestedA(BaseModel):
+        v0: bool
+        v1: bool
+
+    @pydantic_dataclasses.dataclass
+    class NestedB:
+        v0: bool
+        v1: bool
+
+    @dataclasses.dataclass
+    class NestedC:
+        v0: bool
+        v1: bool
+
+    class NestedD(BaseModel):
+        v0: bool = False
+        v1: bool = True
+
+    class SettingsDefaultsA(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        nested_a: NestedA = NestedA(v0=False, v1=True)
+        nested_b: NestedB = NestedB(v0=False, v1=True)
+        nested_d: NestedC = NestedC(v0=False, v1=True)
+        nested_c: NestedD = NestedD()
+
+    env.set('NESTED_A__V0', 'True')
+    env.set('NESTED_B__V0', 'True')
+    env.set('NESTED_C__V0', 'True')
+    env.set('NESTED_D__V0', 'True')
+    assert SettingsDefaultsA().model_dump() == {
+        'nested_a': {'v0': True, 'v1': True},
+        'nested_b': {'v0': True, 'v1': True},
+        'nested_c': {'v0': True, 'v1': True},
+        'nested_d': {'v0': True, 'v1': True},
+    }
+
+
+def test_init_kwargs_nested_model_default_partial_update(env):
+    class DeepSubModel(BaseModel):
+        v4: str
+
+    class SubModel(BaseModel):
+        v1: str
+        v2: bytes
+        v3: int
+        deep: DeepSubModel
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        v0: str
+        sub_model: SubModel
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            return env_settings, dotenv_settings, init_settings, file_secret_settings
+
+    env.set('SUB_MODEL__DEEP__V4', 'override-v4')
+
+    s_final = {'v0': '0', 'sub_model': {'v1': 'init-v1', 'v2': b'init-v2', 'v3': 3, 'deep': {'v4': 'override-v4'}}}
+
+    s = Settings(v0='0', sub_model={'v1': 'init-v1', 'v2': b'init-v2', 'v3': 3, 'deep': {'v4': 'init-v4'}})
+    assert s.model_dump() == s_final
+
+    s = Settings(v0='0', sub_model=SubModel(v1='init-v1', v2=b'init-v2', v3=3, deep=DeepSubModel(v4='init-v4')))
+    assert s.model_dump() == s_final
+
+    s = Settings(v0='0', sub_model=SubModel(v1='init-v1', v2=b'init-v2', v3=3, deep={'v4': 'init-v4'}))
+    assert s.model_dump() == s_final
+
+    s = Settings(v0='0', sub_model={'v1': 'init-v1', 'v2': b'init-v2', 'v3': 3, 'deep': DeepSubModel(v4='init-v4')})
+    assert s.model_dump() == s_final
 
 
 def test_env_str(env):
@@ -1575,6 +1650,10 @@ def test_customise_sources_empty():
 
 
 def test_builtins_settings_source_repr():
+    assert (
+        repr(DefaultSettingsSource(BaseSettings, nested_model_default_partial_update=True))
+        == 'DefaultSettingsSource(nested_model_default_partial_update=True)'
+    )
     assert (
         repr(InitSettingsSource(BaseSettings, init_kwargs={'apple': 'value 0', 'banana': 'value 1'}))
         == "InitSettingsSource(init_kwargs={'apple': 'value 0', 'banana': 'value 1'})"
