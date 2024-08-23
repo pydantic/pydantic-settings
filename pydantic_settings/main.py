@@ -22,7 +22,7 @@ from .sources import (
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
     SettingsError,
-    _CliSubCommand,
+    get_subcommand,
     _get_model_fields,
 )
 
@@ -480,55 +480,12 @@ class CliApp:
         Args:
             model: The model to run the subcommand from.
             cli_exit_on_error: Determines whether this function exits with error if no subcommand is found.
-                If model is subclass of `BaseSettings`, defaults to BaseSettings `cli_exit_on_error` value.
-                Otherwise, defaults to `True`.
+                Defaults to model_config `cli_exit_on_error` value if set. Otherwise, defaults to `True`.
 
         Raises:
             SystemExit: When no subcommand is found and cli_exit_on_error=`True` (the default).
             SettingsError: When no subcommand is found and cli_exit_on_error=`False`.
         """
 
-        if cli_exit_on_error is None and isinstance(model, BaseSettings):
-            cli_exit_on_error = model.model_config.get('cli_exit_on_error')
-        if cli_exit_on_error is None:
-            cli_exit_on_error = True
-
-        subcommand = CliApp.get_subcommand(model, is_required=True, cli_exit_on_error=cli_exit_on_error)
+        subcommand = get_subcommand(model, is_required=True, cli_exit_on_error=cli_exit_on_error)
         CliApp._get_command_entrypoint(type(subcommand))(subcommand)
-
-    @staticmethod
-    def get_subcommand(model: Any, is_required: bool = True, cli_exit_on_error: bool = True) -> Any:
-        """
-        Gets the model subcommand.
-
-        Args:
-            model: The model to get the subcommand from.
-            is_required: Determines whether a model must have subcommand set and raises error if not
-                found. Defaults to `True`.
-            cli_exit_on_error: Determines whether this function exits with error if no subcommand is found.
-                Defaults to `True`.
-
-        Returns:
-            The subcommand model if found, otherwise `None`.
-
-        Raises:
-            SystemExit: When no subcommand is found and is_required=`True` and cli_exit_on_error=`True`
-                (the default).
-            SettingsError: When no subcommand is found and is_required=`True` and
-                cli_exit_on_error=`False`.
-        """
-
-        subcommands: list[str] = []
-        for field_name, field_info in _get_model_fields(type(model)).items():
-            if _CliSubCommand in field_info.metadata:
-                if getattr(model, field_name) is not None:
-                    return getattr(model, field_name)
-                subcommands.append(field_name)
-        if is_required:
-            error_message = (
-                f'Error: CLI subcommand is required {{{", ".join(subcommands)}}}'
-                if subcommands
-                else 'Error: CLI subcommand is required but no subcommands were found.'
-            )
-            raise SystemExit(error_message) if cli_exit_on_error else SettingsError(error_message)
-        return None
