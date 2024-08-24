@@ -1,5 +1,6 @@
 from __future__ import annotations as _annotations
 
+import inspect
 import json
 import os
 import re
@@ -17,7 +18,6 @@ from dataclasses import asdict, is_dataclass
 from enum import Enum
 from pathlib import Path
 from textwrap import dedent
-from types import FunctionType
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -1718,8 +1718,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _metavar_format_recurse(self, obj: Any) -> str:
         """Pretty metavar representation of a type. Adapts logic from `pydantic._repr.display_as_type`."""
         obj = _strip_annotated(obj)
-        if isinstance(obj, FunctionType):
-            return obj.__name__
+        if _is_function(obj):
+            # If function is locally defined use __name__ instead of __qualname__
+            if hasattr(obj, '__code__') and obj.__code__.co_flags & inspect.CO_NESTED:
+                return obj.__name__
+            return obj.__qualname__
         elif obj is ...:
             return '...'
         elif isinstance(obj, Representation):
@@ -1762,13 +1765,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             default = f'(default: {self.cli_parse_none_str})'
             if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
                 default = f'(default: {getattr(model_default, field_name)})'
-            elif model_default not in (PydanticUndefined, None) and callable(model_default):
+            elif model_default not in (PydanticUndefined, None) and _is_function(model_default):
                 default = f'(default factory: {self._metavar_format(model_default)})'
             elif field_info.default not in (PydanticUndefined, None):
                 enum_name = _annotation_enum_val_to_name(field_info.annotation, field_info.default)
                 default = f'(default: {field_info.default if enum_name is None else enum_name})'
             elif field_info.default_factory is not None:
-                default = f'(default: {field_info.default_factory})'
+                default = f'(default factory: {self._metavar_format(field_info.default_factory)})'
             _help += f' {default}' if _help else default
         return _help.replace('%', '%%') if issubclass(type(self._root_parser), ArgumentParser) else _help
 
@@ -2092,3 +2095,7 @@ def _annotation_enum_name_to_val(annotation: type[Any] | None, name: Any) -> Any
             if name in tuple(val.name for val in type_):
                 return type_[name]
     return None
+
+
+def _is_function(obj: Any) -> bool:
+    return inspect.isfunction(obj) or inspect.isbuiltin(obj) or inspect.isroutine(obj) or inspect.ismethod(obj)
