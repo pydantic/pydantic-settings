@@ -1720,9 +1720,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         obj = _strip_annotated(obj)
         if _is_function(obj):
             # If function is locally defined use __name__ instead of __qualname__
-            if hasattr(obj, '__code__') and obj.__code__.co_flags & inspect.CO_NESTED:
-                return obj.__name__
-            return obj.__qualname__
+            return obj.__name__ if '<locals>' in obj.__qualname__ else obj.__qualname__
         elif obj is ...:
             return '...'
         elif isinstance(obj, Representation):
