@@ -560,19 +560,7 @@ print(Settings().model_dump())
 ```
 
 To enable CLI parsing, we simply set the `cli_parse_args` flag to a valid value, which retains similar conotations as
-defined in `argparse`. Alternatively, we can also directly provide the args to parse at time of instantiation:
-
-```py
-from pydantic_settings import BaseSettings
-
-
-class Settings(BaseSettings):
-    this_foo: str
-
-
-print(Settings(_cli_parse_args=['--this_foo', 'is such a foo']).model_dump())
-#> {'this_foo': 'is such a foo'}
-```
+defined in `argparse`.
 
 Note that a CLI settings source is [**the topmost source**](#field-value-priority) by default unless its [priority value
 is customised](#customise-settings-sources):
@@ -869,6 +857,88 @@ options:
 """
 ```
 
+### Creating CLI Applications
+
+The `CliApp` class provides two utility methods, `CliApp.run` and `CliApp.run_subcommand`, that can be used to run a
+Pydantic `BaseSettings`, `BaseModel`, or `pydantic.dataclasses.dataclass` as a CLI application. Primarily, they provide
+structure for running `cli_cmd` methods associated with models.
+
+`CliApp.run` can be used to directly provide `cli_args` for parsing and will run the model `cli_cmd` method (if defined)
+after instantiation:
+
+```py
+from pydantic_settings import BaseSettings, CliApp
+
+
+class Settings(BaseSettings):
+    this_foo: str
+
+    def cli_cmd(self) -> None:
+        print(self.model_dump())
+        #> {'this_foo': 'is such a foo'}
+
+        self.this_foo = 'ran the foo cli cmd'
+
+
+s = CliApp.run(Settings, cli_args=['--this_foo', 'is such a foo'])
+print(s.model_dump())
+#> {'this_foo': 'ran the foo cli cmd'}
+```
+
+Similarly, the `CliApp.run_subcommand` can be used in a recursive fashion to run the `cli_cmd` method for a subcommand:
+
+```py
+from pydantic import BaseModel
+
+from pydantic_settings import CliApp, CliPositionalArg, CliSubCommand
+
+
+class Init(BaseModel):
+    directory: CliPositionalArg[str]
+
+    def cli_cmd(self) -> None:
+        print(f'git init "{self.directory}"')
+        #> git init "dir"
+        self.directory = 'ran the git init cli cmd'
+
+
+class Clone(BaseModel):
+    repository: CliPositionalArg[str]
+    directory: CliPositionalArg[str]
+
+    def cli_cmd(self) -> None:
+        print(f'git clone from "{self.repository}" into "{self.directory}"')
+        self.directory = 'ran the clone cli cmd'
+
+
+class Git(BaseModel):
+    clone: CliSubCommand[Clone]
+    init: CliSubCommand[Init]
+
+    def cli_cmd(self) -> None:
+        CliApp.run_subcommand(self)
+
+
+cmd = CliApp.run(Git, cli_args=['init', 'dir'])
+assert cmd.model_dump() == {
+    'clone': None,
+    'init': {'directory': 'ran the git init cli cmd'},
+}
+```
+
+!!! note
+    Unlike `CliApp.run`, `CliApp.run_subcommand` requires the subcommand model to have a defined `cli_cmd` method.
+
+For `BaseModel` and `pydantic.dataclasses.dataclass` types, `CliApp.run` will internally use the following
+`BaseSettings` defaults:
+
+* `nested_model_default_partial_update=True`
+* `case_sensitive=True`
+* `cli_hide_none_type=True`
+* `cli_avoid_json=True`
+* `cli_enforce_required=True`
+* `cli_implicit_flags=True`
+
 ### Customizing the CLI Experience
 
 The below flags can be used to customise the CLI experience to your needs.
@@ -913,9 +983,10 @@ Additionally, the provided `CliImplicitFlag` and `CliExplicitFlag` annotations c
 when necessary.
 
 !!! note
-For `python < 3.9`:
-  * The `--no-flag` option is not generated due to an underlying `argparse` limitation.
-  * The `CliImplicitFlag` and `CliExplicitFlag` annotations can only be applied to optional bool fields.
+    For `python < 3.9` the `--no-flag` option is not generated due to an underlying `argparse` limitation.
+
+!!! note
+    For `python < 3.9` the `CliImplicitFlag` and `CliExplicitFlag` annotations can only be applied to optional bool fields.
 
 ```py
 from pydantic_settings import BaseSettings, CliExplicitFlag, CliImplicitFlag
@@ -1188,7 +1259,7 @@ defined one that specifies the `root_parser` object.
 import sys
 from argparse import ArgumentParser
 
-from pydantic_settings import BaseSettings, CliSettingsSource
+from pydantic_settings import BaseSettings, CliApp, CliSettingsSource
 
 parser = ArgumentParser()
 parser.add_argument('--food', choices=['pear', 'kiwi', 'lime'])
@@ -1203,13 +1274,15 @@ cli_settings = CliSettingsSource(Settings, root_parser=parser)
 
 # Parse and load CLI settings from the command line into the settings source.
 sys.argv = ['example.py', '--food', 'kiwi', '--name', 'waldo']
-print(Settings(_cli_settings_source=cli_settings(args=True)).model_dump())
+s = CliApp.run(Settings, cli_settings_source=cli_settings(args=True))
+print(s.model_dump())
 #> {'name': 'waldo'}
 
 # Load CLI settings from pre-parsed arguments. i.e., the parsing occurs elsewhere and we
 # just need to load the pre-parsed args into the settings source.
 parsed_args = parser.parse_args(['--food', 'kiwi', '--name', 'ralph'])
-print(Settings(_cli_settings_source=cli_settings(parsed_args=parsed_args)).model_dump())
+s = CliApp.run(Settings, cli_settings_source=cli_settings(parsed_args=parsed_args))
+print(s.model_dump())
 #> {'name': 'ralph'}
 ```
 
