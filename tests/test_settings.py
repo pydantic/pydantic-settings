@@ -5,6 +5,7 @@ import os
 import pathlib
 import re
 import sys
+import time
 import typing
 import uuid
 from datetime import datetime, timezone
@@ -2555,9 +2556,7 @@ def test_cli_help_differentiation(capsys, monkeypatch):
   -h, --help  show this help message and exit
   --foo str   (required)
   --bar int   (default: 123)
-  --boo int   (default: <function
-              test_cli_help_differentiation.<locals>.Cfg.<lambda> at
-              0xffffffff>)
+  --boo int   (default factory: <lambda>)
 """
         )
 
@@ -3801,6 +3800,9 @@ def test_cli_user_settings_source_exceptions():
         (Annotated[SimpleSettings, 'annotation'], 'JSON'),
         (DirectoryPath, 'Path'),
         (FruitsEnum, '{pear,kiwi,lime}'),
+        (time.time_ns, 'time_ns'),
+        (foobar, 'foobar'),
+        (CliDummyParser.add_argument, 'CliDummyParser.add_argument'),
     ],
 )
 @pytest.mark.parametrize('hide_none_type', [True, False])
