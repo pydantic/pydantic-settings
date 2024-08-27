@@ -20,6 +20,7 @@ from pydantic import (
     AliasChoices,
     AliasPath,
     BaseModel,
+    ConfigDict,
     DirectoryPath,
     Discriminator,
     Field,
@@ -59,6 +60,7 @@ from pydantic_settings.sources import (
     CliSubCommand,
     DefaultSettingsSource,
     SettingsError,
+    get_subcommand,
 )
 
 try:
@@ -3095,6 +3097,12 @@ def test_cli_subcommand_with_positionals():
     class BarPlugin:
         my_feature: bool = False
 
+    bar = BarPlugin()
+    with pytest.raises(SystemExit, match='Error: CLI subcommand is required but no subcommands were found.'):
+        get_subcommand(bar)
+    with pytest.raises(SettingsError, match='Error: CLI subcommand is required but no subcommands were found.'):
+        get_subcommand(bar, cli_exit_on_error=False)
+
     @pydantic_dataclasses.dataclass
     class Plugins:
         foo: CliSubCommand[FooPlugin]
@@ -3116,12 +3124,26 @@ def test_cli_subcommand_with_positionals():
         init: CliSubCommand[Init]
         plugins: CliSubCommand[Plugins]
 
+    git = Git(_cli_parse_args=[])
+    assert git.model_dump() == {
+        'clone': None,
+        'init': None,
+        'plugins': None,
+    }
+    assert get_subcommand(git, is_required=False) is None
+    with pytest.raises(SystemExit, match='Error: CLI subcommand is required {clone, init, plugins}'):
+        get_subcommand(git)
+    with pytest.raises(SettingsError, match='Error: CLI subcommand is required {clone, init, plugins}'):
+        get_subcommand(git, cli_exit_on_error=False)
+
     git = Git(_cli_parse_args=['init', '--quiet', 'true', 'dir/path'])
     assert git.model_dump() == {
         'clone': None,
         'init': {'directory': 'dir/path', 'quiet': True, 'bare': False},
         'plugins': None,
     }
+    assert get_subcommand(git) == git.init
+    assert get_subcommand(git, is_required=False) == git.init
 
     git = Git(_cli_parse_args=['clone', 'repo', '.', '--shared', 'true'])
     assert git.model_dump() == {
@@ -3129,6 +3151,8 @@ def test_cli_subcommand_with_positionals():
         'init': None,
         'plugins': None,
     }
+    assert get_subcommand(git) == git.clone
+    assert get_subcommand(git, is_required=False) == git.clone
 
     git = Git(_cli_parse_args=['plugins', 'bar'])
     assert git.model_dump() == {
@@ -3136,6 +3160,26 @@ def test_cli_subcommand_with_positionals():
         'init': None,
         'plugins': {'foo': None, 'bar': {'my_feature': False}},
     }
+    assert get_subcommand(git) == git.plugins
+    assert get_subcommand(git, is_required=False) == git.plugins
+    assert get_subcommand(get_subcommand(git)) == git.plugins.bar
+    assert get_subcommand(get_subcommand(git), is_required=False) == git.plugins.bar
+
+    class NotModel: ...
+
+    with pytest.raises(
+        SettingsError, match='Error: NotModel is not subclass of BaseModel or pydantic.dataclasses.dataclass'
+    ):
+        get_subcommand(NotModel())
+
+    class NotSettingsConfigDict(BaseModel):
+        model_config = ConfigDict(cli_exit_on_error='not a bool')
+
+    with pytest.raises(SystemExit, match='Error: CLI subcommand is required but no subcommands were found.'):
+        get_subcommand(NotSettingsConfigDict())
+
+    with pytest.raises(SettingsError, match='Error: CLI subcommand is required but no subcommands were found.'):
+        get_subcommand(NotSettingsConfigDict(), cli_exit_on_error=False)
 
 
 def test_cli_union_similar_sub_models():

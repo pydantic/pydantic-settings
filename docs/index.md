@@ -747,6 +747,9 @@ Subcommands and positional arguments are expressed using the `CliSubCommand` and
 annotations can only be applied to required fields (i.e. fields that do not have a default value). Furthermore,
 subcommands must be a valid type derived from either a pydantic `BaseModel` or pydantic.dataclasses `dataclass`.
 
+Parsed subcommands can be retrieved from model instances using the `get_subcommand` utility function. If a subcommand is
+not required, set the `is_required` flag to `False` to disable raising an error if no subcommand is found.
+
 !!! note
     CLI settings subcommands are limited to a single subparser per model. In other words, all subcommands for a model
     are grouped under a single subparser; it does not allow for multiple subparsers with each subparser having its own
@@ -759,114 +762,59 @@ subcommands must be a valid type derived from either a pydantic `BaseModel` or p
 ```py
 import sys
 
-from pydantic import BaseModel, Field
-from pydantic.dataclasses import dataclass
+from pydantic import BaseModel
 
 from pydantic_settings import (
     BaseSettings,
     CliPositionalArg,
     CliSubCommand,
+    SettingsError,
+    get_subcommand,
 )
 
 
-@dataclass
-class FooPlugin:
-    """git-plugins-foo - Extra deep foo plugin command"""
-
-    x_feature: bool = Field(default=False, description='Enable "X" feature')
-
-
-@dataclass
-class BarPlugin:
-    """git-plugins-bar - Extra deep bar plugin command"""
-
-    y_feature: bool = Field(default=False, description='Enable "Y" feature')
-
-
-@dataclass
-class Plugins:
-    """git-plugins - Fake plugins for GIT"""
-
-    foo: CliSubCommand[FooPlugin] = Field(description='Foo is fake plugin')
-
-    bar: CliSubCommand[BarPlugin] = Field(description='Bar is fake plugin')
+class Init(BaseModel):
+    directory: CliPositionalArg[str]
 
 
 class Clone(BaseModel):
-    """git-clone - Clone a repository into a new directory"""
-
-    repository: CliPositionalArg[str] = Field(description='The repo ...')
-
-    directory: CliPositionalArg[str] = Field(description='The dir ...')
-
-    local: bool = Field(default=False, description='When the repo ...')
+    repository: CliPositionalArg[str]
+    directory: CliPositionalArg[str]
 
 
-class Git(BaseSettings, cli_parse_args=True, cli_prog_name='git'):
-    """git - The stupid content tracker"""
+class Git(BaseSettings, cli_parse_args=True, cli_exit_on_error=False):
+    clone: CliSubCommand[Clone]
+    init: CliSubCommand[Init]
 
-    clone: CliSubCommand[Clone] = Field(description='Clone a repo ...')
 
-    plugins: CliSubCommand[Plugins] = Field(description='Fake GIT plugins')
-
+# Run without subcommands
+sys.argv = ['example.py']
+cmd = Git()
+assert cmd.model_dump() == {'clone': None, 'init': None}
 
 try:
-    sys.argv = ['example.py', '--help']
-    Git()
-except SystemExit as e:
-    print(e)
-    #> 0
-"""
-usage: git [-h] {clone,plugins} ...
+    # Will raise an error since no subcommand was provided
+    get_subcommand(cmd).model_dump()
+except SettingsError as err:
+    assert str(err) == 'Error: CLI subcommand is required {clone, init}'
 
-git - The stupid content tracker
-
-options:
-  -h, --help       show this help message and exit
-
-subcommands:
-  {clone,plugins}
-    clone          Clone a repo ...
-    plugins        Fake GIT plugins
-"""
+# Will not raise an error since subcommand is not required
+assert get_subcommand(cmd, is_required=False) is None
 
 
-try:
-    sys.argv = ['example.py', 'clone', '--help']
-    Git()
-except SystemExit as e:
-    print(e)
-    #> 0
-"""
-usage: git clone [-h] [--local bool] [--shared bool] REPOSITORY DIRECTORY
+# Run the clone subcommand
+sys.argv = ['example.py', 'clone', 'repo', 'dest']
+cmd = Git()
+assert cmd.model_dump() == {
+    'clone': {'repository': 'repo', 'directory': 'dest'},
+    'init': None,
+}
 
-git-clone - Clone a repository into a new directory
-
-positional arguments:
-  REPOSITORY    The repo ...
-  DIRECTORY     The dir ...
-
-options:
-  -h, --help    show this help message and exit
-  --local bool  When the repo ... (default: False)
-"""
-
-
-try:
-    sys.argv = ['example.py', 'plugins', 'bar', '--help']
-    Git()
-except SystemExit as e:
-    print(e)
-    #> 0
-"""
-usage: git plugins bar [-h] [--my_feature bool]
-
-git-plugins-bar - Extra deep bar plugin command
-
-options:
-  -h, --help        show this help message and exit
-  --y_feature bool  Enable "Y" feature (default: False)
-"""
+# Returns the subcommand model instance (in this case, 'clone')
+assert get_subcommand(cmd).model_dump() == {
+    'directory': 'dest',
+    'repository': 'repo',
+}
 ```
 
 ### Customizing the CLI Experience
