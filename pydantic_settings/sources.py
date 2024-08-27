@@ -1,5 +1,6 @@
 from __future__ import annotations as _annotations
 
+import inspect
 import json
 import os
 import re
@@ -17,7 +18,6 @@ from dataclasses import asdict, is_dataclass
 from enum import Enum
 from pathlib import Path
 from textwrap import dedent
-from types import FunctionType
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -154,6 +154,53 @@ CliPositionalArg = Annotated[T, _CliPositionalArg]
 _CliBoolFlag = TypeVar('_CliBoolFlag', bound=bool)
 CliImplicitFlag = Annotated[_CliBoolFlag, _CliImplicitFlag]
 CliExplicitFlag = Annotated[_CliBoolFlag, _CliExplicitFlag]
+
+
+def get_subcommand(model: BaseModel, is_required: bool = True, cli_exit_on_error: bool | None = None) -> Any:
+    """
+    Get the subcommand from a model.
+
+    Args:
+        model: The model to get the subcommand from.
+        is_required: Determines whether a model must have subcommand set and raises error if not
+            found. Defaults to `True`.
+        cli_exit_on_error: Determines whether this function exits with error if no subcommand is found.
+            Defaults to model_config `cli_exit_on_error` value if set. Otherwise, defaults to `True`.
+
+    Returns:
+        The subcommand model if found, otherwise `None`.
+
+    Raises:
+        SystemExit: When no subcommand is found and is_required=`True` and cli_exit_on_error=`True`
+            (the default).
+        SettingsError: When no subcommand is found and is_required=`True` and
+            cli_exit_on_error=`False`.
+    """
+
+    model_cls = type(model)
+    if cli_exit_on_error is None and is_model_class(model_cls):
+        model_default = model.model_config.get('cli_exit_on_error')
+        if isinstance(model_default, bool):
+            cli_exit_on_error = model_default
+    if cli_exit_on_error is None:
+        cli_exit_on_error = True
+
+    subcommands: list[str] = []
+    for field_name, field_info in _get_model_fields(model_cls).items():
+        if _CliSubCommand in field_info.metadata:
+            if getattr(model, field_name) is not None:
+                return getattr(model, field_name)
+            subcommands.append(field_name)
+
+    if is_required:
+        error_message = (
+            f'Error: CLI subcommand is required {{{", ".join(subcommands)}}}'
+            if subcommands
+            else 'Error: CLI subcommand is required but no subcommands were found.'
+        )
+        raise SystemExit(error_message) if cli_exit_on_error else SettingsError(error_message)
+
+    return None
 
 
 class EnvNoneType(str):
@@ -1372,8 +1419,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, FieldInfo]]:
         positional_args, subcommand_args, optional_args = [], [], []
-        fields = _get_model_fields(model)
-        for field_name, field_info in fields.items():
+        for field_name, field_info in _get_model_fields(model).items():
             if _CliSubCommand in field_info.metadata:
                 if not field_info.is_required():
                     raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has a default value')
@@ -1488,9 +1534,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             sub_models: list[type[BaseModel]] = self._get_sub_models(model, field_name, field_info)
             if _CliSubCommand in field_info.metadata:
                 if subparsers is None:
-                    subparsers = self._add_subparsers(
-                        parser, title='subcommands', dest=f'{arg_prefix}:subcommand', required=self.cli_enforce_required
-                    )
+                    subparsers = self._add_subparsers(parser, title='subcommands', dest=f'{arg_prefix}:subcommand')
                     self._cli_subcommands[f'{arg_prefix}:subcommand'] = [f'{arg_prefix}{field_name}']
                 else:
                     self._cli_subcommands[f'{arg_prefix}:subcommand'].append(f'{arg_prefix}{field_name}')
@@ -1710,8 +1754,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _metavar_format_recurse(self, obj: Any) -> str:
         """Pretty metavar representation of a type. Adapts logic from `pydantic._repr.display_as_type`."""
         obj = _strip_annotated(obj)
-        if isinstance(obj, FunctionType):
-            return obj.__name__
+        if _is_function(obj):
+            # If function is locally defined use __name__ instead of __qualname__
+            return obj.__name__ if '<locals>' in obj.__qualname__ else obj.__qualname__
         elif obj is ...:
             return '...'
         elif isinstance(obj, Representation):
@@ -1754,13 +1799,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             default = f'(default: {self.cli_parse_none_str})'
             if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
                 default = f'(default: {getattr(model_default, field_name)})'
-            elif model_default not in (PydanticUndefined, None) and callable(model_default):
+            elif model_default not in (PydanticUndefined, None) and _is_function(model_default):
                 default = f'(default factory: {self._metavar_format(model_default)})'
             elif field_info.default not in (PydanticUndefined, None):
                 enum_name = _annotation_enum_val_to_name(field_info.annotation, field_info.default)
                 default = f'(default: {field_info.default if enum_name is None else enum_name})'
             elif field_info.default_factory is not None:
-                default = f'(default: {field_info.default_factory})'
+                default = f'(default factory: {self._metavar_format(field_info.default_factory)})'
             _help += f' {default}' if _help else default
         return _help.replace('%', '%%') if issubclass(type(self._root_parser), ArgumentParser) else _help
 
@@ -2092,3 +2137,7 @@ def _get_model_fields(model_cls: type[Any]) -> dict[str, FieldInfo]:
     if is_model_class(model_cls):
         return model_cls.model_fields
     raise SettingsError(f'Error: {model_cls.__name__} is not subclass of BaseModel or pydantic.dataclasses.dataclass')
+
+
+def _is_function(obj: Any) -> bool:
+    return inspect.isfunction(obj) or inspect.isbuiltin(obj) or inspect.isroutine(obj) or inspect.ismethod(obj)

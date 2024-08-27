@@ -16,6 +16,7 @@ from .sources import (
     SettingsError,
     TomlConfigSettingsSource,
     YamlConfigSettingsSource,
+    get_subcommand,
 )
 from .version import VERSION
 
@@ -39,6 +40,7 @@ __all__ = (
     'TomlConfigSettingsSource',
     'YamlConfigSettingsSource',
     'AzureKeyVaultSettingsSource',
+    'get_subcommand',
     '__version__',
 )
 
