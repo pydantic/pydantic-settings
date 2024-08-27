@@ -1,6 +1,5 @@
 from __future__ import annotations as _annotations
 
-import inspect
 import json
 import os
 import re
@@ -18,6 +17,7 @@ from dataclasses import asdict, is_dataclass
 from enum import Enum
 from pathlib import Path
 from textwrap import dedent
+from types import BuiltinFunctionType, FunctionType
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -58,12 +58,16 @@ if TYPE_CHECKING:
         tomllib = None
     import tomli
     import yaml
+    from pydantic._internal._dataclasses import PydanticDataclass
 
     from pydantic_settings.main import BaseSettings
+
+    PydanticModel = TypeVar('PydanticModel', bound=PydanticDataclass | BaseModel)
 else:
     yaml = None
     tomllib = None
     tomli = None
+    PydanticModel = Any
 
 
 def import_yaml() -> None:
@@ -156,7 +160,9 @@ CliImplicitFlag = Annotated[_CliBoolFlag, _CliImplicitFlag]
 CliExplicitFlag = Annotated[_CliBoolFlag, _CliExplicitFlag]
 
 
-def get_subcommand(model: BaseModel, is_required: bool = True, cli_exit_on_error: bool | None = None) -> Any:
+def get_subcommand(
+    model: PydanticModel, is_required: bool = True, cli_exit_on_error: bool | None = None
+) -> PydanticModel:
     """
     Get the subcommand from a model.
 
@@ -2140,4 +2146,4 @@ def _get_model_fields(model_cls: type[Any]) -> dict[str, FieldInfo]:
 
 
 def _is_function(obj: Any) -> bool:
-    return inspect.isfunction(obj) or inspect.isbuiltin(obj) or inspect.isroutine(obj) or inspect.ismethod(obj)
+    return isinstance(obj, (FunctionType, BuiltinFunctionType))

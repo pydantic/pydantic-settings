@@ -808,11 +808,11 @@ assert get_subcommand(cmd).model_dump() == {
 ### Creating CLI Applications
 
 The `CliApp` class provides two utility methods, `CliApp.run` and `CliApp.run_subcommand`, that can be used to run a
-Pydantic `BaseSettings`, `BaseModel`, or `pydantic.dataclasses.dataclass` as a CLI application. Primarily, they provide
-structure for running `cli_cmd` methods associated with models.
+Pydantic `BaseSettings`, `BaseModel`, or `pydantic.dataclasses.dataclass` as a CLI application. Primarily, the methods
+provide structure for running `cli_cmd` methods associated with models.
 
-`CliApp.run` can be used to directly provide `cli_args` for parsing and will run the model `cli_cmd` method (if defined)
-after instantiation:
+`CliApp.run` can be used in directly providing the `cli_args` to be parsed, and will run the model `cli_cmd` method (if
+defined) after instantiation:
 
 ```py
 from pydantic_settings import BaseSettings, CliApp
@@ -822,9 +822,11 @@ class Settings(BaseSettings):
     this_foo: str
 
     def cli_cmd(self) -> None:
+        # Print the parsed data
         print(self.model_dump())
         #> {'this_foo': 'is such a foo'}
 
+        # Update the parsed data showing cli_cmd ran
         self.this_foo = 'ran the foo cli cmd'
 
 
@@ -833,7 +835,7 @@ print(s.model_dump())
 #> {'this_foo': 'ran the foo cli cmd'}
 ```
 
-Similarly, the `CliApp.run_subcommand` can be used in a recursive fashion to run the `cli_cmd` method for a subcommand:
+Similarly, the `CliApp.run_subcommand` can be used in recursive fashion to run the `cli_cmd` method of a subcommand:
 
 ```py
 from pydantic import BaseModel

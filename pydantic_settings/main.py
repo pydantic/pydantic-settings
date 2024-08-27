@@ -410,11 +410,11 @@ class CliApp:
     """
 
     @staticmethod
-    def _run_cli_cmd(model: Any, is_required: bool) -> Any:
-        if hasattr(type(model), 'cli_cmd'):
-            getattr(type(model), 'cli_cmd')(model)
+    def _run_cli_cmd(model: Any, cli_cmd_method_name: str, is_required: bool) -> Any:
+        if hasattr(type(model), cli_cmd_method_name):
+            getattr(type(model), cli_cmd_method_name)(model)
         elif is_required:
-            raise SettingsError(f'Error: {type(model).__name__} class is missing cli_cmd entrypoint')
+            raise SettingsError(f'Error: {type(model).__name__} class is missing {cli_cmd_method_name} entrypoint')
         return model
 
     @staticmethod
@@ -423,6 +423,7 @@ class CliApp:
         cli_args: list[str] | None = None,
         cli_settings_source: CliSettingsSource[Any] | None = None,
         cli_exit_on_error: bool | None = None,
+        cli_cmd_method_name: str = 'cli_cmd',
         **model_init_data: Any,
     ) -> T:
         """
@@ -437,6 +438,7 @@ class CliApp:
             cli_exit_on_error: Determines whether this function exits on error. If model is subclass of
                 `BaseSettings`, defaults to BaseSettings `cli_exit_on_error` value. Otherwise, defaults to
                 `True`.
+            cli_cmd_method_name: The CLI command method name to run. Defaults to "cli_cmd".
             model_init_data: The model init data.
 
         Returns:
@@ -475,10 +477,12 @@ class CliApp:
             for field_name, field_info in model.model_fields.items():
                 model_init_data[_field_name_for_signature(field_name, field_info)] = getattr(model, field_name)
 
-        return CliApp._run_cli_cmd(model_cls(**model_init_data), is_required=False)
+        return CliApp._run_cli_cmd(model_cls(**model_init_data), cli_cmd_method_name, is_required=False)
 
     @staticmethod
-    def run_subcommand(model: PydanticModel, cli_exit_on_error: bool | None = None) -> PydanticModel:
+    def run_subcommand(
+        model: PydanticModel, cli_exit_on_error: bool | None = None, cli_cmd_method_name: str = 'cli_cmd'
+    ) -> PydanticModel:
         """
         Runs the model subcommand. Running a model subcommand requires the `cli_cmd` method to be defined in
         the nested model subcommand class.
@@ -487,6 +491,7 @@ class CliApp:
             model: The model to run the subcommand from.
             cli_exit_on_error: Determines whether this function exits with error if no subcommand is found.
                 Defaults to model_config `cli_exit_on_error` value if set. Otherwise, defaults to `True`.
+            cli_cmd_method_name: The CLI command method name to run. Defaults to "cli_cmd".
 
         Returns:
             The ran subcommand model.
@@ -497,4 +502,4 @@ class CliApp:
         """
 
         subcommand = get_subcommand(model, is_required=True, cli_exit_on_error=cli_exit_on_error)
-        return CliApp._run_cli_cmd(subcommand, is_required=True)
+        return CliApp._run_cli_cmd(subcommand, cli_cmd_method_name, is_required=True)
