@@ -1,6 +1,5 @@
 from __future__ import annotations as _annotations
 
-from collections.abc import Sequence
 import inspect
 import json
 import os
@@ -574,7 +573,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
     def __init__(
         self,
         settings_cls: type[BaseSettings],
-        secrets_dir: str | Path | Sequence[str | Path] | None = None,
+        secrets_dir: PathType | None = None,
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
         env_ignore_empty: bool | None = None,
@@ -597,7 +596,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
 
         secrets_dirs = (
             [self.secrets_dir]
-            if isinstance(self.secrets_dir, (str, Path))
+            if isinstance(self.secrets_dir, (str, os.PathLike))
             else self.secrets_dir
         )
         # directories reversed to match the last-wins behaviour of `env_file`
