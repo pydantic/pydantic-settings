@@ -1416,6 +1416,30 @@ def test_secrets_path(tmp_path):
     assert Settings().model_dump() == {'foo': 'foo_secret_value_str'}
 
 
+def test_secrets_path_multiple(tmp_path):
+    d1 = tmp_path / 'dir1'
+    d2 = tmp_path / 'dir2'
+    d1.mkdir()
+    d2.mkdir()
+    (d1 / 'foo1').write_text('foo1_dir1_secret_value_str')
+    (d1 / 'foo2').write_text('foo2_dir1_secret_value_str')
+    (d2 / 'foo2').write_text('foo2_dir2_secret_value_str')
+    (d2 / 'foo3').write_text('foo3_dir2_secret_value_str')
+
+    class Settings(BaseSettings):
+        foo1: str
+        foo2: str
+        foo3: str
+
+        model_config = SettingsConfigDict(secrets_dir=(d1, d2))
+
+    assert Settings().model_dump() == {
+        'foo1': 'foo1_dir1_secret_value_str',
+        'foo2': 'foo2_dir2_secret_value_str',  # dir2 takes priority
+        'foo3': 'foo3_dir2_secret_value_str',
+    }
+
+
 def test_secrets_path_with_validation_alias(tmp_path):
     p = tmp_path / 'foo'
     p.write_text('{"bar": ["test"]}')
