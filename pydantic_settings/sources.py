@@ -595,8 +595,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
             return secrets
 
         secrets_dirs = [self.secrets_dir] if isinstance(self.secrets_dir, (str, os.PathLike)) else self.secrets_dir
-        # directories reversed to match the last-wins behaviour of `env_file`
-        self.secrets_paths = list(reversed([Path(p).expanduser() for p in secrets_dirs]))
+        self.secrets_paths = [Path(p).expanduser() for p in secrets_dirs]
 
         for path in self.secrets_paths:
             if not path.exists():
@@ -643,7 +642,8 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         """
 
         for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
-            for secrets_path in self.secrets_paths:
+            # pathss reversed to match the last-wins behaviour of `env_file`
+            for secrets_path in reversed(self.secrets_paths):
                 path = self.find_case_path(secrets_path, env_name, self.case_sensitive)
                 if not path:
                     # path does not exist, we currently don't return a warning for this
