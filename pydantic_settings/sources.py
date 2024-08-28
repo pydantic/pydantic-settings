@@ -594,11 +594,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         if self.secrets_dir is None:
             return secrets
 
-        secrets_dirs = (
-            [self.secrets_dir]
-            if isinstance(self.secrets_dir, (str, os.PathLike))
-            else self.secrets_dir
-        )
+        secrets_dirs = [self.secrets_dir] if isinstance(self.secrets_dir, (str, os.PathLike)) else self.secrets_dir
         # directories reversed to match the last-wins behaviour of `env_file`
         self.secrets_paths = list(reversed([Path(p).expanduser() for p in secrets_dirs]))
 
