@@ -642,7 +642,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         """
 
         for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
-            # pathss reversed to match the last-wins behaviour of `env_file`
+            # paths reversed to match the last-wins behaviour of `env_file`
             for secrets_path in reversed(self.secrets_paths):
                 path = self.find_case_path(secrets_path, env_name, self.case_sensitive)
                 if not path:
