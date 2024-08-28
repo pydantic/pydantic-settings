@@ -2500,20 +2500,20 @@ def test_cli_alias_nested_arg(capsys, monkeypatch, avoid_json):
 
 
 def test_cli_alias_exceptions(capsys, monkeypatch):
-    with pytest.raises(SettingsError, match='subcommand argument BadCliSubCommand.foo has an alias'):
+    with pytest.raises(SettingsError, match='subcommand argument BadCliSubCommand.foo has multiple aliases'):
 
         class SubCmd(BaseModel):
             v0: int
 
         class BadCliSubCommand(BaseSettings):
-            foo: CliSubCommand[SubCmd] = Field(alias='bar')
+            foo: CliSubCommand[SubCmd] = Field(validation_alias=AliasChoices('bar', 'boo'))
 
         BadCliSubCommand(_cli_parse_args=True)
 
-    with pytest.raises(SettingsError, match='positional argument BadCliPositionalArg.foo has an alias'):
+    with pytest.raises(SettingsError, match='positional argument BadCliPositionalArg.foo has multiple alias'):
 
         class BadCliPositionalArg(BaseSettings):
-            foo: CliPositionalArg[int] = Field(alias='bar')
+            foo: CliPositionalArg[int] = Field(validation_alias=AliasChoices('bar', 'boo'))
 
         BadCliPositionalArg(_cli_parse_args=True)
 
