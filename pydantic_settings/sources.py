@@ -1,5 +1,6 @@
 from __future__ import annotations as _annotations
 
+import inspect
 import json
 import os
 import re
@@ -8,17 +9,20 @@ import sys
 import typing
 import warnings
 from abc import ABC, abstractmethod
+
+if sys.version_info >= (3, 9):
+    from argparse import BooleanOptionalAction
 from argparse import SUPPRESS, ArgumentParser, Namespace, RawDescriptionHelpFormatter, _SubParsersAction
 from collections import deque
-from dataclasses import is_dataclass
+from dataclasses import asdict, is_dataclass
 from enum import Enum
 from pathlib import Path
 from textwrap import dedent
-from types import FunctionType
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Dict,
     Generic,
     Iterator,
     List,
@@ -35,8 +39,9 @@ from typing import (
 
 import typing_extensions
 from dotenv import dotenv_values
-from pydantic import AliasChoices, AliasPath, BaseModel, Json
+from pydantic import AliasChoices, AliasPath, BaseModel, Json, RootModel, TypeAdapter
 from pydantic._internal._repr import Representation
+from pydantic._internal._signature import _field_name_for_signature
 from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union, typing_base
 from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
 from pydantic.dataclasses import is_pydantic_dataclass
@@ -124,6 +129,14 @@ class _CliPositionalArg:
     pass
 
 
+class _CliImplicitFlag:
+    pass
+
+
+class _CliExplicitFlag:
+    pass
+
+
 class _CliInternalArgParser(ArgumentParser):
     def __init__(self, cli_exit_on_error: bool = True, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -138,6 +151,56 @@ class _CliInternalArgParser(ArgumentParser):
 T = TypeVar('T')
 CliSubCommand = Annotated[Union[T, None], _CliSubCommand]
 CliPositionalArg = Annotated[Union[T, None], _CliPositionalArg]
+_CliBoolFlag = TypeVar('_CliBoolFlag', bound=bool)
+CliImplicitFlag = Annotated[_CliBoolFlag, _CliImplicitFlag]
+CliExplicitFlag = Annotated[_CliBoolFlag, _CliExplicitFlag]
+
+
+def get_subcommand(model: BaseModel, is_required: bool = True, cli_exit_on_error: bool | None = None) -> Any:
+    """
+    Get the subcommand from a model.
+
+    Args:
+        model: The model to get the subcommand from.
+        is_required: Determines whether a model must have subcommand set and raises error if not
+            found. Defaults to `True`.
+        cli_exit_on_error: Determines whether this function exits with error if no subcommand is found.
+            Defaults to model_config `cli_exit_on_error` value if set. Otherwise, defaults to `True`.
+
+    Returns:
+        The subcommand model if found, otherwise `None`.
+
+    Raises:
+        SystemExit: When no subcommand is found and is_required=`True` and cli_exit_on_error=`True`
+            (the default).
+        SettingsError: When no subcommand is found and is_required=`True` and
+            cli_exit_on_error=`False`.
+    """
+
+    model_cls = type(model)
+    if cli_exit_on_error is None and is_model_class(model_cls):
+        model_default = model.model_config.get('cli_exit_on_error')
+        if isinstance(model_default, bool):
+            cli_exit_on_error = model_default
+    if cli_exit_on_error is None:
+        cli_exit_on_error = True
+
+    subcommands: list[str] = []
+    for field_name, field_info in _get_model_fields(model_cls).items():
+        if _CliSubCommand in field_info.metadata:
+            if getattr(model, field_name) is not None:
+                return getattr(model, field_name)
+            subcommands.append(field_name)
+
+    if is_required:
+        error_message = (
+            f'Error: CLI subcommand is required {{{", ".join(subcommands)}}}'
+            if subcommands
+            else 'Error: CLI subcommand is required but no subcommands were found.'
+        )
+        raise SystemExit(error_message) if cli_exit_on_error else SettingsError(error_message)
+
+    return None
 
 
 class EnvNoneType(str):
@@ -247,21 +310,71 @@ class PydanticBaseSettingsSource(ABC):
         pass
 
 
-class InitSettingsSource(PydanticBaseSettingsSource):
+class DefaultSettingsSource(PydanticBaseSettingsSource):
     """
-    Source class for loading values provided during settings class initialization.
+    Source class for loading default object values.
+
+    Args:
+        settings_cls: The Settings class.
+        nested_model_default_partial_update: Whether to allow partial updates on nested model default object fields.
+            Defaults to `False`.
     """
 
-    def __init__(self, settings_cls: type[BaseSettings], init_kwargs: dict[str, Any]):
-        self.init_kwargs = init_kwargs
+    def __init__(self, settings_cls: type[BaseSettings], nested_model_default_partial_update: bool | None = None):
         super().__init__(settings_cls)
+        self.defaults: dict[str, Any] = {}
+        self.nested_model_default_partial_update = (
+            nested_model_default_partial_update
+            if nested_model_default_partial_update is not None
+            else self.config.get('nested_model_default_partial_update', False)
+        )
+        if self.nested_model_default_partial_update:
+            for field_name, field_info in settings_cls.model_fields.items():
+                if is_dataclass(type(field_info.default)):
+                    self.defaults[_field_name_for_signature(field_name, field_info)] = asdict(field_info.default)
+                elif is_model_class(type(field_info.default)):
+                    self.defaults[_field_name_for_signature(field_name, field_info)] = field_info.default.model_dump()
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         # Nothing to do here. Only implement the return statement to make mypy happy
         return None, '', False
 
     def __call__(self) -> dict[str, Any]:
-        return self.init_kwargs
+        return self.defaults
+
+    def __repr__(self) -> str:
+        return f'DefaultSettingsSource(nested_model_default_partial_update={self.nested_model_default_partial_update})'
+
+
+class InitSettingsSource(PydanticBaseSettingsSource):
+    """
+    Source class for loading values provided during settings class initialization.
+    """
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        init_kwargs: dict[str, Any],
+        nested_model_default_partial_update: bool | None = None,
+    ):
+        self.init_kwargs = init_kwargs
+        super().__init__(settings_cls)
+        self.nested_model_default_partial_update = (
+            nested_model_default_partial_update
+            if nested_model_default_partial_update is not None
+            else self.config.get('nested_model_default_partial_update', False)
+        )
+
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        # Nothing to do here. Only implement the return statement to make mypy happy
+        return None, '', False
+
+    def __call__(self) -> dict[str, Any]:
+        return (
+            TypeAdapter(Dict[str, Any]).dump_python(self.init_kwargs)
+            if self.nested_model_default_partial_update
+            else self.init_kwargs
+        )
 
     def __repr__(self) -> str:
         return f'InitSettingsSource(init_kwargs={self.init_kwargs!r})'
@@ -612,9 +725,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             ValuesError: When There is an error in deserializing value for complex field.
         """
         is_complex, allow_parse_failure = self._field_is_complex(field)
-        if self.env_parse_enums and lenient_issubclass(field.annotation, Enum):
-            if value in tuple(val.name for val in field.annotation):  # type: ignore
-                value = field.annotation[value]  # type: ignore
+        if self.env_parse_enums:
+            enum_val = _annotation_enum_name_to_val(field.annotation, value)
+            value = value if enum_val is None else enum_val
 
         if is_complex or value_is_complex:
             if isinstance(value, EnvNoneType):
@@ -697,11 +810,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                 if type_has_key:
                     return type_has_key
         elif is_model_class(annotation) or is_pydantic_dataclass(annotation):
-            fields = (
-                annotation.__pydantic_fields__
-                if is_pydantic_dataclass(annotation) and hasattr(annotation, '__pydantic_fields__')
-                else cast(BaseModel, annotation).model_fields
-            )
+            fields = _get_model_fields(annotation)
             # `case_sensitive is None` is here to be compatible with the old behavior.
             # Has to be removed in V3.
             if (case_sensitive is None or case_sensitive) and fields.get(key):
@@ -905,6 +1014,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_exit_on_error: Determines whether or not the internal parser exits with error info when an error occurs.
             Defaults to `True`.
         cli_prefix: Prefix for command line arguments added under the root parser. Defaults to "".
+        cli_implicit_flags: Whether `bool` fields should be implicitly converted into CLI boolean flags.
+            (e.g. --flag, --no-flag). Defaults to `False`.
         case_sensitive: Whether CLI "--arg" names should be read with case-sensitivity. Defaults to `True`.
             Note: Case-insensitive matching is only supported on the internal root parser and does not apply to CLI
             subcommands.
@@ -932,6 +1043,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_use_class_docs_for_groups: bool | None = None,
         cli_exit_on_error: bool | None = None,
         cli_prefix: str | None = None,
+        cli_implicit_flags: bool | None = None,
         case_sensitive: bool | None = True,
         root_parser: Any = None,
         parse_args_method: Callable[..., Any] | None = ArgumentParser.parse_args,
@@ -975,6 +1087,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if cli_prefix.startswith('.') or cli_prefix.endswith('.') or not cli_prefix.replace('.', '').isidentifier():  # type: ignore
                 raise SettingsError(f'CLI settings source prefix is invalid: {cli_prefix}')
             self.cli_prefix += '.'
+        self.cli_implicit_flags = (
+            cli_implicit_flags
+            if cli_implicit_flags is not None
+            else settings_cls.model_config.get('cli_implicit_flags', False)
+        )
 
         case_sensitive = case_sensitive if case_sensitive is not None else True
         if not case_sensitive and root_parser is not None:
@@ -1151,9 +1268,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     list if parsed_list and (len(parsed_list) > 1 or parsed_list[0].startswith('[')) else str
                 )
             for val in parsed_list:
+                val = val.strip()
                 if val.startswith('[') and val.endswith(']'):
-                    val = val[1:-1]
+                    val = val[1:-1].strip()
                 while val:
+                    val = val.strip()
                     if val.startswith(','):
                         val = self._consume_comma(val, merged_list, is_last_consumed_a_value)
                         is_last_consumed_a_value = False
@@ -1283,14 +1402,26 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             resolved_names = [resolved_name.lower() for resolved_name in resolved_names]
         return tuple(dict.fromkeys(resolved_names)), is_alias_path_only
 
+    def _verify_cli_flag_annotations(self, model: type[BaseModel], field_name: str, field_info: FieldInfo) -> None:
+        if _CliImplicitFlag in field_info.metadata:
+            cli_flag_name = 'CliImplicitFlag'
+        elif _CliExplicitFlag in field_info.metadata:
+            cli_flag_name = 'CliExplicitFlag'
+        else:
+            return
+
+        if field_info.annotation is not bool:
+            raise SettingsError(f'{cli_flag_name} argument {model.__name__}.{field_name} is not of type bool')
+        elif sys.version_info < (3, 9) and (
+            field_info.default is PydanticUndefined and field_info.default_factory is None
+        ):
+            raise SettingsError(
+                f'{cli_flag_name} argument {model.__name__}.{field_name} must have default for python versions < 3.9'
+            )
+
     def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, FieldInfo]]:
         positional_args, subcommand_args, optional_args = [], [], []
-        fields = (
-            model.__pydantic_fields__
-            if hasattr(model, '__pydantic_fields__') and is_pydantic_dataclass(model)
-            else model.model_fields
-        )
-        for field_name, field_info in fields.items():
+        for field_name, field_info in _get_model_fields(model).items():
             if _CliSubCommand in field_info.metadata:
                 if not field_info.is_required():
                     raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has a default value')
@@ -1314,6 +1445,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         raise SettingsError(f'positional argument {model.__name__}.{field_name} has multiple aliases')
                 positional_args.append((field_name, field_info))
             else:
+                self._verify_cli_flag_annotations(model, field_name, field_info)
                 optional_args.append((field_name, field_info))
         return positional_args + subcommand_args + optional_args
 
@@ -1386,6 +1518,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             subcommand_prefix=self.env_prefix,
             group=None,
             alias_prefixes=[],
+            model_default=PydanticUndefined,
         )
 
     def _add_parser_args(
@@ -1397,6 +1530,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         subcommand_prefix: str,
         group: Any,
         alias_prefixes: list[str],
+        model_default: Any,
     ) -> ArgumentParser:
         subparsers: Any = None
         alias_path_args: dict[str, str] = {}
@@ -1419,7 +1553,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                             parser,
                             title='subcommands',
                             dest=f'{arg_prefix}:subcommand',
-                            required=self.cli_enforce_required,
                             description=field_info.description if len(sub_models) > 1 else None,
                         )
                         self._cli_subcommands[f'{arg_prefix}:subcommand'] = {subcommand_name: subcommand_dest}
@@ -1447,16 +1580,19 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         subcommand_prefix=f'{subcommand_prefix}{field_name}.',
                         group=None,
                         alias_prefixes=[],
+                        model_default=PydanticUndefined,
                     )
             else:
                 resolved_names, is_alias_path_only = self._get_resolved_names(field_name, field_info, alias_path_args)
                 arg_flag: str = '--'
                 kwargs: dict[str, Any] = {}
                 kwargs['default'] = SUPPRESS
-                kwargs['help'] = self._help_format(field_info)
+                kwargs['help'] = self._help_format(field_name, field_info, model_default)
                 kwargs['dest'] = f'{arg_prefix}{resolved_names[0]}'
                 kwargs['metavar'] = self._metavar_format(field_info.annotation)
-                kwargs['required'] = self.cli_enforce_required and field_info.is_required()
+                kwargs['required'] = (
+                    self.cli_enforce_required and field_info.is_required() and model_default is PydanticUndefined
+                )
                 if kwargs['dest'] in added_args:
                     continue
                 if _annotation_contains_types(
@@ -1474,6 +1610,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     del kwargs['required']
                     arg_flag = ''
 
+                self._convert_bool_flag(kwargs, field_info, model_default)
+
                 if sub_models and kwargs.get('action') != 'append':
                     self._add_parser_submodels(
                         parser,
@@ -1484,8 +1622,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         arg_flag,
                         arg_names,
                         kwargs,
+                        field_name,
                         field_info,
                         resolved_names,
+                        model_default=model_default,
                     )
                 elif is_alias_path_only:
                     continue
@@ -1500,6 +1640,22 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
         self._add_parser_alias_paths(parser, alias_path_args, added_args, arg_prefix, subcommand_prefix, group)
         return parser
+
+    def _convert_bool_flag(self, kwargs: dict[str, Any], field_info: FieldInfo, model_default: Any) -> None:
+        if kwargs['metavar'] == 'bool':
+            default = None
+            if field_info.default is not PydanticUndefined:
+                default = field_info.default
+            if model_default is not PydanticUndefined:
+                default = model_default
+            if sys.version_info >= (3, 9) or isinstance(default, bool):
+                if (self.cli_implicit_flags or _CliImplicitFlag in field_info.metadata) and (
+                    _CliExplicitFlag not in field_info.metadata
+                ):
+                    del kwargs['metavar']
+                    kwargs['action'] = (
+                        BooleanOptionalAction if sys.version_info >= (3, 9) else f'store_{str(not default).lower()}'
+                    )
 
     def _get_arg_names(
         self, arg_prefix: str, subcommand_prefix: str, alias_prefixes: list[str], resolved_names: tuple[str, ...]
@@ -1524,19 +1680,33 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         arg_flag: str,
         arg_names: list[str],
         kwargs: dict[str, Any],
+        field_name: str,
         field_info: FieldInfo,
         resolved_names: tuple[str, ...],
+        model_default: Any,
     ) -> None:
         model_group: Any = None
         model_group_kwargs: dict[str, Any] = {}
         model_group_kwargs['title'] = f'{arg_names[0]} options'
-        model_group_kwargs['description'] = (
-            None
-            if sub_models[0].__doc__ is None
-            else dedent(sub_models[0].__doc__)
-            if self.cli_use_class_docs_for_groups and len(sub_models) == 1
-            else field_info.description
-        )
+        model_group_kwargs['description'] = field_info.description
+        if self.cli_use_class_docs_for_groups and len(sub_models) == 1:
+            model_group_kwargs['description'] = None if sub_models[0].__doc__ is None else dedent(sub_models[0].__doc__)
+
+        if model_default is not PydanticUndefined:
+            if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
+                model_default = getattr(model_default, field_name)
+        else:
+            if field_info.default is not PydanticUndefined:
+                model_default = field_info.default
+            elif field_info.default_factory is not None:
+                model_default = field_info.default_factory
+        if model_default is None:
+            desc_header = f'default: {self.cli_parse_none_str} (undefined)'
+            if model_group_kwargs['description'] is not None:
+                model_group_kwargs['description'] = dedent(f'{desc_header}\n{model_group_kwargs["description"]}')
+            else:
+                model_group_kwargs['description'] = desc_header
+
         if not self.cli_avoid_json:
             added_args.append(arg_names[0])
             kwargs['help'] = f'set {arg_names[0]} from JSON string'
@@ -1551,6 +1721,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 subcommand_prefix=subcommand_prefix,
                 group=model_group if model_group else model_group_kwargs,
                 alias_prefixes=[f'{arg_prefix}{name}.' for name in resolved_names[1:]],
+                model_default=model_default,
             )
 
     def _add_parser_alias_paths(
@@ -1606,8 +1777,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _metavar_format_recurse(self, obj: Any) -> str:
         """Pretty metavar representation of a type. Adapts logic from `pydantic._repr.display_as_type`."""
         obj = _strip_annotated(obj)
-        if isinstance(obj, FunctionType):
-            return obj.__name__
+        if _is_function(obj):
+            # If function is locally defined use __name__ instead of __qualname__
+            return obj.__name__ if '<locals>' in obj.__qualname__ else obj.__qualname__
         elif obj is ...:
             return '...'
         elif isinstance(obj, Representation):
@@ -1640,17 +1812,23 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _metavar_format(self, obj: Any) -> str:
         return self._metavar_format_recurse(obj).replace(', ', ',')
 
-    def _help_format(self, field_info: FieldInfo) -> str:
+    def _help_format(self, field_name: str, field_info: FieldInfo, model_default: Any) -> str:
         _help = field_info.description if field_info.description else ''
-        if field_info.is_required():
+        if field_info.is_required() and model_default in (PydanticUndefined, None):
             if _CliPositionalArg not in field_info.metadata:
-                _help += ' (required)' if _help else '(required)'
+                ifdef = 'ifdef: ' if model_default is None else ''
+                _help += f' ({ifdef}required)' if _help else f'({ifdef}required)'
         else:
             default = f'(default: {self.cli_parse_none_str})'
-            if field_info.default not in (PydanticUndefined, None):
-                default = f'(default: {field_info.default})'
+            if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
+                default = f'(default: {getattr(model_default, field_name)})'
+            elif model_default not in (PydanticUndefined, None) and _is_function(model_default):
+                default = f'(default factory: {self._metavar_format(model_default)})'
+            elif field_info.default not in (PydanticUndefined, None):
+                enum_name = _annotation_enum_val_to_name(field_info.annotation, field_info.default)
+                default = f'(default: {field_info.default if enum_name is None else enum_name})'
             elif field_info.default_factory is not None:
-                default = f'(default: {field_info.default_factory})'
+                default = f'(default factory: {self._metavar_format(field_info.default_factory)})'
             _help += f' {default}' if _help else default
         return _help.replace('%', '%%') if issubclass(type(self._root_parser), ArgumentParser) else _help
 
@@ -1899,6 +2077,16 @@ def read_env_file(
 
 
 def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
+    # If the model is a root model, the root annotation should be used to
+    # evaluate the complexity.
+    if isinstance(annotation, type) and issubclass(annotation, RootModel):
+        # In some rare cases (see test_root_model_as_field),
+        # the root attribute is not available. For these cases, python 3.8 and 3.9
+        # return 'RootModelRootType'.
+        root_annotation = annotation.__annotations__.get('root', None)
+        if root_annotation is not None and root_annotation != 'RootModelRootType':
+            annotation = root_annotation
+
     if any(isinstance(md, Json) for md in metadata):  # type: ignore[misc]
         return False
     # Check if annotation is of the form Annotated[type, metadata].
@@ -1948,3 +2136,31 @@ def _strip_annotated(annotation: Any) -> Any:
     while get_origin(annotation) == Annotated:
         annotation = get_args(annotation)[0]
     return annotation
+
+
+def _annotation_enum_val_to_name(annotation: type[Any] | None, value: Any) -> Optional[str]:
+    for type_ in (annotation, get_origin(annotation), *get_args(annotation)):
+        if lenient_issubclass(type_, Enum):
+            if value in tuple(val.value for val in type_):
+                return type_(value).name
+    return None
+
+
+def _annotation_enum_name_to_val(annotation: type[Any] | None, name: Any) -> Any:
+    for type_ in (annotation, get_origin(annotation), *get_args(annotation)):
+        if lenient_issubclass(type_, Enum):
+            if name in tuple(val.name for val in type_):
+                return type_[name]
+    return None
+
+
+def _get_model_fields(model_cls: type[Any]) -> dict[str, FieldInfo]:
+    if is_pydantic_dataclass(model_cls) and hasattr(model_cls, '__pydantic_fields__'):
+        return model_cls.__pydantic_fields__
+    if is_model_class(model_cls):
+        return model_cls.model_fields
+    raise SettingsError(f'Error: {model_cls.__name__} is not subclass of BaseModel or pydantic.dataclasses.dataclass')
+
+
+def _is_function(obj: Any) -> bool:
+    return inspect.isfunction(obj) or inspect.isbuiltin(obj) or inspect.isroutine(obj) or inspect.ismethod(obj)

@@ -1,6 +1,8 @@
 from .main import BaseSettings, SettingsConfigDict
 from .sources import (
     AzureKeyVaultSettingsSource,
+    CliExplicitFlag,
+    CliImplicitFlag,
     CliPositionalArg,
     CliSettingsSource,
     CliSubCommand,
@@ -14,6 +16,7 @@ from .sources import (
     SettingsError,
     TomlConfigSettingsSource,
     YamlConfigSettingsSource,
+    get_subcommand,
 )
 from .version import VERSION
 
@@ -24,6 +27,8 @@ __all__ = (
     'CliSettingsSource',
     'CliSubCommand',
     'CliPositionalArg',
+    'CliExplicitFlag',
+    'CliImplicitFlag',
     'InitSettingsSource',
     'JsonConfigSettingsSource',
     'PyprojectTomlConfigSettingsSource',
@@ -34,6 +39,7 @@ __all__ = (
     'TomlConfigSettingsSource',
     'YamlConfigSettingsSource',
     'AzureKeyVaultSettingsSource',
+    'get_subcommand',
     '__version__',
 )
 

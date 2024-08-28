@@ -371,6 +371,39 @@ print(Settings().model_dump())
 #> {'numbers': [1, 2, 3]}
 ```
 
+## Nested model default partial updates
+
+By default, Pydantic settings does not allow partial updates to nested model default objects. This behavior can be
+overriden by setting the `nested_model_default_partial_update` flag to `True`, which will allow partial updates on
+nested model default object fields.
+
+```py
+import os
+
+from pydantic import BaseModel
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class SubModel(BaseModel):
+    val: int = 0
+    flag: bool = False
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_nested_delimiter='__', nested_model_default_partial_update=True
+    )
+
+    nested_model: SubModel = SubModel()
+
+
+# Apply a partial update to the default object using environment variables
+os.environ['NESTED_MODEL__FLAG'] = 'True'
+
+assert Settings().model_dump() == {'nested_model': {'val': 0, 'flag': True}}
+```
+
 ## Dotenv (.env) support
 
 Dotenv files (generally named `.env`) are a common pattern that make it easy to use environment variables in a
@@ -474,7 +507,8 @@ models. There are two primary use cases for Pydantic settings CLI:
 
 By default, the experience is tailored towards use case #1 and builds on the foundations established in [parsing
 environment variables](#parsing-environment-variable-values). If your use case primarily falls into #2, you will likely
-want to enable [enforcing required arguments at the CLI](#enforce-required-arguments-at-cli).
+want to enable [enforcing required arguments at the CLI](#enforce-required-arguments-at-cli) and [nested model default
+partial updates](#nested-model-default-partial-updates).
 
 ### The Basics
 
@@ -713,6 +747,9 @@ Subcommands and positional arguments are expressed using the `CliSubCommand` and
 annotations can only be applied to required fields (i.e. fields that do not have a default value). Furthermore,
 subcommands must be a valid type derived from either a pydantic `BaseModel` or pydantic.dataclasses `dataclass`.
 
+Parsed subcommands can be retrieved from model instances using the `get_subcommand` utility function. If a subcommand is
+not required, set the `is_required` flag to `False` to disable raising an error if no subcommand is found.
+
 !!! note
     CLI settings subcommands are limited to a single subparser per model. In other words, all subcommands for a model
     are grouped under a single subparser; it does not allow for multiple subparsers with each subparser having its own
@@ -725,114 +762,59 @@ subcommands must be a valid type derived from either a pydantic `BaseModel` or p
 ```py
 import sys
 
-from pydantic import BaseModel, Field
-from pydantic.dataclasses import dataclass
+from pydantic import BaseModel
 
 from pydantic_settings import (
     BaseSettings,
     CliPositionalArg,
     CliSubCommand,
+    SettingsError,
+    get_subcommand,
 )
 
 
-@dataclass
-class FooPlugin:
-    """git-plugins-foo - Extra deep foo plugin command"""
-
-    x_feature: bool = Field(default=False, description='Enable "X" feature')
-
-
-@dataclass
-class BarPlugin:
-    """git-plugins-bar - Extra deep bar plugin command"""
-
-    y_feature: bool = Field(default=False, description='Enable "Y" feature')
-
-
-@dataclass
-class Plugins:
-    """git-plugins - Fake plugins for GIT"""
-
-    foo: CliSubCommand[FooPlugin] = Field(description='Foo is fake plugin')
-
-    bar: CliSubCommand[BarPlugin] = Field(description='Bar is fake plugin')
+class Init(BaseModel):
+    directory: CliPositionalArg[str]
 
 
 class Clone(BaseModel):
-    """git-clone - Clone a repository into a new directory"""
-
-    repository: CliPositionalArg[str] = Field(description='The repo ...')
-
-    directory: CliPositionalArg[str] = Field(description='The dir ...')
-
-    local: bool = Field(default=False, description='When the repo ...')
+    repository: CliPositionalArg[str]
+    directory: CliPositionalArg[str]
 
 
-class Git(BaseSettings, cli_parse_args=True, cli_prog_name='git'):
-    """git - The stupid content tracker"""
+class Git(BaseSettings, cli_parse_args=True, cli_exit_on_error=False):
+    clone: CliSubCommand[Clone]
+    init: CliSubCommand[Init]
 
-    clone: CliSubCommand[Clone] = Field(description='Clone a repo ...')
 
-    plugins: CliSubCommand[Plugins] = Field(description='Fake GIT plugins')
-
+# Run without subcommands
+sys.argv = ['example.py']
+cmd = Git()
+assert cmd.model_dump() == {'clone': None, 'init': None}
 
 try:
-    sys.argv = ['example.py', '--help']
-    Git()
-except SystemExit as e:
-    print(e)
-    #> 0
-"""
-usage: git [-h] {clone,plugins} ...
+    # Will raise an error since no subcommand was provided
+    get_subcommand(cmd).model_dump()
+except SettingsError as err:
+    assert str(err) == 'Error: CLI subcommand is required {clone, init}'
 
-git - The stupid content tracker
-
-options:
-  -h, --help       show this help message and exit
-
-subcommands:
-  {clone,plugins}
-    clone          Clone a repo ...
-    plugins        Fake GIT plugins
-"""
+# Will not raise an error since subcommand is not required
+assert get_subcommand(cmd, is_required=False) is None
 
 
-try:
-    sys.argv = ['example.py', 'clone', '--help']
-    Git()
-except SystemExit as e:
-    print(e)
-    #> 0
-"""
-usage: git clone [-h] [--local bool] [--shared bool] REPOSITORY DIRECTORY
+# Run the clone subcommand
+sys.argv = ['example.py', 'clone', 'repo', 'dest']
+cmd = Git()
+assert cmd.model_dump() == {
+    'clone': {'repository': 'repo', 'directory': 'dest'},
+    'init': None,
+}
 
-git-clone - Clone a repository into a new directory
-
-positional arguments:
-  REPOSITORY    The repo ...
-  DIRECTORY     The dir ...
-
-options:
-  -h, --help    show this help message and exit
-  --local bool  When the repo ... (default: False)
-"""
-
-
-try:
-    sys.argv = ['example.py', 'plugins', 'bar', '--help']
-    Git()
-except SystemExit as e:
-    print(e)
-    #> 0
-"""
-usage: git plugins bar [-h] [--my_feature bool]
-
-git-plugins-bar - Extra deep bar plugin command
-
-options:
-  -h, --help        show this help message and exit
-  --y_feature bool  Enable "Y" feature (default: False)
-"""
+# Returns the subcommand model instance (in this case, 'clone')
+assert get_subcommand(cmd).model_dump() == {
+    'directory': 'dest',
+    'repository': 'repo',
+}
 ```
 
 ### Customizing the CLI Experience
@@ -866,6 +848,75 @@ usage: appdantic [-h]
 options:
   -h, --help  show this help message and exit
 """
+```
+
+#### CLI Boolean Flags
+
+Change whether boolean fields should be explicit or implicit by default using the `cli_implicit_flags` setting. By
+default, boolean fields are "explicit", meaning a boolean value must be explicitly provided on the CLI, e.g.
+`--flag=True`. Conversely, boolean fields that are "implicit" derive the value from the flag itself, e.g.
+`--flag,--no-flag`, which removes the need for an explicit value to be passed.
+
+Additionally, the provided `CliImplicitFlag` and `CliExplicitFlag` annotations can be used for more granular control
+when necessary.
+
+!!! note
+For `python < 3.9`:
+  * The `--no-flag` option is not generated due to an underlying `argparse` limitation.
+  * The `CliImplicitFlag` and `CliExplicitFlag` annotations can only be applied to optional bool fields.
+
+```py
+from pydantic_settings import BaseSettings, CliExplicitFlag, CliImplicitFlag
+
+
+class ExplicitSettings(BaseSettings, cli_parse_args=True):
+    """Boolean fields are explicit by default."""
+
+    explicit_req: bool
+    """
+    --explicit_req bool   (required)
+    """
+
+    explicit_opt: bool = False
+    """
+    --explicit_opt bool   (default: False)
+    """
+
+    # Booleans are explicit by default, so must override implicit flags with annotation
+    implicit_req: CliImplicitFlag[bool]
+    """
+    --implicit_req, --no-implicit_req (required)
+    """
+
+    implicit_opt: CliImplicitFlag[bool] = False
+    """
+    --implicit_opt, --no-implicit_opt (default: False)
+    """
+
+
+class ImplicitSettings(BaseSettings, cli_parse_args=True, cli_implicit_flags=True):
+    """With cli_implicit_flags=True, boolean fields are implicit by default."""
+
+    # Booleans are implicit by default, so must override explicit flags with annotation
+    explicit_req: CliExplicitFlag[bool]
+    """
+    --explicit_req bool   (required)
+    """
+
+    explicit_opt: CliExplicitFlag[bool] = False
+    """
+    --explicit_opt bool   (default: False)
+    """
+
+    implicit_req: bool
+    """
+    --implicit_req, --no-implicit_req (required)
+    """
+
+    implicit_opt: bool = False
+    """
+    --implicit_opt, --no-implicit_opt (default: False)
+    """
 ```
 
 #### Change Whether CLI Should Exit on Error
