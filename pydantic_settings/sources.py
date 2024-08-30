@@ -1268,6 +1268,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     list if parsed_list and (len(parsed_list) > 1 or parsed_list[0].startswith('[')) else str
                 )
             for val in parsed_list:
+                if not isinstance(val, str):
+                    break
                 val = val.strip()
                 if val.startswith('[') and val.endswith(']'):
                     val = val[1:-1].strip()
