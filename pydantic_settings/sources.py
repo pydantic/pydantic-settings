@@ -1608,7 +1608,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     if arg_prefix and field_info.validation_alias is not None:
                         # Strip prefix if validation alias is set and value is not complex.
                         # Related https://github.com/pydantic/pydantic-settings/pull/25
-                        kwargs['dest'] = kwargs['dest'][self.env_prefix_len:]
+                        kwargs['dest'] = kwargs['dest'][self.env_prefix_len :]
                     if group is not None:
                         if isinstance(group, dict):
                             group = self._add_argument_group(parser, **group)
