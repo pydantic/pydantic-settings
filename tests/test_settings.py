@@ -3088,6 +3088,71 @@ def test_cli_nested_dict_arg():
         cfg = Cfg(_cli_parse_args=args)
 
 
+def test_cli_subcommand_union():
+    class AlphaCmd(BaseModel):
+        a: str
+
+    class BetaCmd(BaseModel):
+        b: str
+
+    class GammaCmd(BaseModel):
+        g: str
+
+    class Root1(BaseSettings, cli_parse_args=True):
+        subcommand: CliSubCommand[AlphaCmd | BetaCmd | GammaCmd]
+
+    alpha = Root1(_cli_parse_args=['AlphaCmd', '-a=alpha'])
+    assert get_subcommand(alpha).model_dump() == {'a': 'alpha'}
+    assert alpha.model_dump() == {'subcommand': {'a': 'alpha'}}
+    beta = Root1(_cli_parse_args=['BetaCmd', '-b=beta'])
+    assert get_subcommand(beta).model_dump() == {'b': 'beta'}
+    assert beta.model_dump() == {'subcommand': {'b': 'beta'}}
+    gamma = Root1(_cli_parse_args=['GammaCmd', '-g=gamma'])
+    assert get_subcommand(gamma).model_dump() == {'g': 'gamma'}
+    assert gamma.model_dump() == {'subcommand': {'g': 'gamma'}}
+
+    class Root2(BaseSettings, cli_parse_args=True):
+        subcommand: CliSubCommand[AlphaCmd | GammaCmd]
+        beta: CliSubCommand[BetaCmd]
+
+    alpha = Root2(_cli_parse_args=['AlphaCmd', '-a=alpha'])
+    assert get_subcommand(alpha).model_dump() == {'a': 'alpha'}
+    assert alpha.model_dump() == {'subcommand': {'a': 'alpha'}, 'beta': None}
+    beta = Root2(_cli_parse_args=['beta', '-b=beta'])
+    assert get_subcommand(beta).model_dump() == {'b': 'beta'}
+    assert beta.model_dump() == {'subcommand': None, 'beta': {'b': 'beta'}}
+    gamma = Root2(_cli_parse_args=['GammaCmd', '-g=gamma'])
+    assert get_subcommand(gamma).model_dump() == {'g': 'gamma'}
+    assert gamma.model_dump() == {'subcommand': {'g': 'gamma'}, 'beta': None}
+
+    class Root3(BaseSettings, cli_parse_args=True):
+        alpha: CliSubCommand[AlphaCmd]
+        beta: CliSubCommand[BetaCmd]
+        gamma: CliSubCommand[GammaCmd]
+
+    alpha = Root3(_cli_parse_args=['alpha', '-a=alpha'])
+    assert get_subcommand(alpha).model_dump() == {'a': 'alpha'}
+    assert alpha.model_dump() == {
+        'alpha': {'a': 'alpha'},
+        'beta': None,
+        'gamma': None,
+    }
+    beta = Root3(_cli_parse_args=['beta', '-b=beta'])
+    assert get_subcommand(beta).model_dump() == {'b': 'beta'}
+    assert beta.model_dump() == {
+        'alpha': None,
+        'beta': {'b': 'beta'},
+        'gamma': None,
+    }
+    gamma = Root3(_cli_parse_args=['gamma', '-g=gamma'])
+    assert get_subcommand(gamma).model_dump() == {'g': 'gamma'}
+    assert gamma.model_dump() == {
+        'alpha': None,
+        'beta': None,
+        'gamma': {'g': 'gamma'},
+    }
+
+
 def test_cli_subcommand_with_positionals():
     @pydantic_dataclasses.dataclass
     class FooPlugin:

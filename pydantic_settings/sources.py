@@ -150,7 +150,7 @@ class _CliInternalArgParser(ArgumentParser):
 
 T = TypeVar('T')
 CliSubCommand = Annotated[Union[T, None], _CliSubCommand]
-CliPositionalArg = Annotated[Union[T, None], _CliPositionalArg]
+CliPositionalArg = Annotated[T, _CliPositionalArg]
 _CliBoolFlag = TypeVar('_CliBoolFlag', bound=bool)
 CliImplicitFlag = Annotated[_CliBoolFlag, _CliImplicitFlag]
 CliExplicitFlag = Annotated[_CliBoolFlag, _CliExplicitFlag]
