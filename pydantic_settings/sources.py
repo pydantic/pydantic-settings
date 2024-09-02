@@ -1604,16 +1604,19 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         resolved_names,
                         model_default=model_default,
                     )
-                elif is_alias_path_only:
-                    continue
-                elif group is not None:
-                    if isinstance(group, dict):
-                        group = self._add_argument_group(parser, **group)
-                    added_args += list(arg_names)
-                    self._add_argument(group, *(f'{arg_flag[:len(name)]}{name}' for name in arg_names), **kwargs)
-                else:
-                    added_args += list(arg_names)
-                    self._add_argument(parser, *(f'{arg_flag[:len(name)]}{name}' for name in arg_names), **kwargs)
+                elif not is_alias_path_only:
+                    if arg_prefix and field_info.validation_alias is not None:
+                        # Strip prefix if validation alias is set and value is not complex.
+                        # Related https://github.com/pydantic/pydantic-settings/pull/25
+                        kwargs['dest'] = kwargs['dest'][self.env_prefix_len :]
+                    if group is not None:
+                        if isinstance(group, dict):
+                            group = self._add_argument_group(parser, **group)
+                        added_args += list(arg_names)
+                        self._add_argument(group, *(f'{arg_flag[:len(name)]}{name}' for name in arg_names), **kwargs)
+                    else:
+                        added_args += list(arg_names)
+                        self._add_argument(parser, *(f'{arg_flag[:len(name)]}{name}' for name in arg_names), **kwargs)
 
         self._add_parser_alias_paths(parser, alias_path_args, added_args, arg_prefix, subcommand_prefix, group)
         return parser
