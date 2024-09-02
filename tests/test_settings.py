@@ -257,6 +257,7 @@ def test_nested_env_delimiter(env):
         v0: str
         v0_union: Union[SubValue, int]
         top: TopValue
+        top_collection: List[TopValue]
 
         model_config = SettingsConfigDict(env_nested_delimiter='__')
 
@@ -268,6 +269,18 @@ def test_nested_env_delimiter(env):
     env.set('v0_union', '0')
     env.set('top__sub__sub_sub__v6', '6')
     env.set('top__sub__v4', '4')
+
+    env.set(
+        'top_collection',
+        '[{"v1": "json-1", "v2": "json-2", "sub": { "v5": "xx"}}]',
+    )
+
+    env.set('top_collection__0__sub__v5', '5')
+    env.set('top_collection__0__v2', '2')
+    env.set('top_collection__0__v3', '3')
+    env.set('top_collection__0__sub__sub_sub__v6', '6')
+    env.set('top_collection__0__sub__v4', '4')
+
     cfg = Cfg()
     assert cfg.model_dump() == {
         'v0': '0',
@@ -278,6 +291,14 @@ def test_nested_env_delimiter(env):
             'v3': '3',
             'sub': {'v4': '4', 'v5': 5, 'sub_sub': {'v6': '6'}},
         },
+        'top_collection': [
+            {
+                'v1': 'json-1',
+                'v2': '2',
+                'v3': '3',
+                'sub': {'v4': '4', 'v5': 5, 'sub_sub': {'v6': '6'}},
+            }
+        ],
     }
 
 
