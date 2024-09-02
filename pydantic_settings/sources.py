@@ -1248,33 +1248,26 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
         return self
 
-    def _get_merge_parsed_list_types(
-        self, parsed_list: list[str], field_name: str
-    ) -> tuple[Optional[type], Optional[type]]:
-        merge_type = self._cli_dict_args.get(field_name, list)
-        if (
-            merge_type is list
-            or not origin_is_union(get_origin(merge_type))
-            or not any(
-                type_
-                for type_ in get_args(merge_type)
-                if type_ is not type(None) and get_origin(type_) not in (dict, Mapping)
-            )
-        ):
-            inferred_type = merge_type
-        else:
-            inferred_type = list if parsed_list and (len(parsed_list) > 1 or parsed_list[0].startswith('[')) else str
-
-        return merge_type, inferred_type
-
     def _merge_parsed_list(self, parsed_list: list[str], field_name: str) -> str:
         try:
             merged_list: list[str] = []
             is_last_consumed_a_value = False
-            merge_type, inferred_type = self._get_merge_parsed_list_types(parsed_list, field_name)
+            merge_type = self._cli_dict_args.get(field_name, list)
+            if (
+                merge_type is list
+                or not origin_is_union(get_origin(merge_type))
+                or not any(
+                    type_
+                    for type_ in get_args(merge_type)
+                    if type_ is not type(None) and get_origin(type_) not in (dict, Mapping)
+                )
+            ):
+                inferred_type = merge_type
+            else:
+                inferred_type = (
+                    list if parsed_list and (len(parsed_list) > 1 or parsed_list[0].startswith('[')) else str
+                )
             for val in parsed_list:
-                if not isinstance(val, str):
-                    break
                 val = val.strip()
                 if val.startswith('[') and val.endswith(']'):
                     val = val[1:-1].strip()
