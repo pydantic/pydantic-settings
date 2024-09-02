@@ -1433,7 +1433,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     for field_type in field_types:
                         if not (is_model_class(field_type) or is_pydantic_dataclass(field_type)):
                             raise SettingsError(
-                                f'subcommand argument {model.__name__}.{field_name} is not derived from BaseModel'
+                                f'subcommand argument {model.__name__}.{field_name} has type not derived from BaseModel'
                             )
                 subcommand_args.append((field_name, field_info))
             elif _CliPositionalArg in field_info.metadata:
