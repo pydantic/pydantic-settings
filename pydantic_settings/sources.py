@@ -747,6 +747,11 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
                 if isinstance(value, dict):
                     return deep_update(value, self.explode_env_vars(field_name, field, self.env_vars))
+                elif isinstance(value, list):
+                    updates = self.explode_env_vars(field_name, field, self.env_vars)
+                    for i, item in enumerate(updates):
+                        value[i] = deep_update(value[i], item)
+                    return value
                 else:
                     return value
         elif value is not None:
@@ -804,6 +809,15 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             return None
 
         annotation = field.annotation if isinstance(field, FieldInfo) else field
+        if get_origin(annotation) is list:
+            try:
+                # check if key is an integer. If so, it's an index. we fake a field info with the list type
+                # so future calls can continue to traverse the model and set proper types for leaf nodes
+                int(key)
+                if list_type := [*get_args(annotation), None].pop(0):
+                    return FieldInfo(annotation=list_type)
+            except ValueError:
+                pass
         if origin_is_union(get_origin(annotation)) or isinstance(annotation, WithArgsTypes):
             for type_ in get_args(annotation):
                 type_has_key = EnvSettingsSource.next_field(type_, key, case_sensitive)
@@ -822,7 +836,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
         return None
 
-    def explode_env_vars(self, field_name: str, field: FieldInfo, env_vars: Mapping[str, str | None]) -> dict[str, Any]:
+    def explode_env_vars(
+        self, field_name: str, field: FieldInfo, env_vars: Mapping[str, str | None]
+    ) -> dict[str, Any] | list[Any]:
         """
         Process env_vars and extract the values of keys containing env_nested_delimiter into nested dictionaries.
 
@@ -834,14 +850,15 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             env_vars: Environment variables.
 
         Returns:
-            A dictionary contains extracted values from nested env values.
+            A list or a dictionary contains extracted values from nested env values.
         """
         is_dict = lenient_issubclass(get_origin(field.annotation), dict)
+        is_list = lenient_issubclass(get_origin(field.annotation), list)
 
         prefixes = [
             f'{env_name}{self.env_nested_delimiter}' for _, env_name, _ in self._extract_field_info(field, field_name)
         ]
-        result: dict[str, Any] = {}
+        result: dict[str, Any] | list[Any] = {}
         for env_name, env_val in env_vars.items():
             if not any(env_name.startswith(prefix) for prefix in prefixes):
                 continue
@@ -859,11 +876,11 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             target_field = self.next_field(target_field, last_key, self.case_sensitive)
 
             # check if env_val maps to a complex field and if so, parse the env_val
-            if (target_field or is_dict) and env_val:
+            if (target_field or is_dict or is_list) and env_val:
                 if target_field:
                     is_complex, allow_json_failure = self._field_is_complex(target_field)
                 else:
-                    # nested field type is dict
+                    # nested field type is dict or list
                     is_complex, allow_json_failure = True, True
                 if is_complex:
                     try:
@@ -874,7 +891,13 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             if isinstance(env_var, dict):
                 if last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] == {}:
                     env_var[last_key] = env_val
-
+        if is_list:
+            # if field is list based, ensure keys are sequential and return an ordered list
+            result, values = [], result
+            for i in (str(i) for i in range(len(values))):
+                if i not in values:
+                    raise ValueError(f'Expected entry with index {i} for {field_name}')
+                result.append(values[i])
         return result
 
     def __repr__(self) -> str:
