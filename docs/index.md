@@ -757,7 +757,7 @@ not required, set the `is_required` flag to `False` to disable raising an error 
     subcommands](https://docs.python.org/3/library/argparse.html#sub-commands).
 
 !!! note
-    `CliSubCommand` and `CliPositionalArg` are always case sensitive and do not support aliases.
+    `CliSubCommand` and `CliPositionalArg` are always case sensitive.
 
 ```py
 import sys
@@ -817,6 +817,65 @@ assert get_subcommand(cmd).model_dump() == {
 }
 ```
 
+The `CliSubCommand` and `CliPositionalArg` annotations also support union operations and aliases. For unions of Pydantic
+models, it is important to remember the [nuances](https://docs.pydantic.dev/latest/concepts/unions/) that can arise
+during validation. Specifically, for unions of subcommands that are identical in content, it is recommended to break
+them out into separate `CliSubCommand` fields to avoid any complications. Lastly, the derived sub command names from
+unions will be the names of the Pydantic model classes themselves.
+
+When assigning aliases to `CliSubCommand` or `CliPositionalArg` fields, only a single alias can be assigned. For
+non-union subcommands, aliasing will change the displayed help text and subcommand name. Conversely, for union
+subcommands, aliasing will have no tangible effect from the perspective of the CLI settings source. Lastly, for
+positional arguments, aliasing will change the CLI help text displayed for the field.
+
+```py
+import sys
+
+from pydantic import BaseModel, Field
+
+from pydantic_settings import (
+    BaseSettings,
+    CliPositionalArg,
+    CliSubCommand,
+)
+
+
+class Alpha(BaseModel):
+    """Apha Help"""
+
+    cmd_alpha: CliPositionalArg[str] = Field(alias='alpha-cmd')
+
+
+class Beta(BaseModel):
+    """Beta Help"""
+
+    opt_beta: str = Field(alias='opt-beta')
+
+
+class Gamma(BaseModel):
+    """Beta Help"""
+
+    opt_gamma: str = Field(alias='opt-gamma')
+
+
+class Root(BaseSettings, cli_parse_args=True, cli_exit_on_error=False):
+    subcommand: CliSubCommand[Alpha | Beta] = Field(alias='sub-command')
+    gamma: CliSubCommand[Gamma] = Field(alias='gamma-cmd')
+
+
+sys.argv = ['example.py', 'Alpha', 'hello']
+print(Root().model_dump())
+#> {'subcommand': {'cmd_alpha': 'hello'}, 'gamma': None}
+
+sys.argv = ['example.py', 'Beta', '--opt-beta=hey']
+print(Root().model_dump())
+#> {'subcommand': {'opt_beta': 'hey'}, 'gamma': None}
+
+sys.argv = ['example.py', 'gamma-cmd', '--opt-gamma=hi']
+print(Root().model_dump())
+#> {'subcommand': None, 'gamma': {'opt_gamma': 'hi'}}
+```
+
 ### Customizing the CLI Experience
 
 The below flags can be used to customise the CLI experience to your needs.
@@ -861,9 +920,10 @@ Additionally, the provided `CliImplicitFlag` and `CliExplicitFlag` annotations c
 when necessary.
 
 !!! note
-For `python < 3.9`:
-  * The `--no-flag` option is not generated due to an underlying `argparse` limitation.
-  * The `CliImplicitFlag` and `CliExplicitFlag` annotations can only be applied to optional bool fields.
+    For `python < 3.9` the `--no-flag` option is not generated due to an underlying `argparse` limitation.
+
+!!! note
+    For `python < 3.9` the `CliImplicitFlag` and `CliExplicitFlag` annotations can only be applied to optional bool fields.
 
 ```py
 from pydantic_settings import BaseSettings, CliExplicitFlag, CliImplicitFlag

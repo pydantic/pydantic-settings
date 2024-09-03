@@ -1585,19 +1585,29 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     )
             else:
                 arg_flag: str = '--'
+                is_append_action = _annotation_contains_types(
+                    field_info.annotation, (list, set, dict, Sequence, Mapping), is_strip_annotated=True
+                )
+                is_parser_submodel = sub_models and not is_append_action
                 kwargs: dict[str, Any] = {}
                 kwargs['default'] = SUPPRESS
                 kwargs['help'] = self._help_format(field_name, field_info, model_default)
-                kwargs['dest'] = f'{arg_prefix}{preferred_alias}'
                 kwargs['metavar'] = self._metavar_format(field_info.annotation)
                 kwargs['required'] = (
                     self.cli_enforce_required and field_info.is_required() and model_default is PydanticUndefined
                 )
+                kwargs['dest'] = (
+                    # Strip prefix if validation alias is set and value is not complex.
+                    # Related https://github.com/pydantic/pydantic-settings/pull/25
+                    f'{arg_prefix}{preferred_alias}'[self.env_prefix_len :]
+                    if arg_prefix and field_info.validation_alias is not None and not is_parser_submodel
+                    else f'{arg_prefix}{preferred_alias}'
+                )
+
                 if kwargs['dest'] in added_args:
                     continue
-                if _annotation_contains_types(
-                    field_info.annotation, (list, set, dict, Sequence, Mapping), is_strip_annotated=True
-                ):
+
+                if is_append_action:
                     kwargs['action'] = 'append'
                     if _annotation_contains_types(field_info.annotation, (dict, Mapping), is_strip_annotated=True):
                         self._cli_dict_args[kwargs['dest']] = field_info.annotation
@@ -1612,7 +1622,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
                 self._convert_bool_flag(kwargs, field_info, model_default)
 
-                if sub_models and kwargs.get('action') != 'append':
+                if is_parser_submodel:
                     self._add_parser_submodels(
                         parser,
                         sub_models,
@@ -1628,10 +1638,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         model_default=model_default,
                     )
                 elif not is_alias_path_only:
-                    if arg_prefix and field_info.validation_alias is not None:
-                        # Strip prefix if validation alias is set and value is not complex.
-                        # Related https://github.com/pydantic/pydantic-settings/pull/25
-                        kwargs['dest'] = kwargs['dest'][self.env_prefix_len :]
                     if group is not None:
                         if isinstance(group, dict):
                             group = self._add_argument_group(parser, **group)
