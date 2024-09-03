@@ -830,6 +830,7 @@ positional arguments, aliasing will change the CLI help text displayed for the f
 
 ```py
 import sys
+from typing import Union
 
 from pydantic import BaseModel, Field
 
@@ -860,7 +861,7 @@ class Gamma(BaseModel):
 
 
 class Root(BaseSettings, cli_parse_args=True, cli_exit_on_error=False):
-    subcommand: CliSubCommand[Alpha | Beta] = Field(alias='sub-command')
+    subcommand: CliSubCommand[Union[Alpha, Beta]] = Field(alias='sub-command')
     gamma: CliSubCommand[Gamma] = Field(alias='gamma-cmd')
 
 

@@ -3166,7 +3166,7 @@ def test_cli_subcommand_union(capsys, monkeypatch):
     class Root1(BaseSettings):
         """Root Help"""
 
-        subcommand: CliSubCommand[AlphaCmd | BetaCmd | GammaCmd] = Field(description='Field Help')
+        subcommand: CliSubCommand[Union[AlphaCmd, BetaCmd, GammaCmd]] = Field(description='Field Help')
 
     alpha = Root1(_cli_parse_args=['AlphaCmd', '-a=alpha'])
     assert get_subcommand(alpha).model_dump() == {'a': 'alpha'}
@@ -3226,7 +3226,7 @@ subcommands:
     class Root2(BaseSettings):
         """Root Help"""
 
-        subcommand: CliSubCommand[AlphaCmd | GammaCmd] = Field(description='Field Help')
+        subcommand: CliSubCommand[Union[AlphaCmd, GammaCmd]] = Field(description='Field Help')
         beta: CliSubCommand[BetaCmd] = Field(description='Field Beta Help')
 
     alpha = Root2(_cli_parse_args=['AlphaCmd', '-a=alpha'])
@@ -3288,7 +3288,7 @@ subcommands:
         """Root Help"""
 
         beta: CliSubCommand[BetaCmd] = Field(description='Field Beta Help')
-        subcommand: CliSubCommand[AlphaCmd | GammaCmd] = Field(description='Field Help')
+        subcommand: CliSubCommand[Union[AlphaCmd, GammaCmd]] = Field(description='Field Help')
 
     alpha = Root3(_cli_parse_args=['AlphaCmd', '-a=alpha'])
     assert get_subcommand(alpha).model_dump() == {'a': 'alpha'}
