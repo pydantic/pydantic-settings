@@ -837,6 +837,7 @@ from pydantic_settings import (
     BaseSettings,
     CliPositionalArg,
     CliSubCommand,
+    get_subcommand,
 )
 
 
@@ -864,16 +865,13 @@ class Root(BaseSettings, cli_parse_args=True, cli_exit_on_error=False):
 
 
 sys.argv = ['example.py', 'Alpha', 'hello']
-print(Root().model_dump())
-#> {'subcommand': {'cmd_alpha': 'hello'}, 'gamma': None}
+assert get_subcommand(Root()).model_dump() == {'cmd_alpha': 'hello'}
 
 sys.argv = ['example.py', 'Beta', '--opt-beta=hey']
-print(Root().model_dump())
-#> {'subcommand': {'opt_beta': 'hey'}, 'gamma': None}
+assert get_subcommand(Root()).model_dump() == {'opt_beta': 'hey'}
 
 sys.argv = ['example.py', 'gamma-cmd', '--opt-gamma=hi']
-print(Root().model_dump())
-#> {'subcommand': None, 'gamma': {'opt_gamma': 'hi'}}
+assert get_subcommand(Root()).model_dump() == {'opt_gamma': 'hi'}
 ```
 
 ### Customizing the CLI Experience
