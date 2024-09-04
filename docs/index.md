@@ -1227,6 +1227,9 @@ class Settings(BaseSettings):
     database_password: str
 ````
 
+If any of `secrets_dir` is missing, it is ignored, and warning is shown. If any of `secrets_dir` is a file, error is raised.
+
+
 ### Use Case: Docker Secrets
 
 Docker Secrets can be used to provide sensitive configuration to an application running in a Docker container.
