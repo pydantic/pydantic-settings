@@ -1602,7 +1602,7 @@ def test_secrets_missing_location_multiple_all(tmp_path):
         Settings(_secrets_dir=[tmp_path / 'dir1', tmp_path / 'dir2'])
 
     assert len(record) == 2
-    assert record[0].category == record[1].category == UserWarning
+    assert record[0].category is UserWarning and record[1].category is UserWarning
     assert str(record[0].message) == f'directory "{tmp_path}/dir1" does not exist'
     assert str(record[1].message) == f'directory "{tmp_path}/dir2" does not exist'
 
@@ -1620,7 +1620,7 @@ def test_secrets_missing_location_multiple_one(tmp_path):
 
     assert conf.foo == 'secret_value'  # value obtained from first directory
     assert len(record) == 1
-    assert record[0].category == UserWarning
+    assert record[0].category is UserWarning
     assert str(record[0].message) == f'directory "{tmp_path}/dir2" does not exist'
 
 
@@ -1652,7 +1652,7 @@ def test_secrets_file_is_a_directory_multiple_all(tmp_path):
         Settings(_secrets_dir=[d1, d2])
 
     assert len(record) == 2
-    assert record[0].category == record[1].category == UserWarning
+    assert record[0].category is UserWarning and record[1].category is UserWarning
     # warnings are emitted in reverse order
     assert str(record[0].message) == f'attempted to load secret file "{d2}/foo" but found a directory instead.'
     assert str(record[1].message) == f'attempted to load secret file "{d1}/foo" but found a directory instead.'
@@ -1673,7 +1673,7 @@ def test_secrets_file_is_a_directory_multiple_one(tmp_path):
 
     assert conf.foo == 'secret_value'  # value obtained from first directory
     assert len(record) == 1
-    assert record[0].category == UserWarning
+    assert record[0].category is UserWarning
     assert str(record[0].message) == f'attempted to load secret file "{d2}/foo" but found a directory instead.'
 
 
