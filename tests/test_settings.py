@@ -738,6 +738,18 @@ def test_validation_alias_with_env_prefix(env):
     assert Settings().foobar == 'bar'
 
 
+def test_validation_alias_with_cli_prefix():
+    class Settings(BaseSettings, cli_exit_on_error=False):
+        foobar: str = Field(validation_alias='foo')
+
+        model_config = SettingsConfigDict(cli_prefix='p')
+
+    with pytest.raises(SettingsError, match='error parsing CLI: unrecognized arguments: --foo bar'):
+        Settings(_cli_parse_args=['--foo', 'bar'])
+
+    assert Settings(_cli_parse_args=['--p.foo', 'bar']).foobar == 'bar'
+
+
 def test_case_sensitive(monkeypatch):
     class Settings(BaseSettings):
         foo: str
