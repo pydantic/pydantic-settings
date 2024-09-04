@@ -1431,11 +1431,14 @@ def test_secrets_path_multiple(tmp_path):
         foo2: str
         foo3: str
 
-        model_config = SettingsConfigDict(secrets_dir=(d1, d2))
-
-    assert Settings().model_dump() == {
+    assert Settings(_secrets_dir=(d1, d2)).model_dump() == {
         'foo1': 'foo1_dir1_secret_value_str',
         'foo2': 'foo2_dir2_secret_value_str',  # dir2 takes priority
+        'foo3': 'foo3_dir2_secret_value_str',
+    }
+    assert Settings(_secrets_dir=(d2, d1)).model_dump() == {
+        'foo1': 'foo1_dir1_secret_value_str',
+        'foo2': 'foo2_dir1_secret_value_str',  # dir1 takes priority
         'foo3': 'foo3_dir2_secret_value_str',
     }
 
@@ -1559,6 +1562,28 @@ def test_secrets_invalid_secrets_dir(tmp_path):
         Settings()
 
 
+def test_secrets_invalid_secrets_dir_multiple_all(tmp_path):
+    class Settings(BaseSettings):
+        foo: str
+
+    (d1 := tmp_path / 'dir1').write_text('')
+    (d2 := tmp_path / 'dir2').write_text('')
+
+    with pytest.raises(SettingsError, match='secrets_dir must reference a directory, not a file'):
+        Settings(_secrets_dir=[d1, d2])
+
+
+def test_secrets_invalid_secrets_dir_multiple_one(tmp_path):
+    class Settings(BaseSettings):
+        foo: str
+
+    (d1 := tmp_path / 'dir1').mkdir()
+    (d2 := tmp_path / 'dir2').write_text('')
+
+    with pytest.raises(SettingsError, match='secrets_dir must reference a directory, not a file'):
+        Settings(_secrets_dir=[d1, d2])
+
+
 @pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
 def test_secrets_missing_location(tmp_path):
     class Settings(BaseSettings):
@@ -1566,6 +1591,37 @@ def test_secrets_missing_location(tmp_path):
 
     with pytest.warns(UserWarning, match=f'directory "{tmp_path}/does_not_exist" does not exist'):
         Settings()
+
+
+@pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
+def test_secrets_missing_location_multiple_all(tmp_path):
+    class Settings(BaseSettings):
+        foo: Optional[str] = None
+
+    with pytest.warns() as record:
+        Settings(_secrets_dir=[tmp_path / 'dir1', tmp_path / 'dir2'])
+
+    assert len(record) == 2
+    assert record[0].category == record[1].category == UserWarning
+    assert str(record[0].message) == f'directory "{tmp_path}/dir1" does not exist'
+    assert str(record[1].message) == f'directory "{tmp_path}/dir2" does not exist'
+
+
+@pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
+def test_secrets_missing_location_multiple_one(tmp_path):
+    class Settings(BaseSettings):
+        foo: Optional[str] = None
+
+    (d1 := tmp_path / 'dir1').mkdir()
+    (d1 / 'foo').write_text('secret_value')
+
+    with pytest.warns() as record:
+        conf = Settings(_secrets_dir=[d1, tmp_path / 'dir2'])
+
+    assert conf.foo == 'secret_value'  # value obtained from first directory
+    assert len(record) == 1
+    assert record[0].category == UserWarning
+    assert str(record[0].message) == f'directory "{tmp_path}/dir2" does not exist'
 
 
 @pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
@@ -1580,6 +1636,45 @@ def test_secrets_file_is_a_directory(tmp_path):
 
     with pytest.warns(UserWarning, match=f'attempted to load secret file "{tmp_path}/foo" but found a directory inste'):
         Settings()
+
+
+@pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
+def test_secrets_file_is_a_directory_multiple_all(tmp_path):
+    class Settings(BaseSettings):
+        foo: Optional[str] = None
+
+    (d1 := tmp_path / 'dir1').mkdir()
+    (d2 := tmp_path / 'dir2').mkdir()
+    (d1 / 'foo').mkdir()
+    (d2 / 'foo').mkdir()
+
+    with pytest.warns() as record:
+        Settings(_secrets_dir=[d1, d2])
+
+    assert len(record) == 2
+    assert record[0].category == record[1].category == UserWarning
+    # warnings are emitted in reverse order
+    assert str(record[0].message) == f'attempted to load secret file "{d2}/foo" but found a directory instead.'
+    assert str(record[1].message) == f'attempted to load secret file "{d1}/foo" but found a directory instead.'
+
+
+@pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
+def test_secrets_file_is_a_directory_multiple_one(tmp_path):
+    class Settings(BaseSettings):
+        foo: Optional[str] = None
+
+    (d1 := tmp_path / 'dir1').mkdir()
+    (d2 := tmp_path / 'dir2').mkdir()
+    (d1 / 'foo').write_text('secret_value')
+    (d2 / 'foo').mkdir()
+
+    with pytest.warns() as record:
+        conf = Settings(_secrets_dir=[d1, d2])
+
+    assert conf.foo == 'secret_value'  # value obtained from first directory
+    assert len(record) == 1
+    assert record[0].category == UserWarning
+    assert str(record[0].message) == f'attempted to load secret file "{d2}/foo" but found a directory instead.'
 
 
 def test_secrets_dotenv_precedence(tmp_path):

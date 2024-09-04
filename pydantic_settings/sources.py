@@ -595,12 +595,17 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
             return secrets
 
         secrets_dirs = [self.secrets_dir] if isinstance(self.secrets_dir, (str, os.PathLike)) else self.secrets_dir
-        self.secrets_paths = [Path(p).expanduser() for p in secrets_dirs]
+        secrets_paths = [Path(p).expanduser() for p in secrets_dirs]
+        self.secrets_paths = []
 
-        for path in self.secrets_paths:
+        for path in secrets_paths:
             if not path.exists():
                 warnings.warn(f'directory "{path}" does not exist')
-                return secrets
+            else:
+                self.secrets_paths.append(path)
+
+        if not len(self.secrets_paths):
+            return secrets
 
         for path in self.secrets_paths:
             if not path.is_dir():
