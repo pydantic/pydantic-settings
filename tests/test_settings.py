@@ -302,6 +302,41 @@ def test_nested_env_delimiter(env):
     }
 
 
+def test_nested_env_delimiter_lists_index(env):
+    class TopValue(BaseSettings):
+        v1: Optional[str] = None
+        v2: int
+
+    class ListCfg(BaseSettings):
+        top_list: List[int]
+        top_collection: List[List[TopValue]]
+
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set('top_list__0', '3')
+    env.set('top_list__1', '2')
+    env.set('top_list__2', '1')
+    env.set('top_list__5', 'out of bounds index')
+    env.set('top_list', '[1]')
+
+    env.set('top_collection', '[[{"v1": "json-1", "v2": "json-2"}]]')
+    env.set('top_collection__0__0__v1', 'json-1')
+    env.set('top_collection__0__1__v2', '6')
+    env.set('top_collection__0__0__v2', '5')
+    env.set('top_collection__0__3__v1', 'out of bounds index')
+
+    cfg = ListCfg()
+    assert cfg.model_dump() == {
+        'top_list': [3, 2, 1],
+        'top_collection': [
+            [
+                {'v1': 'json-1', 'v2': 5},
+                {'v1': None, 'v2': 6},
+            ]
+        ],
+    }
+
+
 def test_nested_env_optional_json(env):
     class Child(BaseModel):
         num_list: Optional[List[int]] = None

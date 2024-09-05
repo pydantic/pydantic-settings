@@ -43,7 +43,7 @@ from pydantic import AliasChoices, AliasPath, BaseModel, Json, RootModel, TypeAd
 from pydantic._internal._repr import Representation
 from pydantic._internal._signature import _field_name_for_signature
 from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union, typing_base
-from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
+from pydantic._internal._utils import KeyType, deep_update, is_model_class, lenient_issubclass
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
@@ -658,6 +658,48 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         return f'SecretsSettingsSource(secrets_dir={self.secrets_dir!r})'
 
 
+def _deep_update(
+    mapping: Dict[KeyType, Any] | List[Any], *updating_mappings: Dict[KeyType, Any]
+) -> Dict[KeyType, Any] | List[Any]:
+    # if no updating mappings, return the original mapping
+    if not all(updating_mappings):
+        return mapping
+
+    updated_mapping = mapping.copy()
+    for updating_mapping in updating_mappings:
+        if isinstance(updated_mapping, list):
+            # list case
+            if isinstance(updating_mapping, list):
+                for i, v in enumerate(updating_mapping):
+                    # if i < len(updated_mapping):
+                    updated_mapping[i] = _deep_update(updated_mapping[i], v)
+                    # else:
+                    #    updated_mapping.append(v)
+            elif isinstance(updating_mapping, dict):
+                for key, value in updating_mapping.items():
+                    # index is a stored as a key in the dict
+                    index = int(key)
+                    if len(updated_mapping) < index:
+                        continue
+                    # Add empty  dict so we can update it
+                    if len(updated_mapping) == index:
+                        updated_mapping.append({})
+                    # Update it
+                    if isinstance(value, dict):
+                        updated_mapping[index] = _deep_update(updated_mapping[index], value)
+                    else:
+                        updated_mapping[index] = value
+            else:
+                raise NotImplementedError
+        else:
+            for k, v in updating_mapping.items():
+                if k in updated_mapping and isinstance(updated_mapping[k], dict) and isinstance(v, dict):
+                    updated_mapping[k] = _deep_update(updated_mapping[k], v)
+                else:
+                    updated_mapping[k] = v
+    return updated_mapping
+
+
 class EnvSettingsSource(PydanticBaseEnvSettingsSource):
     """
     Source class for loading settings values from environment variables.
@@ -745,13 +787,8 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     if not allow_parse_failure:
                         raise e
 
-                if isinstance(value, dict):
-                    return deep_update(value, self.explode_env_vars(field_name, field, self.env_vars))
-                elif isinstance(value, list):
-                    updates = self.explode_env_vars(field_name, field, self.env_vars)
-                    for i, item in enumerate(updates):
-                        value[i] = deep_update(value[i], item)
-                    return value
+                if isinstance(value, (dict, list)):
+                    return _deep_update(value, self.explode_env_vars(field_name, field, self.env_vars))
                 else:
                     return value
         elif value is not None:
@@ -891,13 +928,21 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             if isinstance(env_var, dict):
                 if last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] == {}:
                     env_var[last_key] = env_val
+
+        def _transform_list_based_field(annotation: Annotated, values: dict[str, Any]) -> dict[str, Any] | list[Any]:
+            assert lenient_issubclass(get_origin(annotation), list)
+            if lenient_issubclass(get_args(annotation)[0], list):
+                result = []
+                for i in (str(i) for i in range(len(values))):
+                    if i not in values:
+                        raise ValueError(f'Expected entry with index {i} for {field_name}')
+                    result.append(_transform_list_based_field(get_args(annotation)[0], values[i]))
+                return result
+            else:
+                return values
+
         if is_list:
-            # if field is list based, ensure keys are sequential and return an ordered list
-            result, values = [], result
-            for i in (str(i) for i in range(len(values))):
-                if i not in values:
-                    raise ValueError(f'Expected entry with index {i} for {field_name}')
-                result.append(values[i])
+            result = _transform_list_based_field(field.annotation, result)
         return result
 
     def __repr__(self) -> str:
