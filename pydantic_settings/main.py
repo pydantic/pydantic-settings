@@ -373,10 +373,8 @@ class BaseSettings(BaseModel):
         env_file: DotenvType,
         case_sensitive: bool | None = None,
     ) -> "BaseSettings":
-        # Determine settings config values
         case_sensitive = case_sensitive if case_sensitive is not None else cls.model_config.get('case_sensitive')
         env_file = env_file
-
         dotenv_settings = DotEnvSettingsSource(
             cls,
             env_file=env_file,
