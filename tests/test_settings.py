@@ -3665,21 +3665,51 @@ def test_cli_user_settings_source(parser_type, prefix):
         cli_cfg_settings = CliSettingsSource(Cfg, cli_prefix=prefix, root_parser=parser)
 
     add_arg('--fruit', choices=['pear', 'kiwi', 'lime'])
+    add_arg('--num-list', action='append', type=int)
+    add_arg('--num', type=int)
 
-    args = ['--fruit', 'pear']
+    args = ['--fruit', 'pear', '--num', '0', '--num-list', '1', '--num-list', '2', '--num-list', '3']
     parsed_args = parse_args(args)
     assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=parsed_args)).model_dump() == {'pet': 'bird'}
     assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {'pet': 'bird'}
     assert Cfg(_cli_settings_source=cli_cfg_settings(args=False)).model_dump() == {'pet': 'bird'}
 
     arg_prefix = f'{prefix}.' if prefix else ''
-    args = ['--fruit', 'kiwi', f'--{arg_prefix}pet', 'dog']
+    args = [
+        '--fruit',
+        'kiwi',
+        '--num',
+        '0',
+        '--num-list',
+        '1',
+        '--num-list',
+        '2',
+        '--num-list',
+        '3',
+        f'--{arg_prefix}pet',
+        'dog',
+    ]
     parsed_args = parse_args(args)
     assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=parsed_args)).model_dump() == {'pet': 'dog'}
     assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {'pet': 'dog'}
     assert Cfg(_cli_settings_source=cli_cfg_settings(args=False)).model_dump() == {'pet': 'bird'}
 
-    parsed_args = parse_args(['--fruit', 'kiwi', f'--{arg_prefix}pet', 'cat'])
+    parsed_args = parse_args(
+        [
+            '--fruit',
+            'kiwi',
+            '--num',
+            '0',
+            '--num-list',
+            '1',
+            '--num-list',
+            '2',
+            '--num-list',
+            '3',
+            f'--{arg_prefix}pet',
+            'cat',
+        ]
+    )
     assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=vars(parsed_args))).model_dump() == {'pet': 'cat'}
     assert Cfg(_cli_settings_source=cli_cfg_settings(args=False)).model_dump() == {'pet': 'bird'}
 
