@@ -574,7 +574,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
     def __init__(
         self,
         settings_cls: type[BaseSettings],
-        secrets_dir: str | Path | None = None,
+        secrets_dir: PathType | None = None,
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
         env_ignore_empty: bool | None = None,
@@ -595,14 +595,22 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         if self.secrets_dir is None:
             return secrets
 
-        self.secrets_path = Path(self.secrets_dir).expanduser()
+        secrets_dirs = [self.secrets_dir] if isinstance(self.secrets_dir, (str, os.PathLike)) else self.secrets_dir
+        secrets_paths = [Path(p).expanduser() for p in secrets_dirs]
+        self.secrets_paths = []
 
-        if not self.secrets_path.exists():
-            warnings.warn(f'directory "{self.secrets_path}" does not exist')
+        for path in secrets_paths:
+            if not path.exists():
+                warnings.warn(f'directory "{path}" does not exist')
+            else:
+                self.secrets_paths.append(path)
+
+        if not len(self.secrets_paths):
             return secrets
 
-        if not self.secrets_path.is_dir():
-            raise SettingsError(f'secrets_dir must reference a directory, not a {path_type_label(self.secrets_path)}')
+        for path in self.secrets_paths:
+            if not path.is_dir():
+                raise SettingsError(f'secrets_dir must reference a directory, not a {path_type_label(path)}')
 
         return super().__call__()
 
@@ -640,18 +648,20 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         """
 
         for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
-            path = self.find_case_path(self.secrets_path, env_name, self.case_sensitive)
-            if not path:
-                # path does not exist, we currently don't return a warning for this
-                continue
+            # paths reversed to match the last-wins behaviour of `env_file`
+            for secrets_path in reversed(self.secrets_paths):
+                path = self.find_case_path(secrets_path, env_name, self.case_sensitive)
+                if not path:
+                    # path does not exist, we currently don't return a warning for this
+                    continue
 
-            if path.is_file():
-                return path.read_text().strip(), field_key, value_is_complex
-            else:
-                warnings.warn(
-                    f'attempted to load secret file "{path}" but found a {path_type_label(path)} instead.',
-                    stacklevel=4,
-                )
+                if path.is_file():
+                    return path.read_text().strip(), field_key, value_is_complex
+                else:
+                    warnings.warn(
+                        f'attempted to load secret file "{path}" but found a {path_type_label(path)} instead.',
+                        stacklevel=4,
+                    )
 
         return None, field_key, value_is_complex
 

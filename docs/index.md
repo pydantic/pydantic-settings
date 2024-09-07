@@ -1214,6 +1214,22 @@ Even when using a secrets directory, *pydantic* will still read environment vari
 Passing a file path via the `_secrets_dir` keyword argument on instantiation (method 2) will override
 the value (if any) set on the `model_config` class.
 
+If you need to load settings from multiple secrets directories, you can pass multiple paths as a tuple or list. Just like for `env_file`, values from subsequent paths override previous ones.
+
+````python
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    # files in '/run/secrets' take priority over '/var/run'
+    model_config = SettingsConfigDict(secrets_dir=('/var/run', '/run/secrets'))
+
+    database_password: str
+````
+
+If any of `secrets_dir` is missing, it is ignored, and warning is shown. If any of `secrets_dir` is a file, error is raised.
+
+
 ### Use Case: Docker Secrets
 
 Docker Secrets can be used to provide sensitive configuration to an application running in a Docker container.
