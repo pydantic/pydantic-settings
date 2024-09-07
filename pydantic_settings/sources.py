@@ -18,6 +18,7 @@ from dataclasses import asdict, is_dataclass
 from enum import Enum
 from pathlib import Path
 from textwrap import dedent
+from types import SimpleNamespace
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -1165,13 +1166,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         ...
 
     @overload
-    def __call__(self, *, parsed_args: Namespace | dict[str, list[str] | str]) -> CliSettingsSource[T]:
+    def __call__(
+        self, *, parsed_args: Namespace | SimpleNamespace | dict[str, list[str] | str]
+    ) -> CliSettingsSource[T]:
         """
         Loads parsed command line arguments into the CLI settings source.
 
         Note:
-            The parsed args must be in `argparse.Namespace` or vars dictionary (e.g., vars(argparse.Namespace))
-            format.
+            The parsed args must be in `argparse.Namespace`, `SimpleNamespace`, or vars dictionary
+            (e.g., vars(argparse.Namespace)) format.
 
         Args:
             parsed_args: The parsed args to load.
@@ -1185,7 +1188,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self,
         *,
         args: list[str] | tuple[str, ...] | bool | None = None,
-        parsed_args: Namespace | dict[str, list[str] | str] | None = None,
+        parsed_args: Namespace | SimpleNamespace | dict[str, list[str] | str] | None = None,
     ) -> dict[str, Any] | CliSettingsSource[T]:
         if args is not None and parsed_args is not None:
             raise SettingsError('`args` and `parsed_args` are mutually exclusive')
@@ -1204,13 +1207,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _load_env_vars(self) -> Mapping[str, str | None]: ...
 
     @overload
-    def _load_env_vars(self, *, parsed_args: Namespace | dict[str, list[str] | str]) -> CliSettingsSource[T]:
+    def _load_env_vars(
+        self, *, parsed_args: Namespace | SimpleNamespace | dict[str, list[str] | str]
+    ) -> CliSettingsSource[T]:
         """
         Loads the parsed command line arguments into the CLI environment settings variables.
 
         Note:
-            The parsed args must be in `argparse.Namespace` or vars dictionary (e.g., vars(argparse.Namespace))
-            format.
+            The parsed args must be in `argparse.Namespace`, `SimpleNamespace`, or vars dictionary
+            (e.g., vars(argparse.Namespace)) format.
 
         Args:
             parsed_args: The parsed args to load.
@@ -1221,12 +1226,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         ...
 
     def _load_env_vars(
-        self, *, parsed_args: Namespace | dict[str, list[str] | str] | None = None
+        self, *, parsed_args: Namespace | SimpleNamespace | dict[str, list[str] | str] | None = None
     ) -> Mapping[str, str | None] | CliSettingsSource[T]:
         if parsed_args is None:
             return {}
 
-        if isinstance(parsed_args, Namespace):
+        if isinstance(parsed_args, (Namespace, SimpleNamespace)):
             parsed_args = vars(parsed_args)
 
         selected_subcommands: list[str] = []
@@ -1256,26 +1261,35 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
         return self
 
+    def _get_merge_parsed_list_types(
+        self, parsed_list: list[str], field_name: str
+    ) -> tuple[Optional[type], Optional[type]]:
+        merge_type = self._cli_dict_args.get(field_name, list)
+        if (
+            merge_type is list
+            or not origin_is_union(get_origin(merge_type))
+            or not any(
+                type_
+                for type_ in get_args(merge_type)
+                if type_ is not type(None) and get_origin(type_) not in (dict, Mapping)
+            )
+        ):
+            inferred_type = merge_type
+        else:
+            inferred_type = list if parsed_list and (len(parsed_list) > 1 or parsed_list[0].startswith('[')) else str
+
+        return merge_type, inferred_type
+
     def _merge_parsed_list(self, parsed_list: list[str], field_name: str) -> str:
         try:
             merged_list: list[str] = []
             is_last_consumed_a_value = False
-            merge_type = self._cli_dict_args.get(field_name, list)
-            if (
-                merge_type is list
-                or not origin_is_union(get_origin(merge_type))
-                or not any(
-                    type_
-                    for type_ in get_args(merge_type)
-                    if type_ is not type(None) and get_origin(type_) not in (dict, Mapping)
-                )
-            ):
-                inferred_type = merge_type
-            else:
-                inferred_type = (
-                    list if parsed_list and (len(parsed_list) > 1 or parsed_list[0].startswith('[')) else str
-                )
+            merge_type, inferred_type = self._get_merge_parsed_list_types(parsed_list, field_name)
             for val in parsed_list:
+                if not isinstance(val, str):
+                    # If val is not a string, it's from an external parser and we can ignore parsing the rest of the
+                    # list.
+                    break
                 val = val.strip()
                 if val.startswith('[') and val.endswith(']'):
                     val = val[1:-1].strip()
