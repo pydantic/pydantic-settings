@@ -1615,13 +1615,10 @@ def test_secrets_missing_location_multiple_one(tmp_path):
     (d1 := tmp_path / 'dir1').mkdir()
     (d1 / 'foo').write_text('secret_value')
 
-    with pytest.warns() as record:
+    with pytest.warns(UserWarning, match=f'directory "{tmp_path}/dir2" does not exist'):
         conf = Settings(_secrets_dir=[d1, tmp_path / 'dir2'])
 
     assert conf.foo == 'secret_value'  # value obtained from first directory
-    assert len(record) == 1
-    assert record[0].category is UserWarning
-    assert str(record[0].message) == f'directory "{tmp_path}/dir2" does not exist'
 
 
 @pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
@@ -1668,13 +1665,10 @@ def test_secrets_file_is_a_directory_multiple_one(tmp_path):
     (d1 / 'foo').write_text('secret_value')
     (d2 / 'foo').mkdir()
 
-    with pytest.warns() as record:
+    with pytest.warns(UserWarning, match=f'attempted to load secret file "{d2}/foo" but found a directory instead.'):
         conf = Settings(_secrets_dir=[d1, d2])
 
     assert conf.foo == 'secret_value'  # value obtained from first directory
-    assert len(record) == 1
-    assert record[0].category is UserWarning
-    assert str(record[0].message) == f'attempted to load secret file "{d2}/foo" but found a directory instead.'
 
 
 def test_secrets_dotenv_precedence(tmp_path):
