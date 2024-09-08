@@ -855,13 +855,13 @@ class Beta(BaseModel):
 
 
 class Gamma(BaseModel):
-    """Beta Help"""
+    """Gamma Help"""
 
     opt_gamma: str = Field(alias='opt-gamma')
 
 
 class Root(BaseSettings, cli_parse_args=True, cli_exit_on_error=False):
-    subcommand: CliSubCommand[Union[Alpha, Beta]] = Field(alias='sub-command')
+    alpha_or_beta: CliSubCommand[Union[Alpha, Beta]] = Field(alias='alpha-or-beta-cmd')
     gamma: CliSubCommand[Gamma] = Field(alias='gamma-cmd')
 
 
@@ -922,7 +922,8 @@ when necessary.
     For `python < 3.9` the `--no-flag` option is not generated due to an underlying `argparse` limitation.
 
 !!! note
-    For `python < 3.9` the `CliImplicitFlag` and `CliExplicitFlag` annotations can only be applied to optional bool fields.
+    For `python < 3.9` the `CliImplicitFlag` and `CliExplicitFlag` annotations can only be applied to optional boolean
+    fields.
 
 ```py
 from pydantic_settings import BaseSettings, CliExplicitFlag, CliImplicitFlag
