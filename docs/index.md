@@ -820,7 +820,7 @@ assert get_subcommand(cmd).model_dump() == {
 The `CliSubCommand` and `CliPositionalArg` annotations also support union operations and aliases. For unions of Pydantic
 models, it is important to remember the [nuances](https://docs.pydantic.dev/latest/concepts/unions/) that can arise
 during validation. Specifically, for unions of subcommands that are identical in content, it is recommended to break
-them out into separate `CliSubCommand` fields to avoid any complications. Lastly, the derived sub command names from
+them out into separate `CliSubCommand` fields to avoid any complications. Lastly, the derived subcommand names from
 unions will be the names of the Pydantic model classes themselves.
 
 When assigning aliases to `CliSubCommand` or `CliPositionalArg` fields, only a single alias can be assigned. For
@@ -1273,6 +1273,22 @@ Even when using a secrets directory, *pydantic* will still read environment vari
 
 Passing a file path via the `_secrets_dir` keyword argument on instantiation (method 2) will override
 the value (if any) set on the `model_config` class.
+
+If you need to load settings from multiple secrets directories, you can pass multiple paths as a tuple or list. Just like for `env_file`, values from subsequent paths override previous ones.
+
+````python
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    # files in '/run/secrets' take priority over '/var/run'
+    model_config = SettingsConfigDict(secrets_dir=('/var/run', '/run/secrets'))
+
+    database_password: str
+````
+
+If any of `secrets_dir` is missing, it is ignored, and warning is shown. If any of `secrets_dir` is a file, error is raised.
+
 
 ### Use Case: Docker Secrets
 

@@ -1416,6 +1416,33 @@ def test_secrets_path(tmp_path):
     assert Settings().model_dump() == {'foo': 'foo_secret_value_str'}
 
 
+def test_secrets_path_multiple(tmp_path):
+    d1 = tmp_path / 'dir1'
+    d2 = tmp_path / 'dir2'
+    d1.mkdir()
+    d2.mkdir()
+    (d1 / 'foo1').write_text('foo1_dir1_secret_value_str')
+    (d1 / 'foo2').write_text('foo2_dir1_secret_value_str')
+    (d2 / 'foo2').write_text('foo2_dir2_secret_value_str')
+    (d2 / 'foo3').write_text('foo3_dir2_secret_value_str')
+
+    class Settings(BaseSettings):
+        foo1: str
+        foo2: str
+        foo3: str
+
+    assert Settings(_secrets_dir=(d1, d2)).model_dump() == {
+        'foo1': 'foo1_dir1_secret_value_str',
+        'foo2': 'foo2_dir2_secret_value_str',  # dir2 takes priority
+        'foo3': 'foo3_dir2_secret_value_str',
+    }
+    assert Settings(_secrets_dir=(d2, d1)).model_dump() == {
+        'foo1': 'foo1_dir1_secret_value_str',
+        'foo2': 'foo2_dir1_secret_value_str',  # dir1 takes priority
+        'foo3': 'foo3_dir2_secret_value_str',
+    }
+
+
 def test_secrets_path_with_validation_alias(tmp_path):
     p = tmp_path / 'foo'
     p.write_text('{"bar": ["test"]}')
@@ -1535,6 +1562,28 @@ def test_secrets_invalid_secrets_dir(tmp_path):
         Settings()
 
 
+def test_secrets_invalid_secrets_dir_multiple_all(tmp_path):
+    class Settings(BaseSettings):
+        foo: str
+
+    (d1 := tmp_path / 'dir1').write_text('')
+    (d2 := tmp_path / 'dir2').write_text('')
+
+    with pytest.raises(SettingsError, match='secrets_dir must reference a directory, not a file'):
+        Settings(_secrets_dir=[d1, d2])
+
+
+def test_secrets_invalid_secrets_dir_multiple_one(tmp_path):
+    class Settings(BaseSettings):
+        foo: str
+
+    (d1 := tmp_path / 'dir1').mkdir()
+    (d2 := tmp_path / 'dir2').write_text('')
+
+    with pytest.raises(SettingsError, match='secrets_dir must reference a directory, not a file'):
+        Settings(_secrets_dir=[d1, d2])
+
+
 @pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
 def test_secrets_missing_location(tmp_path):
     class Settings(BaseSettings):
@@ -1542,6 +1591,34 @@ def test_secrets_missing_location(tmp_path):
 
     with pytest.warns(UserWarning, match=f'directory "{tmp_path}/does_not_exist" does not exist'):
         Settings()
+
+
+@pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
+def test_secrets_missing_location_multiple_all(tmp_path):
+    class Settings(BaseSettings):
+        foo: Optional[str] = None
+
+    with pytest.warns() as record:
+        Settings(_secrets_dir=[tmp_path / 'dir1', tmp_path / 'dir2'])
+
+    assert len(record) == 2
+    assert record[0].category is UserWarning and record[1].category is UserWarning
+    assert str(record[0].message) == f'directory "{tmp_path}/dir1" does not exist'
+    assert str(record[1].message) == f'directory "{tmp_path}/dir2" does not exist'
+
+
+@pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
+def test_secrets_missing_location_multiple_one(tmp_path):
+    class Settings(BaseSettings):
+        foo: Optional[str] = None
+
+    (d1 := tmp_path / 'dir1').mkdir()
+    (d1 / 'foo').write_text('secret_value')
+
+    with pytest.warns(UserWarning, match=f'directory "{tmp_path}/dir2" does not exist'):
+        conf = Settings(_secrets_dir=[d1, tmp_path / 'dir2'])
+
+    assert conf.foo == 'secret_value'  # value obtained from first directory
 
 
 @pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
@@ -1556,6 +1633,42 @@ def test_secrets_file_is_a_directory(tmp_path):
 
     with pytest.warns(UserWarning, match=f'attempted to load secret file "{tmp_path}/foo" but found a directory inste'):
         Settings()
+
+
+@pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
+def test_secrets_file_is_a_directory_multiple_all(tmp_path):
+    class Settings(BaseSettings):
+        foo: Optional[str] = None
+
+    (d1 := tmp_path / 'dir1').mkdir()
+    (d2 := tmp_path / 'dir2').mkdir()
+    (d1 / 'foo').mkdir()
+    (d2 / 'foo').mkdir()
+
+    with pytest.warns() as record:
+        Settings(_secrets_dir=[d1, d2])
+
+    assert len(record) == 2
+    assert record[0].category is UserWarning and record[1].category is UserWarning
+    # warnings are emitted in reverse order
+    assert str(record[0].message) == f'attempted to load secret file "{d2}/foo" but found a directory instead.'
+    assert str(record[1].message) == f'attempted to load secret file "{d1}/foo" but found a directory instead.'
+
+
+@pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
+def test_secrets_file_is_a_directory_multiple_one(tmp_path):
+    class Settings(BaseSettings):
+        foo: Optional[str] = None
+
+    (d1 := tmp_path / 'dir1').mkdir()
+    (d2 := tmp_path / 'dir2').mkdir()
+    (d1 / 'foo').write_text('secret_value')
+    (d2 / 'foo').mkdir()
+
+    with pytest.warns(UserWarning, match=f'attempted to load secret file "{d2}/foo" but found a directory instead.'):
+        conf = Settings(_secrets_dir=[d1, d2])
+
+    assert conf.foo == 'secret_value'  # value obtained from first directory
 
 
 def test_secrets_dotenv_precedence(tmp_path):
@@ -3908,21 +4021,51 @@ def test_cli_user_settings_source(parser_type, prefix):
         cli_cfg_settings = CliSettingsSource(Cfg, cli_prefix=prefix, root_parser=parser)
 
     add_arg('--fruit', choices=['pear', 'kiwi', 'lime'])
+    add_arg('--num-list', action='append', type=int)
+    add_arg('--num', type=int)
 
-    args = ['--fruit', 'pear']
+    args = ['--fruit', 'pear', '--num', '0', '--num-list', '1', '--num-list', '2', '--num-list', '3']
     parsed_args = parse_args(args)
     assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=parsed_args)).model_dump() == {'pet': 'bird'}
     assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {'pet': 'bird'}
     assert Cfg(_cli_settings_source=cli_cfg_settings(args=False)).model_dump() == {'pet': 'bird'}
 
     arg_prefix = f'{prefix}.' if prefix else ''
-    args = ['--fruit', 'kiwi', f'--{arg_prefix}pet', 'dog']
+    args = [
+        '--fruit',
+        'kiwi',
+        '--num',
+        '0',
+        '--num-list',
+        '1',
+        '--num-list',
+        '2',
+        '--num-list',
+        '3',
+        f'--{arg_prefix}pet',
+        'dog',
+    ]
     parsed_args = parse_args(args)
     assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=parsed_args)).model_dump() == {'pet': 'dog'}
     assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {'pet': 'dog'}
     assert Cfg(_cli_settings_source=cli_cfg_settings(args=False)).model_dump() == {'pet': 'bird'}
 
-    parsed_args = parse_args(['--fruit', 'kiwi', f'--{arg_prefix}pet', 'cat'])
+    parsed_args = parse_args(
+        [
+            '--fruit',
+            'kiwi',
+            '--num',
+            '0',
+            '--num-list',
+            '1',
+            '--num-list',
+            '2',
+            '--num-list',
+            '3',
+            f'--{arg_prefix}pet',
+            'cat',
+        ]
+    )
     assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=vars(parsed_args))).model_dump() == {'pet': 'cat'}
     assert Cfg(_cli_settings_source=cli_cfg_settings(args=False)).model_dump() == {'pet': 'bird'}
 
