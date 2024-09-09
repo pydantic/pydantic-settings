@@ -2555,6 +2555,53 @@ def test_cli_source_prioritization(env):
     assert cfg.model_dump() == {'foo': 'FOO FROM ENV'}
 
 
+def test_cli_alias_subcommand_and_positional_args(capsys, monkeypatch):
+    class SubCmd(BaseModel):
+        pos_arg: CliPositionalArg[str] = Field(validation_alias='pos-arg')
+
+    class Cfg(BaseSettings):
+        sub_cmd: CliSubCommand[SubCmd] = Field(validation_alias='sub-cmd')
+
+    cfg = Cfg(**{'sub-cmd': {'pos-arg': 'howdy'}})
+    assert cfg.model_dump() == {'sub_cmd': {'pos_arg': 'howdy'}}
+
+    cfg = Cfg(_cli_parse_args=['sub-cmd', 'howdy'])
+    assert cfg.model_dump() == {'sub_cmd': {'pos_arg': 'howdy'}}
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Cfg(_cli_parse_args=True)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] {{sub-cmd}} ...
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help  show this help message and exit
+
+subcommands:
+  {{sub-cmd}}
+    sub-cmd
+"""
+        )
+        m.setattr(sys, 'argv', ['example.py', 'sub-cmd', '--help'])
+
+        with pytest.raises(SystemExit):
+            Cfg(_cli_parse_args=True)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py sub-cmd [-h] POS-ARG
+
+positional arguments:
+  POS-ARG
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help  show this help message and exit
+"""
+        )
+
+
 @pytest.mark.parametrize('avoid_json', [True, False])
 def test_cli_alias_arg(capsys, monkeypatch, avoid_json):
     class Cfg(BaseSettings, cli_avoid_json=avoid_json):
@@ -2625,20 +2672,20 @@ def test_cli_alias_nested_arg(capsys, monkeypatch, avoid_json):
 
 
 def test_cli_alias_exceptions(capsys, monkeypatch):
-    with pytest.raises(SettingsError, match='subcommand argument BadCliSubCommand.foo has an alias'):
+    with pytest.raises(SettingsError, match='subcommand argument BadCliSubCommand.foo has multiple aliases'):
 
         class SubCmd(BaseModel):
             v0: int
 
         class BadCliSubCommand(BaseSettings):
-            foo: CliSubCommand[SubCmd] = Field(alias='bar')
+            foo: CliSubCommand[SubCmd] = Field(validation_alias=AliasChoices('bar', 'boo'))
 
         BadCliSubCommand(_cli_parse_args=True)
 
-    with pytest.raises(SettingsError, match='positional argument BadCliPositionalArg.foo has an alias'):
+    with pytest.raises(SettingsError, match='positional argument BadCliPositionalArg.foo has multiple alias'):
 
         class BadCliPositionalArg(BaseSettings):
-            foo: CliPositionalArg[int] = Field(alias='bar')
+            foo: CliPositionalArg[int] = Field(validation_alias=AliasChoices('bar', 'boo'))
 
         BadCliPositionalArg(_cli_parse_args=True)
 
@@ -3213,6 +3260,201 @@ def test_cli_nested_dict_arg():
         cfg = Cfg(_cli_parse_args=args)
 
 
+def test_cli_subcommand_union(capsys, monkeypatch):
+    class AlphaCmd(BaseModel):
+        """Alpha Help"""
+
+        a: str
+
+    class BetaCmd(BaseModel):
+        """Beta Help"""
+
+        b: str
+
+    class GammaCmd(BaseModel):
+        """Gamma Help"""
+
+        g: str
+
+    class Root1(BaseSettings):
+        """Root Help"""
+
+        subcommand: CliSubCommand[Union[AlphaCmd, BetaCmd, GammaCmd]] = Field(description='Field Help')
+
+    alpha = Root1(_cli_parse_args=['AlphaCmd', '-a=alpha'])
+    assert get_subcommand(alpha).model_dump() == {'a': 'alpha'}
+    assert alpha.model_dump() == {'subcommand': {'a': 'alpha'}}
+    beta = Root1(_cli_parse_args=['BetaCmd', '-b=beta'])
+    assert get_subcommand(beta).model_dump() == {'b': 'beta'}
+    assert beta.model_dump() == {'subcommand': {'b': 'beta'}}
+    gamma = Root1(_cli_parse_args=['GammaCmd', '-g=gamma'])
+    assert get_subcommand(gamma).model_dump() == {'g': 'gamma'}
+    assert gamma.model_dump() == {'subcommand': {'g': 'gamma'}}
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Root1(_cli_parse_args=True)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] {{AlphaCmd,BetaCmd,GammaCmd}} ...
+
+Root Help
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+
+subcommands:
+  Field Help
+
+  {{AlphaCmd,BetaCmd,GammaCmd}}
+    AlphaCmd
+    BetaCmd
+    GammaCmd
+"""
+        )
+
+        with pytest.raises(SystemExit):
+            Root1(_cli_parse_args=True, _cli_use_class_docs_for_groups=True)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] {{AlphaCmd,BetaCmd,GammaCmd}} ...
+
+Root Help
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+
+subcommands:
+  Field Help
+
+  {{AlphaCmd,BetaCmd,GammaCmd}}
+    AlphaCmd            Alpha Help
+    BetaCmd             Beta Help
+    GammaCmd            Gamma Help
+"""
+        )
+
+    class Root2(BaseSettings):
+        """Root Help"""
+
+        subcommand: CliSubCommand[Union[AlphaCmd, GammaCmd]] = Field(description='Field Help')
+        beta: CliSubCommand[BetaCmd] = Field(description='Field Beta Help')
+
+    alpha = Root2(_cli_parse_args=['AlphaCmd', '-a=alpha'])
+    assert get_subcommand(alpha).model_dump() == {'a': 'alpha'}
+    assert alpha.model_dump() == {'subcommand': {'a': 'alpha'}, 'beta': None}
+    beta = Root2(_cli_parse_args=['beta', '-b=beta'])
+    assert get_subcommand(beta).model_dump() == {'b': 'beta'}
+    assert beta.model_dump() == {'subcommand': None, 'beta': {'b': 'beta'}}
+    gamma = Root2(_cli_parse_args=['GammaCmd', '-g=gamma'])
+    assert get_subcommand(gamma).model_dump() == {'g': 'gamma'}
+    assert gamma.model_dump() == {'subcommand': {'g': 'gamma'}, 'beta': None}
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Root2(_cli_parse_args=True)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] {{AlphaCmd,GammaCmd,beta}} ...
+
+Root Help
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+
+subcommands:
+  Field Help
+
+  {{AlphaCmd,GammaCmd,beta}}
+    AlphaCmd
+    GammaCmd
+    beta                Field Beta Help
+"""
+        )
+
+        with pytest.raises(SystemExit):
+            Root2(_cli_parse_args=True, _cli_use_class_docs_for_groups=True)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] {{AlphaCmd,GammaCmd,beta}} ...
+
+Root Help
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+
+subcommands:
+  Field Help
+
+  {{AlphaCmd,GammaCmd,beta}}
+    AlphaCmd            Alpha Help
+    GammaCmd            Gamma Help
+    beta                Beta Help
+"""
+        )
+
+    class Root3(BaseSettings):
+        """Root Help"""
+
+        beta: CliSubCommand[BetaCmd] = Field(description='Field Beta Help')
+        subcommand: CliSubCommand[Union[AlphaCmd, GammaCmd]] = Field(description='Field Help')
+
+    alpha = Root3(_cli_parse_args=['AlphaCmd', '-a=alpha'])
+    assert get_subcommand(alpha).model_dump() == {'a': 'alpha'}
+    assert alpha.model_dump() == {'subcommand': {'a': 'alpha'}, 'beta': None}
+    beta = Root3(_cli_parse_args=['beta', '-b=beta'])
+    assert get_subcommand(beta).model_dump() == {'b': 'beta'}
+    assert beta.model_dump() == {'subcommand': None, 'beta': {'b': 'beta'}}
+    gamma = Root3(_cli_parse_args=['GammaCmd', '-g=gamma'])
+    assert get_subcommand(gamma).model_dump() == {'g': 'gamma'}
+    assert gamma.model_dump() == {'subcommand': {'g': 'gamma'}, 'beta': None}
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Root3(_cli_parse_args=True)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] {{beta,AlphaCmd,GammaCmd}} ...
+
+Root Help
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+
+subcommands:
+  {{beta,AlphaCmd,GammaCmd}}
+    beta                Field Beta Help
+    AlphaCmd
+    GammaCmd
+"""
+        )
+
+        with pytest.raises(SystemExit):
+            Root3(_cli_parse_args=True, _cli_use_class_docs_for_groups=True)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] {{beta,AlphaCmd,GammaCmd}} ...
+
+Root Help
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+
+subcommands:
+  {{beta,AlphaCmd,GammaCmd}}
+    beta                Beta Help
+    AlphaCmd            Alpha Help
+    GammaCmd            Gamma Help
+"""
+        )
+
+
 def test_cli_subcommand_with_positionals():
     @pydantic_dataclasses.dataclass
     class FooPlugin:
@@ -3414,16 +3656,17 @@ def test_cli_annotation_exceptions(monkeypatch):
             SubCommandHasDefault()
 
         with pytest.raises(
-            SettingsError, match='subcommand argument SubCommandMultipleTypes.subcmd has multiple types'
+            SettingsError,
+            match='subcommand argument SubCommandMultipleTypes.subcmd has type not derived from BaseModel',
         ):
 
             class SubCommandMultipleTypes(BaseSettings, cli_parse_args=True):
-                subcmd: CliSubCommand[Union[SubCmd, SubCmdAlt]]
+                subcmd: CliSubCommand[Union[SubCmd, str]]
 
             SubCommandMultipleTypes()
 
         with pytest.raises(
-            SettingsError, match='subcommand argument SubCommandNotModel.subcmd is not derived from BaseModel'
+            SettingsError, match='subcommand argument SubCommandNotModel.subcmd has type not derived from BaseModel'
         ):
 
             class SubCommandNotModel(BaseSettings, cli_parse_args=True):
