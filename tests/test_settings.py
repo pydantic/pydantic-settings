@@ -1416,6 +1416,33 @@ def test_secrets_path(tmp_path):
     assert Settings().model_dump() == {'foo': 'foo_secret_value_str'}
 
 
+def test_secrets_path_multiple(tmp_path):
+    d1 = tmp_path / 'dir1'
+    d2 = tmp_path / 'dir2'
+    d1.mkdir()
+    d2.mkdir()
+    (d1 / 'foo1').write_text('foo1_dir1_secret_value_str')
+    (d1 / 'foo2').write_text('foo2_dir1_secret_value_str')
+    (d2 / 'foo2').write_text('foo2_dir2_secret_value_str')
+    (d2 / 'foo3').write_text('foo3_dir2_secret_value_str')
+
+    class Settings(BaseSettings):
+        foo1: str
+        foo2: str
+        foo3: str
+
+    assert Settings(_secrets_dir=(d1, d2)).model_dump() == {
+        'foo1': 'foo1_dir1_secret_value_str',
+        'foo2': 'foo2_dir2_secret_value_str',  # dir2 takes priority
+        'foo3': 'foo3_dir2_secret_value_str',
+    }
+    assert Settings(_secrets_dir=(d2, d1)).model_dump() == {
+        'foo1': 'foo1_dir1_secret_value_str',
+        'foo2': 'foo2_dir1_secret_value_str',  # dir1 takes priority
+        'foo3': 'foo3_dir2_secret_value_str',
+    }
+
+
 def test_secrets_path_with_validation_alias(tmp_path):
     p = tmp_path / 'foo'
     p.write_text('{"bar": ["test"]}')
@@ -1535,6 +1562,28 @@ def test_secrets_invalid_secrets_dir(tmp_path):
         Settings()
 
 
+def test_secrets_invalid_secrets_dir_multiple_all(tmp_path):
+    class Settings(BaseSettings):
+        foo: str
+
+    (d1 := tmp_path / 'dir1').write_text('')
+    (d2 := tmp_path / 'dir2').write_text('')
+
+    with pytest.raises(SettingsError, match='secrets_dir must reference a directory, not a file'):
+        Settings(_secrets_dir=[d1, d2])
+
+
+def test_secrets_invalid_secrets_dir_multiple_one(tmp_path):
+    class Settings(BaseSettings):
+        foo: str
+
+    (d1 := tmp_path / 'dir1').mkdir()
+    (d2 := tmp_path / 'dir2').write_text('')
+
+    with pytest.raises(SettingsError, match='secrets_dir must reference a directory, not a file'):
+        Settings(_secrets_dir=[d1, d2])
+
+
 @pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
 def test_secrets_missing_location(tmp_path):
     class Settings(BaseSettings):
@@ -1542,6 +1591,34 @@ def test_secrets_missing_location(tmp_path):
 
     with pytest.warns(UserWarning, match=f'directory "{tmp_path}/does_not_exist" does not exist'):
         Settings()
+
+
+@pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
+def test_secrets_missing_location_multiple_all(tmp_path):
+    class Settings(BaseSettings):
+        foo: Optional[str] = None
+
+    with pytest.warns() as record:
+        Settings(_secrets_dir=[tmp_path / 'dir1', tmp_path / 'dir2'])
+
+    assert len(record) == 2
+    assert record[0].category is UserWarning and record[1].category is UserWarning
+    assert str(record[0].message) == f'directory "{tmp_path}/dir1" does not exist'
+    assert str(record[1].message) == f'directory "{tmp_path}/dir2" does not exist'
+
+
+@pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
+def test_secrets_missing_location_multiple_one(tmp_path):
+    class Settings(BaseSettings):
+        foo: Optional[str] = None
+
+    (d1 := tmp_path / 'dir1').mkdir()
+    (d1 / 'foo').write_text('secret_value')
+
+    with pytest.warns(UserWarning, match=f'directory "{tmp_path}/dir2" does not exist'):
+        conf = Settings(_secrets_dir=[d1, tmp_path / 'dir2'])
+
+    assert conf.foo == 'secret_value'  # value obtained from first directory
 
 
 @pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
@@ -1556,6 +1633,42 @@ def test_secrets_file_is_a_directory(tmp_path):
 
     with pytest.warns(UserWarning, match=f'attempted to load secret file "{tmp_path}/foo" but found a directory inste'):
         Settings()
+
+
+@pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
+def test_secrets_file_is_a_directory_multiple_all(tmp_path):
+    class Settings(BaseSettings):
+        foo: Optional[str] = None
+
+    (d1 := tmp_path / 'dir1').mkdir()
+    (d2 := tmp_path / 'dir2').mkdir()
+    (d1 / 'foo').mkdir()
+    (d2 / 'foo').mkdir()
+
+    with pytest.warns() as record:
+        Settings(_secrets_dir=[d1, d2])
+
+    assert len(record) == 2
+    assert record[0].category is UserWarning and record[1].category is UserWarning
+    # warnings are emitted in reverse order
+    assert str(record[0].message) == f'attempted to load secret file "{d2}/foo" but found a directory instead.'
+    assert str(record[1].message) == f'attempted to load secret file "{d1}/foo" but found a directory instead.'
+
+
+@pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
+def test_secrets_file_is_a_directory_multiple_one(tmp_path):
+    class Settings(BaseSettings):
+        foo: Optional[str] = None
+
+    (d1 := tmp_path / 'dir1').mkdir()
+    (d2 := tmp_path / 'dir2').mkdir()
+    (d1 / 'foo').write_text('secret_value')
+    (d2 / 'foo').mkdir()
+
+    with pytest.warns(UserWarning, match=f'attempted to load secret file "{d2}/foo" but found a directory instead.'):
+        conf = Settings(_secrets_dir=[d1, d2])
+
+    assert conf.foo == 'secret_value'  # value obtained from first directory
 
 
 def test_secrets_dotenv_precedence(tmp_path):
@@ -2442,6 +2555,53 @@ def test_cli_source_prioritization(env):
     assert cfg.model_dump() == {'foo': 'FOO FROM ENV'}
 
 
+def test_cli_alias_subcommand_and_positional_args(capsys, monkeypatch):
+    class SubCmd(BaseModel):
+        pos_arg: CliPositionalArg[str] = Field(validation_alias='pos-arg')
+
+    class Cfg(BaseSettings):
+        sub_cmd: CliSubCommand[SubCmd] = Field(validation_alias='sub-cmd')
+
+    cfg = Cfg(**{'sub-cmd': {'pos-arg': 'howdy'}})
+    assert cfg.model_dump() == {'sub_cmd': {'pos_arg': 'howdy'}}
+
+    cfg = Cfg(_cli_parse_args=['sub-cmd', 'howdy'])
+    assert cfg.model_dump() == {'sub_cmd': {'pos_arg': 'howdy'}}
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Cfg(_cli_parse_args=True)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] {{sub-cmd}} ...
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help  show this help message and exit
+
+subcommands:
+  {{sub-cmd}}
+    sub-cmd
+"""
+        )
+        m.setattr(sys, 'argv', ['example.py', 'sub-cmd', '--help'])
+
+        with pytest.raises(SystemExit):
+            Cfg(_cli_parse_args=True)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py sub-cmd [-h] POS-ARG
+
+positional arguments:
+  POS-ARG
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help  show this help message and exit
+"""
+        )
+
+
 @pytest.mark.parametrize('avoid_json', [True, False])
 def test_cli_alias_arg(capsys, monkeypatch, avoid_json):
     class Cfg(BaseSettings, cli_avoid_json=avoid_json):
@@ -2512,20 +2672,20 @@ def test_cli_alias_nested_arg(capsys, monkeypatch, avoid_json):
 
 
 def test_cli_alias_exceptions(capsys, monkeypatch):
-    with pytest.raises(SettingsError, match='subcommand argument BadCliSubCommand.foo has an alias'):
+    with pytest.raises(SettingsError, match='subcommand argument BadCliSubCommand.foo has multiple aliases'):
 
         class SubCmd(BaseModel):
             v0: int
 
         class BadCliSubCommand(BaseSettings):
-            foo: CliSubCommand[SubCmd] = Field(alias='bar')
+            foo: CliSubCommand[SubCmd] = Field(validation_alias=AliasChoices('bar', 'boo'))
 
         BadCliSubCommand(_cli_parse_args=True)
 
-    with pytest.raises(SettingsError, match='positional argument BadCliPositionalArg.foo has an alias'):
+    with pytest.raises(SettingsError, match='positional argument BadCliPositionalArg.foo has multiple alias'):
 
         class BadCliPositionalArg(BaseSettings):
-            foo: CliPositionalArg[int] = Field(alias='bar')
+            foo: CliPositionalArg[int] = Field(validation_alias=AliasChoices('bar', 'boo'))
 
         BadCliPositionalArg(_cli_parse_args=True)
 
@@ -3100,6 +3260,201 @@ def test_cli_nested_dict_arg():
         cfg = Cfg(_cli_parse_args=args)
 
 
+def test_cli_subcommand_union(capsys, monkeypatch):
+    class AlphaCmd(BaseModel):
+        """Alpha Help"""
+
+        a: str
+
+    class BetaCmd(BaseModel):
+        """Beta Help"""
+
+        b: str
+
+    class GammaCmd(BaseModel):
+        """Gamma Help"""
+
+        g: str
+
+    class Root1(BaseSettings):
+        """Root Help"""
+
+        subcommand: CliSubCommand[Union[AlphaCmd, BetaCmd, GammaCmd]] = Field(description='Field Help')
+
+    alpha = Root1(_cli_parse_args=['AlphaCmd', '-a=alpha'])
+    assert get_subcommand(alpha).model_dump() == {'a': 'alpha'}
+    assert alpha.model_dump() == {'subcommand': {'a': 'alpha'}}
+    beta = Root1(_cli_parse_args=['BetaCmd', '-b=beta'])
+    assert get_subcommand(beta).model_dump() == {'b': 'beta'}
+    assert beta.model_dump() == {'subcommand': {'b': 'beta'}}
+    gamma = Root1(_cli_parse_args=['GammaCmd', '-g=gamma'])
+    assert get_subcommand(gamma).model_dump() == {'g': 'gamma'}
+    assert gamma.model_dump() == {'subcommand': {'g': 'gamma'}}
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Root1(_cli_parse_args=True)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] {{AlphaCmd,BetaCmd,GammaCmd}} ...
+
+Root Help
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+
+subcommands:
+  Field Help
+
+  {{AlphaCmd,BetaCmd,GammaCmd}}
+    AlphaCmd
+    BetaCmd
+    GammaCmd
+"""
+        )
+
+        with pytest.raises(SystemExit):
+            Root1(_cli_parse_args=True, _cli_use_class_docs_for_groups=True)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] {{AlphaCmd,BetaCmd,GammaCmd}} ...
+
+Root Help
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+
+subcommands:
+  Field Help
+
+  {{AlphaCmd,BetaCmd,GammaCmd}}
+    AlphaCmd            Alpha Help
+    BetaCmd             Beta Help
+    GammaCmd            Gamma Help
+"""
+        )
+
+    class Root2(BaseSettings):
+        """Root Help"""
+
+        subcommand: CliSubCommand[Union[AlphaCmd, GammaCmd]] = Field(description='Field Help')
+        beta: CliSubCommand[BetaCmd] = Field(description='Field Beta Help')
+
+    alpha = Root2(_cli_parse_args=['AlphaCmd', '-a=alpha'])
+    assert get_subcommand(alpha).model_dump() == {'a': 'alpha'}
+    assert alpha.model_dump() == {'subcommand': {'a': 'alpha'}, 'beta': None}
+    beta = Root2(_cli_parse_args=['beta', '-b=beta'])
+    assert get_subcommand(beta).model_dump() == {'b': 'beta'}
+    assert beta.model_dump() == {'subcommand': None, 'beta': {'b': 'beta'}}
+    gamma = Root2(_cli_parse_args=['GammaCmd', '-g=gamma'])
+    assert get_subcommand(gamma).model_dump() == {'g': 'gamma'}
+    assert gamma.model_dump() == {'subcommand': {'g': 'gamma'}, 'beta': None}
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Root2(_cli_parse_args=True)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] {{AlphaCmd,GammaCmd,beta}} ...
+
+Root Help
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+
+subcommands:
+  Field Help
+
+  {{AlphaCmd,GammaCmd,beta}}
+    AlphaCmd
+    GammaCmd
+    beta                Field Beta Help
+"""
+        )
+
+        with pytest.raises(SystemExit):
+            Root2(_cli_parse_args=True, _cli_use_class_docs_for_groups=True)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] {{AlphaCmd,GammaCmd,beta}} ...
+
+Root Help
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+
+subcommands:
+  Field Help
+
+  {{AlphaCmd,GammaCmd,beta}}
+    AlphaCmd            Alpha Help
+    GammaCmd            Gamma Help
+    beta                Beta Help
+"""
+        )
+
+    class Root3(BaseSettings):
+        """Root Help"""
+
+        beta: CliSubCommand[BetaCmd] = Field(description='Field Beta Help')
+        subcommand: CliSubCommand[Union[AlphaCmd, GammaCmd]] = Field(description='Field Help')
+
+    alpha = Root3(_cli_parse_args=['AlphaCmd', '-a=alpha'])
+    assert get_subcommand(alpha).model_dump() == {'a': 'alpha'}
+    assert alpha.model_dump() == {'subcommand': {'a': 'alpha'}, 'beta': None}
+    beta = Root3(_cli_parse_args=['beta', '-b=beta'])
+    assert get_subcommand(beta).model_dump() == {'b': 'beta'}
+    assert beta.model_dump() == {'subcommand': None, 'beta': {'b': 'beta'}}
+    gamma = Root3(_cli_parse_args=['GammaCmd', '-g=gamma'])
+    assert get_subcommand(gamma).model_dump() == {'g': 'gamma'}
+    assert gamma.model_dump() == {'subcommand': {'g': 'gamma'}, 'beta': None}
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Root3(_cli_parse_args=True)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] {{beta,AlphaCmd,GammaCmd}} ...
+
+Root Help
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+
+subcommands:
+  {{beta,AlphaCmd,GammaCmd}}
+    beta                Field Beta Help
+    AlphaCmd
+    GammaCmd
+"""
+        )
+
+        with pytest.raises(SystemExit):
+            Root3(_cli_parse_args=True, _cli_use_class_docs_for_groups=True)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] {{beta,AlphaCmd,GammaCmd}} ...
+
+Root Help
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+
+subcommands:
+  {{beta,AlphaCmd,GammaCmd}}
+    beta                Beta Help
+    AlphaCmd            Alpha Help
+    GammaCmd            Gamma Help
+"""
+        )
+
+
 def test_cli_subcommand_with_positionals():
     @pydantic_dataclasses.dataclass
     class FooPlugin:
@@ -3301,16 +3656,17 @@ def test_cli_annotation_exceptions(monkeypatch):
             SubCommandHasDefault()
 
         with pytest.raises(
-            SettingsError, match='subcommand argument SubCommandMultipleTypes.subcmd has multiple types'
+            SettingsError,
+            match='subcommand argument SubCommandMultipleTypes.subcmd has type not derived from BaseModel',
         ):
 
             class SubCommandMultipleTypes(BaseSettings, cli_parse_args=True):
-                subcmd: CliSubCommand[Union[SubCmd, SubCmdAlt]]
+                subcmd: CliSubCommand[Union[SubCmd, str]]
 
             SubCommandMultipleTypes()
 
         with pytest.raises(
-            SettingsError, match='subcommand argument SubCommandNotModel.subcmd is not derived from BaseModel'
+            SettingsError, match='subcommand argument SubCommandNotModel.subcmd has type not derived from BaseModel'
         ):
 
             class SubCommandNotModel(BaseSettings, cli_parse_args=True):
@@ -3665,21 +4021,51 @@ def test_cli_user_settings_source(parser_type, prefix):
         cli_cfg_settings = CliSettingsSource(Cfg, cli_prefix=prefix, root_parser=parser)
 
     add_arg('--fruit', choices=['pear', 'kiwi', 'lime'])
+    add_arg('--num-list', action='append', type=int)
+    add_arg('--num', type=int)
 
-    args = ['--fruit', 'pear']
+    args = ['--fruit', 'pear', '--num', '0', '--num-list', '1', '--num-list', '2', '--num-list', '3']
     parsed_args = parse_args(args)
     assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=parsed_args)).model_dump() == {'pet': 'bird'}
     assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {'pet': 'bird'}
     assert Cfg(_cli_settings_source=cli_cfg_settings(args=False)).model_dump() == {'pet': 'bird'}
 
     arg_prefix = f'{prefix}.' if prefix else ''
-    args = ['--fruit', 'kiwi', f'--{arg_prefix}pet', 'dog']
+    args = [
+        '--fruit',
+        'kiwi',
+        '--num',
+        '0',
+        '--num-list',
+        '1',
+        '--num-list',
+        '2',
+        '--num-list',
+        '3',
+        f'--{arg_prefix}pet',
+        'dog',
+    ]
     parsed_args = parse_args(args)
     assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=parsed_args)).model_dump() == {'pet': 'dog'}
     assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {'pet': 'dog'}
     assert Cfg(_cli_settings_source=cli_cfg_settings(args=False)).model_dump() == {'pet': 'bird'}
 
-    parsed_args = parse_args(['--fruit', 'kiwi', f'--{arg_prefix}pet', 'cat'])
+    parsed_args = parse_args(
+        [
+            '--fruit',
+            'kiwi',
+            '--num',
+            '0',
+            '--num-list',
+            '1',
+            '--num-list',
+            '2',
+            '--num-list',
+            '3',
+            f'--{arg_prefix}pet',
+            'cat',
+        ]
+    )
     assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=vars(parsed_args))).model_dump() == {'pet': 'cat'}
     assert Cfg(_cli_settings_source=cli_cfg_settings(args=False)).model_dump() == {'pet': 'bird'}
 

@@ -745,7 +745,7 @@ not required, set the `is_required` flag to `False` to disable raising an error 
     subcommands](https://docs.python.org/3/library/argparse.html#sub-commands).
 
 !!! note
-    `CliSubCommand` and `CliPositionalArg` are always case sensitive and do not support aliases.
+    `CliSubCommand` and `CliPositionalArg` are always case sensitive.
 
 ```py
 import sys
@@ -803,6 +803,64 @@ assert get_subcommand(cmd).model_dump() == {
     'directory': 'dest',
     'repository': 'repo',
 }
+```
+
+The `CliSubCommand` and `CliPositionalArg` annotations also support union operations and aliases. For unions of Pydantic
+models, it is important to remember the [nuances](https://docs.pydantic.dev/latest/concepts/unions/) that can arise
+during validation. Specifically, for unions of subcommands that are identical in content, it is recommended to break
+them out into separate `CliSubCommand` fields to avoid any complications. Lastly, the derived subcommand names from
+unions will be the names of the Pydantic model classes themselves.
+
+When assigning aliases to `CliSubCommand` or `CliPositionalArg` fields, only a single alias can be assigned. For
+non-union subcommands, aliasing will change the displayed help text and subcommand name. Conversely, for union
+subcommands, aliasing will have no tangible effect from the perspective of the CLI settings source. Lastly, for
+positional arguments, aliasing will change the CLI help text displayed for the field.
+
+```py
+import sys
+from typing import Union
+
+from pydantic import BaseModel, Field
+
+from pydantic_settings import (
+    BaseSettings,
+    CliPositionalArg,
+    CliSubCommand,
+    get_subcommand,
+)
+
+
+class Alpha(BaseModel):
+    """Apha Help"""
+
+    cmd_alpha: CliPositionalArg[str] = Field(alias='alpha-cmd')
+
+
+class Beta(BaseModel):
+    """Beta Help"""
+
+    opt_beta: str = Field(alias='opt-beta')
+
+
+class Gamma(BaseModel):
+    """Gamma Help"""
+
+    opt_gamma: str = Field(alias='opt-gamma')
+
+
+class Root(BaseSettings, cli_parse_args=True, cli_exit_on_error=False):
+    alpha_or_beta: CliSubCommand[Union[Alpha, Beta]] = Field(alias='alpha-or-beta-cmd')
+    gamma: CliSubCommand[Gamma] = Field(alias='gamma-cmd')
+
+
+sys.argv = ['example.py', 'Alpha', 'hello']
+assert get_subcommand(Root()).model_dump() == {'cmd_alpha': 'hello'}
+
+sys.argv = ['example.py', 'Beta', '--opt-beta=hey']
+assert get_subcommand(Root()).model_dump() == {'opt_beta': 'hey'}
+
+sys.argv = ['example.py', 'gamma-cmd', '--opt-gamma=hi']
+assert get_subcommand(Root()).model_dump() == {'opt_gamma': 'hi'}
 ```
 
 ### Creating CLI Applications
@@ -936,7 +994,8 @@ when necessary.
     For `python < 3.9` the `--no-flag` option is not generated due to an underlying `argparse` limitation.
 
 !!! note
-    For `python < 3.9` the `CliImplicitFlag` and `CliExplicitFlag` annotations can only be applied to optional bool fields.
+    For `python < 3.9` the `CliImplicitFlag` and `CliExplicitFlag` annotations can only be applied to optional boolean
+    fields.
 
 ```py
 from pydantic_settings import BaseSettings, CliExplicitFlag, CliImplicitFlag
@@ -1288,6 +1347,22 @@ Even when using a secrets directory, *pydantic* will still read environment vari
 
 Passing a file path via the `_secrets_dir` keyword argument on instantiation (method 2) will override
 the value (if any) set on the `model_config` class.
+
+If you need to load settings from multiple secrets directories, you can pass multiple paths as a tuple or list. Just like for `env_file`, values from subsequent paths override previous ones.
+
+````python
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    # files in '/run/secrets' take priority over '/var/run'
+    model_config = SettingsConfigDict(secrets_dir=('/var/run', '/run/secrets'))
+
+    database_password: str
+````
+
+If any of `secrets_dir` is missing, it is ignored, and warning is shown. If any of `secrets_dir` is a file, error is raised.
+
 
 ### Use Case: Docker Secrets
 

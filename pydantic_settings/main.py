@@ -1,6 +1,5 @@
 from __future__ import annotations as _annotations
 
-from pathlib import Path
 from typing import Any, ClassVar, TypeVar
 
 from pydantic import ConfigDict
@@ -49,7 +48,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_exit_on_error: bool
     cli_prefix: str
     cli_implicit_flags: bool | None
-    secrets_dir: str | Path | None
+    secrets_dir: PathType | None
     json_file: PathType | None
     json_file_encoding: str | None
     yaml_file: PathType | None
@@ -128,7 +127,7 @@ class BaseSettings(BaseModel):
         _cli_prefix: The root parser command line arguments prefix. Defaults to "".
         _cli_implicit_flags: Whether `bool` fields should be implicitly converted into CLI boolean flags.
             (e.g. --flag, --no-flag). Defaults to `False`.
-        _secrets_dir: The secret files directory. Defaults to `None`.
+        _secrets_dir: The secret files directory or a sequence of directories. Defaults to `None`.
     """
 
     def __init__(
@@ -153,7 +152,7 @@ class BaseSettings(BaseModel):
         _cli_exit_on_error: bool | None = None,
         _cli_prefix: str | None = None,
         _cli_implicit_flags: bool | None = None,
-        _secrets_dir: str | Path | None = None,
+        _secrets_dir: PathType | None = None,
         **values: Any,
     ) -> None:
         # Uses something other than `self` the first arg to allow "self" as a settable attribute
@@ -231,7 +230,7 @@ class BaseSettings(BaseModel):
         _cli_exit_on_error: bool | None = None,
         _cli_prefix: str | None = None,
         _cli_implicit_flags: bool | None = None,
-        _secrets_dir: str | Path | None = None,
+        _secrets_dir: PathType | None = None,
     ) -> dict[str, Any]:
         # Determine settings config values
         case_sensitive = _case_sensitive if _case_sensitive is not None else self.model_config.get('case_sensitive')
