@@ -2,7 +2,7 @@ from __future__ import annotations as _annotations
 
 from typing import Any, ClassVar, TypeVar
 
-from pydantic import ConfigDict
+from pydantic import AliasGenerator, ConfigDict
 from pydantic._internal._config import config_keys
 from pydantic._internal._signature import _field_name_for_signature
 from pydantic._internal._utils import deep_update, is_model_class
@@ -463,6 +463,7 @@ class CliApp:
 
             class CliAppBaseSettings(BaseSettings, model_cls):  # type: ignore
                 model_config = SettingsConfigDict(
+                    alias_generator=AliasGenerator(lambda s: s.replace('_', '-')),
                     nested_model_default_partial_update=True,
                     case_sensitive=True,
                     cli_hide_none_type=True,

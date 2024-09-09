@@ -938,8 +938,9 @@ assert cmd.model_dump() == {
     Unlike `CliApp.run`, `CliApp.run_subcommand` requires the subcommand model to have a defined `cli_cmd` method.
 
 For `BaseModel` and `pydantic.dataclasses.dataclass` types, `CliApp.run` will internally use the following
-`BaseSettings` defaults:
+`BaseSettings` configuration defaults:
 
+* `alias_generator=AliasGenerator(lambda s: s.replace('_', '-'))`
 * `nested_model_default_partial_update=True`
 * `case_sensitive=True`
 * `cli_hide_none_type=True`
