@@ -2014,6 +2014,62 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
         return f'AzureKeyVaultSettingsSource(url={self._url!r}, ' f'env_nested_delimiter={self.env_nested_delimiter!r})'
 
 
+class AwsSystemsManagerParameterStoreSettingsSource(EnvSettingsSource):
+    _ssm_client: 'SSMClient'  # type: ignore
+    _ssm_path: str
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        ssm_client: 'SSMClient',  # type: ignore
+        ssm_path: str = '/',
+        case_sensitive: bool | None = None,
+        env_prefix: str | None = None,
+        env_nested_delimiter: str = '/',
+        env_ignore_empty: bool | None = None,
+        env_parse_none_str: str | None = None,
+        env_parse_enums: bool | None = None,
+    ) -> None:
+        self._ssm_client = ssm_client
+        self._ssm_path = ssm_path
+        super().__init__(
+            settings_cls,
+            case_sensitive,
+            env_prefix,
+            env_nested_delimiter,
+            env_ignore_empty,
+            env_parse_none_str,
+            env_parse_enums,
+        )
+
+    def _load_env_vars(self) -> Mapping[str, Optional[str]]:
+        paginator = self._ssm_client.get_paginator('get_parameters_by_path')
+        response_iterator = paginator.paginate(
+            Path=self._ssm_path, WithDecryption=True, Recursive=True
+        )
+
+        output = {}
+        try:
+            for page in response_iterator:
+                for parameter in page['Parameters']:
+                    name = Path(parameter['Name'])
+                    key = name.relative_to(self._ssm_path).as_posix()
+
+                    if not self.case_sensitive:
+                        first_key, *rest = key.split(self.env_nested_delimiter)
+                        key = self.env_nested_delimiter.join([first_key.lower(), *rest])
+
+                    output[key] = parameter['Value']
+
+        except self._ssm_client.exceptions.ClientError as e:
+            warnings.warn(f'Unable to get parameters from {self._ssm_path!r}: {e}')
+
+        return output
+
+    def __repr__(self) -> str:
+        return f'AwsSystemsManagerParameterStoreSettingsSource(ssm_path={self._ssm_path!r})'
+
+
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
     return key if case_sensitive else key.lower()
 

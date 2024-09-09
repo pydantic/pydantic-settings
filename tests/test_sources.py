@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from pydantic_settings.main import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources import (
+    AwsSystemsManagerParameterStoreSettingsSource,
     AzureKeyVaultSettingsSource,
     PydanticBaseSettingsSource,
     PyprojectTomlConfigSettingsSource,
@@ -30,6 +31,12 @@ try:
     from azure.keyvault.secrets import KeyVaultSecret, SecretProperties
 except ImportError:
     azure_key_vault = False
+
+try:
+    aws = True
+    import boto3
+except ImportError:
+    aws = False
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -210,3 +217,190 @@ class TestAzureKeyVaultSettingsSource:
             raise ResourceNotFoundError()
 
         return key_vault_secret
+
+
+@pytest.mark.skipif(not aws, reason="boto3 is not installed")
+class TestAwsSystemsManagerParameterStoreSettingsSource:
+    """Test AwsSystemsManagerParameterStoreSettingsSource."""
+
+    def test___init__(self, mocker: MockerFixture) -> None:
+        """Test __init__."""
+
+        class AwsSettings(BaseSettings):
+            """AWS settings."""
+
+        mock_parameters = []
+        paginator_mock = mocker.Mock()
+        paginator_mock.paginate.return_value = [{'Parameters': mock_parameters}]
+
+        client_mock = mocker.Mock()
+        client_mock.get_paginator.return_value = paginator_mock
+        client_mock.exceptions.ClientError = Exception
+
+        AwsSystemsManagerParameterStoreSettingsSource(
+            settings_cls=AwsSettings, ssm_client=client_mock, ssm_path='/my/path'
+        )
+
+    def test___call__case_sensitive(self, mocker: MockerFixture) -> None:
+        """Test __call__."""
+
+        class SqlServer(BaseModel):
+            password: str = Field(..., alias='Password')
+
+        class AwsSettings(BaseSettings):
+            """AWS settings."""
+
+            SqlServerUser: str
+            sql_server_user: str = Field(..., alias='SqlServerUser')
+            sql_server: SqlServer = Field(..., alias='SqlServer')
+
+        mock_parameters = [
+            {'Name': '/my/path/SqlServerUser', 'Value': 'SecretValue'},
+            {'Name': '/my/path/SqlServer/Password', 'Value': 'SecretValue'},
+        ]
+        paginator_mock = mocker.Mock()
+        paginator_mock.paginate.return_value = [{'Parameters': mock_parameters}]
+
+        client_mock = mocker.Mock()
+        client_mock.get_paginator.return_value = paginator_mock
+        client_mock.exceptions.ClientError = Exception
+
+        obj = AwsSystemsManagerParameterStoreSettingsSource(
+            settings_cls=AwsSettings,
+            ssm_client=client_mock,
+            ssm_path='/my/path',
+            case_sensitive=True,
+        )
+
+        settings = obj()
+
+        assert settings['SqlServerUser'] == 'SecretValue'
+        assert settings['SqlServer']['Password'] == 'SecretValue'
+
+    def test___call__case_insensitive(self, mocker: MockerFixture) -> None:
+        """Test __call__."""
+
+        class SqlServer(BaseModel):
+            password: str = Field(..., alias='Password')
+
+        class AwsSettings(BaseSettings):
+            """AWS settings."""
+
+            SqlServerUser: str
+            sql_server_user: str = Field(..., alias='SqlServerUser')
+            sql_server: SqlServer = Field(..., alias='SqlServer')
+
+        mock_parameters = [
+            {'Name': '/my/path/SqlServerUser', 'Value': 'SecretValue'},
+            {'Name': '/my/path/SqlServer/Password', 'Value': 'SecretValue'},
+        ]
+        paginator_mock = mocker.Mock()
+        paginator_mock.paginate.return_value = [{'Parameters': mock_parameters}]
+
+        client_mock = mocker.Mock()
+        client_mock.get_paginator.return_value = paginator_mock
+        client_mock.exceptions.ClientError = Exception
+
+        obj = AwsSystemsManagerParameterStoreSettingsSource(
+            settings_cls=AwsSettings,
+            ssm_client=client_mock,
+            ssm_path='/my/path',
+            case_sensitive=False,
+        )
+        settings = obj()
+
+        assert settings['SqlServerUser'] == 'SecretValue'
+        assert settings['SqlServer']['Password'] == 'SecretValue'
+
+    def test_aws_ssm_settings_source(self, mocker: MockerFixture) -> None:
+        """Test AwsSystemsManagerParameterStoreSettingsSource."""
+        mock_parameters = [
+            {'Name': '/my/path/SqlServerUser', 'Value': 'SecretValue'},
+            {'Name': '/my/path/SqlServer/Password', 'Value': 'SecretValue'},
+        ]
+        paginator_mock = mocker.Mock()
+        paginator_mock.paginate.return_value = [{'Parameters': mock_parameters}]
+
+        client_mock = mocker.Mock()
+        client_mock.get_paginator.return_value = paginator_mock
+        client_mock.exceptions.ClientError = Exception
+
+        class SqlServer(BaseModel):
+            password: str = Field(..., alias='Password')
+
+        class AwsSettings(BaseSettings):
+            """AWS settings."""
+
+            SqlServerUser: str
+            sql_server_user: str = Field(..., alias='SqlServerUser')
+            sql_server: SqlServer = Field(..., alias='SqlServer')
+
+            @classmethod
+            def settings_customise_sources(
+                cls,
+                settings_cls: type[BaseSettings],
+                init_settings: PydanticBaseSettingsSource,
+                env_settings: PydanticBaseSettingsSource,
+                dotenv_settings: PydanticBaseSettingsSource,
+                file_secret_settings: PydanticBaseSettingsSource,
+            ) -> tuple[PydanticBaseSettingsSource, ...]:
+                return (
+                    AwsSystemsManagerParameterStoreSettingsSource(
+                        settings_cls=AwsSettings,
+                        ssm_client=client_mock,
+                        ssm_path='/my/path',
+                    ),
+                )
+
+        settings = AwsSettings()  # type: ignore
+
+        assert settings.SqlServerUser == 'SecretValue'
+        assert settings.sql_server_user == 'SecretValue'
+        assert settings.sql_server.password == 'SecretValue'
+
+    def test_aws_ssm_settings_source__delimiter(self, mocker: MockerFixture) -> None:
+        """Test AwsSystemsManagerParameterStoreSettingsSource."""
+        mock_parameters = [
+            {'Name': '/my/path/SqlServerUser', 'Value': 'SecretValue'},
+            {'Name': '/my/path/SqlServer__Password', 'Value': 'SecretValue'},
+        ]
+        paginator_mock = mocker.Mock()
+        paginator_mock.paginate.return_value = [{'Parameters': mock_parameters}]
+
+        client_mock = mocker.Mock()
+        client_mock.get_paginator.return_value = paginator_mock
+        client_mock.exceptions.ClientError = Exception
+
+        class SqlServer(BaseModel):
+            password: str = Field(..., alias='Password')
+
+        class AwsSettings(BaseSettings):
+            """AWS settings."""
+
+            SqlServerUser: str
+            sql_server_user: str = Field(..., alias='SqlServerUser')
+            sql_server: SqlServer = Field(..., alias='SqlServer')
+
+            @classmethod
+            def settings_customise_sources(
+                cls,
+                settings_cls: type[BaseSettings],
+                init_settings: PydanticBaseSettingsSource,
+                env_settings: PydanticBaseSettingsSource,
+                dotenv_settings: PydanticBaseSettingsSource,
+                file_secret_settings: PydanticBaseSettingsSource,
+            ) -> tuple[PydanticBaseSettingsSource, ...]:
+                return (
+                    AwsSystemsManagerParameterStoreSettingsSource(
+                        settings_cls=AwsSettings,
+                        ssm_client=client_mock,
+                        ssm_path='/my/path',
+                        env_nested_delimiter='__',
+                    ),
+                )
+
+        settings = AwsSettings()  # type: ignore
+
+        assert settings.SqlServerUser == 'SecretValue'
+        assert settings.sql_server_user == 'SecretValue'
+        assert settings.sql_server.password == 'SecretValue'

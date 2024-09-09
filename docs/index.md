@@ -1306,6 +1306,63 @@ class AzureKeyVaultSettings(BaseSettings):
         )
 ```
 
+## AWS Systems Manager Parameter Store
+
+You must set the following parameters:
+
+- `ssm_client`: An initialized [`boto3` SSM Client](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ssm.html#client).
+
+Optionally, you may specify the following parameters:
+
+- `ssm_path`: The hierarchy for the parameter. Hierarchies start with a forward slash (/). The hierarchy is the parameter name except the last part of the parameter. Under the hood, we make use of the [`get_parameters_by_path` method](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ssm/client/get_parameters_by_path.html) to recursively retrieve all parameters within the a specified path hierarchy.
+
+```py
+import os
+from typing import Tuple, Type
+
+import boto3
+from pydantic import BaseModel
+
+from pydantic_settings import (
+    AwsSystemsManagerParameterStoreSettingsSource,
+    BaseSettings,
+    PydanticBaseSettingsSource,
+)
+
+
+class SubModel(BaseModel):
+    a: str
+
+
+class AzureKeyVaultSettings(BaseSettings):
+    foo: str
+    bar: int
+    sub: SubModel
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        client = boto3.client('ssm')
+        ssm_param_store_settings = AwsSystemsManagerParameterStoreSettingsSource(
+            settings_cls,
+            ssm_client=client,
+            ssm_path=os.environ.get('SSM_PREFIX', '/api/dev/'),
+        )
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+            ssm_param_store_settings,
+        )
+``` -->
+
 ## Other settings source
 
 Other settings sources are available for common configuration files:
