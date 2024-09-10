@@ -2170,14 +2170,16 @@ def test_nested_bytes_field(env):
 
 def test_protected_namespace_defaults():
     # pydantic default
-    with pytest.warns(UserWarning, match='Field "model_prefixed_field" has conflict with protected namespace "model_"'):
+    with pytest.warns(
+        UserWarning, match='Field "model_prefixed_field" in Model has conflict with protected namespace "model_"'
+    ):
 
         class Model(BaseSettings):
             model_prefixed_field: str
 
     # pydantic-settings default
     with pytest.raises(
-        UserWarning, match='Field "settings_prefixed_field" has conflict with protected namespace "settings_"'
+        UserWarning, match='Field "settings_prefixed_field" in Model1 has conflict with protected namespace "settings_"'
     ):
 
         class Model1(BaseSettings):

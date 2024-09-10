@@ -4,11 +4,11 @@
 #
 #    pip-compile --no-emit-index-url --output-file=requirements/testing.txt requirements/testing.in
 #
-black==24.4.2
+black==24.8.0
     # via pytest-examples
 click==8.1.7
     # via black
-coverage[toml]==7.6.0
+coverage[toml]==7.6.1
     # via -r requirements/testing.in
 exceptiongroup==1.2.2
     # via pytest
@@ -26,27 +26,27 @@ packaging==24.1
     #   pytest
 pathspec==0.12.1
     # via black
-platformdirs==4.2.2
+platformdirs==4.3.2
     # via black
 pluggy==1.5.0
     # via pytest
 pygments==2.18.0
     # via rich
-pytest==8.3.2
+pytest==8.3.3
     # via
     #   -r requirements/testing.in
     #   pytest-examples
     #   pytest-mock
     #   pytest-pretty
-pytest-examples==0.0.12
+pytest-examples==0.0.13
     # via -r requirements/testing.in
 pytest-mock==3.14.0
     # via -r requirements/testing.in
 pytest-pretty==1.2.0
     # via -r requirements/testing.in
-rich==13.7.1
+rich==13.8.0
     # via pytest-pretty
-ruff==0.5.5
+ruff==0.6.4
     # via pytest-examples
 tomli==2.0.1
     # via
