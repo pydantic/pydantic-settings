@@ -59,6 +59,11 @@ if TYPE_CHECKING:
     import tomli
     import yaml
 
+    try:
+        from mypy_boto3_ssm import SSMClient
+    except ImportError:
+        pass
+
     from pydantic_settings.main import BaseSettings
 else:
     yaml = None
@@ -2015,13 +2020,13 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
 
 
 class AwsSystemsManagerParameterStoreSettingsSource(EnvSettingsSource):
-    _ssm_client: 'SSMClient'  # type: ignore
+    _ssm_client: 'SSMClient'
     _ssm_path: str
 
     def __init__(
         self,
         settings_cls: type[BaseSettings],
-        ssm_client: 'SSMClient',  # type: ignore
+        ssm_client: 'SSMClient',
         ssm_path: str = '/',
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,

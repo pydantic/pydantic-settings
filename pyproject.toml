@@ -49,6 +49,7 @@ dynamic = ['version']
 yaml = ["pyyaml>=6.0.1"]
 toml = ["tomli>=2.0.1"]
 azure-key-vault = ["azure-keyvault-secrets>=4.8.0", "azure-identity>=1.16.0"]
+aws = ["boto3>=1.35.0", "boto3-stubs[ssm]>=1.35.0"]
 
 [project.urls]
 Homepage = 'https://github.com/pydantic/pydantic-settings'
