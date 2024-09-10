@@ -986,7 +986,9 @@ class DotEnvSettingsSource(EnvSettingsSource):
             env_used = False
             for field_name, field in self.settings_cls.model_fields.items():
                 for _, field_env_name, _ in self._extract_field_info(field, field_name):
-                    if env_name.startswith(field_env_name):
+                    if env_name == field_env_name or (
+                        lenient_issubclass(field.annotation, BaseModel) and env_name.startswith(field_env_name)
+                    ):
                         env_used = True
                         break
             if not env_used:
