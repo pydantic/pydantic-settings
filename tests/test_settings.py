@@ -41,6 +41,7 @@ from typing_extensions import Annotated, Literal, override
 
 from pydantic_settings import (
     BaseSettings,
+    CliApp,
     DotEnvSettingsSource,
     EnvSettingsSource,
     InitSettingsSource,
@@ -4254,6 +4255,36 @@ type TypeAliasInt = int
 assert CliSettingsSource(SimpleSettings)._metavar_format(TypeAliasInt) == 'TypeAliasInt'
 """
     )
+
+
+def test_cli_app_exceptions():
+    with pytest.raises(
+        SettingsError, match='Error: NotPydanticModel is not subclass of BaseModel or pydantic.dataclasses.dataclass'
+    ):
+
+        class NotPydanticModel: ...
+
+        CliApp.run(NotPydanticModel)
+
+    with pytest.raises(SettingsError, match='Error: `cli_args` and `cli_settings_source` are mutually exclusive'):
+
+        class Cfg(BaseModel): ...
+
+        cli_settings = CliSettingsSource(Cfg)
+        CliApp.run(Cfg, cli_args=['hello'], cli_settings_source=cli_settings)
+
+    with pytest.raises(SettingsError, match='Error: Child class is missing cli_cmd entrypoint'):
+
+        class Child(BaseModel):
+            val: str
+
+        class Root(BaseModel):
+            child: CliSubCommand[Child]
+
+            def cli_cmd(self) -> None:
+                CliApp.run_subcommand(self)
+
+        CliApp.run(Root, cli_args=['child', '--val=hello'])
 
 
 def test_json_file(tmp_path):

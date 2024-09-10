@@ -507,8 +507,7 @@ models. There are two primary use cases for Pydantic settings CLI:
 
 By default, the experience is tailored towards use case #1 and builds on the foundations established in [parsing
 environment variables](#parsing-environment-variable-values). If your use case primarily falls into #2, you will likely
-want to enable [enforcing required arguments at the CLI](#enforce-required-arguments-at-cli) and [nested model default
-partial updates](#nested-model-default-partial-updates).
+want to enable most of the defaults outlined at the end of [creating CLI applications](#creating-cli-applications).
 
 ### The Basics
 
@@ -948,6 +947,10 @@ For `BaseModel` and `pydantic.dataclasses.dataclass` types, `CliApp.run` will in
 * `cli_enforce_required=True`
 * `cli_implicit_flags=True`
 
+!!! note
+    The alias generator for kebab case does not propagate to subcommands or submodels and will have to be manually set
+    in these cases.
+
 ### Customizing the CLI Experience
 
 The below flags can be used to customise the CLI experience to your needs.
@@ -1310,6 +1313,11 @@ parser methods that can be customised, along with their argparse counterparts (t
 
 For a non-argparse parser the parser methods can be set to `None` if not supported. The CLI settings will only raise an
 error when connecting to the root parser if a parser method is necessary but set to `None`.
+
+!!! note
+    The `formatter_class` is only applied to subcommands. The `CliSettingsSource` never touches or modifies any of the
+    external parser settings to avoid breaking changes. Since subcommands reside on their own internal parser trees, we
+    can safely apply the `formatter_class` settings without breaking the external parser logic.
 
 ## Secrets
 
