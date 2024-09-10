@@ -32,12 +32,6 @@ try:
 except ImportError:
     azure_key_vault = False
 
-try:
-    aws = True
-    import boto3
-except ImportError:
-    aws = False
-
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -219,7 +213,6 @@ class TestAzureKeyVaultSettingsSource:
         return key_vault_secret
 
 
-@pytest.mark.skipif(not aws, reason="boto3 is not installed")
 class TestAwsSystemsManagerParameterStoreSettingsSource:
     """Test AwsSystemsManagerParameterStoreSettingsSource."""
 
