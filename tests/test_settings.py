@@ -4980,3 +4980,17 @@ def test_settings_source_settings_sources_data(env):
     env.set('one', '1')
     s = Settings(one=True, two=True)
     assert s.four is True
+
+
+def test_dotenv_extra_allow_similar_fields(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('POSTGRES_USER=postgres\nPOSTGRES_USER_2=postgres2\nPOSTGRES_NAME=name')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_file=p, extra='allow')
+
+        POSTGRES_USER: str
+
+    s = Settings()
+    assert s.POSTGRES_USER == 'postgres'
+    assert s.model_dump() == {'POSTGRES_USER': 'postgres', 'postgres_name': 'name', 'postgres_user_2': 'postgres2'}
