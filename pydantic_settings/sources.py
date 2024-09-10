@@ -2115,7 +2115,7 @@ def read_env_file(
 def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
     # If the model is a root model, the root annotation should be used to
     # evaluate the complexity.
-    if isinstance(annotation, type) and issubclass(annotation, RootModel):
+    if annotation is not None and inspect.isclass(annotation) and issubclass(annotation, RootModel):
         # In some rare cases (see test_root_model_as_field),
         # the root attribute is not available. For these cases, python 3.8 and 3.9
         # return 'RootModelRootType'.
