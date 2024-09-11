@@ -1334,7 +1334,7 @@ class SubModel(BaseModel):
     a: str
 
 
-class AzureKeyVaultSettings(BaseSettings):
+class AwsParamStoreSettings(BaseSettings):
     foo: str
     bar: int
     sub: SubModel
