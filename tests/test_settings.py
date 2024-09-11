@@ -4994,3 +4994,13 @@ def test_dotenv_extra_allow_similar_fields(tmp_path):
     s = Settings()
     assert s.POSTGRES_USER == 'postgres'
     assert s.model_dump() == {'POSTGRES_USER': 'postgres', 'postgres_name': 'name', 'postgres_user_2': 'postgres2'}
+
+
+@pytest.mark.skipif(sys.version_info < (3, 9), reason='requires python 3.9 or higher')
+def test_annotation_is_complex_root_model_check():
+    """Test for https://github.com/pydantic/pydantic-settings/issues/390"""
+
+    class Settings(BaseSettings):
+        foo: list[str] = []
+
+    Settings()
