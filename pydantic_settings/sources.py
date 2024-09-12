@@ -824,13 +824,14 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             fields = _get_model_fields(annotation)
             # `case_sensitive is None` is here to be compatible with the old behavior.
             # Has to be removed in V3.
-            if (case_sensitive is None or case_sensitive) and fields.get(key):
-                return fields[key]
-            elif not case_sensitive:
-                for field_name, f in fields.items():
-                    if field_name.lower() == key.lower():
+            for field_name, f in fields.items():
+                if case_sensitive is None or case_sensitive:
+                    if (field_name == key) or (isinstance(f.validation_alias, str) and f.validation_alias == key):
                         return f
-
+                elif (field_name.lower() == key.lower()) or (
+                    isinstance(f.validation_alias, str) and f.validation_alias.lower() == key.lower()
+                ):
+                    return f
         return None
 
     def explode_env_vars(self, field_name: str, field: FieldInfo, env_vars: Mapping[str, str | None]) -> dict[str, Any]:

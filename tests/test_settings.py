@@ -5004,3 +5004,45 @@ def test_annotation_is_complex_root_model_check():
         foo: list[str] = []
 
     Settings()
+
+
+def test_nested_model_field_with_alias(env):
+    class NestedSettings(BaseModel):
+        foo: List[str] = Field(alias='fooalias')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+        nested: NestedSettings
+
+    env.set('nested__fooalias', '["one", "two"]')
+
+    s = Settings()
+    assert s.model_dump() == {'nested': {'foo': ['one', 'two']}}
+
+
+def test_nested_model_field_with_alias_case_sensitive(monkeypatch):
+    class NestedSettings(BaseModel):
+        foo: List[str] = Field(alias='fooAlias')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', case_sensitive=True)
+
+        nested: NestedSettings
+
+    # Need to patch os.environ to get build to work on Windows, where os.environ is case insensitive
+    monkeypatch.setattr(os, 'environ', value={'nested__fooalias': '["one", "two"]'})
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert exc_info.value.errors(include_url=False) == [
+        {
+            'type': 'missing',
+            'loc': ('nested', 'fooAlias'),
+            'msg': 'Field required',
+            'input': {'fooalias': '["one", "two"]'},
+        }
+    ]
+
+    monkeypatch.setattr(os, 'environ', value={'nested__fooAlias': '["one", "two"]'})
+    s = Settings()
+    assert s.model_dump() == {'nested': {'foo': ['one', 'two']}}
