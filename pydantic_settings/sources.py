@@ -108,8 +108,8 @@ def import_azure_key_vault() -> None:
         ) from e
 
 
-DotenvType = Union[Path, str, Sequence[Union[Path, str]] ...]
-PathType = Union[Path, str, Sequence[Union[Path, str]] ...]
+DotenvType = Union[Path, str, Sequence[Union[Path, str]], ...]
+PathType = Union[Path, str, Sequence[Union[Path, str]], ...]
 DEFAULT_PATH: PathType = Path('')
 
 # This is used as default value for `_env_file` in the `BaseSettings` class and
