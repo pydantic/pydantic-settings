@@ -1030,6 +1030,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_prefix: Prefix for command line arguments added under the root parser. Defaults to "".
         cli_implicit_flags: Whether `bool` fields should be implicitly converted into CLI boolean flags.
             (e.g. --flag, --no-flag). Defaults to `False`.
+        cli_ignore_unknown_args: Whether to ignore unknown CLI args and parse only known ones. Defaults to `False`.
         case_sensitive: Whether CLI "--arg" names should be read with case-sensitivity. Defaults to `True`.
             Note: Case-insensitive matching is only supported on the internal root parser and does not apply to CLI
             subcommands.
@@ -1058,9 +1059,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_exit_on_error: bool | None = None,
         cli_prefix: str | None = None,
         cli_implicit_flags: bool | None = None,
+        cli_ignore_unknown_args: bool | None = None,
         case_sensitive: bool | None = True,
         root_parser: Any = None,
-        parse_args_method: Callable[..., Any] | None = ArgumentParser.parse_args,
+        parse_args_method: Callable[..., Any] | None = None,
         add_argument_method: Callable[..., Any] | None = ArgumentParser.add_argument,
         add_argument_group_method: Callable[..., Any] | None = ArgumentParser.add_argument_group,
         add_parser_method: Callable[..., Any] | None = _SubParsersAction.add_parser,
@@ -1105,6 +1107,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             cli_implicit_flags
             if cli_implicit_flags is not None
             else settings_cls.model_config.get('cli_implicit_flags', False)
+        )
+        self.cli_ignore_unknown_args = (
+            cli_ignore_unknown_args
+            if cli_ignore_unknown_args is not None
+            else settings_cls.model_config.get('cli_ignore_unknown_args', False)
         )
 
         case_sensitive = case_sensitive if case_sensitive is not None else True
@@ -1521,14 +1528,19 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _connect_root_parser(
         self,
         root_parser: T,
-        parse_args_method: Callable[..., Any] | None = ArgumentParser.parse_args,
+        parse_args_method: Callable[..., Any] | None,
         add_argument_method: Callable[..., Any] | None = ArgumentParser.add_argument,
         add_argument_group_method: Callable[..., Any] | None = ArgumentParser.add_argument_group,
         add_parser_method: Callable[..., Any] | None = _SubParsersAction.add_parser,
         add_subparsers_method: Callable[..., Any] | None = ArgumentParser.add_subparsers,
         formatter_class: Any = RawDescriptionHelpFormatter,
     ) -> None:
+        def _parse_known_args(*args: Any, **kwargs: Any) -> Namespace:
+            return ArgumentParser.parse_known_args(*args, **kwargs)[0]
+
         self._root_parser = root_parser
+        if parse_args_method is None:
+            parse_args_method = _parse_known_args if self.cli_ignore_unknown_args else ArgumentParser.parse_args
         self._parse_args = self._connect_parser_method(parse_args_method, 'parsed_args_method')
         self._add_argument = self._connect_parser_method(add_argument_method, 'add_argument_method')
         self._add_argument_group = self._connect_parser_method(add_argument_group_method, 'add_argument_group_method')
