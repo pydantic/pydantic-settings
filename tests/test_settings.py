@@ -3981,6 +3981,18 @@ example.py: error: unrecognized arguments: --bad-arg
             Settings(_cli_exit_on_error=False)
 
 
+def test_cli_ignore_unknown_args():
+    class Cfg(BaseSettings, cli_ignore_unknown_args=True):
+        this: str = 'hello'
+        that: int = 123
+
+    cfg = Cfg(_cli_parse_args=['not_my_positional_arg', '--not-my-optional-arg=456'])
+    assert cfg.model_dump() == {'this': 'hello', 'that': 123}
+
+    cfg = Cfg(_cli_parse_args=['not_my_positional_arg', '--not-my-optional-arg=456', '--this=goodbye', '--that=789'])
+    assert cfg.model_dump() == {'this': 'goodbye', 'that': 789}
+
+
 @pytest.mark.parametrize('parser_type', [pytest.Parser, argparse.ArgumentParser, CliDummyParser])
 @pytest.mark.parametrize('prefix', ['', 'cfg'])
 def test_cli_user_settings_source(parser_type, prefix):

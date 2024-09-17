@@ -42,6 +42,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_exit_on_error: bool
     cli_prefix: str
     cli_implicit_flags: bool | None
+    cli_ignore_unknown_args: bool | None
     secrets_dir: PathType | None
     json_file: PathType | None
     json_file_encoding: str | None
@@ -120,6 +121,7 @@ class BaseSettings(BaseModel):
         _cli_prefix: The root parser command line arguments prefix. Defaults to "".
         _cli_implicit_flags: Whether `bool` fields should be implicitly converted into CLI boolean flags.
             (e.g. --flag, --no-flag). Defaults to `False`.
+        _cli_ignore_unknown_args: Whether to ignore unknown CLI args and parse only known ones. Defaults to `False`.
         _secrets_dir: The secret files directory or a sequence of directories. Defaults to `None`.
     """
 
@@ -145,6 +147,7 @@ class BaseSettings(BaseModel):
         _cli_exit_on_error: bool | None = None,
         _cli_prefix: str | None = None,
         _cli_implicit_flags: bool | None = None,
+        _cli_ignore_unknown_args: bool | None = None,
         _secrets_dir: PathType | None = None,
         **values: Any,
     ) -> None:
@@ -172,6 +175,7 @@ class BaseSettings(BaseModel):
                 _cli_exit_on_error=_cli_exit_on_error,
                 _cli_prefix=_cli_prefix,
                 _cli_implicit_flags=_cli_implicit_flags,
+                _cli_ignore_unknown_args=_cli_ignore_unknown_args,
                 _secrets_dir=_secrets_dir,
             )
         )
@@ -223,6 +227,7 @@ class BaseSettings(BaseModel):
         _cli_exit_on_error: bool | None = None,
         _cli_prefix: str | None = None,
         _cli_implicit_flags: bool | None = None,
+        _cli_ignore_unknown_args: bool | None = None,
         _secrets_dir: PathType | None = None,
     ) -> dict[str, Any]:
         # Determine settings config values
@@ -279,6 +284,11 @@ class BaseSettings(BaseModel):
         cli_prefix = _cli_prefix if _cli_prefix is not None else self.model_config.get('cli_prefix')
         cli_implicit_flags = (
             _cli_implicit_flags if _cli_implicit_flags is not None else self.model_config.get('cli_implicit_flags')
+        )
+        cli_ignore_unknown_args = (
+            _cli_ignore_unknown_args
+            if _cli_ignore_unknown_args is not None
+            else self.model_config.get('cli_ignore_unknown_args')
         )
 
         secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
@@ -339,6 +349,7 @@ class BaseSettings(BaseModel):
                         cli_exit_on_error=cli_exit_on_error,
                         cli_prefix=cli_prefix,
                         cli_implicit_flags=cli_implicit_flags,
+                        cli_ignore_unknown_args=cli_ignore_unknown_args,
                         case_sensitive=case_sensitive,
                     )
                     if cli_settings_source is None
@@ -388,6 +399,7 @@ class BaseSettings(BaseModel):
         cli_exit_on_error=True,
         cli_prefix='',
         cli_implicit_flags=False,
+        cli_ignore_unknown_args=False,
         json_file=None,
         json_file_encoding=None,
         yaml_file=None,
