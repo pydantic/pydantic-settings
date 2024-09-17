@@ -26,12 +26,10 @@ from typing import (
     Dict,
     Generic,
     Iterator,
-    List,
     Mapping,
     NoReturn,
     Optional,
     Sequence,
-    Tuple,
     TypeVar,
     Union,
     cast,
@@ -108,8 +106,8 @@ def import_azure_key_vault() -> None:
         ) from e
 
 
-DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
-PathType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
+DotenvType = Union[Path, str, Sequence[Union[Path, str]]]
+PathType = Union[Path, str, Sequence[Union[Path, str]]]
 DEFAULT_PATH: PathType = Path('')
 
 # This is used as default value for `_env_file` in the `BaseSettings` class and
