@@ -979,7 +979,7 @@ class ImplicitSettings(BaseSettings, cli_parse_args=True, cli_implicit_flags=Tru
     """
 ```
 
-#### Ignore Unknown Args
+#### Ignore Unknown Arguments
 
 Change whether to ignore unknown CLI args and only parse known ones using `cli_ignore_unknown_args`. By default, the CLI
 does not ignore any args.
