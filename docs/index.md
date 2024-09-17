@@ -979,6 +979,26 @@ class ImplicitSettings(BaseSettings, cli_parse_args=True, cli_implicit_flags=Tru
     """
 ```
 
+#### Ignore Unknown Args
+
+Change whether to ignore unknown CLI args and only parse known ones using `cli_ignore_unknown_args`. By default, the CLI
+does not ignore any args.
+
+```py
+import sys
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings, cli_parse_args=True, cli_ignore_unknown_args=True):
+    good_arg: str
+
+
+sys.argv = ['example.py', '--bad-arg=bad', 'ANOTHER_BAD_ARG', '--good_arg=hello world']
+print(Settings().model_dump())
+#> {'good_arg': 'hello world'}
+```
+
 #### Change Whether CLI Should Exit on Error
 
 Change whether the CLI internal parser will exit on error or raise a `SettingsError` exception by using
