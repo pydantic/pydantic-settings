@@ -25,12 +25,10 @@ from typing import (
     Dict,
     Generic,
     Iterator,
-    List,
     Mapping,
     NoReturn,
     Optional,
     Sequence,
-    Tuple,
     TypeVar,
     Union,
     cast,
@@ -111,8 +109,8 @@ def import_azure_key_vault() -> None:
         ) from e
 
 
-DotenvType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
-PathType = Union[Path, str, List[Union[Path, str]], Tuple[Union[Path, str], ...]]
+DotenvType = Union[Path, str, Sequence[Union[Path, str]]]
+PathType = Union[Path, str, Sequence[Union[Path, str]]]
 DEFAULT_PATH: PathType = Path('')
 
 # This is used as default value for `_env_file` in the `BaseSettings` class and
@@ -829,13 +827,14 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             fields = _get_model_fields(annotation)
             # `case_sensitive is None` is here to be compatible with the old behavior.
             # Has to be removed in V3.
-            if (case_sensitive is None or case_sensitive) and fields.get(key):
-                return fields[key]
-            elif not case_sensitive:
-                for field_name, f in fields.items():
-                    if field_name.lower() == key.lower():
+            for field_name, f in fields.items():
+                if case_sensitive is None or case_sensitive:
+                    if (field_name == key) or (isinstance(f.validation_alias, str) and f.validation_alias == key):
                         return f
-
+                elif (field_name.lower() == key.lower()) or (
+                    isinstance(f.validation_alias, str) and f.validation_alias.lower() == key.lower()
+                ):
+                    return f
         return None
 
     def explode_env_vars(self, field_name: str, field: FieldInfo, env_vars: Mapping[str, str | None]) -> dict[str, Any]:
@@ -1034,6 +1033,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_prefix: Prefix for command line arguments added under the root parser. Defaults to "".
         cli_implicit_flags: Whether `bool` fields should be implicitly converted into CLI boolean flags.
             (e.g. --flag, --no-flag). Defaults to `False`.
+        cli_ignore_unknown_args: Whether to ignore unknown CLI args and parse only known ones. Defaults to `False`.
         case_sensitive: Whether CLI "--arg" names should be read with case-sensitivity. Defaults to `True`.
             Note: Case-insensitive matching is only supported on the internal root parser and does not apply to CLI
             subcommands.
@@ -1062,9 +1062,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_exit_on_error: bool | None = None,
         cli_prefix: str | None = None,
         cli_implicit_flags: bool | None = None,
+        cli_ignore_unknown_args: bool | None = None,
         case_sensitive: bool | None = True,
         root_parser: Any = None,
-        parse_args_method: Callable[..., Any] | None = ArgumentParser.parse_args,
+        parse_args_method: Callable[..., Any] | None = None,
         add_argument_method: Callable[..., Any] | None = ArgumentParser.add_argument,
         add_argument_group_method: Callable[..., Any] | None = ArgumentParser.add_argument_group,
         add_parser_method: Callable[..., Any] | None = _SubParsersAction.add_parser,
@@ -1109,6 +1110,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             cli_implicit_flags
             if cli_implicit_flags is not None
             else settings_cls.model_config.get('cli_implicit_flags', False)
+        )
+        self.cli_ignore_unknown_args = (
+            cli_ignore_unknown_args
+            if cli_ignore_unknown_args is not None
+            else settings_cls.model_config.get('cli_ignore_unknown_args', False)
         )
 
         case_sensitive = case_sensitive if case_sensitive is not None else True
@@ -1525,14 +1531,19 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _connect_root_parser(
         self,
         root_parser: T,
-        parse_args_method: Callable[..., Any] | None = ArgumentParser.parse_args,
+        parse_args_method: Callable[..., Any] | None,
         add_argument_method: Callable[..., Any] | None = ArgumentParser.add_argument,
         add_argument_group_method: Callable[..., Any] | None = ArgumentParser.add_argument_group,
         add_parser_method: Callable[..., Any] | None = _SubParsersAction.add_parser,
         add_subparsers_method: Callable[..., Any] | None = ArgumentParser.add_subparsers,
         formatter_class: Any = RawDescriptionHelpFormatter,
     ) -> None:
+        def _parse_known_args(*args: Any, **kwargs: Any) -> Namespace:
+            return ArgumentParser.parse_known_args(*args, **kwargs)[0]
+
         self._root_parser = root_parser
+        if parse_args_method is None:
+            parse_args_method = _parse_known_args if self.cli_ignore_unknown_args else ArgumentParser.parse_args
         self._parse_args = self._connect_parser_method(parse_args_method, 'parsed_args_method')
         self._add_argument = self._connect_parser_method(add_argument_method, 'add_argument_method')
         self._add_argument_group = self._connect_parser_method(add_argument_group_method, 'add_argument_group_method')
@@ -2120,13 +2131,16 @@ def read_env_file(
 def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
     # If the model is a root model, the root annotation should be used to
     # evaluate the complexity.
-    if isinstance(annotation, type) and issubclass(annotation, RootModel):
-        # In some rare cases (see test_root_model_as_field),
-        # the root attribute is not available. For these cases, python 3.8 and 3.9
-        # return 'RootModelRootType'.
-        root_annotation = annotation.__annotations__.get('root', None)
-        if root_annotation is not None and root_annotation != 'RootModelRootType':
-            annotation = root_annotation
+    try:
+        if annotation is not None and issubclass(annotation, RootModel):
+            # In some rare cases (see test_root_model_as_field),
+            # the root attribute is not available. For these cases, python 3.8 and 3.9
+            # return 'RootModelRootType'.
+            root_annotation = annotation.__annotations__.get('root', None)
+            if root_annotation is not None and root_annotation != 'RootModelRootType':
+                annotation = root_annotation
+    except TypeError:
+        pass
 
     if any(isinstance(md, Json) for md in metadata):  # type: ignore[misc]
         return False

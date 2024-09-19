@@ -3982,6 +3982,18 @@ example.py: error: unrecognized arguments: --bad-arg
             Settings(_cli_exit_on_error=False)
 
 
+def test_cli_ignore_unknown_args():
+    class Cfg(BaseSettings, cli_ignore_unknown_args=True):
+        this: str = 'hello'
+        that: int = 123
+
+    cfg = Cfg(_cli_parse_args=['not_my_positional_arg', '--not-my-optional-arg=456'])
+    assert cfg.model_dump() == {'this': 'hello', 'that': 123}
+
+    cfg = Cfg(_cli_parse_args=['not_my_positional_arg', '--not-my-optional-arg=456', '--this=goodbye', '--that=789'])
+    assert cfg.model_dump() == {'this': 'goodbye', 'that': 789}
+
+
 @pytest.mark.parametrize('parser_type', [pytest.Parser, argparse.ArgumentParser, CliDummyParser])
 @pytest.mark.parametrize('prefix', ['', 'cfg'])
 def test_cli_user_settings_source(parser_type, prefix):
@@ -5025,3 +5037,55 @@ def test_dotenv_extra_allow_similar_fields(tmp_path):
     s = Settings()
     assert s.POSTGRES_USER == 'postgres'
     assert s.model_dump() == {'POSTGRES_USER': 'postgres', 'postgres_name': 'name', 'postgres_user_2': 'postgres2'}
+
+
+@pytest.mark.skipif(sys.version_info < (3, 9), reason='requires python 3.9 or higher')
+def test_annotation_is_complex_root_model_check():
+    """Test for https://github.com/pydantic/pydantic-settings/issues/390"""
+
+    class Settings(BaseSettings):
+        foo: list[str] = []
+
+    Settings()
+
+
+def test_nested_model_field_with_alias(env):
+    class NestedSettings(BaseModel):
+        foo: List[str] = Field(alias='fooalias')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+        nested: NestedSettings
+
+    env.set('nested__fooalias', '["one", "two"]')
+
+    s = Settings()
+    assert s.model_dump() == {'nested': {'foo': ['one', 'two']}}
+
+
+def test_nested_model_field_with_alias_case_sensitive(monkeypatch):
+    class NestedSettings(BaseModel):
+        foo: List[str] = Field(alias='fooAlias')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', case_sensitive=True)
+
+        nested: NestedSettings
+
+    # Need to patch os.environ to get build to work on Windows, where os.environ is case insensitive
+    monkeypatch.setattr(os, 'environ', value={'nested__fooalias': '["one", "two"]'})
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert exc_info.value.errors(include_url=False) == [
+        {
+            'type': 'missing',
+            'loc': ('nested', 'fooAlias'),
+            'msg': 'Field required',
+            'input': {'fooalias': '["one", "two"]'},
+        }
+    ]
+
+    monkeypatch.setattr(os, 'environ', value={'nested__fooAlias': '["one", "two"]'})
+    s = Settings()
+    assert s.model_dump() == {'nested': {'foo': ['one', 'two']}}
