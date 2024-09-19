@@ -5046,3 +5046,18 @@ def test_nested_model_field_with_alias_case_sensitive(monkeypatch):
     monkeypatch.setattr(os, 'environ', value={'nested__fooAlias': '["one", "two"]'})
     s = Settings()
     assert s.model_dump() == {'nested': {'foo': ['one', 'two']}}
+
+
+def test_nested_model_field_with_alias_choices(env):
+    class NestedSettings(BaseModel):
+        foo: List[str] = Field(alias=AliasChoices('fooalias', 'foo-alias'))
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+        nested: NestedSettings
+
+    env.set('nested__fooalias', '["one", "two"]')
+
+    s = Settings()
+    assert s.model_dump() == {'nested': {'foo': ['one', 'two']}}
