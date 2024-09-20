@@ -30,6 +30,8 @@ from pydantic import (
     SecretStr,
     Tag,
     ValidationError,
+    ValidationInfo,
+    field_validator,
 )
 from pydantic import (
     dataclasses as pydantic_dataclasses,
@@ -5058,3 +5060,19 @@ def test_nested_model_field_with_alias_case_sensitive(monkeypatch):
     monkeypatch.setattr(os, 'environ', value={'nested__fooAlias': '["one", "two"]'})
     s = Settings()
     assert s.model_dump() == {'nested': {'foo': ['one', 'two']}}
+
+
+def test_validation_context():
+    class Settings(BaseSettings):
+        foo: str
+
+        @field_validator('foo')
+        @classmethod
+        def test_validator(cls, v: str, info: ValidationInfo):
+            context = info.context
+            assert context == {'foo': 'bar'}
+            return v
+
+    s = Settings.model_validate({'foo': 'foo bar'}, context={'foo': 'bar'})
+    assert s.foo == 'foo bar'
+    assert s.model_dump() == {'foo': 'foo bar'}
