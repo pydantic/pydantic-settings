@@ -2697,10 +2697,22 @@ def test_cli_case_insensitive_arg():
         foo: str = Field(validation_alias=AliasChoices('F', 'Foo'))
         bar: str = Field(validation_alias=AliasChoices('B', 'Bar'))
 
-    cfg = Cfg(_cli_parse_args=['--FOO=--VAL', '--BAR', '"--VAL"', ])
+    cfg = Cfg(
+        _cli_parse_args=[
+            '--FOO=--VAL',
+            '--BAR',
+            '"--VAL"',
+        ]
+    )
     assert cfg.model_dump() == {'foo': '--VAL', 'bar': '"--VAL"'}
 
-    cfg = Cfg(_cli_parse_args=['-f=-V', '-b', '"-V"', ])
+    cfg = Cfg(
+        _cli_parse_args=[
+            '-f=-V',
+            '-b',
+            '"-V"',
+        ]
+    )
     assert cfg.model_dump() == {'foo': '-V', 'bar': '"-V"'}
 
     cfg = Cfg(_cli_parse_args=['--Foo=--VAL', '--Bar', '"--VAL"'], _case_sensitive=True)
