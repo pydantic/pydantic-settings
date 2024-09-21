@@ -1,5 +1,7 @@
 from __future__ import annotations as _annotations
 
+from argparse import Namespace
+from types import SimpleNamespace
 from typing import Any, ClassVar, TypeVar
 
 from pydantic import AliasGenerator, ConfigDict
@@ -431,7 +433,7 @@ class CliApp:
     @staticmethod
     def run(
         model_cls: type[T],
-        cli_args: list[str] | None = None,
+        cli_args: list[str] | Namespace | SimpleNamespace | dict[str, Any] | None = None,
         cli_settings_source: CliSettingsSource[Any] | None = None,
         cli_exit_on_error: bool | None = None,
         cli_cmd_method_name: str = 'cli_cmd',
@@ -443,7 +445,8 @@ class CliApp:
 
         Args:
             model_cls: The model class to run as a CLI application.
-            cli_args: The list of CLI arguments to parse. Defaults to `sys.argv[1:]`.
+            cli_args: The list of CLI arguments to parse. If `cli_settings_source` is specified, this may
+                also be a namespace or dictionary of pre-parsed CLI arguments. Defaults to `sys.argv[1:]`.
             cli_settings_source: Override the default CLI settings source with a user defined instance.
                 Defaults to `None`.
             cli_exit_on_error: Determines whether this function exits on error. If model is subclass of
@@ -460,17 +463,24 @@ class CliApp:
             SettingsError: If model_cls does not have a `cli_cmd` entrypoint defined.
         """
 
-        cli_parse_args: list[str] | bool = True if cli_args is None else cli_args
         if not (is_pydantic_dataclass(model_cls) or is_model_class(model_cls)):
             raise SettingsError(
                 f'Error: {model_cls.__name__} is not subclass of BaseModel or pydantic.dataclasses.dataclass'
             )
-        elif cli_args is not None and cli_settings_source is not None:
-            raise SettingsError('Error: `cli_args` and `cli_settings_source` are mutually exclusive')
+
+        cli_settings = None
+        cli_parse_args = True if cli_args is None else cli_args
+        if cli_settings_source is not None:
+            if isinstance(cli_parse_args, (Namespace, SimpleNamespace, dict)):
+                cli_settings = cli_settings_source(parsed_args=cli_parse_args)
+            else:
+                cli_settings = cli_settings_source(args=cli_parse_args)
+        elif isinstance(cli_parse_args, (Namespace, SimpleNamespace, dict)):
+            raise SettingsError('Error: `cli_args` must be list[str] or None when `cli_settings_source` is not used')
 
         model_init_data['_cli_parse_args'] = cli_parse_args
         model_init_data['_cli_exit_on_error'] = cli_exit_on_error
-        model_init_data['_cli_settings_source'] = cli_settings_source
+        model_init_data['_cli_settings_source'] = cli_settings
         if not issubclass(model_cls, BaseSettings):
 
             class CliAppBaseSettings(BaseSettings, model_cls):  # type: ignore

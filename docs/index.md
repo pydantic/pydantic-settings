@@ -1307,14 +1307,14 @@ cli_settings = CliSettingsSource(Settings, root_parser=parser)
 
 # Parse and load CLI settings from the command line into the settings source.
 sys.argv = ['example.py', '--food', 'kiwi', '--name', 'waldo']
-s = CliApp.run(Settings, cli_settings_source=cli_settings(args=True))
+s = CliApp.run(Settings, cli_settings_source=cli_settings)
 print(s.model_dump())
 #> {'name': 'waldo'}
 
 # Load CLI settings from pre-parsed arguments. i.e., the parsing occurs elsewhere and we
 # just need to load the pre-parsed args into the settings source.
 parsed_args = parser.parse_args(['--food', 'kiwi', '--name', 'ralph'])
-s = CliApp.run(Settings, cli_settings_source=cli_settings(parsed_args=parsed_args))
+s = CliApp.run(Settings, cli_args=parsed_args, cli_settings_source=cli_settings)
 print(s.model_dump())
 #> {'name': 'ralph'}
 ```

@@ -1179,9 +1179,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         ...
 
     @overload
-    def __call__(
-        self, *, parsed_args: Namespace | SimpleNamespace | dict[str, list[str] | str]
-    ) -> CliSettingsSource[T]:
+    def __call__(self, *, parsed_args: Namespace | SimpleNamespace | dict[str, Any]) -> CliSettingsSource[T]:
         """
         Loads parsed command line arguments into the CLI settings source.
 
@@ -1220,9 +1218,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _load_env_vars(self) -> Mapping[str, str | None]: ...
 
     @overload
-    def _load_env_vars(
-        self, *, parsed_args: Namespace | SimpleNamespace | dict[str, list[str] | str]
-    ) -> CliSettingsSource[T]:
+    def _load_env_vars(self, *, parsed_args: Namespace | SimpleNamespace | dict[str, Any]) -> CliSettingsSource[T]:
         """
         Loads the parsed command line arguments into the CLI environment settings variables.
 
