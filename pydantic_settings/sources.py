@@ -2035,7 +2035,7 @@ class AzureKeyVaultMapping(Mapping[str, Optional[str]]):
         if key not in self._loaded_secrets:
             try:
                 self._loaded_secrets[key] = self._secret_client.get_secret(key).value
-            except ResourceNotFoundError:  # type: ignore
+            except Exception:
                 raise KeyError(key)
 
         return self._loaded_secrets[key]
