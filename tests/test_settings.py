@@ -3993,6 +3993,17 @@ def test_cli_ignore_unknown_args():
     assert cfg.model_dump() == {'this': 'goodbye', 'that': 789}
 
 
+def test_cli_flag_prefix_char():
+    class Cfg(BaseSettings, cli_flag_prefix_char='+'):
+        my_var: str = Field(validation_alias=AliasChoices('m', 'my-var'))
+
+    cfg = Cfg(_cli_parse_args=['++my-var=hello'])
+    assert cfg.model_dump() == {'my_var': 'hello'}
+
+    cfg = Cfg(_cli_parse_args=['+m=hello'])
+    assert cfg.model_dump() == {'my_var': 'hello'}
+
+
 @pytest.mark.parametrize('parser_type', [pytest.Parser, argparse.ArgumentParser, CliDummyParser])
 @pytest.mark.parametrize('prefix', ['', 'cfg'])
 def test_cli_user_settings_source(parser_type, prefix):
