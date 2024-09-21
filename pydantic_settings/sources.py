@@ -1512,7 +1512,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             ) -> Any:
                 insensitive_args = []
                 for arg in shlex.split(shlex.join(args)) if args else []:
-                    flag_prefix = rf'\{self.cli_flag_prefix_char}'
+                    flag_prefix = rf'\{self.cli_flag_prefix_char}' * 2
                     matched = re.match(rf'^({flag_prefix}[^\s=]+)(.*)', arg)
                     if matched:
                         arg = matched.group(1).lower() + matched.group(2)
