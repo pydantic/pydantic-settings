@@ -1207,6 +1207,31 @@ sub_model options:
 """
 ```
 
+#### Change the CLI Flag Prefix Character
+
+Change The CLI flag prefix character used in CLI optional arguments by settings `cli_flag_prefix_char`.
+
+```py
+import sys
+
+from pydantic import AliasChoices, Field
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings, cli_parse_args=True, cli_flag_prefix_char='+'):
+    my_arg: str = Field(validation_alias=AliasChoices('m', 'my-arg'))
+
+
+sys.argv = ['example.py', '++my-arg', 'hi']
+print(Settings().model_dump())
+#> {'my_arg': 'hi'}
+
+sys.argv = ['example.py', '+m', 'hi']
+print(Settings().model_dump())
+#> {'my_arg': 'hi'}
+```
+
 ### Integrating with Existing Parsers
 
 A CLI settings source can be integrated with existing parsers by overriding the default CLI settings source with a user
