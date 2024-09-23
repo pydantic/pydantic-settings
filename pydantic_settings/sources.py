@@ -778,8 +778,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
     # Default value of `case_sensitive` is `None`, because we don't want to break existing behavior.
     # We have to change the method to a non-static method and use
     # `self.case_sensitive` instead in V3.
-    @staticmethod
-    def next_field(field: FieldInfo | Any | None, key: str, case_sensitive: bool | None = None) -> FieldInfo | None:
+    def next_field(
+        self, field: FieldInfo | Any | None, key: str, case_sensitive: bool | None = None
+    ) -> FieldInfo | None:
         """
         Find the field in a sub model by key(env name)
 
@@ -815,7 +816,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         annotation = field.annotation if isinstance(field, FieldInfo) else field
         if origin_is_union(get_origin(annotation)) or isinstance(annotation, WithArgsTypes):
             for type_ in get_args(annotation):
-                type_has_key = EnvSettingsSource.next_field(type_, key, case_sensitive)
+                type_has_key = self.next_field(type_, key, case_sensitive)
                 if type_has_key:
                     return type_has_key
         elif is_model_class(annotation) or is_pydantic_dataclass(annotation):
@@ -823,13 +824,12 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             # `case_sensitive is None` is here to be compatible with the old behavior.
             # Has to be removed in V3.
             for field_name, f in fields.items():
-                if case_sensitive is None or case_sensitive:
-                    if (field_name == key) or (isinstance(f.validation_alias, str) and f.validation_alias == key):
+                for _, env_name, _ in self._extract_field_info(f, field_name):
+                    if case_sensitive is None or case_sensitive:
+                        if field_name == key or env_name == key:
+                            return f
+                    elif field_name.lower() == key.lower() or env_name.lower() == key.lower():
                         return f
-                elif (field_name.lower() == key.lower()) or (
-                    isinstance(f.validation_alias, str) and f.validation_alias.lower() == key.lower()
-                ):
-                    return f
         return None
 
     def explode_env_vars(self, field_name: str, field: FieldInfo, env_vars: Mapping[str, str | None]) -> dict[str, Any]:
