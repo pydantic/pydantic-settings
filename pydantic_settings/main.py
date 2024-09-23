@@ -49,6 +49,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_use_class_docs_for_groups: bool
     cli_exit_on_error: bool
     cli_prefix: str
+    cli_flag_prefix_char: str
     cli_implicit_flags: bool | None
     cli_ignore_unknown_args: bool | None
     secrets_dir: PathType | None
@@ -128,6 +129,7 @@ class BaseSettings(BaseModel):
         _cli_exit_on_error: Determines whether or not the internal parser exits with error info when an error occurs.
             Defaults to `True`.
         _cli_prefix: The root parser command line arguments prefix. Defaults to "".
+        _cli_flag_prefix_char: The flag prefix character to use for CLI optional arguments. Defaults to '-'.
         _cli_implicit_flags: Whether `bool` fields should be implicitly converted into CLI boolean flags.
             (e.g. --flag, --no-flag). Defaults to `False`.
         _cli_ignore_unknown_args: Whether to ignore unknown CLI args and parse only known ones. Defaults to `False`.
@@ -155,6 +157,7 @@ class BaseSettings(BaseModel):
         _cli_use_class_docs_for_groups: bool | None = None,
         _cli_exit_on_error: bool | None = None,
         _cli_prefix: str | None = None,
+        _cli_flag_prefix_char: str | None = None,
         _cli_implicit_flags: bool | None = None,
         _cli_ignore_unknown_args: bool | None = None,
         _secrets_dir: PathType | None = None,
@@ -183,6 +186,7 @@ class BaseSettings(BaseModel):
                 _cli_use_class_docs_for_groups=_cli_use_class_docs_for_groups,
                 _cli_exit_on_error=_cli_exit_on_error,
                 _cli_prefix=_cli_prefix,
+                _cli_flag_prefix_char=_cli_flag_prefix_char,
                 _cli_implicit_flags=_cli_implicit_flags,
                 _cli_ignore_unknown_args=_cli_ignore_unknown_args,
                 _secrets_dir=_secrets_dir,
@@ -235,6 +239,7 @@ class BaseSettings(BaseModel):
         _cli_use_class_docs_for_groups: bool | None = None,
         _cli_exit_on_error: bool | None = None,
         _cli_prefix: str | None = None,
+        _cli_flag_prefix_char: str | None = None,
         _cli_implicit_flags: bool | None = None,
         _cli_ignore_unknown_args: bool | None = None,
         _secrets_dir: PathType | None = None,
@@ -291,6 +296,11 @@ class BaseSettings(BaseModel):
             _cli_exit_on_error if _cli_exit_on_error is not None else self.model_config.get('cli_exit_on_error')
         )
         cli_prefix = _cli_prefix if _cli_prefix is not None else self.model_config.get('cli_prefix')
+        cli_flag_prefix_char = (
+            _cli_flag_prefix_char
+            if _cli_flag_prefix_char is not None
+            else self.model_config.get('cli_flag_prefix_char')
+        )
         cli_implicit_flags = (
             _cli_implicit_flags if _cli_implicit_flags is not None else self.model_config.get('cli_implicit_flags')
         )
@@ -358,6 +368,7 @@ class BaseSettings(BaseModel):
                     cli_use_class_docs_for_groups=cli_use_class_docs_for_groups,
                     cli_exit_on_error=cli_exit_on_error,
                     cli_prefix=cli_prefix,
+                    cli_flag_prefix_char=cli_flag_prefix_char,
                     cli_implicit_flags=cli_implicit_flags,
                     cli_ignore_unknown_args=cli_ignore_unknown_args,
                     case_sensitive=case_sensitive,
@@ -404,6 +415,7 @@ class BaseSettings(BaseModel):
         cli_use_class_docs_for_groups=False,
         cli_exit_on_error=True,
         cli_prefix='',
+        cli_flag_prefix_char='-',
         cli_implicit_flags=False,
         cli_ignore_unknown_args=False,
         json_file=None,

@@ -2697,17 +2697,40 @@ def test_cli_alias_exceptions(capsys, monkeypatch):
 
 def test_cli_case_insensitive_arg():
     class Cfg(BaseSettings, cli_exit_on_error=False):
-        Foo: str
-        Bar: str
+        foo: str = Field(validation_alias=AliasChoices('F', 'Foo'))
+        bar: str = Field(validation_alias=AliasChoices('B', 'Bar'))
 
-    cfg = CliApp.run(Cfg, cli_args=['--FOO=--VAL', '--BAR', '"--VAL"'])
-    assert cfg.model_dump() == {'Foo': '--VAL', 'Bar': '"--VAL"'}
+    cfg = CliApp.run(
+        Cfg,
+        cli_args=[
+            '--FOO=--VAL',
+            '--BAR',
+            '"--VAL"',
+        ],
+    )
+    assert cfg.model_dump() == {'foo': '--VAL', 'bar': '"--VAL"'}
+
+    cfg = CliApp.run(
+        Cfg,
+        cli_args=[
+            '-f=-V',
+            '-b',
+            '"-V"',
+        ],
+    )
+    assert cfg.model_dump() == {'foo': '-V', 'bar': '"-V"'}
 
     cfg = Cfg(_cli_parse_args=['--Foo=--VAL', '--Bar', '"--VAL"'], _case_sensitive=True)
-    assert cfg.model_dump() == {'Foo': '--VAL', 'Bar': '"--VAL"'}
+    assert cfg.model_dump() == {'foo': '--VAL', 'bar': '"--VAL"'}
+
+    cfg = Cfg(_cli_parse_args=['-F=-V', '-B', '"-V"'], _case_sensitive=True)
+    assert cfg.model_dump() == {'foo': '-V', 'bar': '"-V"'}
 
     with pytest.raises(SettingsError, match='error parsing CLI: unrecognized arguments: --FOO=--VAL --BAR "--VAL"'):
         Cfg(_cli_parse_args=['--FOO=--VAL', '--BAR', '"--VAL"'], _case_sensitive=True)
+
+    with pytest.raises(SettingsError, match='error parsing CLI: unrecognized arguments: -f=-V -b "-V"'):
+        Cfg(_cli_parse_args=['-f=-V', '-b', '"-V"'], _case_sensitive=True)
 
     with pytest.raises(SettingsError, match='Case-insensitive matching is only supported on the internal root parser'):
         CliSettingsSource(Cfg, root_parser=CliDummyParser(), case_sensitive=False)
@@ -3999,6 +4022,17 @@ def test_cli_ignore_unknown_args():
     assert cfg.model_dump() == {'this': 'goodbye', 'that': 789}
 
 
+def test_cli_flag_prefix_char():
+    class Cfg(BaseSettings, cli_flag_prefix_char='+'):
+        my_var: str = Field(validation_alias=AliasChoices('m', 'my-var'))
+
+    cfg = Cfg(_cli_parse_args=['++my-var=hello'])
+    assert cfg.model_dump() == {'my_var': 'hello'}
+
+    cfg = Cfg(_cli_parse_args=['+m=hello'])
+    assert cfg.model_dump() == {'my_var': 'hello'}
+
+
 @pytest.mark.parametrize('parser_type', [pytest.Parser, argparse.ArgumentParser, CliDummyParser])
 @pytest.mark.parametrize('prefix', ['', 'cfg'])
 def test_cli_user_settings_source(parser_type, prefix):
@@ -5149,5 +5183,20 @@ def test_nested_model_field_with_alias_case_sensitive(monkeypatch):
     ]
 
     monkeypatch.setattr(os, 'environ', value={'nested__fooAlias': '["one", "two"]'})
+    s = Settings()
+    assert s.model_dump() == {'nested': {'foo': ['one', 'two']}}
+
+
+def test_nested_model_field_with_alias_choices(env):
+    class NestedSettings(BaseModel):
+        foo: List[str] = Field(alias=AliasChoices('fooalias', 'foo-alias'))
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+        nested: NestedSettings
+
+    env.set('nested__fooalias', '["one", "two"]')
+
     s = Settings()
     assert s.model_dump() == {'nested': {'foo': ['one', 'two']}}
