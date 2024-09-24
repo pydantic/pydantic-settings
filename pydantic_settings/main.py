@@ -1,10 +1,14 @@
 from __future__ import annotations as _annotations
 
-from typing import Any, ClassVar
+from argparse import Namespace
+from types import SimpleNamespace
+from typing import Any, ClassVar, TypeVar
 
-from pydantic import ConfigDict
+from pydantic import AliasGenerator, ConfigDict
 from pydantic._internal._config import config_keys
-from pydantic._internal._utils import deep_update
+from pydantic._internal._signature import _field_name_for_signature
+from pydantic._internal._utils import deep_update, is_model_class
+from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.main import BaseModel
 
 from .sources import (
@@ -17,8 +21,13 @@ from .sources import (
     InitSettingsSource,
     PathType,
     PydanticBaseSettingsSource,
+    PydanticModel,
     SecretsSettingsSource,
+    SettingsError,
+    get_subcommand,
 )
+
+T = TypeVar('T')
 
 
 class SettingsConfigDict(ConfigDict, total=False):
@@ -33,7 +42,6 @@ class SettingsConfigDict(ConfigDict, total=False):
     env_parse_enums: bool | None
     cli_prog_name: str | None
     cli_parse_args: bool | list[str] | tuple[str, ...] | None
-    cli_settings_source: CliSettingsSource[Any] | None
     cli_parse_none_str: str | None
     cli_hide_none_type: bool
     cli_avoid_json: bool
@@ -91,7 +99,8 @@ class BaseSettings(BaseModel):
     All the below attributes can be set via `model_config`.
 
     Args:
-        _case_sensitive: Whether environment variables names should be read with case-sensitivity. Defaults to `None`.
+        _case_sensitive: Whether environment and CLI variable names should be read with case-sensitivity.
+            Defaults to `None`.
         _nested_model_default_partial_update: Whether to allow partial updates on nested model default object fields.
             Defaults to `False`.
         _env_prefix: Prefix for all environment variables. Defaults to `None`.
@@ -347,26 +356,24 @@ class BaseSettings(BaseModel):
             file_secret_settings=file_secret_settings,
         ) + (default_settings,)
         if not any([source for source in sources if isinstance(source, CliSettingsSource)]):
-            if cli_parse_args is not None or cli_settings_source is not None:
-                cli_settings = (
-                    CliSettingsSource(
-                        self.__class__,
-                        cli_prog_name=cli_prog_name,
-                        cli_parse_args=cli_parse_args,
-                        cli_parse_none_str=cli_parse_none_str,
-                        cli_hide_none_type=cli_hide_none_type,
-                        cli_avoid_json=cli_avoid_json,
-                        cli_enforce_required=cli_enforce_required,
-                        cli_use_class_docs_for_groups=cli_use_class_docs_for_groups,
-                        cli_exit_on_error=cli_exit_on_error,
-                        cli_prefix=cli_prefix,
-                        cli_flag_prefix_char=cli_flag_prefix_char,
-                        cli_implicit_flags=cli_implicit_flags,
-                        cli_ignore_unknown_args=cli_ignore_unknown_args,
-                        case_sensitive=case_sensitive,
-                    )
-                    if cli_settings_source is None
-                    else cli_settings_source
+            if isinstance(cli_settings_source, CliSettingsSource):
+                sources = (cli_settings_source,) + sources
+            elif cli_parse_args is not None:
+                cli_settings = CliSettingsSource[Any](
+                    self.__class__,
+                    cli_prog_name=cli_prog_name,
+                    cli_parse_args=cli_parse_args,
+                    cli_parse_none_str=cli_parse_none_str,
+                    cli_hide_none_type=cli_hide_none_type,
+                    cli_avoid_json=cli_avoid_json,
+                    cli_enforce_required=cli_enforce_required,
+                    cli_use_class_docs_for_groups=cli_use_class_docs_for_groups,
+                    cli_exit_on_error=cli_exit_on_error,
+                    cli_prefix=cli_prefix,
+                    cli_flag_prefix_char=cli_flag_prefix_char,
+                    cli_implicit_flags=cli_implicit_flags,
+                    cli_ignore_unknown_args=cli_ignore_unknown_args,
+                    case_sensitive=case_sensitive,
                 )
                 sources = (cli_settings,) + sources
         if sources:
@@ -403,7 +410,6 @@ class BaseSettings(BaseModel):
         env_parse_enums=None,
         cli_prog_name=None,
         cli_parse_args=None,
-        cli_settings_source=None,
         cli_parse_none_str=None,
         cli_hide_none_type=False,
         cli_avoid_json=False,
@@ -422,3 +428,114 @@ class BaseSettings(BaseModel):
         secrets_dir=None,
         protected_namespaces=('model_', 'settings_'),
     )
+
+
+class CliApp:
+    """
+    A utility class for running Pydantic `BaseSettings`, `BaseModel`, or `pydantic.dataclasses.dataclass` as
+    CLI applications.
+    """
+
+    @staticmethod
+    def _run_cli_cmd(model: Any, cli_cmd_method_name: str, is_required: bool) -> Any:
+        if hasattr(type(model), cli_cmd_method_name):
+            getattr(type(model), cli_cmd_method_name)(model)
+        elif is_required:
+            raise SettingsError(f'Error: {type(model).__name__} class is missing {cli_cmd_method_name} entrypoint')
+        return model
+
+    @staticmethod
+    def run(
+        model_cls: type[T],
+        cli_args: list[str] | Namespace | SimpleNamespace | dict[str, Any] | None = None,
+        cli_settings_source: CliSettingsSource[Any] | None = None,
+        cli_exit_on_error: bool | None = None,
+        cli_cmd_method_name: str = 'cli_cmd',
+        **model_init_data: Any,
+    ) -> T:
+        """
+        Runs a Pydantic `BaseSettings`, `BaseModel`, or `pydantic.dataclasses.dataclass` as a CLI application.
+        Running a model as a CLI application requires the `cli_cmd` method to be defined in the model class.
+
+        Args:
+            model_cls: The model class to run as a CLI application.
+            cli_args: The list of CLI arguments to parse. If `cli_settings_source` is specified, this may
+                also be a namespace or dictionary of pre-parsed CLI arguments. Defaults to `sys.argv[1:]`.
+            cli_settings_source: Override the default CLI settings source with a user defined instance.
+                Defaults to `None`.
+            cli_exit_on_error: Determines whether this function exits on error. If model is subclass of
+                `BaseSettings`, defaults to BaseSettings `cli_exit_on_error` value. Otherwise, defaults to
+                `True`.
+            cli_cmd_method_name: The CLI command method name to run. Defaults to "cli_cmd".
+            model_init_data: The model init data.
+
+        Returns:
+            The ran instance of model.
+
+        Raises:
+            SettingsError: If model_cls is not subclass of `BaseModel` or `pydantic.dataclasses.dataclass`.
+            SettingsError: If model_cls does not have a `cli_cmd` entrypoint defined.
+        """
+
+        if not (is_pydantic_dataclass(model_cls) or is_model_class(model_cls)):
+            raise SettingsError(
+                f'Error: {model_cls.__name__} is not subclass of BaseModel or pydantic.dataclasses.dataclass'
+            )
+
+        cli_settings = None
+        cli_parse_args = True if cli_args is None else cli_args
+        if cli_settings_source is not None:
+            if isinstance(cli_parse_args, (Namespace, SimpleNamespace, dict)):
+                cli_settings = cli_settings_source(parsed_args=cli_parse_args)
+            else:
+                cli_settings = cli_settings_source(args=cli_parse_args)
+        elif isinstance(cli_parse_args, (Namespace, SimpleNamespace, dict)):
+            raise SettingsError('Error: `cli_args` must be list[str] or None when `cli_settings_source` is not used')
+
+        model_init_data['_cli_parse_args'] = cli_parse_args
+        model_init_data['_cli_exit_on_error'] = cli_exit_on_error
+        model_init_data['_cli_settings_source'] = cli_settings
+        if not issubclass(model_cls, BaseSettings):
+
+            class CliAppBaseSettings(BaseSettings, model_cls):  # type: ignore
+                model_config = SettingsConfigDict(
+                    alias_generator=AliasGenerator(lambda s: s.replace('_', '-')),
+                    nested_model_default_partial_update=True,
+                    case_sensitive=True,
+                    cli_hide_none_type=True,
+                    cli_avoid_json=True,
+                    cli_enforce_required=True,
+                    cli_implicit_flags=True,
+                )
+
+            model = CliAppBaseSettings(**model_init_data)
+            model_init_data = {}
+            for field_name, field_info in model.model_fields.items():
+                model_init_data[_field_name_for_signature(field_name, field_info)] = getattr(model, field_name)
+
+        return CliApp._run_cli_cmd(model_cls(**model_init_data), cli_cmd_method_name, is_required=False)
+
+    @staticmethod
+    def run_subcommand(
+        model: PydanticModel, cli_exit_on_error: bool | None = None, cli_cmd_method_name: str = 'cli_cmd'
+    ) -> PydanticModel:
+        """
+        Runs the model subcommand. Running a model subcommand requires the `cli_cmd` method to be defined in
+        the nested model subcommand class.
+
+        Args:
+            model: The model to run the subcommand from.
+            cli_exit_on_error: Determines whether this function exits with error if no subcommand is found.
+                Defaults to model_config `cli_exit_on_error` value if set. Otherwise, defaults to `True`.
+            cli_cmd_method_name: The CLI command method name to run. Defaults to "cli_cmd".
+
+        Returns:
+            The ran subcommand model.
+
+        Raises:
+            SystemExit: When no subcommand is found and cli_exit_on_error=`True` (the default).
+            SettingsError: When no subcommand is found and cli_exit_on_error=`False`.
+        """
+
+        subcommand = get_subcommand(model, is_required=True, cli_exit_on_error=cli_exit_on_error)
+        return CliApp._run_cli_cmd(subcommand, cli_cmd_method_name, is_required=True)

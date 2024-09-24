@@ -507,8 +507,7 @@ models. There are two primary use cases for Pydantic settings CLI:
 
 By default, the experience is tailored towards use case #1 and builds on the foundations established in [parsing
 environment variables](#parsing-environment-variable-values). If your use case primarily falls into #2, you will likely
-want to enable [enforcing required arguments at the CLI](#enforce-required-arguments-at-cli) and [nested model default
-partial updates](#nested-model-default-partial-updates).
+want to enable most of the defaults outlined at the end of [creating CLI applications](#creating-cli-applications).
 
 ### The Basics
 
@@ -560,19 +559,7 @@ print(Settings().model_dump())
 ```
 
 To enable CLI parsing, we simply set the `cli_parse_args` flag to a valid value, which retains similar conotations as
-defined in `argparse`. Alternatively, we can also directly provide the args to parse at time of instantiation:
-
-```py
-from pydantic_settings import BaseSettings
-
-
-class Settings(BaseSettings):
-    this_foo: str
-
-
-print(Settings(_cli_parse_args=['--this_foo', 'is such a foo']).model_dump())
-#> {'this_foo': 'is such a foo'}
-```
+defined in `argparse`.
 
 Note that a CLI settings source is [**the topmost source**](#field-value-priority) by default unless its [priority value
 is customised](#customise-settings-sources):
@@ -874,6 +861,95 @@ assert get_subcommand(Root()).model_dump() == {'opt_beta': 'hey'}
 sys.argv = ['example.py', 'gamma-cmd', '--opt-gamma=hi']
 assert get_subcommand(Root()).model_dump() == {'opt_gamma': 'hi'}
 ```
+
+### Creating CLI Applications
+
+The `CliApp` class provides two utility methods, `CliApp.run` and `CliApp.run_subcommand`, that can be used to run a
+Pydantic `BaseSettings`, `BaseModel`, or `pydantic.dataclasses.dataclass` as a CLI application. Primarily, the methods
+provide structure for running `cli_cmd` methods associated with models.
+
+`CliApp.run` can be used in directly providing the `cli_args` to be parsed, and will run the model `cli_cmd` method (if
+defined) after instantiation:
+
+```py
+from pydantic_settings import BaseSettings, CliApp
+
+
+class Settings(BaseSettings):
+    this_foo: str
+
+    def cli_cmd(self) -> None:
+        # Print the parsed data
+        print(self.model_dump())
+        #> {'this_foo': 'is such a foo'}
+
+        # Update the parsed data showing cli_cmd ran
+        self.this_foo = 'ran the foo cli cmd'
+
+
+s = CliApp.run(Settings, cli_args=['--this_foo', 'is such a foo'])
+print(s.model_dump())
+#> {'this_foo': 'ran the foo cli cmd'}
+```
+
+Similarly, the `CliApp.run_subcommand` can be used in recursive fashion to run the `cli_cmd` method of a subcommand:
+
+```py
+from pydantic import BaseModel
+
+from pydantic_settings import CliApp, CliPositionalArg, CliSubCommand
+
+
+class Init(BaseModel):
+    directory: CliPositionalArg[str]
+
+    def cli_cmd(self) -> None:
+        print(f'git init "{self.directory}"')
+        #> git init "dir"
+        self.directory = 'ran the git init cli cmd'
+
+
+class Clone(BaseModel):
+    repository: CliPositionalArg[str]
+    directory: CliPositionalArg[str]
+
+    def cli_cmd(self) -> None:
+        print(f'git clone from "{self.repository}" into "{self.directory}"')
+        self.directory = 'ran the clone cli cmd'
+
+
+class Git(BaseModel):
+    clone: CliSubCommand[Clone]
+    init: CliSubCommand[Init]
+
+    def cli_cmd(self) -> None:
+        CliApp.run_subcommand(self)
+
+
+cmd = CliApp.run(Git, cli_args=['init', 'dir'])
+assert cmd.model_dump() == {
+    'clone': None,
+    'init': {'directory': 'ran the git init cli cmd'},
+}
+```
+
+!!! note
+    Unlike `CliApp.run`, `CliApp.run_subcommand` requires the subcommand model to have a defined `cli_cmd` method.
+
+For `BaseModel` and `pydantic.dataclasses.dataclass` types, `CliApp.run` will internally use the following
+`BaseSettings` configuration defaults:
+
+* `alias_generator=AliasGenerator(lambda s: s.replace('_', '-'))`
+* `nested_model_default_partial_update=True`
+* `case_sensitive=True`
+* `cli_hide_none_type=True`
+* `cli_avoid_json=True`
+* `cli_enforce_required=True`
+* `cli_implicit_flags=True`
+
+!!! note
+    The alias generator for kebab case does not propagate to subcommands or submodels and will have to be manually set
+    in these cases.
 
 ### Customizing the CLI Experience
 
@@ -1241,7 +1317,7 @@ defined one that specifies the `root_parser` object.
 import sys
 from argparse import ArgumentParser
 
-from pydantic_settings import BaseSettings, CliSettingsSource
+from pydantic_settings import BaseSettings, CliApp, CliSettingsSource
 
 parser = ArgumentParser()
 parser.add_argument('--food', choices=['pear', 'kiwi', 'lime'])
@@ -1256,13 +1332,15 @@ cli_settings = CliSettingsSource(Settings, root_parser=parser)
 
 # Parse and load CLI settings from the command line into the settings source.
 sys.argv = ['example.py', '--food', 'kiwi', '--name', 'waldo']
-print(Settings(_cli_settings_source=cli_settings(args=True)).model_dump())
+s = CliApp.run(Settings, cli_settings_source=cli_settings)
+print(s.model_dump())
 #> {'name': 'waldo'}
 
 # Load CLI settings from pre-parsed arguments. i.e., the parsing occurs elsewhere and we
 # just need to load the pre-parsed args into the settings source.
 parsed_args = parser.parse_args(['--food', 'kiwi', '--name', 'ralph'])
-print(Settings(_cli_settings_source=cli_settings(parsed_args=parsed_args)).model_dump())
+s = CliApp.run(Settings, cli_args=parsed_args, cli_settings_source=cli_settings)
+print(s.model_dump())
 #> {'name': 'ralph'}
 ```
 
@@ -1280,6 +1358,11 @@ parser methods that can be customised, along with their argparse counterparts (t
 
 For a non-argparse parser the parser methods can be set to `None` if not supported. The CLI settings will only raise an
 error when connecting to the root parser if a parser method is necessary but set to `None`.
+
+!!! note
+    The `formatter_class` is only applied to subcommands. The `CliSettingsSource` never touches or modifies any of the
+    external parser settings to avoid breaking changes. Since subcommands reside on their own internal parser trees, we
+    can safely apply the `formatter_class` settings without breaking the external parser logic.
 
 ## Secrets
 
