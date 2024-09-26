@@ -986,10 +986,19 @@ class DotEnvSettingsSource(EnvSettingsSource):
             for field_name, field in self.settings_cls.model_fields.items():
                 for _, field_env_name, _ in self._extract_field_info(field, field_name):
                     if env_name == field_env_name or (
-                        lenient_issubclass(field.annotation, BaseModel) and env_name.startswith(field_env_name)
+                        (
+                            _annotation_is_complex(field.annotation, field.metadata)
+                            or (
+                                origin_is_union(get_origin(field.annotation))
+                                and _union_is_complex(field.annotation, field.metadata)
+                            )
+                        )
+                        and env_name.startswith(field_env_name)
                     ):
                         env_used = True
                         break
+                if env_used:
+                    break
             if not env_used:
                 if is_extra_allowed and env_name.startswith(self.env_prefix):
                     # env_prefix should be respected and removed from the env_name
