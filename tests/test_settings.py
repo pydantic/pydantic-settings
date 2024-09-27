@@ -5218,3 +5218,25 @@ def test_nested_model_field_with_alias_choices(env):
 
     s = Settings()
     assert s.model_dump() == {'nested': {'foo': ['one', 'two']}}
+
+
+def test_dotenv_optional_nested(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('not_nested=works\nNESTED__A=fails\nNESTED__b=2')
+
+    class NestedSettings(BaseModel):
+        A: str
+        b: int
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=p,
+            env_nested_delimiter='__',
+            extra='forbid',
+        )
+
+        not_nested: str
+        NESTED: Optional[NestedSettings]
+
+    s = Settings()
+    assert s.model_dump() == {'not_nested': 'works', 'NESTED': {'A': 'fails', 'b': 2}}
