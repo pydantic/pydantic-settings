@@ -5,10 +5,10 @@ Test pydantic_settings.PyprojectTomlConfigSettingsSource.
 from __future__ import annotations
 
 import sys
-from typing import Optional, Tuple, Type, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Tuple, Type
 
-from pydantic import BaseModel
 import pytest
+from pydantic import BaseModel
 
 from pydantic_settings import (
     BaseSettings,

@@ -10,8 +10,8 @@ import pytest
 from pydantic import BaseModel, Field
 
 from pydantic_settings import (
-    BaseSettings,
     AzureKeyVaultSettingsSource,
+    BaseSettings,
     PydanticBaseSettingsSource,
 )
 from pydantic_settings.sources import import_azure_key_vault

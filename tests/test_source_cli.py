@@ -39,7 +39,6 @@ from pydantic_settings.sources import (
     get_subcommand,
 )
 
-
 ARGPARSE_OPTIONS_TEXT = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
 
 
@@ -110,7 +109,6 @@ def test_validation_alias_with_cli_prefix():
         CliApp.run(Settings, cli_args=['--foo', 'bar'])
 
     assert CliApp.run(Settings, cli_args=['--p.foo', 'bar']).foobar == 'bar'
-
 
 
 def test_cli_nested_arg():
@@ -2019,4 +2017,3 @@ def test_cli_app_exceptions():
                 CliApp.run_subcommand(self)
 
         CliApp.run(Root, cli_args=['child', '--val=hello'])
-
