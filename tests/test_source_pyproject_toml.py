@@ -2,13 +2,13 @@
 Test pydantic_settings.PyprojectTomlConfigSettingsSource.
 """
 
-from __future__ import annotations
-
 import sys
-from typing import TYPE_CHECKING, Optional, Tuple, Type
+from pathlib import Path
+from typing import Optional, Tuple, Type
 
 import pytest
 from pydantic import BaseModel
+from pytest_mock import MockerFixture
 
 from pydantic_settings import (
     BaseSettings,
@@ -21,11 +21,6 @@ try:
     import tomli
 except ImportError:
     tomli = None
-
-if TYPE_CHECKING:
-    from pathlib import Path
-
-    from pytest_mock import MockerFixture
 
 
 MODULE = 'pydantic_settings.sources'

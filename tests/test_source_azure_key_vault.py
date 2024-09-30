@@ -2,12 +2,11 @@
 Test pydantic_settings.AzureKeyVaultSettingsSource.
 """
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
+from typing import Tuple, Type
 
 import pytest
 from pydantic import BaseModel, Field
+from pytest_mock import MockerFixture
 
 from pydantic_settings import (
     AzureKeyVaultSettingsSource,
@@ -24,9 +23,6 @@ try:
     from azure.keyvault.secrets import KeyVaultSecret, SecretProperties
 except ImportError:
     azure_key_vault = False
-
-if TYPE_CHECKING:
-    from pytest_mock import MockerFixture
 
 
 MODULE = 'pydantic_settings.sources'
@@ -93,12 +89,12 @@ class TestAzureKeyVaultSettingsSource:
             @classmethod
             def settings_customise_sources(
                 cls,
-                settings_cls: type[BaseSettings],
+                settings_cls: Type[BaseSettings],
                 init_settings: PydanticBaseSettingsSource,
                 env_settings: PydanticBaseSettingsSource,
                 dotenv_settings: PydanticBaseSettingsSource,
                 file_secret_settings: PydanticBaseSettingsSource,
-            ) -> tuple[PydanticBaseSettingsSource, ...]:
+            ) -> Tuple[PydanticBaseSettingsSource, ...]:
                 return (
                     AzureKeyVaultSettingsSource(
                         settings_cls, 'https://my-resource.vault.azure.net/', DefaultAzureCredential()
