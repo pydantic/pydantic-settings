@@ -13,6 +13,7 @@ from pydantic_settings import (
     JsonConfigSettingsSource,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
+    SettingsError,
 )
 
 
@@ -91,7 +92,7 @@ def test_nondict_json_file(tmp_path):
         ) -> Tuple[PydanticBaseSettingsSource, ...]:
             return (JsonConfigSettingsSource(settings_cls),)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(SettingsError, match='Failed to parse settings from .*, expecting an object'):
         Settings()
 
 

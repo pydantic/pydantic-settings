@@ -12,6 +12,7 @@ from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
+    SettingsError,
     TomlConfigSettingsSource,
 )
 
@@ -97,7 +98,7 @@ def test_pyproject_nondict_toml(cd_tmp_path):
         ) -> Tuple[PydanticBaseSettingsSource, ...]:
             return (TomlConfigSettingsSource(settings_cls, pyproject),)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(SettingsError, match='Failed to parse settings from'):
         Settings()
 
 

@@ -11,6 +11,7 @@ from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
+    SettingsError,
     YamlConfigSettingsSource,
 )
 
@@ -105,7 +106,7 @@ def test_nondict_yaml_file(tmp_path):
         ) -> Tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls),)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(SettingsError, match='Failed to parse settings from .*, expecting an object'):
         Settings()
 
 
