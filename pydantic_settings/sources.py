@@ -1921,6 +1921,10 @@ class ConfigFileSourceMixin(ABC):
                     settings = self._read_file(file_path)
                 except ValueError as e:
                     raise SettingsError(f'Failed to parse settings from {file_path}, {e}')
+                if not isinstance(settings, dict):
+                    raise SettingsError(
+                        f'Failed to parse settings from {file_path}, expecting an object (valid dictionnary)'
+                    )
                 vars.update(settings)
         return vars
 
