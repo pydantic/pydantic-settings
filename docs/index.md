@@ -390,18 +390,36 @@ class SubModel(BaseModel):
     flag: bool = False
 
 
-class Settings(BaseSettings):
+class SettingsPartialUpdate(BaseSettings):
     model_config = SettingsConfigDict(
         env_nested_delimiter='__', nested_model_default_partial_update=True
     )
 
-    nested_model: SubModel = SubModel()
+    nested_model: SubModel = SubModel(val=1)
+
+
+class SettingsNoPartialUpdate(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_nested_delimiter='__', nested_model_default_partial_update=False
+    )
+
+    nested_model: SubModel = SubModel(val=1)
 
 
 # Apply a partial update to the default object using environment variables
 os.environ['NESTED_MODEL__FLAG'] = 'True'
 
-assert Settings().model_dump() == {'nested_model': {'val': 0, 'flag': True}}
+# When partial update is enabled, the existing SubModel instance is updated
+# with nested_model.flag=True change
+assert SettingsPartialUpdate().model_dump() == {
+    'nested_model': {'val': 1, 'flag': True}
+}
+
+# When partial update is disabled, a new SubModel instance is instantiated
+# with nested_model.flag=True change
+assert SettingsNoPartialUpdate().model_dump() == {
+    'nested_model': {'val': 0, 'flag': True}
+}
 ```
 
 ## Dotenv (.env) support
