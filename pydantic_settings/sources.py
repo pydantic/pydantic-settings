@@ -156,6 +156,8 @@ CliPositionalArg = Annotated[T, _CliPositionalArg]
 _CliBoolFlag = TypeVar('_CliBoolFlag', bound=bool)
 CliImplicitFlag = Annotated[_CliBoolFlag, _CliImplicitFlag]
 CliExplicitFlag = Annotated[_CliBoolFlag, _CliExplicitFlag]
+CLI_SUPPRESS = SUPPRESS
+CliSuppress = Annotated[T, CLI_SUPPRESS]
 
 
 def get_subcommand(
@@ -1647,7 +1649,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 )
                 is_parser_submodel = sub_models and not is_append_action
                 kwargs: dict[str, Any] = {}
-                kwargs['default'] = SUPPRESS
+                kwargs['default'] = CLI_SUPPRESS
                 kwargs['help'] = self._help_format(field_name, field_info, model_default)
                 kwargs['metavar'] = self._metavar_format(field_info.annotation)
                 kwargs['required'] = (
@@ -1816,7 +1818,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     else f'{arg_prefix.replace(subcommand_prefix, "", 1)}{name}'
                 )
                 kwargs: dict[str, Any] = {}
-                kwargs['default'] = SUPPRESS
+                kwargs['default'] = CLI_SUPPRESS
                 kwargs['help'] = 'pydantic alias path'
                 kwargs['dest'] = f'{arg_prefix}{name}'
                 if metavar == 'dict' or is_nested_alias_path:
@@ -1883,6 +1885,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _help_format(self, field_name: str, field_info: FieldInfo, model_default: Any) -> str:
         _help = field_info.description if field_info.description else ''
+        if _help == CLI_SUPPRESS or CLI_SUPPRESS in field_info.metadata:
+            return CLI_SUPPRESS
+
         if field_info.is_required() and model_default in (PydanticUndefined, None):
             if _CliPositionalArg not in field_info.metadata:
                 ifdef = 'ifdef: ' if model_default is None else ''

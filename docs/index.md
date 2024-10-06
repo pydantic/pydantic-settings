@@ -1326,6 +1326,42 @@ print(Settings().model_dump())
 #> {'my_arg': 'hi'}
 ```
 
+#### Suppressing Fields from CLI Help Text
+
+To suppress a field from the CLI help text, the `CliSuppress` annotation can be used for field types, or the
+`CLI_SUPPRESS` string constant can be used for field descriptions.
+
+```py
+import sys
+
+from pydantic import Field
+
+from pydantic_settings import CLI_SUPPRESS, BaseSettings, CliSuppress
+
+
+class Settings(BaseSettings, cli_parse_args=True):
+    """Suppress fields from CLI help text."""
+
+    field_a: CliSuppress[int] = 0
+    field_b: str = Field(default=1, description=CLI_SUPPRESS)
+
+
+try:
+    sys.argv = ['example.py', '--help']
+    Settings()
+except SystemExit as e:
+    print(e)
+    #> 0
+"""
+usage: example.py [-h]
+
+Suppress fields from CLI help text.
+
+options:
+  -h, --help          show this help message and exit
+"""
+```
+
 ### Integrating with Existing Parsers
 
 A CLI settings source can be integrated with existing parsers by overriding the default CLI settings source with a user
