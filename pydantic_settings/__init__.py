@@ -1,5 +1,6 @@
 from .main import BaseSettings, CliApp, SettingsConfigDict
 from .sources import (
+    CLI_SUPPRESS,
     AzureKeyVaultSettingsSource,
     CliExplicitFlag,
     CliImplicitFlag,
@@ -7,7 +8,6 @@ from .sources import (
     CliSettingsSource,
     CliSubCommand,
     CliSuppress,
-    CLI_SUPPRESS,
     DotEnvSettingsSource,
     EnvSettingsSource,
     InitSettingsSource,

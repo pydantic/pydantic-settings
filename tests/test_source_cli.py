@@ -30,13 +30,13 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 from pydantic_settings.sources import (
+    CLI_SUPPRESS,
     CliExplicitFlag,
     CliImplicitFlag,
     CliPositionalArg,
     CliSettingsSource,
     CliSubCommand,
     CliSuppress,
-    CLI_SUPPRESS,
     SettingsError,
     get_subcommand,
 )
