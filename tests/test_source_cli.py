@@ -30,11 +30,13 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 from pydantic_settings.sources import (
+    CLI_SUPPRESS,
     CliExplicitFlag,
     CliImplicitFlag,
     CliPositionalArg,
     CliSettingsSource,
     CliSubCommand,
+    CliSuppress,
     SettingsError,
     get_subcommand,
 )
@@ -1648,10 +1650,10 @@ def test_cli_flag_prefix_char():
     class Cfg(BaseSettings, cli_flag_prefix_char='+'):
         my_var: str = Field(validation_alias=AliasChoices('m', 'my-var'))
 
-    cfg = Cfg(_cli_parse_args=['++my-var=hello'])
+    cfg = CliApp.run(Cfg, cli_args=['++my-var=hello'])
     assert cfg.model_dump() == {'my_var': 'hello'}
 
-    cfg = Cfg(_cli_parse_args=['+m=hello'])
+    cfg = CliApp.run(Cfg, cli_args=['+m=hello'])
     assert cfg.model_dump() == {'my_var': 'hello'}
 
 
@@ -2017,3 +2019,24 @@ def test_cli_app_exceptions():
                 CliApp.run_subcommand(self)
 
         CliApp.run(Root, cli_args=['child', '--val=hello'])
+
+
+def test_cli_suppress(capsys, monkeypatch):
+    class Settings(BaseSettings, cli_parse_args=True):
+        field_a: CliSuppress[int] = 0
+        field_b: str = Field(default=1, description=CLI_SUPPRESS)
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            CliApp.run(Settings)
+
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h]
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help  show this help message and exit
+"""
+        )

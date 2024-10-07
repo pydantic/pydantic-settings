@@ -1,11 +1,13 @@
 from .main import BaseSettings, CliApp, SettingsConfigDict
 from .sources import (
+    CLI_SUPPRESS,
     AzureKeyVaultSettingsSource,
     CliExplicitFlag,
     CliImplicitFlag,
     CliPositionalArg,
     CliSettingsSource,
     CliSubCommand,
+    CliSuppress,
     DotEnvSettingsSource,
     EnvSettingsSource,
     InitSettingsSource,
@@ -27,6 +29,8 @@ __all__ = (
     'CliApp',
     'CliSettingsSource',
     'CliSubCommand',
+    'CliSuppress',
+    'CLI_SUPPRESS',
     'CliPositionalArg',
     'CliExplicitFlag',
     'CliImplicitFlag',
