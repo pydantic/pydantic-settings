@@ -2715,3 +2715,20 @@ def test_dotenv_optional_nested(tmp_path):
 
     s = Settings()
     assert s.model_dump() == {'not_nested': 'works', 'NESTED': {'A': 'fails', 'b': 2}}
+
+
+def test_dotenv_env_prefix_env_without_prefix(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('test_foo=test-foo\nfoo=foo')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=p,
+            env_prefix='TEST_',
+            extra='ignore',
+        )
+
+        foo: str
+
+    s = Settings()
+    assert s.model_dump() == {'foo': 'test-foo'}
