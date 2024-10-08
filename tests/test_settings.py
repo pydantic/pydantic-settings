@@ -186,6 +186,7 @@ def test_nested_env_delimiter(env):
         v0: str
         v0_union: Union[SubValue, int]
         top: TopValue
+        top_collection: List[TopValue]
 
         model_config = SettingsConfigDict(env_nested_delimiter='__')
 
@@ -197,6 +198,18 @@ def test_nested_env_delimiter(env):
     env.set('v0_union', '0')
     env.set('top__sub__sub_sub__v6', '6')
     env.set('top__sub__v4', '4')
+
+    env.set(
+        'top_collection',
+        '[{"v1": "json-1", "v2": "json-2", "sub": { "v5": "xx"}}]',
+    )
+
+    env.set('top_collection__0__sub__v5', '5')
+    env.set('top_collection__0__v2', '2')
+    env.set('top_collection__0__v3', '3')
+    env.set('top_collection__0__sub__sub_sub__v6', '6')
+    env.set('top_collection__0__sub__v4', '4')
+
     cfg = Cfg()
     assert cfg.model_dump() == {
         'v0': '0',
@@ -207,6 +220,49 @@ def test_nested_env_delimiter(env):
             'v3': '3',
             'sub': {'v4': '4', 'v5': 5, 'sub_sub': {'v6': '6'}},
         },
+        'top_collection': [
+            {
+                'v1': 'json-1',
+                'v2': '2',
+                'v3': '3',
+                'sub': {'v4': '4', 'v5': 5, 'sub_sub': {'v6': '6'}},
+            }
+        ],
+    }
+
+
+def test_nested_env_delimiter_lists_index(env):
+    class TopValue(BaseSettings):
+        v1: Optional[str] = None
+        v2: int
+
+    class ListCfg(BaseSettings):
+        top_list: List[int]
+        top_collection: List[List[TopValue]]
+
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set('top_list__0', '3')
+    env.set('top_list__1', '2')
+    env.set('top_list__2', '1')
+    env.set('top_list__5', 'out of bounds index')
+    env.set('top_list', '[1]')
+
+    env.set('top_collection', '[[{"v1": "json-1", "v2": "json-2"}]]')
+    env.set('top_collection__0__0__v1', 'json-1')
+    env.set('top_collection__0__1__v2', '6')
+    env.set('top_collection__0__0__v2', '5')
+    env.set('top_collection__0__3__v1', 'out of bounds index')
+
+    cfg = ListCfg()
+    assert cfg.model_dump() == {
+        'top_list': [3, 2, 1],
+        'top_collection': [
+            [
+                {'v1': 'json-1', 'v2': 5},
+                {'v1': None, 'v2': 6},
+            ]
+        ],
     }
 
 
