@@ -64,6 +64,12 @@ class SettingWithIgnoreEmpty(BaseSettings):
     model_config = SettingsConfigDict(env_ignore_empty=True)
 
 
+class SettingWithPopulateByName(BaseSettings):
+    apple: str = Field('default', alias='pomo')
+
+    model_config = SettingsConfigDict(populate_by_name=True)
+
+
 def test_sub_env(env):
     env.set('apple', 'hello')
     s = SimpleSettings()
@@ -125,6 +131,110 @@ def test_ignore_empty_with_dotenv_when_not_empty_uses_value(tmp_path):
 
     s = Settings()
     assert s.a == 'b'
+
+
+def test_populate_by_name_when_using_alias(env):
+    env.set('pomo', 'bongusta')
+    s = SettingWithPopulateByName()
+    assert s.apple == 'bongusta'
+
+
+def test_populate_by_name_when_using_name(env):
+    env.set('apple', 'honeycrisp')
+    s = SettingWithPopulateByName()
+    assert s.apple == 'honeycrisp'
+
+
+def test_populate_by_name_when_using_both(env):
+    env.set('apple', 'honeycrisp')
+    env.set('pomo', 'bongusta')
+    s = SettingWithPopulateByName()
+    assert s.apple == 'bongusta', 'Expected alias value to be prioritized.'
+
+
+def test_populate_by_name_with_alias_path_when_using_alias(env):
+    env.set('fruits', '["empire", "honeycrisp"]')
+
+    class Settings(BaseSettings):
+        apple: str = Field('default', validation_alias=AliasPath('fruits', 0))
+        model_config = SettingsConfigDict(populate_by_name=True)
+
+    s = Settings()
+    assert s.apple == 'empire'
+
+
+def test_populate_by_name_with_alias_path_when_using_name(env):
+    env.set('apple', 'jonathan gold')
+
+    class Settings(BaseSettings):
+        apple: str = Field('default', validation_alias=AliasPath('fruits', 0))
+        model_config = SettingsConfigDict(populate_by_name=True)
+
+    s = Settings()
+    assert s.apple == 'jonathan gold'
+
+
+@pytest.mark.parametrize(
+    'env_vars, expected_value',
+    [
+        pytest.param({'pomo': 'pomo-chosen'}, 'pomo-chosen', id='pomo'),
+        pytest.param({'pomme': 'pomme-chosen'}, 'pomme-chosen', id='pomme'),
+        pytest.param({'manzano': 'manzano-chosen'}, 'manzano-chosen', id='manzano'),
+        pytest.param(
+            {'pomo': 'pomo-chosen', 'pomme': 'pomme-chosen', 'manzano': 'manzano-chosen'},
+            'pomo-chosen',
+            id='pomo-priority',
+        ),
+        pytest.param({'pomme': 'pomme-chosen', 'manzano': 'manzano-chosen'}, 'pomme-chosen', id='pomme-priority'),
+    ],
+)
+def test_populate_by_name_with_alias_choices_when_using_alias(env, env_vars: dict[str, str], expected_value: str):
+    for k, v in env_vars.items():
+        env.set(k, v)
+
+    class Settings(BaseSettings):
+        apple: str = Field('default', validation_alias=AliasChoices('pomo', 'pomme', 'manzano'))
+        model_config = SettingsConfigDict(populate_by_name=True)
+
+    s = Settings()
+    assert s.apple == expected_value
+
+
+def test_populate_by_name_with_dotenv_when_using_alias(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('pomo=bongusta')
+
+    class Settings(BaseSettings):
+        apple: str = Field('default', alias='pomo')
+        model_config = SettingsConfigDict(env_file=p, populate_by_name=True)
+
+    s = Settings()
+    assert s.apple == 'bongusta'
+
+
+def test_populate_by_name_with_dotenv_when_using_name(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('apple=honeycrisp')
+
+    class Settings(BaseSettings):
+        apple: str = Field('default', alias='pomo')
+        model_config = SettingsConfigDict(env_file=p, populate_by_name=True)
+
+    s = Settings()
+    assert s.apple == 'honeycrisp'
+
+
+def test_populate_by_name_with_dotenv_when_using_both(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('apple=honeycrisp')
+    p.write_text('pomo=bongusta')
+
+    class Settings(BaseSettings):
+        apple: str = Field('default', alias='pomo')
+        model_config = SettingsConfigDict(env_file=p, populate_by_name=True)
+
+    s = Settings()
+    assert s.apple == 'bongusta', 'Expected alias value to be prioritized.'
 
 
 def test_with_prefix(env):
