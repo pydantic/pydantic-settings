@@ -445,10 +445,12 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                         )
             else:  # string validation alias
                 field_info.append((v_alias, self._apply_case_sensitive(v_alias), False))
-        elif origin_is_union(get_origin(field.annotation)) and _union_is_complex(field.annotation, field.metadata):
-            field_info.append((field_name, self._apply_case_sensitive(self.env_prefix + field_name), True))
-        else:
-            field_info.append((field_name, self._apply_case_sensitive(self.env_prefix + field_name), False))
+
+        if not v_alias or self.config.get('populate_by_name', False):
+            if origin_is_union(get_origin(field.annotation)) and _union_is_complex(field.annotation, field.metadata):
+                field_info.append((field_name, self._apply_case_sensitive(self.env_prefix + field_name), True))
+            else:
+                field_info.append((field_name, self._apply_case_sensitive(self.env_prefix + field_name), False))
 
         return field_info
 
