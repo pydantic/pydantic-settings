@@ -188,7 +188,7 @@ def test_populate_by_name_with_alias_path_when_using_name(env):
         pytest.param({'pomme': 'pomme-chosen', 'manzano': 'manzano-chosen'}, 'pomme-chosen', id='pomme-priority'),
     ],
 )
-def test_populate_by_name_with_alias_choices_when_using_alias(env, env_vars: dict[str, str], expected_value: str):
+def test_populate_by_name_with_alias_choices_when_using_alias(env, env_vars: Dict[str, str], expected_value: str):
     for k, v in env_vars.items():
         env.set(k, v)
 
