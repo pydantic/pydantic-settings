@@ -1,14 +1,14 @@
 from pathlib import Path
 
-path_type_labels = {
-    'is_dir': 'directory',
-    'is_file': 'file',
-    'is_mount': 'mount point',
-    'is_symlink': 'symlink',
-    'is_block_device': 'block device',
-    'is_char_device': 'char device',
-    'is_fifo': 'FIFO',
-    'is_socket': 'socket',
+_PATH_TYPE_LABELS = {
+    Path.is_dir: 'directory',
+    Path.is_file: 'file',
+    Path.is_mount: 'mount point',
+    Path.is_symlink: 'symlink',
+    Path.is_block_device: 'block device',
+    Path.is_char_device: 'char device',
+    Path.is_fifo: 'FIFO',
+    Path.is_socket: 'socket',
 }
 
 
@@ -17,8 +17,8 @@ def path_type_label(p: Path) -> str:
     Find out what sort of thing a path is.
     """
     assert p.exists(), 'path does not exist'
-    for method, name in path_type_labels.items():
-        if getattr(p, method)():
+    for method, name in _PATH_TYPE_LABELS.items():
+        if method(p):
             return name
 
     return 'unknown'
