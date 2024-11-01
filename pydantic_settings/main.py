@@ -193,8 +193,6 @@ class BaseSettings(BaseModel):
             )
         )
 
-    __init__.__pydantic_base_init__ = True  # type: ignore
-
     @classmethod
     def settings_customise_sources(
         cls,
