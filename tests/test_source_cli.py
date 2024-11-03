@@ -44,6 +44,11 @@ from pydantic_settings.sources import (
 ARGPARSE_OPTIONS_TEXT = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
 
 
+@pytest.fixture(autouse=True)
+def cli_test_env_autouse(cli_test_env):
+    pass
+
+
 def foobar(a, b, c=4):
     pass
 
