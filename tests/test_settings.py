@@ -1116,9 +1116,13 @@ def test_env_file_config_custom_encoding(tmp_path):
 
 
 @pytest.fixture
-def home_tmp():
+def home_tmp(tmp_path, env):
+    env.set('HOME', str(tmp_path))
+    env.set('USERPROFILE', str(tmp_path))
+    env.set('HOMEPATH', str(tmp_path))
+
     tmp_filename = f'{uuid.uuid4()}.env'
-    home_tmp_path = Path.home() / tmp_filename
+    home_tmp_path = tmp_path / tmp_filename
     yield home_tmp_path, tmp_filename
     home_tmp_path.unlink()
 
