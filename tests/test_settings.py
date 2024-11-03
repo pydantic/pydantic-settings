@@ -2175,7 +2175,7 @@ def test_protected_namespace_defaults():
             model_prefixed_field: str
 
     # pydantic-settings default
-    with pytest.raises(
+    with pytest.warns(
         UserWarning, match='Field "settings_prefixed_field" in Model1 has conflict with protected namespace "settings_"'
     ):
 
