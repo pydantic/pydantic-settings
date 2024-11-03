@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from enum import IntEnum
 from pathlib import Path
 from typing import Any, Callable, Dict, Generic, Hashable, List, Optional, Set, Tuple, Type, TypeVar, Union
+from unittest import mock
 
 import pytest
 from annotated_types import MinLen
@@ -66,6 +67,12 @@ class SettingWithPopulateByName(BaseSettings):
     apple: str = Field('default', alias='pomo')
 
     model_config = SettingsConfigDict(populate_by_name=True)
+
+
+@pytest.fixture(autouse=True)
+def clean_env():
+    with mock.patch.dict(os.environ, clear=True):
+        yield
 
 
 def test_sub_env(env):
