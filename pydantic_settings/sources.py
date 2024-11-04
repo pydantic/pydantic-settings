@@ -1951,6 +1951,9 @@ class JsonConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         with open(file_path, encoding=self.json_file_encoding) as json_file:
             return json.load(json_file)
 
+    def __repr__(self) -> str:
+        return f'JsonConfigSettingsSource(json_file={self.json_file_path})'
+
 
 class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
     """
@@ -1972,6 +1975,9 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
             if sys.version_info < (3, 11):
                 return tomli.load(toml_file)
             return tomllib.load(toml_file)
+
+    def __repr__(self) -> str:
+        return f'TomlConfigSettingsSource(toml_file={self.toml_file_path})'
 
 
 class PyprojectTomlConfigSettingsSource(TomlConfigSettingsSource):
@@ -2044,6 +2050,9 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         import_yaml()
         with open(file_path, encoding=self.yaml_file_encoding) as yaml_file:
             return yaml.safe_load(yaml_file) or {}
+
+    def __repr__(self) -> str:
+        return f'YamlConfigSettingsSource(yaml_file={self.yaml_file_path})'
 
 
 class AzureKeyVaultMapping(Mapping[str, Optional[str]]):

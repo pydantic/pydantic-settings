@@ -3,6 +3,7 @@ Test pydantic_settings.TomlConfigSettingsSource.
 """
 
 import sys
+from pathlib import Path
 from typing import Tuple, Type
 
 import pytest
@@ -19,6 +20,11 @@ try:
     import tomli
 except ImportError:
     tomli = None
+
+
+def test_repr() -> None:
+    source = TomlConfigSettingsSource(BaseSettings(), Path('config.toml'))
+    assert repr(source) == 'TomlConfigSettingsSource(toml_file=config.toml)'
 
 
 @pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
