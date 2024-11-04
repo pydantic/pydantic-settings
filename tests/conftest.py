@@ -82,3 +82,15 @@ def docs_test_env():
     yield setenv
 
     setenv.clear()
+
+
+@pytest.fixture
+def cli_test_env():
+    setenv = SetEnv()
+
+    # envs for reproducible cli tests
+    setenv.set('COLUMNS', '80')
+
+    yield setenv
+
+    setenv.clear()

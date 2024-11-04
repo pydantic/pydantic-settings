@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from enum import IntEnum
 from pathlib import Path
 from typing import Any, Callable, Dict, Generic, Hashable, List, Optional, Set, Tuple, Type, TypeVar, Union
+from unittest import mock
 
 import pytest
 from annotated_types import MinLen
@@ -66,6 +67,12 @@ class SettingWithPopulateByName(BaseSettings):
     apple: str = Field('default', alias='pomo')
 
     model_config = SettingsConfigDict(populate_by_name=True)
+
+
+@pytest.fixture(autouse=True)
+def clean_env():
+    with mock.patch.dict(os.environ, clear=True):
+        yield
 
 
 def test_sub_env(env):
@@ -1109,9 +1116,13 @@ def test_env_file_config_custom_encoding(tmp_path):
 
 
 @pytest.fixture
-def home_tmp():
+def home_tmp(tmp_path, env):
+    env.set('HOME', str(tmp_path))
+    env.set('USERPROFILE', str(tmp_path))
+    env.set('HOMEPATH', str(tmp_path))
+
     tmp_filename = f'{uuid.uuid4()}.env'
-    home_tmp_path = Path.home() / tmp_filename
+    home_tmp_path = tmp_path / tmp_filename
     yield home_tmp_path, tmp_filename
     home_tmp_path.unlink()
 
