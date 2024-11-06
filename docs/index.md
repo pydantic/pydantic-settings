@@ -90,15 +90,15 @@ print(Settings().model_dump())
 2. The environment variable name is overridden using `alias`. In this case, the environment variable
    `my_api_key` will be used for both validation and serialization instead of `api_key`.
 
-   Check the [`Field` documentation](fields.md#field-aliases) for more information.
+    Check the [`Field` documentation](fields.md#field-aliases) for more information.
 
-3. The `AliasChoices` class allows to have multiple environment variable names for a single field.
+3. The [`AliasChoices`][pydantic.AliasChoices] class allows to have multiple environment variable names for a single field.
    The first environment variable that is found will be used.
 
-    Check the [`AliasChoices`](alias.md#aliaspath-and-aliaschoices) for more information.
+    Check the [documentation on alias choices](alias.md#aliaspath-and-aliaschoices) for more information.
 
-4. The `ImportString` class allows to import an object from a string.
-   In this case, the environment variable `special_function` will be read and the function `math.cos` will be imported.
+4. The [`ImportString`][pydantic.types.ImportString] class allows to import an object from a string.
+   In this case, the environment variable `special_function` will be read and the function [`math.cos`][] will be imported.
 
 5. The `env_prefix` config setting allows to set a prefix for all environment variables.
 
