@@ -33,7 +33,6 @@ from typing_extensions import Annotated, Literal, override
 
 from pydantic_settings import (
     BaseSettings,
-    CliApp,
     DotEnvSettingsSource,
     EnvSettingsSource,
     InitSettingsSource,
@@ -637,7 +636,7 @@ def test_alias_nested_model_default_partial_update():
         v0: str = 'ok'
         sub_model: SubModel = SubModel(v1='top default', v3=33)
 
-    assert CliApp.run(Settings, cli_args=['--sub-model.v1=cli']).model_dump() == {
+    assert Settings(**{'sub-model': {'v1': 'cli'}}).model_dump() == {
         'v0': 'ok',
         'sub_model': {'v1': 'cli', 'v2': b'hello', 'v3': 33},
     }
