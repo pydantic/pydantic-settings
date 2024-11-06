@@ -13,6 +13,7 @@ import pytest
 from annotated_types import MinLen
 from pydantic import (
     AliasChoices,
+    AliasGenerator,
     AliasPath,
     BaseModel,
     Discriminator,
@@ -619,6 +620,26 @@ def test_init_kwargs_nested_model_default_partial_update(env):
 
     s = Settings(v0='0', sub_model={'v1': 'init-v1', 'v2': b'init-v2', 'v3': 3, 'deep': DeepSubModel(v4='init-v4')})
     assert s.model_dump() == s_final
+
+
+def test_alias_nested_model_default_partial_update():
+    class SubModel(BaseModel):
+        v1: str = 'default'
+        v2: bytes = b'hello'
+        v3: int
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            nested_model_default_partial_update=True, alias_generator=AliasGenerator(lambda s: s.replace('_', '-'))
+        )
+
+        v0: str = 'ok'
+        sub_model: SubModel = SubModel(v1='top default', v3=33)
+
+    assert Settings(**{'sub-model': {'v1': 'cli'}}).model_dump() == {
+        'v0': 'ok',
+        'sub_model': {'v1': 'cli', 'v2': b'hello', 'v3': 33},
+    }
 
 
 def test_env_str(env):
