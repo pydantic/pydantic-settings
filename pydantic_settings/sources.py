@@ -350,7 +350,9 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
         return self.defaults
 
     def __repr__(self) -> str:
-        return f'DefaultSettingsSource(nested_model_default_partial_update={self.nested_model_default_partial_update})'
+        return (
+            f'{self.__class__.__name__}(nested_model_default_partial_update={self.nested_model_default_partial_update})'
+        )
 
 
 class InitSettingsSource(PydanticBaseSettingsSource):
@@ -384,7 +386,7 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         )
 
     def __repr__(self) -> str:
-        return f'InitSettingsSource(init_kwargs={self.init_kwargs!r})'
+        return f'{self.__class__.__name__}(init_kwargs={self.init_kwargs!r})'
 
 
 class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
@@ -674,7 +676,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         return None, field_key, value_is_complex
 
     def __repr__(self) -> str:
-        return f'SecretsSettingsSource(secrets_dir={self.secrets_dir!r})'
+        return f'{self.__class__.__name__}(secrets_dir={self.secrets_dir!r})'
 
 
 class EnvSettingsSource(PydanticBaseEnvSettingsSource):
@@ -899,7 +901,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
     def __repr__(self) -> str:
         return (
-            f'EnvSettingsSource(env_nested_delimiter={self.env_nested_delimiter!r}, '
+            f'{self.__class__.__name__}(env_nested_delimiter={self.env_nested_delimiter!r}, '
             f'env_prefix_len={self.env_prefix_len!r})'
         )
 
@@ -1015,7 +1017,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
 
     def __repr__(self) -> str:
         return (
-            f'DotEnvSettingsSource(env_file={self.env_file!r}, env_file_encoding={self.env_file_encoding!r}, '
+            f'{self.__class__.__name__}(env_file={self.env_file!r}, env_file_encoding={self.env_file_encoding!r}, '
             f'env_nested_delimiter={self.env_nested_delimiter!r}, env_prefix_len={self.env_prefix_len!r})'
         )
 
@@ -1919,6 +1921,9 @@ class JsonConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         with open(file_path, encoding=self.json_file_encoding) as json_file:
             return json.load(json_file)
 
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}(json_file={self.json_file_path})'
+
 
 class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
     """
@@ -1940,6 +1945,9 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
             if sys.version_info < (3, 11):
                 return tomli.load(toml_file)
             return tomllib.load(toml_file)
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}(toml_file={self.toml_file_path})'
 
 
 class PyprojectTomlConfigSettingsSource(TomlConfigSettingsSource):
@@ -2013,6 +2021,9 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         with open(file_path, encoding=self.yaml_file_encoding) as yaml_file:
             return yaml.safe_load(yaml_file) or {}
 
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}(yaml_file={self.yaml_file_path})'
+
 
 class AzureKeyVaultMapping(Mapping[str, Optional[str]]):
     _loaded_secrets: dict[str, str | None]
@@ -2075,7 +2086,7 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
         return AzureKeyVaultMapping(secret_client)
 
     def __repr__(self) -> str:
-        return f'AzureKeyVaultSettingsSource(url={self._url!r}, ' f'env_nested_delimiter={self.env_nested_delimiter!r})'
+        return f'{self.__class__.__name__}(url={self._url!r}, ' f'env_nested_delimiter={self.env_nested_delimiter!r})'
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:

@@ -3,6 +3,7 @@ Test pydantic_settings.JsonConfigSettingsSource.
 """
 
 import json
+from pathlib import Path
 from typing import Tuple, Type, Union
 
 from pydantic import BaseModel
@@ -13,6 +14,11 @@ from pydantic_settings import (
     PydanticBaseSettingsSource,
     SettingsConfigDict,
 )
+
+
+def test_repr() -> None:
+    source = JsonConfigSettingsSource(BaseSettings(), Path('config.json'))
+    assert repr(source) == 'JsonConfigSettingsSource(json_file=config.json)'
 
 
 def test_json_file(tmp_path):

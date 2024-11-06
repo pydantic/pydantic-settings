@@ -2,6 +2,7 @@
 Test pydantic_settings.YamlConfigSettingsSource.
 """
 
+from pathlib import Path
 from typing import Tuple, Type, Union
 
 import pytest
@@ -18,6 +19,11 @@ try:
     import yaml
 except ImportError:
     yaml = None
+
+
+def test_repr() -> None:
+    source = YamlConfigSettingsSource(BaseSettings(), Path('config.yaml'))
+    assert repr(source) == 'YamlConfigSettingsSource(yaml_file=config.yaml)'
 
 
 @pytest.mark.skipif(yaml, reason='PyYAML is installed')
