@@ -1567,8 +1567,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         model_default = (
             None
             if (
-                model_default is not PydanticUndefined
-                and (is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)))
+                (is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)))
                 and not issubclass(type(model_default), model)
             )
             else model_default
