@@ -458,8 +458,11 @@ def test_cli_help_union_of_models(capsys, monkeypatch):
         caww: str = 'caww'
         tweet: str
 
+    class Tiger(Cat):
+        roar: str = 'roar'
+
     class Car(BaseSettings, cli_parse_args=True):
-        driver: Union[Cat, Dog, Bird] = Cat(meow='purr')
+        driver: Union[Cat, Dog, Bird] = Tiger(meow='purr')
 
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
