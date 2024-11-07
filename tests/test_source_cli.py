@@ -452,7 +452,7 @@ def test_cli_help_union_of_models(capsys, monkeypatch):
         meow: str = 'meow'
 
     class Dog(BaseModel):
-        bark: str  = 'bark'
+        bark: str = 'bark'
 
     class Bird(BaseModel):
         caww: str = 'caww'
