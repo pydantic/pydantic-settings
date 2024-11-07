@@ -1866,7 +1866,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 _help += f' ({ifdef}required)' if _help else f'({ifdef}required)'
         else:
             default = f'(default: {self.cli_parse_none_str})'
-            if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
+            if (is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default))) and hasattr(
+                model_default, field_name
+            ):
                 default = f'(default: {getattr(model_default, field_name)})'
             elif model_default not in (PydanticUndefined, None) and _is_function(model_default):
                 default = f'(default factory: {self._metavar_format(model_default)})'
