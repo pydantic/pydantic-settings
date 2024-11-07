@@ -447,6 +447,42 @@ My Multiline Doc
         )
 
 
+def test_cli_help_union_of_models(capsys, monkeypatch):
+    class Cat(BaseModel):
+        meow: str = 'meow'
+
+    class Dog(BaseModel):
+        bark: str  = 'bark'
+
+    class Bird(BaseModel):
+        caww: str = 'caww'
+        tweet: str
+
+    class Car(BaseSettings, cli_parse_args=True):
+        driver: Cat | Dog | Bird = Cat(meow='purr')
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Car()
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] [--driver JSON] [--driver.meow str] [--driver.bark str]
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help         show this help message and exit
+
+driver options:
+  --driver JSON      set driver from JSON string
+  --driver.meow str  (default: purr)
+  --driver.bark str  (default: bark)
+  --driver.caww str  (default: caww)
+  --driver.tweet str (ifdef: required)
+"""
+        )
+
+
 def test_cli_help_default_or_none_model(capsys, monkeypatch):
     class DeeperSubModel(BaseModel):
         flag: bool

@@ -1615,6 +1615,17 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         model_default=PydanticUndefined,
                     )
             else:
+                # For union of models, ignore model default if not of same type as current model.
+                model_default = (
+                    None
+                    if (
+                        model_default is not PydanticUndefined
+                        and (is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)))
+                        and type(model_default) is not model
+                    )
+                    else model_default
+                )
+
                 flag_prefix: str = self._cli_flag_prefix
                 is_append_action = _annotation_contains_types(
                     field_info.annotation, (list, set, dict, Sequence, Mapping), is_strip_annotated=True
@@ -1866,9 +1877,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 _help += f' ({ifdef}required)' if _help else f'({ifdef}required)'
         else:
             default = f'(default: {self.cli_parse_none_str})'
-            if (is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default))) and hasattr(
-                model_default, field_name
-            ):
+            if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
                 default = f'(default: {getattr(model_default, field_name)})'
             elif model_default not in (PydanticUndefined, None) and _is_function(model_default):
                 default = f'(default factory: {self._metavar_format(model_default)})'
