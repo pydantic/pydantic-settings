@@ -78,6 +78,30 @@ def test_toml_no_file():
 
 
 @pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+def test_pyproject_nondict_toml(cd_tmp_path):
+    pyproject = cd_tmp_path / 'pyproject.toml'
+    pyproject.write_text(
+        """
+    [tool.pydantic-settings]
+    foobar
+    """
+    )
+
+    class Settings(BaseSettings):
+        foobar: str
+        model_config = SettingsConfigDict()
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls: Type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls, pyproject),)
+
+    with pytest.raises(ValueError):
+        Settings()
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
 def test_multiple_file_toml(tmp_path):
     p1 = tmp_path / '.env.toml1'
     p2 = tmp_path / '.env.toml2'
