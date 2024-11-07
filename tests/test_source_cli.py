@@ -469,16 +469,17 @@ def test_cli_help_union_of_models(capsys, monkeypatch):
         assert (
             capsys.readouterr().out
             == f"""usage: example.py [-h] [--driver JSON] [--driver.meow str] [--driver.bark str]
+                  [--driver.caww str] [--driver.tweet str]
 
 {ARGPARSE_OPTIONS_TEXT}:
-  -h, --help         show this help message and exit
+  -h, --help          show this help message and exit
 
 driver options:
-  --driver JSON      set driver from JSON string
-  --driver.meow str  (default: purr)
-  --driver.bark str  (default: bark)
-  --driver.caww str  (default: caww)
-  --driver.tweet str (ifdef: required)
+  --driver JSON       set driver from JSON string
+  --driver.meow str   (default: purr)
+  --driver.bark str   (default: bark)
+  --driver.caww str   (default: caww)
+  --driver.tweet str  (ifdef: required)
 """
         )
 
