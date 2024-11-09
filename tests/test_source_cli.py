@@ -2120,13 +2120,12 @@ def test_cli_mutually_exclusive_group(capsys, monkeypatch):
         in capsys.readouterr().err
     )
 
-
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
         with pytest.raises(SystemExit):
             CliApp.run(Settings)
         usage = (
-        """usage: example.py [-h] [--circle-optional.radius float |
+            """usage: example.py [-h] [--circle-optional.radius float |
                   --circle-optional.diameter float |
                   --circle-optional.perimeter float]
                   (--circle-required.radius float |
@@ -2138,7 +2137,8 @@ def test_cli_mutually_exclusive_group(capsys, monkeypatch):
                   (--circle-required.radius float | --circle-required.diameter float | --circle-required.perimeter float)"""
         )
         assert (
-            capsys.readouterr().out == f"""{usage}
+            capsys.readouterr().out
+            == f"""{usage}
 
 {ARGPARSE_OPTIONS_TEXT}:
   -h, --help            show this help message and exit
@@ -2159,7 +2159,7 @@ circle-required options (mutually exclusive):
   --circle-required.perimeter float
                         (default: 23)
 """
-    )
+        )
 
 
 def test_cli_mutually_exclusive_group_exceptions():
