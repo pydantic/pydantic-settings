@@ -969,6 +969,44 @@ For `BaseModel` and `pydantic.dataclasses.dataclass` types, `CliApp.run` will in
     The alias generator for kebab case does not propagate to subcommands or submodels and will have to be manually set
     in these cases.
 
+### Mutually Exclusive Groups
+
+CLI mutually exclusive groups can be created by inheriting from the `CliMutuallyExclusiveGroup` class.
+
+!!! note
+    A `CliMutuallyExclusiveGroup` cannot be used in a union or contain nested models.
+
+```py
+from typing import Optional
+
+from pydantic import BaseModel
+
+from pydantic_settings import CliApp, CliMutuallyExclusiveGroup, SettingsError
+
+
+class Circle(CliMutuallyExclusiveGroup):
+    radius: Optional[float] = None
+    diameter: Optional[float] = None
+    perimeter: Optional[float] = None
+
+
+class Settings(BaseModel):
+    circle: Circle
+
+
+try:
+    CliApp.run(
+        Settings,
+        cli_args=['--circle.radius=1', '--circle.diameter=2'],
+        cli_exit_on_error=False,
+    )
+except SettingsError as e:
+    print(e)
+    """
+    error parsing CLI: argument --circle.diameter: not allowed with argument --circle.radius
+    """
+```
+
 ### Customizing the CLI Experience
 
 The below flags can be used to customise the CLI experience to your needs.
