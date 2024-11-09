@@ -2122,14 +2122,22 @@ def test_cli_mutually_exclusive_group(capsys):
 
     with pytest.raises(SystemExit):
         CliApp.run(Settings, cli_args=['--help'])
-    assert (
-        capsys.readouterr().out
-        == f"""usage: example.py [-h] [--circle-optional.radius float |
+    usage = (
+        """usage: example.py [-h] [--circle-optional.radius float |
                   --circle-optional.diameter float |
                   --circle-optional.perimeter float]
                   (--circle-required.radius float |
                   --circle-required.diameter float |
-                  --circle-required.perimeter float)
+                  --circle-required.perimeter float)"""
+        if sys.version_info >= (3, 13)
+        else """usage: example.py [-h]
+                  [--circle-optional.radius float | --circle-optional.diameter float | --circle-optional.perimeter float]
+                  (--circle-required.radius float | --circle-required.diameter float | --circle-required.perimeter float)
+              """
+    )
+    assert (
+        capsys.readouterr().out
+        == f"""{usage}
 
 {ARGPARSE_OPTIONS_TEXT}:
   -h, --help            show this help message and exit
