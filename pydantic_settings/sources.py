@@ -1587,6 +1587,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     ) -> ArgumentParser:
         subparsers: Any = None
         alias_path_args: dict[str, str] = {}
+        # Ignore model default if the default is a model and not a subclass of the current model.
+        model_default = (
+            None
+            if (
+                (is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)))
+                and not issubclass(type(model_default), model)
+            )
+            else model_default
+        )
         for field_name, field_info in self._sort_arg_fields(model):
             sub_models: list[type[BaseModel]] = self._get_sub_models(model, field_name, field_info)
             alias_names, is_alias_path_only = _get_alias_names(
