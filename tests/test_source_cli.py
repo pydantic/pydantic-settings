@@ -33,6 +33,7 @@ from pydantic_settings.sources import (
     CLI_SUPPRESS,
     CliExplicitFlag,
     CliImplicitFlag,
+    CliMutuallyExclusiveGroup,
     CliPositionalArg,
     CliSettingsSource,
     CliSubCommand,
@@ -79,30 +80,30 @@ class SettingWithIgnoreEmpty(BaseSettings):
 class CliDummyArgGroup(BaseModel, arbitrary_types_allowed=True):
     group: argparse._ArgumentGroup
 
-    def add_argument(self, *args, **kwargs) -> None:
+    def add_argument(self, *args: Any, **kwargs: Any) -> None:
         self.group.add_argument(*args, **kwargs)
 
 
 class CliDummySubParsers(BaseModel, arbitrary_types_allowed=True):
     sub_parser: argparse._SubParsersAction
 
-    def add_parser(self, *args, **kwargs) -> 'CliDummyParser':
+    def add_parser(self, *args: Any, **kwargs: Any) -> 'CliDummyParser':
         return CliDummyParser(parser=self.sub_parser.add_parser(*args, **kwargs))
 
 
 class CliDummyParser(BaseModel, arbitrary_types_allowed=True):
     parser: argparse.ArgumentParser = Field(default_factory=lambda: argparse.ArgumentParser())
 
-    def add_argument(self, *args, **kwargs) -> None:
+    def add_argument(self, *args: Any, **kwargs: Any) -> None:
         self.parser.add_argument(*args, **kwargs)
 
-    def add_argument_group(self, *args, **kwargs) -> CliDummyArgGroup:
+    def add_argument_group(self, *args: Any, **kwargs: Any) -> CliDummyArgGroup:
         return CliDummyArgGroup(group=self.parser.add_argument_group(*args, **kwargs))
 
-    def add_subparsers(self, *args, **kwargs) -> CliDummySubParsers:
+    def add_subparsers(self, *args: Any, **kwargs: Any) -> CliDummySubParsers:
         return CliDummySubParsers(sub_parser=self.parser.add_subparsers(*args, **kwargs))
 
-    def parse_args(self, *args, **kwargs) -> argparse.Namespace:
+    def parse_args(self, *args: Any, **kwargs: Any) -> argparse.Namespace:
         return self.parser.parse_args(*args, **kwargs)
 
 
@@ -1826,11 +1827,11 @@ def test_cli_dummy_user_settings_with_subcommand(prefix):
 
     args = ['--fruit', 'pear']
     parsed_args = parser.parse_args(args)
-    assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=parsed_args)).model_dump() == {
+    assert CliApp.run(Cfg, cli_args=parsed_args, cli_settings_source=cli_cfg_settings).model_dump() == {
         'pet': 'bird',
         'command': None,
     }
-    assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {
+    assert CliApp.run(Cfg, cli_args=args, cli_settings_source=cli_cfg_settings).model_dump() == {
         'pet': 'bird',
         'command': None,
     }
@@ -1838,28 +1839,28 @@ def test_cli_dummy_user_settings_with_subcommand(prefix):
     arg_prefix = f'{prefix}.' if prefix else ''
     args = ['--fruit', 'kiwi', f'--{arg_prefix}pet', 'dog']
     parsed_args = parser.parse_args(args)
-    assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=parsed_args)).model_dump() == {
+    assert CliApp.run(Cfg, cli_args=parsed_args, cli_settings_source=cli_cfg_settings).model_dump() == {
         'pet': 'dog',
         'command': None,
     }
-    assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {
+    assert CliApp.run(Cfg, cli_args=args, cli_settings_source=cli_cfg_settings).model_dump() == {
         'pet': 'dog',
         'command': None,
     }
 
     parsed_args = parser.parse_args(['--fruit', 'kiwi', f'--{arg_prefix}pet', 'cat'])
-    assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=vars(parsed_args))).model_dump() == {
+    assert CliApp.run(Cfg, cli_args=vars(parsed_args), cli_settings_source=cli_cfg_settings).model_dump() == {
         'pet': 'cat',
         'command': None,
     }
 
     args = ['--fruit', 'kiwi', f'--{arg_prefix}pet', 'dog', 'command', '--name', 'ralph', '--command', 'roll']
     parsed_args = parser.parse_args(args)
-    assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=vars(parsed_args))).model_dump() == {
+    assert CliApp.run(Cfg, cli_args=vars(parsed_args), cli_settings_source=cli_cfg_settings).model_dump() == {
         'pet': 'dog',
         'command': {'name': 'ralph', 'command': 'roll'},
     }
-    assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {
+    assert CliApp.run(Cfg, cli_args=args, cli_settings_source=cli_cfg_settings).model_dump() == {
         'pet': 'dog',
         'command': {'name': 'ralph', 'command': 'roll'},
     }
@@ -2085,3 +2086,140 @@ def test_cli_suppress(capsys, monkeypatch):
   -h, --help  show this help message and exit
 """
         )
+
+
+def test_cli_mutually_exclusive_group(capsys, monkeypatch):
+    class Circle(CliMutuallyExclusiveGroup):
+        radius: Optional[float] = 21
+        diameter: Optional[float] = 22
+        perimeter: Optional[float] = 23
+
+    class Settings(BaseModel):
+        circle_optional: Circle = Circle(radius=None, diameter=None, perimeter=24)
+        circle_required: Circle
+
+    CliApp.run(Settings, cli_args=['--circle-required.radius=1', '--circle-optional.radius=1']).model_dump() == {
+        'circle_optional': {'radius': 1, 'diameter': 22, 'perimeter': 24},
+        'circle_required': {'radius': 1, 'diameter': 22, 'perimeter': 23},
+    }
+
+    with pytest.raises(SystemExit):
+        CliApp.run(Settings, cli_args=['--circle-required.radius=1', '--circle-required.diameter=2'])
+    assert (
+        'error: argument --circle-required.diameter: not allowed with argument --circle-required.radius'
+        in capsys.readouterr().err
+    )
+
+    with pytest.raises(SystemExit):
+        CliApp.run(
+            Settings,
+            cli_args=['--circle-required.radius=1', '--circle-optional.radius=1', '--circle-optional.diameter=2'],
+        )
+    assert (
+        'error: argument --circle-optional.diameter: not allowed with argument --circle-optional.radius'
+        in capsys.readouterr().err
+    )
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+        with pytest.raises(SystemExit):
+            CliApp.run(Settings)
+        usage = (
+            """usage: example.py [-h] [--circle-optional.radius float |
+                  --circle-optional.diameter float |
+                  --circle-optional.perimeter float]
+                  (--circle-required.radius float |
+                  --circle-required.diameter float |
+                  --circle-required.perimeter float)"""
+            if sys.version_info >= (3, 13)
+            else """usage: example.py [-h]
+                  [--circle-optional.radius float | --circle-optional.diameter float | --circle-optional.perimeter float]
+                  (--circle-required.radius float | --circle-required.diameter float | --circle-required.perimeter float)"""
+        )
+        assert (
+            capsys.readouterr().out
+            == f"""{usage}
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+
+circle-optional options (mutually exclusive):
+  --circle-optional.radius float
+                        (default: None)
+  --circle-optional.diameter float
+                        (default: None)
+  --circle-optional.perimeter float
+                        (default: 24.0)
+
+circle-required options (mutually exclusive):
+  --circle-required.radius float
+                        (default: 21)
+  --circle-required.diameter float
+                        (default: 22)
+  --circle-required.perimeter float
+                        (default: 23)
+"""
+        )
+
+
+def test_cli_mutually_exclusive_group_exceptions():
+    class Circle(CliMutuallyExclusiveGroup):
+        radius: Optional[float] = 21
+        diameter: Optional[float] = 22
+        perimeter: Optional[float] = 23
+
+    class Settings(BaseSettings):
+        circle: Circle
+
+    parser = CliDummyParser()
+    with pytest.raises(
+        SettingsError,
+        match='cannot connect CLI settings source root parser: group object is missing add_mutually_exclusive_group but is needed for connecting',
+    ):
+        CliSettingsSource(
+            Settings,
+            root_parser=parser,
+            parse_args_method=CliDummyParser.parse_args,
+            add_argument_method=CliDummyParser.add_argument,
+            add_argument_group_method=CliDummyParser.add_argument_group,
+            add_parser_method=CliDummySubParsers.add_parser,
+            add_subparsers_method=CliDummyParser.add_subparsers,
+        )
+
+    class SubModel(BaseModel):
+        pass
+
+    class SettingsInvalidUnion(BaseSettings):
+        union: Union[Circle, SubModel]
+
+    with pytest.raises(SettingsError, match='cannot use union with CliMutuallyExclusiveGroup'):
+        CliApp.run(SettingsInvalidUnion)
+
+    class CircleInvalidSubModel(Circle):
+        square: Optional[SubModel] = None
+
+    class SettingsInvalidOptSubModel(BaseModel):
+        circle: CircleInvalidSubModel = CircleInvalidSubModel()
+
+    class SettingsInvalidReqSubModel(BaseModel):
+        circle: CircleInvalidSubModel
+
+    for settings in [SettingsInvalidOptSubModel, SettingsInvalidReqSubModel]:
+        with pytest.raises(SettingsError, match='cannot have nested models in a CliMutuallyExclusiveGroup'):
+            CliApp.run(settings)
+
+    class CircleRequiredField(Circle):
+        length: float
+
+    class SettingsOptCircleReqField(BaseModel):
+        circle: CircleRequiredField = CircleRequiredField(length=2)
+
+    assert CliApp.run(SettingsOptCircleReqField, cli_args=[]).model_dump() == {
+        'circle': {'diameter': 22.0, 'length': 2.0, 'perimeter': 23.0, 'radius': 21.0}
+    }
+
+    class SettingsInvalidReqCircleReqField(BaseModel):
+        circle: CircleRequiredField
+
+    with pytest.raises(ValueError, match='mutually exclusive arguments must be optional'):
+        CliApp.run(SettingsInvalidReqCircleReqField)
