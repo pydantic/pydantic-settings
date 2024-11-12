@@ -1165,6 +1165,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 description=None if settings_cls.__doc__ is None else dedent(settings_cls.__doc__),
                 formatter_class=formatter_class,
                 prefix_chars=self.cli_flag_prefix_char,
+                allow_abbrev=False,
             )
             if root_parser is None
             else root_parser

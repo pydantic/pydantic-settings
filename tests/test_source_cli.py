@@ -2223,3 +2223,17 @@ def test_cli_mutually_exclusive_group_exceptions():
 
     with pytest.raises(ValueError, match='mutually exclusive arguments must be optional'):
         CliApp.run(SettingsInvalidReqCircleReqField)
+
+
+def test_cli_invalid_abbrev():
+    class MySettings(BaseSettings):
+        bacon: str = ''
+        badger: str = ''
+
+    with pytest.raises(
+        SettingsError,
+        match='error parsing CLI: unrecognized arguments: --bac cli abbrev are invalid for internal parser',
+    ):
+        CliApp.run(
+            MySettings, cli_args=['--bac', 'cli abbrev are invalid for internal parser'], cli_exit_on_error=False
+        )
