@@ -37,7 +37,7 @@ from typing import (
 
 import typing_extensions
 from dotenv import dotenv_values
-from pydantic import AliasChoices, AliasPath, BaseModel, Json, RootModel, TypeAdapter
+from pydantic import AliasChoices, AliasPath, BaseModel, Json, RootModel, Secret, TypeAdapter
 from pydantic._internal._repr import Representation
 from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union, typing_base
 from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
@@ -2202,6 +2202,10 @@ def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) ->
         inner, *meta = get_args(annotation)
         return _annotation_is_complex(inner, meta)
     origin = get_origin(annotation)
+
+    if origin is Secret:
+        return False
+
     return (
         _annotation_is_complex_inner(annotation)
         or _annotation_is_complex_inner(origin)

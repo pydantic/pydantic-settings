@@ -20,7 +20,9 @@ from pydantic import (
     Field,
     HttpUrl,
     Json,
+    PostgresDsn,
     RootModel,
+    Secret,
     SecretStr,
     Tag,
     ValidationError,
@@ -2856,3 +2858,16 @@ def test_dotenv_env_prefix_env_without_prefix(tmp_path):
 
     s = Settings()
     assert s.model_dump() == {'foo': 'test-foo'}
+
+
+def test_parsing_secret_field(env):
+    class Settings(BaseSettings):
+        foo: Secret[int]
+        bar: Secret[PostgresDsn]
+
+    env.set('foo', '123')
+    env.set('bar', 'postgres://user:password@localhost/dbname')
+
+    s = Settings()
+    assert s.foo.get_secret_value() == 123
+    assert s.bar.get_secret_value() == PostgresDsn('postgres://user:password@localhost/dbname')
