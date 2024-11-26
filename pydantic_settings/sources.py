@@ -661,7 +661,9 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
                 a flag to determine whether value is complex.
         """
 
-        for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
+        field_infos = self._extract_field_info(field, field_name)
+        preferred_key, *_ = field_infos[0]
+        for field_key, env_name, value_is_complex in field_infos:
             # paths reversed to match the last-wins behaviour of `env_file`
             for secrets_path in reversed(self.secrets_paths):
                 path = self.find_case_path(secrets_path, env_name, self.case_sensitive)
@@ -670,14 +672,16 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
                     continue
 
                 if path.is_file():
-                    return path.read_text().strip(), field_key, value_is_complex
+                    if value_is_complex or (self.config.get('populate_by_name', False) and (field_key == field_name)):
+                        preferred_key = field_key
+                    return path.read_text().strip(), preferred_key, value_is_complex
                 else:
                     warnings.warn(
                         f'attempted to load secret file "{path}" but found a {path_type_label(path)} instead.',
                         stacklevel=4,
                     )
 
-        return None, field_key, value_is_complex
+        return None, preferred_key, value_is_complex
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}(secrets_dir={self.secrets_dir!r})'
@@ -725,12 +729,16 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         """
 
         env_val: str | None = None
-        for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
+        field_infos = self._extract_field_info(field, field_name)
+        preferred_key, *_ = field_infos[0]
+        for field_key, env_name, value_is_complex in field_infos:
             env_val = self.env_vars.get(env_name)
             if env_val is not None:
+                if value_is_complex or (self.config.get('populate_by_name', False) and (field_key == field_name)):
+                    preferred_key = field_key
                 break
 
-        return env_val, field_key, value_is_complex
+        return env_val, preferred_key, value_is_complex
 
     def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
         """
