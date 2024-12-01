@@ -2281,7 +2281,7 @@ def test_cli_submodels_strip_annotated():
         b: str = '2'
         type: Literal['b'] = 'b'
 
-    def _get_type(model: BaseModel | dict) -> str:
+    def _get_type(model: Union[BaseModel, Dict]) -> str:
         if isinstance(model, dict):
             return model.get('type', 'a')
         return model.type  # type: ignore
