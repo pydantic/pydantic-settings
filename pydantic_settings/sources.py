@@ -1682,7 +1682,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     else f'{arg_prefix}{preferred_alias}'
                 )
 
-                if kwargs['dest'] in added_args:
+                arg_names = self._get_arg_names(arg_prefix, subcommand_prefix, alias_prefixes, alias_names, added_args)
+                if not arg_names or (kwargs['dest'] in added_args):
                     continue
 
                 if is_append_action:
@@ -1690,7 +1691,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     if _annotation_contains_types(field_info.annotation, (dict, Mapping), is_strip_annotated=True):
                         self._cli_dict_args[kwargs['dest']] = field_info.annotation
 
-                arg_names = self._get_arg_names(arg_prefix, subcommand_prefix, alias_prefixes, alias_names)
                 if _CliPositionalArg in field_info.metadata:
                     kwargs['metavar'] = preferred_alias.upper()
                     arg_names = [kwargs['dest']]
@@ -1748,18 +1748,25 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     )
 
     def _get_arg_names(
-        self, arg_prefix: str, subcommand_prefix: str, alias_prefixes: list[str], alias_names: tuple[str, ...]
+        self,
+        arg_prefix: str,
+        subcommand_prefix: str,
+        alias_prefixes: list[str],
+        alias_names: tuple[str, ...],
+        added_args: list[str],
     ) -> list[str]:
         arg_names: list[str] = []
         for prefix in [arg_prefix] + alias_prefixes:
             for name in alias_names:
-                arg_names.append(
+                arg_name = (
                     f'{prefix}{name}'
                     if subcommand_prefix == self.env_prefix
                     else f'{prefix.replace(subcommand_prefix, "", 1)}{name}'
                 )
                 if self.cli_kebab_case:
-                    arg_names[-1] = arg_names[-1].replace('_', '-')
+                    arg_name = arg_name.replace('_', '-')
+                if arg_name not in added_args:
+                    arg_names.append(arg_name)
         return arg_names
 
     def _add_parser_submodels(
