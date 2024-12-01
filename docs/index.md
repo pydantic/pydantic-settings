@@ -957,17 +957,13 @@ assert cmd.model_dump() == {
 For `BaseModel` and `pydantic.dataclasses.dataclass` types, `CliApp.run` will internally use the following
 `BaseSettings` configuration defaults:
 
-* `alias_generator=AliasGenerator(lambda s: s.replace('_', '-'))`
 * `nested_model_default_partial_update=True`
 * `case_sensitive=True`
 * `cli_hide_none_type=True`
 * `cli_avoid_json=True`
 * `cli_enforce_required=True`
 * `cli_implicit_flags=True`
-
-!!! note
-    The alias generator for kebab case does not propagate to subcommands or submodels and will have to be manually set
-    in these cases.
+* `cli_kebab_case=True`
 
 ### Mutually Exclusive Groups
 
@@ -1129,6 +1125,40 @@ class Settings(BaseSettings, cli_parse_args=True, cli_ignore_unknown_args=True):
 sys.argv = ['example.py', '--bad-arg=bad', 'ANOTHER_BAD_ARG', '--good_arg=hello world']
 print(Settings().model_dump())
 #> {'good_arg': 'hello world'}
+```
+
+#### CLI Kebab Case for Arguments
+
+Change whether CLI arguments should use kebab case by enabling `cli_kebab_case`.
+
+!!! note
+    CLI kebab case does not apply to subcommand or positional arguments, which must still use aliasing.
+
+```py
+import sys
+
+from pydantic import Field
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings, cli_parse_args=True, cli_kebab_case=True):
+    my_option: str = Field(description='will show as kebab case on CLI')
+
+
+try:
+    sys.argv = ['example.py', '--help']
+    Settings()
+except SystemExit as e:
+    print(e)
+    #> 0
+"""
+usage: example.py [-h] [--my-option str]
+
+options:
+  -h, --help       show this help message and exit
+  --my-option str  will show as kebab case on CLI (required)
+"""
 ```
 
 #### Change Whether CLI Should Exit on Error

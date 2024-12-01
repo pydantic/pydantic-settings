@@ -1063,6 +1063,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_implicit_flags: Whether `bool` fields should be implicitly converted into CLI boolean flags.
             (e.g. --flag, --no-flag). Defaults to `False`.
         cli_ignore_unknown_args: Whether to ignore unknown CLI args and parse only known ones. Defaults to `False`.
+        cli_kebab_case: CLI args use kebab case. Defaults to `False`.
         case_sensitive: Whether CLI "--arg" names should be read with case-sensitivity. Defaults to `True`.
             Note: Case-insensitive matching is only supported on the internal root parser and does not apply to CLI
             subcommands.
@@ -1093,6 +1094,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_flag_prefix_char: str | None = None,
         cli_implicit_flags: bool | None = None,
         cli_ignore_unknown_args: bool | None = None,
+        cli_kebab_case: bool | None = None,
         case_sensitive: bool | None = True,
         root_parser: Any = None,
         parse_args_method: Callable[..., Any] | None = None,
@@ -1151,6 +1153,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             cli_ignore_unknown_args
             if cli_ignore_unknown_args is not None
             else settings_cls.model_config.get('cli_ignore_unknown_args', False)
+        )
+        self.cli_kebab_case = (
+            cli_kebab_case if cli_kebab_case is not None else settings_cls.model_config.get('cli_kebab_case', False)
         )
 
         case_sensitive = case_sensitive if case_sensitive is not None else True
@@ -1753,6 +1758,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     if subcommand_prefix == self.env_prefix
                     else f'{prefix.replace(subcommand_prefix, "", 1)}{name}'
                 )
+                if self.cli_kebab_case:
+                    arg_names[-1] = arg_names[-1].replace('_', '-')
         return arg_names
 
     def _add_parser_submodels(

@@ -2268,3 +2268,53 @@ def test_cli_invalid_abbrev():
         CliApp.run(
             MySettings, cli_args=['--bac', 'cli abbrev are invalid for internal parser'], cli_exit_on_error=False
         )
+
+
+def test_cli_kebab_case(env, capsys, monkeypatch):
+    class SubModel(BaseModel):
+        v1: str = 'default'
+        v2: bytes = b'hello'
+        v3: int
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_prefix='MYTEST_',
+            env_nested_delimiter='__',
+            nested_model_default_partial_update=True,
+            cli_parse_args=True,
+            cli_kebab_case=True,
+        )
+
+        v0: str = 'ok'
+        sub_model: SubModel = SubModel(v1='top default', v3=33)
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            CliApp.run(Settings)
+
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] [--v0 str] [--sub-model JSON] [--sub-model.v1 str]
+                  [--sub-model.v2 bytes] [--sub-model.v3 int]
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+  --v0 str              (default: ok)
+
+sub-model options:
+  --sub-model JSON      set sub-model from JSON string
+  --sub-model.v1 str    (default: top default)
+  --sub-model.v2 bytes  (default: b'hello')
+  --sub-model.v3 int    (default: 33)
+"""
+        )
+
+    env.set('MYTEST_V0', 'env with prefix')
+    env.set('MYTEST_SUB_MODEL__V1', 'env with prefix')
+    env.set('MYTEST_SUB_MODEL__V2', 'env with prefix')
+    assert CliApp.run(Settings, cli_args=['--sub-model.v1=cli']).model_dump() == {
+        'v0': 'env with prefix',
+        'sub_model': {'v1': 'cli', 'v2': b'env with prefix', 'v3': 33},
+    }
