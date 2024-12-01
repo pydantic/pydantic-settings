@@ -1435,7 +1435,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             elif _annotation_contains_types(type_, (_CliPositionalArg,), is_include_origin=False):
                 raise SettingsError(f'CliPositionalArg is not outermost annotation for {model.__name__}.{field_name}')
             if is_model_class(_strip_annotated(type_)) or is_pydantic_dataclass(_strip_annotated(type_)):
-                sub_models.append(_strip_annotated(type_))  # type: ignore
+                sub_models.append(_strip_annotated(type_))
         return sub_models
 
     def _verify_cli_flag_annotations(self, model: type[BaseModel], field_name: str, field_info: FieldInfo) -> None:
