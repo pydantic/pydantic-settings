@@ -2286,7 +2286,7 @@ def test_cli_submodels_strip_annotated():
             return model.get('type', 'a')
         return model.type  # type: ignore
 
-    Poly = Annotated[Annotated[PolyA, Tag('a')] | Annotated[PolyB, Tag('b')], Discriminator(_get_type)]
+    Poly = Annotated[Union[Annotated[PolyA, Tag('a')], Annotated[PolyB, Tag('b')]], Discriminator(_get_type)]
 
     class WithUnion(BaseSettings):
         poly: Poly
