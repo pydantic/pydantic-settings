@@ -2202,26 +2202,28 @@ def test_nested_bytes_field(env):
 def test_protected_namespace_defaults():
     # pydantic default
     with pytest.warns(
-        UserWarning, match='Field "model_prefixed_field" in Model has conflict with protected namespace "model_"'
+        UserWarning,
+        match='Field "model_dump_prefixed_field" in Model has conflict with protected namespace "model_dump"',
     ):
 
         class Model(BaseSettings):
-            model_prefixed_field: str
+            model_dump_prefixed_field: str
 
     # pydantic-settings default
     with pytest.warns(
-        UserWarning, match='Field "settings_prefixed_field" in Model1 has conflict with protected namespace "settings_"'
+        UserWarning,
+        match='Field "settings_customise_sources_prefixed_field" in Model1 has conflict with protected namespace "settings_customise_sources"',
     ):
 
         class Model1(BaseSettings):
-            settings_prefixed_field: str
+            settings_customise_sources_prefixed_field: str
 
     with pytest.raises(
         NameError,
         match=(
             'Field "settings_customise_sources" conflicts with member <bound method '
             "BaseSettings.settings_customise_sources of <class 'pydantic_settings.main.BaseSettings'>> "
-            'of protected namespace "settings_".'
+            'of protected namespace "settings_customise_sources".'
         ),
     ):
 
