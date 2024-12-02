@@ -15,7 +15,9 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     DirectoryPath,
+    Discriminator,
     Field,
+    Tag,
     ValidationError,
 )
 from pydantic import (
@@ -2268,6 +2270,28 @@ def test_cli_invalid_abbrev():
         CliApp.run(
             MySettings, cli_args=['--bac', 'cli abbrev are invalid for internal parser'], cli_exit_on_error=False
         )
+
+
+def test_cli_submodels_strip_annotated():
+    class PolyA(BaseModel):
+        a: int = 1
+        type: Literal['a'] = 'a'
+
+    class PolyB(BaseModel):
+        b: str = '2'
+        type: Literal['b'] = 'b'
+
+    def _get_type(model: Union[BaseModel, Dict]) -> str:
+        if isinstance(model, dict):
+            return model.get('type', 'a')
+        return model.type  # type: ignore
+
+    Poly = Annotated[Union[Annotated[PolyA, Tag('a')], Annotated[PolyB, Tag('b')]], Discriminator(_get_type)]
+
+    class WithUnion(BaseSettings):
+        poly: Poly
+
+    assert CliApp.run(WithUnion, ['--poly.type=a']).model_dump() == {'poly': {'a': 1, 'type': 'a'}}
 
 
 def test_cli_kebab_case(capsys, monkeypatch):
