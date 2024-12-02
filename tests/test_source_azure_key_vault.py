@@ -115,7 +115,7 @@ class TestAzureKeyVaultSettingsSource:
         assert settings.sql_server_user == expected_secret_value
         assert settings.sql_server.password == expected_secret_value
 
-    def _raise_resource_not_found_when_getting_parent_secret_name(self, secret_name: str) -> KeyVaultSecret:
+    def _raise_resource_not_found_when_getting_parent_secret_name(self, secret_name: str):
         expected_secret_value = 'SecretValue'
         key_vault_secret = KeyVaultSecret(SecretProperties(), expected_secret_value)
 
