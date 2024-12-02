@@ -10,11 +10,14 @@ import pytest
 import typing_extensions
 from pydantic import (
     AliasChoices,
+    AliasGenerator,
     AliasPath,
     BaseModel,
     ConfigDict,
     DirectoryPath,
+    Discriminator,
     Field,
+    Tag,
     ValidationError,
 )
 from pydantic import (
@@ -107,7 +110,7 @@ class CliDummyParser(BaseModel, arbitrary_types_allowed=True):
         return self.parser.parse_args(*args, **kwargs)
 
 
-def test_validation_alias_with_cli_prefix():
+def test_cli_validation_alias_with_cli_prefix():
     class Settings(BaseSettings, cli_exit_on_error=False):
         foobar: str = Field(validation_alias='foo')
 
@@ -117,6 +120,36 @@ def test_validation_alias_with_cli_prefix():
         CliApp.run(Settings, cli_args=['--foo', 'bar'])
 
     assert CliApp.run(Settings, cli_args=['--p.foo', 'bar']).foobar == 'bar'
+
+
+@pytest.mark.parametrize(
+    'alias_generator',
+    [
+        AliasGenerator(validation_alias=lambda s: AliasChoices(s, s.replace('_', '-'))),
+        AliasGenerator(validation_alias=lambda s: AliasChoices(s.replace('_', '-'), s)),
+    ],
+)
+def test_cli_alias_resolution_consistency_with_env(env, alias_generator):
+    class SubModel(BaseModel):
+        v1: str = 'model default'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_nested_delimiter='__',
+            nested_model_default_partial_update=True,
+            alias_generator=alias_generator,
+        )
+
+        sub_model: SubModel = SubModel(v1='top default')
+
+    assert CliApp.run(Settings, cli_args=[]).model_dump() == {'sub_model': {'v1': 'top default'}}
+
+    env.set('SUB_MODEL__V1', 'env default')
+    assert CliApp.run(Settings, cli_args=[]).model_dump() == {'sub_model': {'v1': 'env default'}}
+
+    assert CliApp.run(Settings, cli_args=['--sub-model.v1=cli default']).model_dump() == {
+        'sub_model': {'v1': 'cli default'}
+    }
 
 
 def test_cli_nested_arg():
@@ -2237,3 +2270,25 @@ def test_cli_invalid_abbrev():
         CliApp.run(
             MySettings, cli_args=['--bac', 'cli abbrev are invalid for internal parser'], cli_exit_on_error=False
         )
+
+
+def test_cli_submodels_strip_annotated():
+    class PolyA(BaseModel):
+        a: int = 1
+        type: Literal['a'] = 'a'
+
+    class PolyB(BaseModel):
+        b: str = '2'
+        type: Literal['b'] = 'b'
+
+    def _get_type(model: Union[BaseModel, Dict]) -> str:
+        if isinstance(model, dict):
+            return model.get('type', 'a')
+        return model.type  # type: ignore
+
+    Poly = Annotated[Union[Annotated[PolyA, Tag('a')], Annotated[PolyB, Tag('b')]], Discriminator(_get_type)]
+
+    class WithUnion(BaseSettings):
+        poly: Poly
+
+    assert CliApp.run(WithUnion, ['--poly.type=a']).model_dump() == {'poly': {'a': 1, 'type': 'a'}}
