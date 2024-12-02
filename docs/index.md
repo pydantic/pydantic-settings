@@ -1131,9 +1131,6 @@ print(Settings().model_dump())
 
 Change whether CLI arguments should use kebab case by enabling `cli_kebab_case`.
 
-!!! note
-    CLI kebab case does not apply to subcommand or positional arguments, which must still use aliasing.
-
 ```py
 import sys
 

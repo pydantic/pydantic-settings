@@ -1618,7 +1618,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             preferred_alias = alias_names[0]
             if _CliSubCommand in field_info.metadata:
                 for model in sub_models:
-                    subcommand_alias = model.__name__ if len(sub_models) > 1 else preferred_alias
+                    subcommand_alias = self._check_kebab_name(
+                        model.__name__ if len(sub_models) > 1 else preferred_alias
+                    )
                     subcommand_name = f'{arg_prefix}{subcommand_alias}'
                     subcommand_dest = f'{arg_prefix}{preferred_alias}'
                     self._cli_subcommands[f'{arg_prefix}:subcommand'][subcommand_name] = subcommand_dest
@@ -1692,7 +1694,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         self._cli_dict_args[kwargs['dest']] = field_info.annotation
 
                 if _CliPositionalArg in field_info.metadata:
-                    kwargs['metavar'] = preferred_alias.upper()
+                    kwargs['metavar'] = self._check_kebab_name(preferred_alias.upper())
                     arg_names = [kwargs['dest']]
                     del kwargs['dest']
                     del kwargs['required']
@@ -1731,6 +1733,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self._add_parser_alias_paths(parser, alias_path_args, added_args, arg_prefix, subcommand_prefix, group)
         return parser
 
+    def _check_kebab_name(self, name: str) -> str:
+        if self.cli_kebab_case:
+            return name.replace('_', '-')
+        return name
+
     def _convert_bool_flag(self, kwargs: dict[str, Any], field_info: FieldInfo, model_default: Any) -> None:
         if kwargs['metavar'] == 'bool':
             default = None
@@ -1758,13 +1765,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         arg_names: list[str] = []
         for prefix in [arg_prefix] + alias_prefixes:
             for name in alias_names:
-                arg_name = (
+                arg_name = self._check_kebab_name(
                     f'{prefix}{name}'
                     if subcommand_prefix == self.env_prefix
                     else f'{prefix.replace(subcommand_prefix, "", 1)}{name}'
                 )
-                if self.cli_kebab_case:
-                    arg_name = arg_name.replace('_', '-')
                 if arg_name not in added_args:
                     arg_names.append(arg_name)
         return arg_names

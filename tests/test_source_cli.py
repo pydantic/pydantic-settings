@@ -2270,51 +2270,88 @@ def test_cli_invalid_abbrev():
         )
 
 
-def test_cli_kebab_case(env, capsys, monkeypatch):
+def test_cli_kebab_case(capsys, monkeypatch):
+    class DeepSubModel(BaseModel):
+        deep_submodel_positional_arg: CliPositionalArg[str]
+        deep_submodel_arg: str
+
     class SubModel(BaseModel):
-        v1: str = 'default'
-        v2: bytes = b'hello'
-        v3: int
+        submodel_subcommand: CliSubCommand[DeepSubModel]
+        submodel_arg: str
 
-    class Settings(BaseSettings):
-        model_config = SettingsConfigDict(
-            env_prefix='MYTEST_',
-            env_nested_delimiter='__',
-            nested_model_default_partial_update=True,
-            cli_parse_args=True,
-            cli_kebab_case=True,
-        )
+    class Root(BaseModel):
+        root_subcommand: CliSubCommand[SubModel]
+        root_arg: str
 
-        v0: str = 'ok'
-        sub_model: SubModel = SubModel(v1='top default', v3=33)
+    assert CliApp.run(
+        Root,
+        cli_args=[
+            '--root-arg=hi',
+            'root-subcommand',
+            '--submodel-arg=hello',
+            'submodel-subcommand',
+            'hey',
+            '--deep-submodel-arg=bye',
+        ],
+    ).model_dump() == {
+        'root_arg': 'hi',
+        'root_subcommand': {
+            'submodel_arg': 'hello',
+            'submodel_subcommand': {'deep_submodel_positional_arg': 'hey', 'deep_submodel_arg': 'bye'},
+        },
+    }
 
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
-
         with pytest.raises(SystemExit):
-            CliApp.run(Settings)
-
+            CliApp.run(Root)
         assert (
             capsys.readouterr().out
-            == f"""usage: example.py [-h] [--v0 str] [--sub-model JSON] [--sub-model.v1 str]
-                  [--sub-model.v2 bytes] [--sub-model.v3 int]
+            == f"""usage: example.py [-h] --root-arg str {{root-subcommand}} ...
 
 {ARGPARSE_OPTIONS_TEXT}:
-  -h, --help            show this help message and exit
-  --v0 str              (default: ok)
+  -h, --help         show this help message and exit
+  --root-arg str     (required)
 
-sub-model options:
-  --sub-model JSON      set sub-model from JSON string
-  --sub-model.v1 str    (default: top default)
-  --sub-model.v2 bytes  (default: b'hello')
-  --sub-model.v3 int    (default: 33)
+subcommands:
+  {{root-subcommand}}
+    root-subcommand
 """
         )
 
-    env.set('MYTEST_V0', 'env with prefix')
-    env.set('MYTEST_SUB_MODEL__V1', 'env with prefix')
-    env.set('MYTEST_SUB_MODEL__V2', 'env with prefix')
-    assert CliApp.run(Settings, cli_args=['--sub-model.v1=cli']).model_dump() == {
-        'v0': 'env with prefix',
-        'sub_model': {'v1': 'cli', 'v2': b'env with prefix', 'v3': 33},
-    }
+        m.setattr(sys, 'argv', ['example.py', 'root-subcommand', '--help'])
+        with pytest.raises(SystemExit):
+            CliApp.run(Root)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py root-subcommand [-h] --submodel-arg str
+                                  {{submodel-subcommand}} ...
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+  --submodel-arg str    (required)
+
+subcommands:
+  {{submodel-subcommand}}
+    submodel-subcommand
+"""
+        )
+
+        m.setattr(sys, 'argv', ['example.py', 'root-subcommand', 'submodel-subcommand', '--help'])
+        with pytest.raises(SystemExit):
+            CliApp.run(Root)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py root-subcommand submodel-subcommand [-h]
+                                                      --deep-submodel-arg str
+                                                      DEEP-SUBMODEL-POSITIONAL-ARG
+
+positional arguments:
+  DEEP-SUBMODEL-POSITIONAL-ARG
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+  --deep-submodel-arg str
+                        (required)
+"""
+        )
