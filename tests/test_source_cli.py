@@ -2292,3 +2292,86 @@ def test_cli_submodels_strip_annotated():
         poly: Poly
 
     assert CliApp.run(WithUnion, ['--poly.type=a']).model_dump() == {'poly': {'a': 1, 'type': 'a'}}
+
+
+def test_cli_kebab_case(capsys, monkeypatch):
+    class DeepSubModel(BaseModel):
+        deep_pos_arg: CliPositionalArg[str]
+        deep_arg: str
+
+    class SubModel(BaseModel):
+        sub_subcmd: CliSubCommand[DeepSubModel]
+        sub_arg: str
+
+    class Root(BaseModel):
+        root_subcmd: CliSubCommand[SubModel]
+        root_arg: str
+
+    assert CliApp.run(
+        Root,
+        cli_args=[
+            '--root-arg=hi',
+            'root-subcmd',
+            '--sub-arg=hello',
+            'sub-subcmd',
+            'hey',
+            '--deep-arg=bye',
+        ],
+    ).model_dump() == {
+        'root_arg': 'hi',
+        'root_subcmd': {
+            'sub_arg': 'hello',
+            'sub_subcmd': {'deep_pos_arg': 'hey', 'deep_arg': 'bye'},
+        },
+    }
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+        with pytest.raises(SystemExit):
+            CliApp.run(Root)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] --root-arg str {{root-subcmd}} ...
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help      show this help message and exit
+  --root-arg str  (required)
+
+subcommands:
+  {{root-subcmd}}
+    root-subcmd
+"""
+        )
+
+        m.setattr(sys, 'argv', ['example.py', 'root-subcmd', '--help'])
+        with pytest.raises(SystemExit):
+            CliApp.run(Root)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py root-subcmd [-h] --sub-arg str {{sub-subcmd}} ...
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help     show this help message and exit
+  --sub-arg str  (required)
+
+subcommands:
+  {{sub-subcmd}}
+    sub-subcmd
+"""
+        )
+
+        m.setattr(sys, 'argv', ['example.py', 'root-subcmd', 'sub-subcmd', '--help'])
+        with pytest.raises(SystemExit):
+            CliApp.run(Root)
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py root-subcmd sub-subcmd [-h] --deep-arg str DEEP-POS-ARG
+
+positional arguments:
+  DEEP-POS-ARG
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help      show this help message and exit
+  --deep-arg str  (required)
+"""
+        )

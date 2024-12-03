@@ -1063,6 +1063,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_implicit_flags: Whether `bool` fields should be implicitly converted into CLI boolean flags.
             (e.g. --flag, --no-flag). Defaults to `False`.
         cli_ignore_unknown_args: Whether to ignore unknown CLI args and parse only known ones. Defaults to `False`.
+        cli_kebab_case: CLI args use kebab case. Defaults to `False`.
         case_sensitive: Whether CLI "--arg" names should be read with case-sensitivity. Defaults to `True`.
             Note: Case-insensitive matching is only supported on the internal root parser and does not apply to CLI
             subcommands.
@@ -1093,6 +1094,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_flag_prefix_char: str | None = None,
         cli_implicit_flags: bool | None = None,
         cli_ignore_unknown_args: bool | None = None,
+        cli_kebab_case: bool | None = None,
         case_sensitive: bool | None = True,
         root_parser: Any = None,
         parse_args_method: Callable[..., Any] | None = None,
@@ -1151,6 +1153,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             cli_ignore_unknown_args
             if cli_ignore_unknown_args is not None
             else settings_cls.model_config.get('cli_ignore_unknown_args', False)
+        )
+        self.cli_kebab_case = (
+            cli_kebab_case if cli_kebab_case is not None else settings_cls.model_config.get('cli_kebab_case', False)
         )
 
         case_sensitive = case_sensitive if case_sensitive is not None else True
@@ -1613,7 +1618,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             preferred_alias = alias_names[0]
             if _CliSubCommand in field_info.metadata:
                 for model in sub_models:
-                    subcommand_alias = model.__name__ if len(sub_models) > 1 else preferred_alias
+                    subcommand_alias = self._check_kebab_name(
+                        model.__name__ if len(sub_models) > 1 else preferred_alias
+                    )
                     subcommand_name = f'{arg_prefix}{subcommand_alias}'
                     subcommand_dest = f'{arg_prefix}{preferred_alias}'
                     self._cli_subcommands[f'{arg_prefix}:subcommand'][subcommand_name] = subcommand_dest
@@ -1677,7 +1684,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     else f'{arg_prefix}{preferred_alias}'
                 )
 
-                if kwargs['dest'] in added_args:
+                arg_names = self._get_arg_names(arg_prefix, subcommand_prefix, alias_prefixes, alias_names, added_args)
+                if not arg_names or (kwargs['dest'] in added_args):
                     continue
 
                 if is_append_action:
@@ -1685,9 +1693,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     if _annotation_contains_types(field_info.annotation, (dict, Mapping), is_strip_annotated=True):
                         self._cli_dict_args[kwargs['dest']] = field_info.annotation
 
-                arg_names = self._get_arg_names(arg_prefix, subcommand_prefix, alias_prefixes, alias_names)
                 if _CliPositionalArg in field_info.metadata:
-                    kwargs['metavar'] = preferred_alias.upper()
+                    kwargs['metavar'] = self._check_kebab_name(preferred_alias.upper())
                     arg_names = [kwargs['dest']]
                     del kwargs['dest']
                     del kwargs['required']
@@ -1726,6 +1733,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self._add_parser_alias_paths(parser, alias_path_args, added_args, arg_prefix, subcommand_prefix, group)
         return parser
 
+    def _check_kebab_name(self, name: str) -> str:
+        if self.cli_kebab_case:
+            return name.replace('_', '-')
+        return name
+
     def _convert_bool_flag(self, kwargs: dict[str, Any], field_info: FieldInfo, model_default: Any) -> None:
         if kwargs['metavar'] == 'bool':
             default = None
@@ -1743,16 +1755,23 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     )
 
     def _get_arg_names(
-        self, arg_prefix: str, subcommand_prefix: str, alias_prefixes: list[str], alias_names: tuple[str, ...]
+        self,
+        arg_prefix: str,
+        subcommand_prefix: str,
+        alias_prefixes: list[str],
+        alias_names: tuple[str, ...],
+        added_args: list[str],
     ) -> list[str]:
         arg_names: list[str] = []
         for prefix in [arg_prefix] + alias_prefixes:
             for name in alias_names:
-                arg_names.append(
+                arg_name = self._check_kebab_name(
                     f'{prefix}{name}'
                     if subcommand_prefix == self.env_prefix
                     else f'{prefix.replace(subcommand_prefix, "", 1)}{name}'
                 )
+                if arg_name not in added_args:
+                    arg_names.append(arg_name)
         return arg_names
 
     def _add_parser_submodels(

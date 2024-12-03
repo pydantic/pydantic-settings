@@ -4,7 +4,7 @@ from argparse import Namespace
 from types import SimpleNamespace
 from typing import Any, ClassVar, TypeVar
 
-from pydantic import AliasGenerator, ConfigDict
+from pydantic import ConfigDict
 from pydantic._internal._config import config_keys
 from pydantic._internal._signature import _field_name_for_signature
 from pydantic._internal._utils import deep_update, is_model_class
@@ -52,6 +52,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_flag_prefix_char: str
     cli_implicit_flags: bool | None
     cli_ignore_unknown_args: bool | None
+    cli_kebab_case: bool | None
     secrets_dir: PathType | None
     json_file: PathType | None
     json_file_encoding: str | None
@@ -133,6 +134,7 @@ class BaseSettings(BaseModel):
         _cli_implicit_flags: Whether `bool` fields should be implicitly converted into CLI boolean flags.
             (e.g. --flag, --no-flag). Defaults to `False`.
         _cli_ignore_unknown_args: Whether to ignore unknown CLI args and parse only known ones. Defaults to `False`.
+        _cli_kebab_case: CLI args use kebab case. Defaults to `False`.
         _secrets_dir: The secret files directory or a sequence of directories. Defaults to `None`.
     """
 
@@ -160,6 +162,7 @@ class BaseSettings(BaseModel):
         _cli_flag_prefix_char: str | None = None,
         _cli_implicit_flags: bool | None = None,
         _cli_ignore_unknown_args: bool | None = None,
+        _cli_kebab_case: bool | None = None,
         _secrets_dir: PathType | None = None,
         **values: Any,
     ) -> None:
@@ -189,6 +192,7 @@ class BaseSettings(BaseModel):
                 _cli_flag_prefix_char=_cli_flag_prefix_char,
                 _cli_implicit_flags=_cli_implicit_flags,
                 _cli_ignore_unknown_args=_cli_ignore_unknown_args,
+                _cli_kebab_case=_cli_kebab_case,
                 _secrets_dir=_secrets_dir,
             )
         )
@@ -242,6 +246,7 @@ class BaseSettings(BaseModel):
         _cli_flag_prefix_char: str | None = None,
         _cli_implicit_flags: bool | None = None,
         _cli_ignore_unknown_args: bool | None = None,
+        _cli_kebab_case: bool | None = None,
         _secrets_dir: PathType | None = None,
     ) -> dict[str, Any]:
         # Determine settings config values
@@ -309,6 +314,7 @@ class BaseSettings(BaseModel):
             if _cli_ignore_unknown_args is not None
             else self.model_config.get('cli_ignore_unknown_args')
         )
+        cli_kebab_case = _cli_kebab_case if _cli_kebab_case is not None else self.model_config.get('cli_kebab_case')
 
         secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
@@ -371,6 +377,7 @@ class BaseSettings(BaseModel):
                     cli_flag_prefix_char=cli_flag_prefix_char,
                     cli_implicit_flags=cli_implicit_flags,
                     cli_ignore_unknown_args=cli_ignore_unknown_args,
+                    cli_kebab_case=cli_kebab_case,
                     case_sensitive=case_sensitive,
                 )
                 sources = (cli_settings,) + sources
@@ -418,6 +425,7 @@ class BaseSettings(BaseModel):
         cli_flag_prefix_char='-',
         cli_implicit_flags=False,
         cli_ignore_unknown_args=False,
+        cli_kebab_case=False,
         json_file=None,
         json_file_encoding=None,
         yaml_file=None,
@@ -497,13 +505,13 @@ class CliApp:
 
             class CliAppBaseSettings(BaseSettings, model_cls):  # type: ignore
                 model_config = SettingsConfigDict(
-                    alias_generator=AliasGenerator(lambda s: s.replace('_', '-')),
                     nested_model_default_partial_update=True,
                     case_sensitive=True,
                     cli_hide_none_type=True,
                     cli_avoid_json=True,
                     cli_enforce_required=True,
                     cli_implicit_flags=True,
+                    cli_kebab_case=True,
                 )
 
             model = CliAppBaseSettings(**model_init_data)
