@@ -432,7 +432,7 @@ class BaseSettings(BaseModel):
         yaml_file_encoding=None,
         toml_file=None,
         secrets_dir=None,
-        protected_namespaces=('model_', 'settings_'),
+        protected_namespaces=('model_validate', 'model_dump', 'settings_customise_sources'),
     )
 
 
