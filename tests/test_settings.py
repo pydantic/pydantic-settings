@@ -1,4 +1,5 @@
 import dataclasses
+import json
 import os
 import pathlib
 import sys
@@ -26,6 +27,7 @@ from pydantic import (
     SecretStr,
     Tag,
     ValidationError,
+    field_validator,
 )
 from pydantic import (
     dataclasses as pydantic_dataclasses,
@@ -37,7 +39,9 @@ from pydantic_settings import (
     BaseSettings,
     DotEnvSettingsSource,
     EnvSettingsSource,
+    ForceDecode,
     InitSettingsSource,
+    NoDecode,
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
     SettingsConfigDict,
@@ -2873,3 +2877,69 @@ def test_parsing_secret_field(env):
     s = Settings()
     assert s.foo.get_secret_value() == 123
     assert s.bar.get_secret_value() == PostgresDsn('postgres://user:password@localhost/dbname')
+
+
+def test_field_annotated_no_decode(env):
+    class Settings(BaseSettings):
+        a: List[str]  # this field will be decoded because of default `enable_decoding=True`
+        b: Annotated[List[str], NoDecode]
+
+        # decode the value here. the field value won't be decoded because of NoDecode
+        @field_validator('b', mode='before')
+        @classmethod
+        def decode_b(cls, v: str) -> List[str]:
+            return json.loads(v)
+
+    env.set('a', '["one", "two"]')
+    env.set('b', '["1", "2"]')
+
+    s = Settings()
+    assert s.model_dump() == {'a': ['one', 'two'], 'b': ['1', '2']}
+
+
+def test_field_annotated_no_decode_and_disable_decoding(env):
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(enable_decoding=False)
+
+        a: Annotated[List[str], NoDecode]
+
+        # decode the value here. the field value won't be decoded because of NoDecode
+        @field_validator('a', mode='before')
+        @classmethod
+        def decode_b(cls, v: str) -> List[str]:
+            return json.loads(v)
+
+    env.set('a', '["one", "two"]')
+
+    s = Settings()
+    assert s.model_dump() == {'a': ['one', 'two']}
+
+
+def test_field_annotated_disable_decoding(env):
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(enable_decoding=False)
+
+        a: List[str]
+
+        # decode the value here. the field value won't be decoded because of `enable_decoding=False`
+        @field_validator('a', mode='before')
+        @classmethod
+        def decode_b(cls, v: str) -> List[str]:
+            return json.loads(v)
+
+    env.set('a', '["one", "two"]')
+
+    s = Settings()
+    assert s.model_dump() == {'a': ['one', 'two']}
+
+
+def test_field_annotated_force_decode_disable_decoding(env):
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(enable_decoding=False)
+
+        a: Annotated[List[str], ForceDecode]
+
+    env.set('a', '["one", "two"]')
+
+    s = Settings()
+    assert s.model_dump() == {'a': ['one', 'two']}

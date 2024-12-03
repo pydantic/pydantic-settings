@@ -118,6 +118,14 @@ DEFAULT_PATH: PathType = Path('')
 ENV_FILE_SENTINEL: DotenvType = Path('')
 
 
+class NoDecode:
+    pass
+
+
+class ForceDecode:
+    pass
+
+
 class SettingsError(ValueError):
     pass
 
@@ -312,6 +320,12 @@ class PydanticBaseSettingsSource(ABC):
         Returns:
             The decoded value for further preparation
         """
+        if field and (
+            NoDecode in field.metadata
+            or (self.config.get('enable_decoding') is False and ForceDecode not in field.metadata)
+        ):
+            return value
+
         return json.loads(value)
 
     @abstractmethod
