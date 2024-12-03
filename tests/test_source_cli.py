@@ -2296,32 +2296,32 @@ def test_cli_submodels_strip_annotated():
 
 def test_cli_kebab_case(capsys, monkeypatch):
     class DeepSubModel(BaseModel):
-        deep_submodel_positional_arg: CliPositionalArg[str]
-        deep_submodel_arg: str
+        deep_pos_arg: CliPositionalArg[str]
+        deep_arg: str
 
     class SubModel(BaseModel):
-        submodel_subcommand: CliSubCommand[DeepSubModel]
-        submodel_arg: str
+        sub_subcmd: CliSubCommand[DeepSubModel]
+        sub_arg: str
 
     class Root(BaseModel):
-        root_subcommand: CliSubCommand[SubModel]
+        root_subcmd: CliSubCommand[SubModel]
         root_arg: str
 
     assert CliApp.run(
         Root,
         cli_args=[
             '--root-arg=hi',
-            'root-subcommand',
-            '--submodel-arg=hello',
-            'submodel-subcommand',
+            'root-subcmd',
+            '--sub-arg=hello',
+            'sub-subcmd',
             'hey',
-            '--deep-submodel-arg=bye',
+            '--deep-arg=bye',
         ],
     ).model_dump() == {
         'root_arg': 'hi',
-        'root_subcommand': {
-            'submodel_arg': 'hello',
-            'submodel_subcommand': {'deep_submodel_positional_arg': 'hey', 'deep_submodel_arg': 'bye'},
+        'root_subcmd': {
+            'sub_arg': 'hello',
+            'sub_subcmd': {'deep_pos_arg': 'hey', 'deep_arg': 'bye'},
         },
     }
 
@@ -2331,51 +2331,47 @@ def test_cli_kebab_case(capsys, monkeypatch):
             CliApp.run(Root)
         assert (
             capsys.readouterr().out
-            == f"""usage: example.py [-h] --root-arg str {{root-subcommand}} ...
+            == f"""usage: example.py [-h] --root-arg str {{root-subcmd}} ...
 
 {ARGPARSE_OPTIONS_TEXT}:
-  -h, --help         show this help message and exit
-  --root-arg str     (required)
+  -h, --help      show this help message and exit
+  --root-arg str  (required)
 
 subcommands:
-  {{root-subcommand}}
-    root-subcommand
+  {{root-subcmd}}
+    root-subcmd
 """
         )
 
-        m.setattr(sys, 'argv', ['example.py', 'root-subcommand', '--help'])
+        m.setattr(sys, 'argv', ['example.py', 'root-subcmd', '--help'])
         with pytest.raises(SystemExit):
             CliApp.run(Root)
         assert (
             capsys.readouterr().out
-            == f"""usage: example.py root-subcommand [-h] --submodel-arg str
-                                  {{submodel-subcommand}} ...
+            == f"""usage: example.py root-subcmd [-h] --sub-arg str {{sub-subcmd}} ...
 
 {ARGPARSE_OPTIONS_TEXT}:
-  -h, --help            show this help message and exit
-  --submodel-arg str    (required)
+  -h, --help     show this help message and exit
+  --sub-arg str  (required)
 
 subcommands:
-  {{submodel-subcommand}}
-    submodel-subcommand
+  {{sub-subcmd}}
+    sub-subcmd
 """
         )
 
-        m.setattr(sys, 'argv', ['example.py', 'root-subcommand', 'submodel-subcommand', '--help'])
+        m.setattr(sys, 'argv', ['example.py', 'root-subcmd', 'sub-subcmd', '--help'])
         with pytest.raises(SystemExit):
             CliApp.run(Root)
         assert (
             capsys.readouterr().out
-            == f"""usage: example.py root-subcommand submodel-subcommand [-h]
-                                                      --deep-submodel-arg str
-                                                      DEEP-SUBMODEL-POSITIONAL-ARG
+            == f"""usage: example.py root-subcmd sub-subcmd [-h] --deep-arg str DEEP-POS-ARG
 
 positional arguments:
-  DEEP-SUBMODEL-POSITIONAL-ARG
+  DEEP-POS-ARG
 
 {ARGPARSE_OPTIONS_TEXT}:
-  -h, --help            show this help message and exit
-  --deep-submodel-arg str
-                        (required)
+  -h, --help      show this help message and exit
+  --deep-arg str  (required)
 """
         )
