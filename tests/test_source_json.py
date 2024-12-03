@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Tuple, Type, Union
 
+import pytest
 from pydantic import BaseModel
 
 from pydantic_settings import (
@@ -13,6 +14,7 @@ from pydantic_settings import (
     JsonConfigSettingsSource,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
+    SettingsError,
 )
 
 
@@ -71,6 +73,33 @@ def test_json_no_file():
 
     s = Settings()
     assert s.model_dump() == {}
+
+
+def test_nondict_json_file(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text(
+        """
+        "noway"
+    """
+    )
+
+    class Settings(BaseSettings):
+        foobar: str
+        model_config = SettingsConfigDict(json_file=p)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (JsonConfigSettingsSource(settings_cls),)
+
+    with pytest.raises(SettingsError, match='Failed to parse settings from .*, expecting an object'):
+        Settings()
 
 
 def test_multiple_file_json(tmp_path):
