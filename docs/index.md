@@ -432,7 +432,7 @@ print(Settings().model_dump())
 ```
 
 You can force JSON parsing for a field by annotating it with [`ForceDecode`](../api/pydantic_settings.md#pydantic_settings.ForceDecode).
-This will bypass the the `enable_decoding` config setting:
+This will bypass the `enable_decoding` config setting:
 
 ```py
 import os
