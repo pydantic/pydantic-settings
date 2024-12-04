@@ -119,10 +119,14 @@ ENV_FILE_SENTINEL: DotenvType = Path('')
 
 
 class NoDecode:
+    """Annotation to prevent decoding of a field value."""
+
     pass
 
 
 class ForceDecode:
+    """Annotation to force decoding of a field value."""
+
     pass
 
 
