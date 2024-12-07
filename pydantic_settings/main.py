@@ -79,6 +79,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     """
 
     toml_file: PathType | None
+    enable_decoding: bool
 
 
 # Extend `config_keys` by pydantic settings config keys to
@@ -433,6 +434,7 @@ class BaseSettings(BaseModel):
         toml_file=None,
         secrets_dir=None,
         protected_namespaces=('model_validate', 'model_dump', 'settings_customise_sources'),
+        enable_decoding=True,
     )
 
 
