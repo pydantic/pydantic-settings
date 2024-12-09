@@ -136,7 +136,7 @@ print(Settings1())
 #> foo='test'
 ```
 
-Check the [Validation of default values](validators.md#validation-of-default-values) for more information.
+Check the [validation of default values](fields.md#validate-default-values) for more information.
 
 ## Environment variable names
 
