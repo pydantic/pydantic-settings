@@ -371,6 +371,100 @@ print(Settings().model_dump())
 #> {'numbers': [1, 2, 3]}
 ```
 
+### Disabling JSON parsing
+
+pydantic-settings by default parses complex types from environment variables as JSON strings. If you want to disable
+this behavior for a field and parse the value in your own validator, you can annotate the field with
+[`NoDecode`](../api/pydantic_settings.md#pydantic_settings.NoDecode):
+
+```py
+import os
+from typing import List
+
+from pydantic import field_validator
+from typing_extensions import Annotated
+
+from pydantic_settings import BaseSettings, NoDecode
+
+
+class Settings(BaseSettings):
+    numbers: Annotated[List[int], NoDecode]  # (1)!
+
+    @field_validator('numbers', mode='before')
+    @classmethod
+    def decode_numbers(cls, v: str) -> List[int]:
+        return [int(x) for x in v.split(',')]
+
+
+os.environ['numbers'] = '1,2,3'
+print(Settings().model_dump())
+#> {'numbers': [1, 2, 3]}
+```
+
+1. The `NoDecode` annotation disables JSON parsing for the `numbers` field. The `decode_numbers` field validator
+   will be called to parse the value.
+
+You can also disable JSON parsing for all fields by setting the `enable_decoding` config setting to `False`:
+
+```py
+import os
+from typing import List
+
+from pydantic import field_validator
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(enable_decoding=False)
+
+    numbers: List[int]
+
+    @field_validator('numbers', mode='before')
+    @classmethod
+    def decode_numbers(cls, v: str) -> List[int]:
+        return [int(x) for x in v.split(',')]
+
+
+os.environ['numbers'] = '1,2,3'
+print(Settings().model_dump())
+#> {'numbers': [1, 2, 3]}
+```
+
+You can force JSON parsing for a field by annotating it with [`ForceDecode`](../api/pydantic_settings.md#pydantic_settings.ForceDecode).
+This will bypass the `enable_decoding` config setting:
+
+```py
+import os
+from typing import List
+
+from pydantic import field_validator
+from typing_extensions import Annotated
+
+from pydantic_settings import BaseSettings, ForceDecode, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(enable_decoding=False)
+
+    numbers: Annotated[List[int], ForceDecode]
+    numbers1: List[int]  # (1)!
+
+    @field_validator('numbers1', mode='before')
+    @classmethod
+    def decode_numbers1(cls, v: str) -> List[int]:
+        return [int(x) for x in v.split(',')]
+
+
+os.environ['numbers'] = '["1","2","3"]'
+os.environ['numbers1'] = '1,2,3'
+print(Settings().model_dump())
+#> {'numbers': [1, 2, 3], 'numbers1': [1, 2, 3]}
+```
+
+1. The `numbers1` field is not annotated with `ForceDecode`, so it will not be parsed as JSON.
+   and we have to provide a custom validator to parse the value.
+
 ## Nested model default partial updates
 
 By default, Pydantic settings does not allow partial updates to nested model default objects. This behavior can be
