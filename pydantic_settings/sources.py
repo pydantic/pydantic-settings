@@ -40,7 +40,7 @@ from dotenv import dotenv_values
 from pydantic import AliasChoices, AliasPath, BaseModel, Json, RootModel, Secret, TypeAdapter
 from pydantic._internal._repr import Representation
 from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union, typing_base
-from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
+from pydantic._internal._utils import KeyType, deep_update, is_model_class, lenient_issubclass
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
@@ -705,6 +705,48 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         return f'{self.__class__.__name__}(secrets_dir={self.secrets_dir!r})'
 
 
+def _deep_update(
+    mapping: Dict[KeyType, Any] | List[Any], *updating_mappings: Dict[KeyType, Any]
+) -> Dict[KeyType, Any] | List[Any]:
+    # if no updating mappings, return the original mapping
+    if not all(updating_mappings):
+        return mapping
+
+    updated_mapping = mapping.copy()
+    for updating_mapping in updating_mappings:
+        if isinstance(updated_mapping, list):
+            # list case
+            if isinstance(updating_mapping, list):
+                for i, v in enumerate(updating_mapping):
+                    # if i < len(updated_mapping):
+                    updated_mapping[i] = _deep_update(updated_mapping[i], v)
+                    # else:
+                    #    updated_mapping.append(v)
+            elif isinstance(updating_mapping, dict):
+                for key, value in updating_mapping.items():
+                    # index is a stored as a key in the dict
+                    index = int(key)
+                    if len(updated_mapping) < index:
+                        continue
+                    # Add empty  dict so we can update it
+                    if len(updated_mapping) == index:
+                        updated_mapping.append({})
+                    # Update it
+                    if isinstance(value, dict):
+                        updated_mapping[index] = _deep_update(updated_mapping[index], value)
+                    else:
+                        updated_mapping[index] = value
+            else:
+                raise NotImplementedError
+        else:
+            for k, v in updating_mapping.items():
+                if k in updated_mapping and isinstance(updated_mapping[k], dict) and isinstance(v, dict):
+                    updated_mapping[k] = _deep_update(updated_mapping[k], v)
+                else:
+                    updated_mapping[k] = v
+    return updated_mapping
+
+
 class EnvSettingsSource(PydanticBaseEnvSettingsSource):
     """
     Source class for loading settings values from environment variables.
@@ -796,8 +838,8 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     if not allow_parse_failure:
                         raise e
 
-                if isinstance(value, dict):
-                    return deep_update(value, self.explode_env_vars(field_name, field, self.env_vars))
+                if isinstance(value, (dict, list)):
+                    return _deep_update(value, self.explode_env_vars(field_name, field, self.env_vars))
                 else:
                     return value
         elif value is not None:
@@ -856,6 +898,15 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             return None
 
         annotation = field.annotation if isinstance(field, FieldInfo) else field
+        if get_origin(annotation) is list:
+            try:
+                # check if key is an integer. If so, it's an index. we fake a field info with the list type
+                # so future calls can continue to traverse the model and set proper types for leaf nodes
+                int(key)
+                if list_type := [*get_args(annotation), None].pop(0):
+                    return FieldInfo(annotation=list_type)
+            except ValueError:
+                pass
         if origin_is_union(get_origin(annotation)) or isinstance(annotation, WithArgsTypes):
             for type_ in get_args(annotation):
                 type_has_key = self.next_field(type_, key, case_sensitive)
@@ -874,7 +925,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                         return f
         return None
 
-    def explode_env_vars(self, field_name: str, field: FieldInfo, env_vars: Mapping[str, str | None]) -> dict[str, Any]:
+    def explode_env_vars(
+        self, field_name: str, field: FieldInfo, env_vars: Mapping[str, str | None]
+    ) -> dict[str, Any] | list[Any]:
         """
         Process env_vars and extract the values of keys containing env_nested_delimiter into nested dictionaries.
 
@@ -886,14 +939,15 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             env_vars: Environment variables.
 
         Returns:
-            A dictionary contains extracted values from nested env values.
+            A list or a dictionary contains extracted values from nested env values.
         """
         is_dict = lenient_issubclass(get_origin(field.annotation), dict)
+        is_list = lenient_issubclass(get_origin(field.annotation), list)
 
         prefixes = [
             f'{env_name}{self.env_nested_delimiter}' for _, env_name, _ in self._extract_field_info(field, field_name)
         ]
-        result: dict[str, Any] = {}
+        result: dict[str, Any] | list[Any] = {}
         for env_name, env_val in env_vars.items():
             if not any(env_name.startswith(prefix) for prefix in prefixes):
                 continue
@@ -911,11 +965,11 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             target_field = self.next_field(target_field, last_key, self.case_sensitive)
 
             # check if env_val maps to a complex field and if so, parse the env_val
-            if (target_field or is_dict) and env_val:
+            if (target_field or is_dict or is_list) and env_val:
                 if target_field:
                     is_complex, allow_json_failure = self._field_is_complex(target_field)
                 else:
-                    # nested field type is dict
+                    # nested field type is dict or list
                     is_complex, allow_json_failure = True, True
                 if is_complex:
                     try:
@@ -927,6 +981,20 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                 if last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] == {}:
                     env_var[last_key] = env_val
 
+        def _transform_list_based_field(annotation: Annotated, values: dict[str, Any]) -> dict[str, Any] | list[Any]:
+            assert lenient_issubclass(get_origin(annotation), list)
+            if lenient_issubclass(get_args(annotation)[0], list):
+                result = []
+                for i in (str(i) for i in range(len(values))):
+                    if i not in values:
+                        raise ValueError(f'Expected entry with index {i} for {field_name}')
+                    result.append(_transform_list_based_field(get_args(annotation)[0], values[i]))
+                return result
+            else:
+                return values
+
+        if is_list:
+            result = _transform_list_based_field(field.annotation, result)
         return result
 
     def __repr__(self) -> str:
