@@ -1935,7 +1935,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             return self._metavar_format_choices([val.name for val in obj])
         elif isinstance(obj, WithArgsTypes):
             return self._metavar_format_choices(
-                list(map(self._metavar_format_recurse, self._get_modified_args(obj))), obj_qualname=obj.__qualname__
+                list(map(self._metavar_format_recurse, self._get_modified_args(obj))),
+                obj_qualname=obj.__qualname__ if hasattr(obj, '__qualname__') else str(obj),
             )
         elif obj is type(None):
             return self.cli_parse_none_str
