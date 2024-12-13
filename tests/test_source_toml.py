@@ -13,6 +13,7 @@ from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
+    SettingsError,
     TomlConfigSettingsSource,
 )
 
@@ -81,6 +82,30 @@ def test_toml_no_file():
 
     s = Settings()
     assert s.model_dump() == {}
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+def test_pyproject_nondict_toml(cd_tmp_path):
+    pyproject = cd_tmp_path / 'pyproject.toml'
+    pyproject.write_text(
+        """
+    [tool.pydantic-settings]
+    foobar
+    """
+    )
+
+    class Settings(BaseSettings):
+        foobar: str
+        model_config = SettingsConfigDict()
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls: Type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls, pyproject),)
+
+    with pytest.raises(SettingsError, match='Failed to parse settings from'):
+        Settings()
 
 
 @pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
