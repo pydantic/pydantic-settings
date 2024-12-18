@@ -268,7 +268,9 @@ class PydanticBaseSettingsSource(ABC):
         return self._settings_sources_data
 
     @abstractmethod
-    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+    def get_field_value(
+        self, field: FieldInfo, field_name: str, use_preferred_alias: bool = False
+    ) -> tuple[Any, str, bool]:
         """
         Gets the value, the key for model creation, and a flag to determine whether value is complex.
 
@@ -277,9 +279,10 @@ class PydanticBaseSettingsSource(ABC):
         Args:
             field: The field.
             field_name: The field name.
+            use_preferred_alias: Use the preferred alias name when resolving key. Defaults to `False`.
 
         Returns:
-            A tuple contains the key, value and a flag to determine whether value is complex.
+            A tuple contains the value, key and a flag to determine whether value is complex.
         """
         pass
 
@@ -364,7 +367,9 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
                 elif is_model_class(type(field_info.default)):
                     self.defaults[preferred_alias] = field_info.default.model_dump()
 
-    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+    def get_field_value(
+        self, field: FieldInfo, field_name: str, use_preferred_alias: bool = False
+    ) -> tuple[Any, str, bool]:
         # Nothing to do here. Only implement the return statement to make mypy happy
         return None, '', False
 
@@ -396,7 +401,9 @@ class InitSettingsSource(PydanticBaseSettingsSource):
             else self.config.get('nested_model_default_partial_update', False)
         )
 
-    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+    def get_field_value(
+        self, field: FieldInfo, field_name: str, use_preferred_alias: bool = False
+    ) -> tuple[Any, str, bool]:
         # Nothing to do here. Only implement the return statement to make mypy happy
         return None, '', False
 
@@ -567,7 +574,9 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
         for field_name, field in self.settings_cls.model_fields.items():
             try:
-                field_value, field_key, value_is_complex = self.get_field_value(field, field_name)
+                field_value, field_key, value_is_complex = self.get_field_value(
+                    field, field_name, use_preferred_alias=True
+                )
             except Exception as e:
                 raise SettingsError(
                     f'error getting value for field "{field_name}" from source "{self.__class__.__name__}"'
@@ -666,16 +675,19 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
                 return f
         return None
 
-    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+    def get_field_value(
+        self, field: FieldInfo, field_name: str, use_preferred_alias: bool = False
+    ) -> tuple[Any, str, bool]:
         """
         Gets the value for field from secret file and a flag to determine whether value is complex.
 
         Args:
             field: The field.
             field_name: The field name.
+            use_preferred_alias: Use the preferred alias name when resolving key. Defaults to `False`.
 
         Returns:
-            A tuple contains the key, value if the file exists otherwise `None`, and
+            A tuple that contains the value (`None` if the file does not exist), key, and
                 a flag to determine whether value is complex.
         """
 
@@ -690,7 +702,11 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
                     continue
 
                 if path.is_file():
-                    if value_is_complex or (self.config.get('populate_by_name', False) and (field_key == field_name)):
+                    if (
+                        not use_preferred_alias
+                        or value_is_complex
+                        or (self.config.get('populate_by_name', False) and (field_key == field_name))
+                    ):
                         preferred_key = field_key
                     return path.read_text().strip(), preferred_key, value_is_complex
                 else:
@@ -733,16 +749,19 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
     def _load_env_vars(self) -> Mapping[str, str | None]:
         return parse_env_vars(os.environ, self.case_sensitive, self.env_ignore_empty, self.env_parse_none_str)
 
-    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+    def get_field_value(
+        self, field: FieldInfo, field_name: str, use_preferred_alias: bool = False
+    ) -> tuple[Any, str, bool]:
         """
         Gets the value for field from environment variables and a flag to determine whether value is complex.
 
         Args:
             field: The field.
             field_name: The field name.
+            use_preferred_alias: Use the preferred alias name when resolving key. Defaults to `False`.
 
         Returns:
-            A tuple contains the key, value if the file exists otherwise `None`, and
+            A tuple that contains the value (`None` if not found), key, and
                 a flag to determine whether value is complex.
         """
 
@@ -752,7 +771,11 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         for field_key, env_name, value_is_complex in field_infos:
             env_val = self.env_vars.get(env_name)
             if env_val is not None:
-                if value_is_complex or (self.config.get('populate_by_name', False) and (field_key == field_name)):
+                if (
+                    not use_preferred_alias
+                    or value_is_complex
+                    or (self.config.get('populate_by_name', False) and (field_key == field_name))
+                ):
                     preferred_key = field_key
                 break
 
