@@ -564,7 +564,8 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
     def _get_resolved_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         """
-        Gets the value, the key for model creation, and a flag to determine whether value is complex.
+        Gets the value, the preferred alias key for model creation, and a flag to determine whether value
+        is complex.
 
         Note:
             In V3, this method should either be made public, or, this method should be removed and the
@@ -575,7 +576,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             field_name: The field name.
 
         Returns:
-            A tuple that contains the value, key and a flag to determine whether value is complex.
+            A tuple that contains the value, preferred key and a flag to determine whether value is complex.
         """
         field_value, field_key, value_is_complex = self.get_field_value(field, field_name)
         if not (value_is_complex or (self.config.get('populate_by_name', False) and (field_key == field_name))):
