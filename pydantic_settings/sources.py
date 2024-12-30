@@ -562,9 +562,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
         return values
 
-    def _get_resolved_field_value(
-        self, field: FieldInfo, field_name: str, use_preferred_alias: bool = False
-    ) -> tuple[Any, str, bool]:
+    def _get_resolved_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         """
         Gets the value, the key for model creation, and a flag to determine whether value is complex.
 
@@ -575,7 +573,6 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         Args:
             field: The field.
             field_name: The field name.
-            use_preferred_alias: Use the preferred alias name when resolving key. Defaults to `False`.
 
         Returns:
             A tuple that contains the value, key and a flag to determine whether value is complex.
@@ -592,9 +589,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
         for field_name, field in self.settings_cls.model_fields.items():
             try:
-                field_value, field_key, value_is_complex = self._get_resolved_field_value(
-                    field, field_name, use_preferred_alias=True
-                )
+                field_value, field_key, value_is_complex = self._get_resolved_field_value(field, field_name)
             except Exception as e:
                 raise SettingsError(
                     f'error getting value for field "{field_name}" from source "{self.__class__.__name__}"'
