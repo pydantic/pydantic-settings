@@ -1333,7 +1333,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 if subcommand_dest not in selected_subcommands:
                     parsed_args[subcommand_dest] = self.cli_parse_none_str
 
-        parsed_args = {key: val for key, val in parsed_args.items() if not key.endswith(':subcommand')}
+        parsed_args = {
+            key: val
+            for key, val in parsed_args.items()
+            if not key.endswith(':subcommand') and val is not PydanticUndefined
+        }
         if selected_subcommands:
             last_selected_subcommand = max(selected_subcommands, key=len)
             if not any(field_name for field_name in parsed_args.keys() if f'{last_selected_subcommand}.' in field_name):
@@ -1511,12 +1515,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                             )
                 subcommand_args.append((field_name, field_info))
             elif _CliPositionalArg in field_info.metadata:
-                if not field_info.is_required():
-                    raise SettingsError(f'positional argument {model.__name__}.{field_name} has a default value')
-                else:
-                    alias_names, *_ = _get_alias_names(field_name, field_info)
-                    if len(alias_names) > 1:
-                        raise SettingsError(f'positional argument {model.__name__}.{field_name} has multiple aliases')
+                alias_names, *_ = _get_alias_names(field_name, field_info)
+                if len(alias_names) > 1:
+                    raise SettingsError(f'positional argument {model.__name__}.{field_name} has multiple aliases')
                 positional_args.append((field_name, field_info))
             else:
                 self._verify_cli_flag_annotations(model, field_name, field_info)
@@ -1727,11 +1728,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         self._cli_dict_args[kwargs['dest']] = field_info.annotation
 
                 if _CliPositionalArg in field_info.metadata:
-                    kwargs['metavar'] = self._check_kebab_name(preferred_alias.upper())
-                    arg_names = [kwargs['dest']]
-                    del kwargs['dest']
-                    del kwargs['required']
-                    flag_prefix = ''
+                    arg_names, flag_prefix = self._convert_positional_arg(kwargs, field_info, preferred_alias)
 
                 self._convert_bool_flag(kwargs, field_info, model_default)
 
@@ -1786,6 +1783,23 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     kwargs['action'] = (
                         BooleanOptionalAction if sys.version_info >= (3, 9) else f'store_{str(not default).lower()}'
                     )
+
+    def _convert_positional_arg(
+        self, kwargs: dict[str, Any], field_info: FieldInfo, preferred_alias: str
+    ) -> tuple[list[str], str]:
+        flag_prefix = ''
+        arg_names = [kwargs['dest']]
+        kwargs['default'] = PydanticUndefined
+        kwargs['metavar'] = self._check_kebab_name(preferred_alias.upper())
+
+        # Note: For positional args, we must strictly look at field_info.is_required instead of our derived
+        # kwargs['required'].
+        if not field_info.is_required():
+            kwargs['nargs'] = '?'
+
+        del kwargs['dest']
+        del kwargs['required']
+        return arg_names, flag_prefix
 
     def _get_arg_names(
         self,
