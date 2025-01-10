@@ -1313,6 +1313,7 @@ def test_cli_optional_positional_arg(env):
 
     assert CliApp.run(Main, cli_args=['789']).model_dump() == {'value': 789}
 
+
 def test_cli_enums(capsys, monkeypatch):
     class Pet(IntEnum):
         dog = 0
