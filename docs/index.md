@@ -842,9 +842,10 @@ print(User().model_dump())
 
 ### Subcommands and Positional Arguments
 
-Subcommands and positional arguments are expressed using the `CliSubCommand` and `CliPositionalArg` annotations. These
-annotations can only be applied to required fields (i.e. fields that do not have a default value). Furthermore,
-subcommands must be a valid type derived from either a pydantic `BaseModel` or pydantic.dataclasses `dataclass`.
+Subcommands and positional arguments are expressed using the `CliSubCommand` and `CliPositionalArg` annotations. The
+subcommand annotation can only be applied to required fields (i.e. fields that do not have a default value).
+Furthermore, subcommands must be a valid type derived from either a pydantic `BaseModel` or pydantic.dataclasses
+`dataclass`.
 
 Parsed subcommands can be retrieved from model instances using the `get_subcommand` utility function. If a subcommand is
 not required, set the `is_required` flag to `False` to disable raising an error if no subcommand is found.
