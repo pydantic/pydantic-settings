@@ -1318,10 +1318,10 @@ def test_cli_variadic_positional_arg(env):
     class MainRequired(BaseSettings):
         model_config = SettingsConfigDict(cli_parse_args=True)
 
-        values: CliPositionalArg[list[int]]
+        values: CliPositionalArg[List[int]]
 
     class MainOptional(MainRequired):
-        values: CliPositionalArg[list[int]] = [1, 2, 3]
+        values: CliPositionalArg[List[int]] = [1, 2, 3]
 
     assert CliApp.run(MainOptional, cli_args=[]).model_dump() == {'values': [1, 2, 3]}
     with pytest.raises(SettingsError, match='error parsing CLI: the following arguments are required: VALUES'):
@@ -1460,8 +1460,8 @@ def test_cli_annotation_exceptions(monkeypatch):
         ):
 
             class MultipleVariadicPositionialArgs(BaseSettings, cli_parse_args=True):
-                strings: CliPositionalArg[list[str]]
-                numbers: CliPositionalArg[list[int]]
+                strings: CliPositionalArg[List[str]]
+                numbers: CliPositionalArg[List[int]]
 
             MultipleVariadicPositionialArgs()
 
@@ -1471,7 +1471,7 @@ def test_cli_annotation_exceptions(monkeypatch):
         ):
 
             class VariadicPositionialArgAndSubCommand(BaseSettings, cli_parse_args=True):
-                strings: CliPositionalArg[list[str]]
+                strings: CliPositionalArg[List[str]]
                 sub_cmd: CliSubCommand[SubCmd]
 
             VariadicPositionialArgAndSubCommand()
