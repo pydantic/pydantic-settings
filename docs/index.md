@@ -1285,6 +1285,9 @@ However, if your use case [aligns more with #2](#command-line-support), using Py
 likely want required fields to be _strictly required at the CLI_. We can enable this behavior by using
 `cli_enforce_required`.
 
+!!! note
+    A required `CliPositionalArg` field is always strictly required (enforced) at the CLI.
+
 ```py
 import os
 import sys
