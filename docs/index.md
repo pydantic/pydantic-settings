@@ -156,7 +156,8 @@ class Settings(BaseSettings):
 ```
 
 !!! note
-    The default `env_prefix` is `''` (empty string).
+    The default `env_prefix` is `''` (empty string). `env_prefix` is not only for env settings but also for
+    dotenv files, secrets, and other sources.
 
 If you want to change the environment variable name for a single field, you can use an alias.
 
