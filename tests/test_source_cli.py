@@ -1297,6 +1297,45 @@ def test_cli_union_similar_sub_models():
     assert cfg.model_dump() == {'child': {'name': 'new name a', 'diff_a': 'new diff a'}}
 
 
+def test_cli_optional_positional_arg(env):
+    class Main(BaseSettings):
+        model_config = SettingsConfigDict(
+            cli_parse_args=True,
+            cli_enforce_required=True,
+        )
+
+        value: CliPositionalArg[int] = 123
+
+    assert CliApp.run(Main, cli_args=[]).model_dump() == {'value': 123}
+
+    env.set('VALUE', '456')
+    assert CliApp.run(Main, cli_args=[]).model_dump() == {'value': 456}
+
+    assert CliApp.run(Main, cli_args=['789']).model_dump() == {'value': 789}
+
+
+def test_cli_variadic_positional_arg(env):
+    class MainRequired(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+
+        values: CliPositionalArg[List[int]]
+
+    class MainOptional(MainRequired):
+        values: CliPositionalArg[List[int]] = [1, 2, 3]
+
+    assert CliApp.run(MainOptional, cli_args=[]).model_dump() == {'values': [1, 2, 3]}
+    with pytest.raises(SettingsError, match='error parsing CLI: the following arguments are required: VALUES'):
+        CliApp.run(MainRequired, cli_args=[], cli_exit_on_error=False)
+
+    env.set('VALUES', '[4,5,6]')
+    assert CliApp.run(MainOptional, cli_args=[]).model_dump() == {'values': [4, 5, 6]}
+    with pytest.raises(SettingsError, match='error parsing CLI: the following arguments are required: VALUES'):
+        CliApp.run(MainRequired, cli_args=[], cli_exit_on_error=False)
+
+    assert CliApp.run(MainOptional, cli_args=['7', '8', '9']).model_dump() == {'values': [7, 8, 9]}
+    assert CliApp.run(MainRequired, cli_args=['7', '8', '9']).model_dump() == {'values': [7, 8, 9]}
+
+
 def test_cli_enums(capsys, monkeypatch):
     class Pet(IntEnum):
         dog = 0
@@ -1416,13 +1455,26 @@ def test_cli_annotation_exceptions(monkeypatch):
             PositionalArgNotOutermost()
 
         with pytest.raises(
-            SettingsError, match='positional argument PositionalArgHasDefault.pos_arg has a default value'
+            SettingsError,
+            match='MultipleVariadicPositionialArgs has multiple variadic positonal arguments: strings, numbers',
         ):
 
-            class PositionalArgHasDefault(BaseSettings, cli_parse_args=True):
-                pos_arg: CliPositionalArg[str] = 'bad'
+            class MultipleVariadicPositionialArgs(BaseSettings, cli_parse_args=True):
+                strings: CliPositionalArg[List[str]]
+                numbers: CliPositionalArg[List[int]]
 
-            PositionalArgHasDefault()
+            MultipleVariadicPositionialArgs()
+
+        with pytest.raises(
+            SettingsError,
+            match='VariadicPositionialArgAndSubCommand has variadic positonal arguments and subcommand arguments: strings, sub_cmd',
+        ):
+
+            class VariadicPositionialArgAndSubCommand(BaseSettings, cli_parse_args=True):
+                strings: CliPositionalArg[List[str]]
+                sub_cmd: CliSubCommand[SubCmd]
+
+            VariadicPositionialArgAndSubCommand()
 
     with pytest.raises(
         SettingsError, match=re.escape("cli_parse_args must be List[str] or Tuple[str, ...], recieved <class 'str'>")
