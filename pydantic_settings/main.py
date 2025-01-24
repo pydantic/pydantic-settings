@@ -140,7 +140,8 @@ class BaseSettings(BaseModel):
     """
 
     def __init__(
-        __pydantic_self__,
+        self,
+        /,
         _case_sensitive: bool | None = None,
         _nested_model_default_partial_update: bool | None = None,
         _env_prefix: str | None = None,
@@ -152,7 +153,7 @@ class BaseSettings(BaseModel):
         _env_parse_enums: bool | None = None,
         _cli_prog_name: str | None = None,
         _cli_parse_args: bool | list[str] | tuple[str, ...] | None = None,
-        _cli_settings_source: CliSettingsSource[Any] | None = None,
+        _cli_settings_source: CliSettingsSource[object] | None = None,
         _cli_parse_none_str: str | None = None,
         _cli_hide_none_type: bool | None = None,
         _cli_avoid_json: bool | None = None,
@@ -167,9 +168,8 @@ class BaseSettings(BaseModel):
         _secrets_dir: PathType | None = None,
         **values: Any,
     ) -> None:
-        # Uses something other than `self` the first arg to allow "self" as a settable attribute
         super().__init__(
-            **__pydantic_self__._settings_build_values(
+            **self._settings_build_values(
                 values,
                 _case_sensitive=_case_sensitive,
                 _nested_model_default_partial_update=_nested_model_default_partial_update,
