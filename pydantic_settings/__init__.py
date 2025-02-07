@@ -1,6 +1,7 @@
 from .main import BaseSettings, CliApp, SettingsConfigDict
 from .sources import (
     CLI_SUPPRESS,
+    AWSSecretsManagerSettingsSource,
     AzureKeyVaultSettingsSource,
     CliExplicitFlag,
     CliImplicitFlag,
@@ -50,6 +51,7 @@ __all__ = (
     'TomlConfigSettingsSource',
     'YamlConfigSettingsSource',
     'AzureKeyVaultSettingsSource',
+    'AWSSecretsManagerSettingsSource',
     'get_subcommand',
     '__version__',
 )
