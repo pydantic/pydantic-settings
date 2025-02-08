@@ -79,6 +79,11 @@ def docs_test_env():
     setenv.set('SUB_MODEL__V3', '3')
     setenv.set('SUB_MODEL__DEEP__V4', 'v4')
 
+    # envs for parsing environment variable values example with env_nested_depth=1
+    setenv.set('GENERATION_LLM_PROVIDER', 'anthropic')
+    setenv.set('GENERATION_LLM_API_KEY', 'your-api-key')
+    setenv.set('GENERATION_LLM_API_VERSION', '2024-03-15')
+
     yield setenv
 
     setenv.clear()

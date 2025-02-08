@@ -324,6 +324,58 @@ print(Settings().model_dump())
 `env_nested_delimiter` can be configured via the `model_config` as shown above, or via the
 `_env_nested_delimiter` keyword argument on instantiation.
 
+By default environment variables are split by `env_nested_delimiter` into arbitrarily deep nested fields. You can limit
+the depth of the nested fields with the `env_nested_depth` config setting. A common use case this is particularly useful
+is for two-level deep settings, where the `env_nested_delimiter` (usually a single `_`) may be a substring of model
+field names. For example:
+
+```bash
+# your environment
+export GENERATION_LLM_PROVIDER='anthropic'
+export GENERATION_LLM_API_KEY='your-api-key'
+export GENERATION_LLM_API_VERSION='2024-03-15'
+```
+
+You could load them into the following settings model:
+
+```py
+from pydantic import BaseModel
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class LLMConfig(BaseModel):
+    provider: str = 'openai'
+    api_key: str
+    api_type: str = 'azure'
+    api_version: str = '2023-03-15-preview'
+
+
+class GenerationConfig(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_nested_delimiter='_', env_nested_depth=1, env_prefix='GENERATION_'
+    )
+
+    llm: LLMConfig
+    ...
+
+
+print(GenerationConfig().model_dump())
+"""
+{
+    'llm': {
+        'provider': 'anthropic',
+        'api_key': 'your-api-key',
+        'api_type': 'azure',
+        'api_version': '2024-03-15',
+    }
+}
+"""
+```
+
+Without `env_nested_depth=1` set, `GENERATION_LLM_API_KEY` would be parsed as `llm.api.key` instead of `llm.api_key`
+and it would raise a `ValidationError`.
+
 Nested environment variables take precedence over the top-level environment variable JSON
 (e.g. in the example above, `SUB_MODEL__V2` trumps `SUB_MODEL`).
 
