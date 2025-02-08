@@ -4,7 +4,7 @@ import os
 import pathlib
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import IntEnum
 from pathlib import Path
 from typing import Any, Callable, Dict, Generic, Hashable, List, Optional, Set, Tuple, Type, TypeVar, Union
@@ -396,6 +396,30 @@ def test_nested_env_delimiter_aliases(env):
     env.set('foo__v1', '-1-')
     env.set('bar__v2', '-2-')
     assert Cfg().model_dump() == {'sub_model': {'v1': '-1-', 'v2': '-2-'}}
+
+
+@pytest.mark.parametrize('env_prefix', [None, 'prefix_', 'prefix__'])
+def test_nested_env_depth(env, env_prefix):
+    class Person(BaseModel):
+        sex: Literal['M', 'F']
+        first_name: str
+        date_of_birth: date
+
+    class Cfg(BaseSettings):
+        caregiver: Person
+
+        model_config = SettingsConfigDict(env_nested_delimiter='_', env_nested_depth=1)
+        if env_prefix is not None:
+            model_config['env_prefix'] = env_prefix
+
+    env_prefix = env_prefix or ''
+    env.set(env_prefix + 'caregiver_sex', 'M')
+    env.set(env_prefix + 'caregiver_first_name', 'Joe')
+    env.set(env_prefix + 'caregiver_date_of_birth', '1975-09-12')
+
+    assert Cfg().model_dump() == {
+        'caregiver': {'sex': 'M', 'first_name': 'Joe', 'date_of_birth': date(1975, 9, 12)},
+    }
 
 
 class DateModel(BaseModel):
@@ -1823,11 +1847,11 @@ def test_builtins_settings_source_repr():
     )
     assert (
         repr(EnvSettingsSource(BaseSettings, env_nested_delimiter='__'))
-        == "EnvSettingsSource(env_nested_delimiter='__', env_prefix_len=0)"
+        == "EnvSettingsSource(env_nested_delimiter='__', env_nested_depth=-1, env_prefix_len=0)"
     )
     assert repr(DotEnvSettingsSource(BaseSettings, env_file='.env', env_file_encoding='utf-8')) == (
         "DotEnvSettingsSource(env_file='.env', env_file_encoding='utf-8', "
-        'env_nested_delimiter=None, env_prefix_len=0)'
+        'env_nested_delimiter=None, env_nested_depth=-1, env_prefix_len=0)'
     )
     assert (
         repr(SecretsSettingsSource(BaseSettings, secrets_dir='/secrets'))
