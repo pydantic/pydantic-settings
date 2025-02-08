@@ -1078,12 +1078,12 @@ from pydantic_settings import BaseSettings, CliApp
 class AsyncSettings(BaseSettings):
     async def cli_cmd(self) -> None:
         print('Hello from an async CLI method!')
+        #> Hello from an async CLI method!
 
 
-if __name__ == '__main__':
-    # If an event loop is already running, a new thread will be used;
-    # otherwise, asyncio.run() is used to execute this async method.
-    CliApp.run(AsyncSettings)
+# If an event loop is already running, a new thread will be used;
+# otherwise, asyncio.run() is used to execute this async method.
+assert CliApp.run(AsyncSettings, cli_args=[]).model_dump() == {}
 ```
 
 #### Asynchronous Subcommands
@@ -1106,8 +1106,9 @@ class Clone(BaseModel):
     directory: CliPositionalArg[str]
 
     async def cli_cmd(self) -> None:
-        print(f'Cloning async from "{self.repository}" into "{self.directory}"')
         # Perform async tasks here, e.g. network or I/O operations
+        print(f'Cloning async from "{self.repository}" into "{self.directory}"')
+        #> Cloning async from "repo" into "dir"
 
 
 class Git(BaseSettings):
@@ -1118,8 +1119,10 @@ class Git(BaseSettings):
         CliApp.run_subcommand(self)
 
 
-if __name__ == '__main__':
-    CliApp.run(Git, cli_args=['clone', 'repo', 'dir'])
+CliApp.run(Git, cli_args=['clone', 'repo', 'dir']).model_dump() == {
+    'repository': 'repo',
+    'directory': 'dir',
+}
 ```
 
 When executing a subcommand with an asynchronous cli_cmd, Pydantic settings automatically detects whether the current thread already has an active event loop. If so, the async command is run in a fresh thread to avoid conflicts. Otherwise, it uses asyncio.run() in the current thread. This handling ensures your asynchronous subcommands “just work” without additional manual setup.
