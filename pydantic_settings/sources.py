@@ -749,6 +749,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         self.env_nested_depth = (
             env_nested_depth if env_nested_depth is not None else self.config.get('env_nested_depth', -1)
         )
+        self.maxsplit = self.env_nested_depth - 1 if self.env_nested_depth > 0 else self.env_nested_depth
         self.env_prefix_len = len(self.env_prefix)
 
         self.env_vars = self._load_env_vars()
@@ -914,11 +915,13 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         ]
         result: dict[str, Any] = {}
         for env_name, env_val in env_vars.items():
-            if not any(env_name.startswith(prefix) for prefix in prefixes):
+            try:
+                prefix = next(prefix for prefix in prefixes if env_name.startswith(prefix))
+            except StopIteration:
                 continue
             # we remove the prefix before splitting in case the prefix has characters in common with the delimiter
-            env_name_without_prefix = env_name[self.env_prefix_len :]
-            _, *keys, last_key = env_name_without_prefix.split(self.env_nested_delimiter, self.env_nested_depth)
+            env_name_without_prefix = env_name[len(prefix) :]
+            *keys, last_key = env_name_without_prefix.split(self.env_nested_delimiter, self.maxsplit)
             env_var = result
             target_field: FieldInfo | None = field
             for key in keys:

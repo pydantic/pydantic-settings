@@ -407,6 +407,8 @@ def test_nested_env_depth(env, env_prefix):
 
     class Cfg(BaseSettings):
         caregiver: Person
+        significant_other: Optional[Person] = None
+        next_of_kin: Optional[Person] = None
 
         model_config = SettingsConfigDict(env_nested_delimiter='_', env_nested_depth=1)
         if env_prefix is not None:
@@ -416,9 +418,17 @@ def test_nested_env_depth(env, env_prefix):
     env.set(env_prefix + 'caregiver_sex', 'M')
     env.set(env_prefix + 'caregiver_first_name', 'Joe')
     env.set(env_prefix + 'caregiver_date_of_birth', '1975-09-12')
+    env.set(env_prefix + 'significant_other_sex', 'F')
+    env.set(env_prefix + 'significant_other_first_name', 'Jill')
+    env.set(env_prefix + 'significant_other_date_of_birth', '1998-04-19')
+    env.set(env_prefix + 'next_of_kin_sex', 'M')
+    env.set(env_prefix + 'next_of_kin_first_name', 'Jack')
+    env.set(env_prefix + 'next_of_kin_date_of_birth', '1999-04-19')
 
     assert Cfg().model_dump() == {
         'caregiver': {'sex': 'M', 'first_name': 'Joe', 'date_of_birth': date(1975, 9, 12)},
+        'significant_other': {'sex': 'F', 'first_name': 'Jill', 'date_of_birth': date(1998, 4, 19)},
+        'next_of_kin': {'sex': 'M', 'first_name': 'Jack', 'date_of_birth': date(1999, 4, 19)},
     }
 
 
