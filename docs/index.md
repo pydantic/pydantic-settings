@@ -325,7 +325,7 @@ print(Settings().model_dump())
 `_env_nested_delimiter` keyword argument on instantiation.
 
 By default environment variables are split by `env_nested_delimiter` into arbitrarily deep nested fields. You can limit
-the depth of the nested fields with the `env_nested_depth` config setting. A common use case this is particularly useful
+the depth of the nested fields with the `env_nested_max_split` config setting. A common use case this is particularly useful
 is for two-level deep settings, where the `env_nested_delimiter` (usually a single `_`) may be a substring of model
 field names. For example:
 
@@ -353,7 +353,7 @@ class LLMConfig(BaseModel):
 
 class GenerationConfig(BaseSettings):
     model_config = SettingsConfigDict(
-        env_nested_delimiter='_', env_nested_depth=1, env_prefix='GENERATION_'
+        env_nested_delimiter='_', env_nested_max_split=1, env_prefix='GENERATION_'
     )
 
     llm: LLMConfig
@@ -373,7 +373,7 @@ print(GenerationConfig().model_dump())
 """
 ```
 
-Without `env_nested_depth=1` set, `GENERATION_LLM_API_KEY` would be parsed as `llm.api.key` instead of `llm.api_key`
+Without `env_nested_max_split=1` set, `GENERATION_LLM_API_KEY` would be parsed as `llm.api.key` instead of `llm.api_key`
 and it would raise a `ValidationError`.
 
 Nested environment variables take precedence over the top-level environment variable JSON

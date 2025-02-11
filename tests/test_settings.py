@@ -399,7 +399,7 @@ def test_nested_env_delimiter_aliases(env):
 
 
 @pytest.mark.parametrize('env_prefix', [None, 'prefix_', 'prefix__'])
-def test_nested_env_depth(env, env_prefix):
+def test_nested_env_max_split(env, env_prefix):
     class Person(BaseModel):
         sex: Literal['M', 'F']
         first_name: str
@@ -410,7 +410,7 @@ def test_nested_env_depth(env, env_prefix):
         significant_other: Optional[Person] = None
         next_of_kin: Optional[Person] = None
 
-        model_config = SettingsConfigDict(env_nested_delimiter='_', env_nested_depth=1)
+        model_config = SettingsConfigDict(env_nested_delimiter='_', env_nested_max_split=1)
         if env_prefix is not None:
             model_config['env_prefix'] = env_prefix
 
@@ -1857,11 +1857,11 @@ def test_builtins_settings_source_repr():
     )
     assert (
         repr(EnvSettingsSource(BaseSettings, env_nested_delimiter='__'))
-        == "EnvSettingsSource(env_nested_delimiter='__', env_nested_depth=-1, env_prefix_len=0)"
+        == "EnvSettingsSource(env_nested_delimiter='__', env_prefix_len=0)"
     )
     assert repr(DotEnvSettingsSource(BaseSettings, env_file='.env', env_file_encoding='utf-8')) == (
         "DotEnvSettingsSource(env_file='.env', env_file_encoding='utf-8', "
-        'env_nested_delimiter=None, env_nested_depth=-1, env_prefix_len=0)'
+        'env_nested_delimiter=None, env_prefix_len=0)'
     )
     assert (
         repr(SecretsSettingsSource(BaseSettings, secrets_dir='/secrets'))

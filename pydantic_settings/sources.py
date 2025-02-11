@@ -735,7 +735,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
         env_nested_delimiter: str | None = None,
-        env_nested_depth: int | None = None,
+        env_nested_max_split: int | None = None,
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
@@ -746,10 +746,10 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         self.env_nested_delimiter = (
             env_nested_delimiter if env_nested_delimiter is not None else self.config.get('env_nested_delimiter')
         )
-        self.env_nested_depth = (
-            env_nested_depth if env_nested_depth is not None else self.config.get('env_nested_depth', -1)
+        self.env_nested_max_split = (
+            env_nested_max_split if env_nested_max_split is not None else self.config.get('env_nested_max_split')
         )
-        self.maxsplit = self.env_nested_depth - 1 if self.env_nested_depth > 0 else self.env_nested_depth
+        self.maxsplit = (self.env_nested_max_split or 0) - 1
         self.env_prefix_len = len(self.env_prefix)
 
         self.env_vars = self._load_env_vars()
@@ -954,7 +954,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
     def __repr__(self) -> str:
         return (
             f'{self.__class__.__name__}(env_nested_delimiter={self.env_nested_delimiter!r}, '
-            f'env_nested_depth={self.env_nested_depth}, env_prefix_len={self.env_prefix_len!r})'
+            f'env_prefix_len={self.env_prefix_len!r})'
         )
 
 
@@ -971,7 +971,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
         env_nested_delimiter: str | None = None,
-        env_nested_depth: int | None = None,
+        env_nested_max_split: int | None = None,
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
@@ -985,7 +985,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
             case_sensitive,
             env_prefix,
             env_nested_delimiter,
-            env_nested_depth,
+            env_nested_max_split,
             env_ignore_empty,
             env_parse_none_str,
             env_parse_enums,
@@ -1072,8 +1072,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
     def __repr__(self) -> str:
         return (
             f'{self.__class__.__name__}(env_file={self.env_file!r}, env_file_encoding={self.env_file_encoding!r}, '
-            f'env_nested_delimiter={self.env_nested_delimiter!r}, env_nested_depth={self.env_nested_depth}, '
-            f'env_prefix_len={self.env_prefix_len!r})'
+            f'env_nested_delimiter={self.env_nested_delimiter!r}, env_prefix_len={self.env_prefix_len!r})'
         )
 
 
