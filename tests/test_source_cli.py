@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import re
 import sys
 import time
@@ -2118,6 +2119,29 @@ def test_cli_app():
         'clone': {'repository': 'ran Clone.alt_cmd', 'directory': 'dir'},
         'init': None,
     }
+
+
+def test_cli_app_async_method_no_existing_loop():
+    class Command(BaseSettings):
+        called: bool = False
+
+        async def cli_cmd(self) -> None:
+            self.called = True
+
+    assert CliApp.run(Command, cli_args=[]).called
+
+
+def test_cli_app_async_method_with_existing_loop():
+    class Command(BaseSettings):
+        called: bool = False
+
+        async def cli_cmd(self) -> None:
+            self.called = True
+
+    async def run_as_coro():
+        return CliApp.run(Command, cli_args=[])
+
+    assert asyncio.run(run_as_coro()).called
 
 
 def test_cli_app_exceptions():
