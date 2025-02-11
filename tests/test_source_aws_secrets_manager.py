@@ -3,6 +3,7 @@ Test pydantic_settings.AWSSecretsManagerSettingsSource.
 """
 
 import json
+import os
 from typing import Tuple, Type
 
 import pytest
@@ -20,6 +21,8 @@ try:
     aws_secrets_manager = True
     import_aws_secrets_manager()
     import boto3
+
+    os.environ['AWS_DEFAULT_REGION'] = os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
 except ImportError:
     aws_secrets_manager = False
 
