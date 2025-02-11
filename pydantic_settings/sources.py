@@ -108,6 +108,19 @@ def import_azure_key_vault() -> None:
         ) from e
 
 
+def import_aws_secrets_manager() -> None:
+    global boto3_client
+    global SecretsManagerClient
+
+    try:
+        from boto3 import client as boto3_client
+        from mypy_boto3_secretsmanager.client import SecretsManagerClient
+    except ImportError as e:
+        raise ImportError(
+            'AWS Secrets Manager dependencies are not installed, run `pip install pydantic-settings[aws-secrets-manager]`'
+        ) from e
+
+
 DotenvType = Union[Path, str, Sequence[Union[Path, str]]]
 PathType = Union[Path, str, Sequence[Union[Path, str]]]
 DEFAULT_PATH: PathType = Path('')
@@ -881,7 +894,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                 type_has_key = self.next_field(type_, key, case_sensitive)
                 if type_has_key:
                     return type_has_key
-        elif is_model_class(annotation) or is_pydantic_dataclass(annotation):
+        elif is_model_class(annotation) or is_pydantic_dataclass(annotation):  # type: ignore
             fields = _get_model_fields(annotation)
             # `case_sensitive is None` is here to be compatible with the old behavior.
             # Has to be removed in V3.
@@ -1782,11 +1795,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         if isinstance(group, dict):
                             group = self._add_group(parser, **group)
                         added_args += list(arg_names)
-                        self._add_argument(group, *(f'{flag_prefix[:len(name)]}{name}' for name in arg_names), **kwargs)
+                        self._add_argument(
+                            group, *(f'{flag_prefix[: len(name)]}{name}' for name in arg_names), **kwargs
+                        )
                     else:
                         added_args += list(arg_names)
                         self._add_argument(
-                            parser, *(f'{flag_prefix[:len(name)]}{name}' for name in arg_names), **kwargs
+                            parser, *(f'{flag_prefix[: len(name)]}{name}' for name in arg_names), **kwargs
                         )
 
         self._add_parser_alias_paths(parser, alias_path_args, added_args, arg_prefix, subcommand_prefix, group)
@@ -2243,7 +2258,44 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
         return AzureKeyVaultMapping(secret_client)
 
     def __repr__(self) -> str:
-        return f'{self.__class__.__name__}(url={self._url!r}, ' f'env_nested_delimiter={self.env_nested_delimiter!r})'
+        return f'{self.__class__.__name__}(url={self._url!r}, env_nested_delimiter={self.env_nested_delimiter!r})'
+
+
+class AWSSecretsManagerSettingsSource(EnvSettingsSource):
+    _secret_id: str
+    _secretsmanager_client: SecretsManagerClient  # type: ignore
+
+    def __init__(
+        self,
+        settings_cls: type[BaseSettings],
+        secret_id: str,
+        env_prefix: str | None = None,
+        env_parse_none_str: str | None = None,
+        env_parse_enums: bool | None = None,
+    ) -> None:
+        import_aws_secrets_manager()
+        self._secretsmanager_client = boto3_client('secretsmanager')  # type: ignore
+        self._secret_id = secret_id
+        super().__init__(
+            settings_cls,
+            case_sensitive=True,
+            env_prefix=env_prefix,
+            env_nested_delimiter='--',
+            env_ignore_empty=False,
+            env_parse_none_str=env_parse_none_str,
+            env_parse_enums=env_parse_enums,
+        )
+
+    def _load_env_vars(self) -> Mapping[str, Optional[str]]:
+        response = self._secretsmanager_client.get_secret_value(SecretId=self._secret_id)
+
+        return json.loads(response['SecretString'])
+
+    def __repr__(self) -> str:
+        return (
+            f'{self.__class__.__name__}(secret_id={self._secret_id!r}, '
+            f'env_nested_delimiter={self.env_nested_delimiter!r})'
+        )
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
