@@ -858,6 +858,25 @@ def test_case_sensitive(monkeypatch):
     ]
 
 
+@pytest.mark.parametrize('env_nested_delimiter', [None, ''])
+def test_case_sensitive_no_nested_delimiter(monkeypatch, env_nested_delimiter):
+    class Subsettings(BaseSettings):
+        foo: str
+
+    class Settings(BaseSettings):
+        subsettings: Subsettings
+
+        model_config = SettingsConfigDict(case_sensitive=True, env_nested_delimiter=env_nested_delimiter)
+
+    # Need to patch os.environ to get build to work on Windows, where os.environ is case insensitive
+    monkeypatch.setattr(os, 'environ', value={'subsettingsNonefoo': '1'})
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert exc_info.value.errors(include_url=False) == [
+        {'type': 'missing', 'loc': ('subsettings',), 'msg': 'Field required', 'input': {}}
+    ]
+
+
 def test_nested_dataclass(env):
     @pydantic_dataclasses.dataclass
     class DeepNestedDataclass:
