@@ -44,7 +44,7 @@ from pydantic_settings import (
     NoDecode,
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
-    SettingsConfigDict,
+    SettingsConfigDict
 )
 from pydantic_settings.sources import DefaultSettingsSource, SettingsError
 
@@ -1100,6 +1100,30 @@ def test_env_file_with_env_prefix_invalid(tmp_path):
         Settings()
     assert exc_info.value.errors(include_url=False) == [
         {'type': 'extra_forbidden', 'loc': ('f',), 'msg': 'Extra inputs are not permitted', 'input': 'random value'}
+    ]
+
+
+def test_env_file_with_env_prefix_invalid_with_sources(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text(prefix_test_env_invalid_file)
+
+    class Settings(BaseSettings):
+        a: str
+        b: str
+        c: str
+
+        model_config = SettingsConfigDict(env_file=p, env_prefix='prefix_', validate_each_source=True)
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert exc_info.value.errors(include_url=False) == [
+        {
+            'type': 'extra_forbidden',
+            'loc': ('f',),
+            'msg': 'Extra inputs are not permitted',
+            'input': 'random value',
+            'ctx': {'source': 'DotEnvSettingsSource'}
+        }
     ]
 
 
