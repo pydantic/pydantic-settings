@@ -4,7 +4,7 @@ import os
 import pathlib
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import IntEnum
 from pathlib import Path
 from typing import Any, Callable, Dict, Generic, Hashable, List, Optional, Set, Tuple, Type, TypeVar, Union
@@ -396,6 +396,40 @@ def test_nested_env_delimiter_aliases(env):
     env.set('foo__v1', '-1-')
     env.set('bar__v2', '-2-')
     assert Cfg().model_dump() == {'sub_model': {'v1': '-1-', 'v2': '-2-'}}
+
+
+@pytest.mark.parametrize('env_prefix', [None, 'prefix_', 'prefix__'])
+def test_nested_env_max_split(env, env_prefix):
+    class Person(BaseModel):
+        sex: Literal['M', 'F']
+        first_name: str
+        date_of_birth: date
+
+    class Cfg(BaseSettings):
+        caregiver: Person
+        significant_other: Optional[Person] = None
+        next_of_kin: Optional[Person] = None
+
+        model_config = SettingsConfigDict(env_nested_delimiter='_', env_nested_max_split=1)
+        if env_prefix is not None:
+            model_config['env_prefix'] = env_prefix
+
+    env_prefix = env_prefix or ''
+    env.set(env_prefix + 'caregiver_sex', 'M')
+    env.set(env_prefix + 'caregiver_first_name', 'Joe')
+    env.set(env_prefix + 'caregiver_date_of_birth', '1975-09-12')
+    env.set(env_prefix + 'significant_other_sex', 'F')
+    env.set(env_prefix + 'significant_other_first_name', 'Jill')
+    env.set(env_prefix + 'significant_other_date_of_birth', '1998-04-19')
+    env.set(env_prefix + 'next_of_kin_sex', 'M')
+    env.set(env_prefix + 'next_of_kin_first_name', 'Jack')
+    env.set(env_prefix + 'next_of_kin_date_of_birth', '1999-04-19')
+
+    assert Cfg().model_dump() == {
+        'caregiver': {'sex': 'M', 'first_name': 'Joe', 'date_of_birth': date(1975, 9, 12)},
+        'significant_other': {'sex': 'F', 'first_name': 'Jill', 'date_of_birth': date(1998, 4, 19)},
+        'next_of_kin': {'sex': 'M', 'first_name': 'Jack', 'date_of_birth': date(1999, 4, 19)},
+    }
 
 
 class DateModel(BaseModel):

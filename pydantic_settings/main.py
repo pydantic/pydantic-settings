@@ -41,6 +41,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     env_file_encoding: str | None
     env_ignore_empty: bool
     env_nested_delimiter: str | None
+    env_nested_max_split: int | None
     env_parse_none_str: str | None
     env_parse_enums: bool | None
     cli_prog_name: str | None
@@ -115,6 +116,7 @@ class BaseSettings(BaseModel):
         _env_file_encoding: The env file encoding, e.g. `'latin-1'`. Defaults to `None`.
         _env_ignore_empty: Ignore environment variables where the value is an empty string. Default to `False`.
         _env_nested_delimiter: The nested env values delimiter. Defaults to `None`.
+        _env_nested_max_split: The nested env values maximum nesting. Defaults to `None`, which means no limit.
         _env_parse_none_str: The env string value that should be parsed (e.g. "null", "void", "None", etc.)
             into `None` type(None). Defaults to `None` type(None), which means no parsing should occur.
         _env_parse_enums: Parse enum field names to values. Defaults to `None.`, which means no parsing should occur.
@@ -143,7 +145,8 @@ class BaseSettings(BaseModel):
     """
 
     def __init__(
-        __pydantic_self__,
+        self,
+        /,
         _case_sensitive: bool | None = None,
         _nested_model_default_partial_update: bool | None = None,
         _env_prefix: str | None = None,
@@ -151,11 +154,12 @@ class BaseSettings(BaseModel):
         _env_file_encoding: str | None = None,
         _env_ignore_empty: bool | None = None,
         _env_nested_delimiter: str | None = None,
+        _env_nested_max_split: int | None = None,
         _env_parse_none_str: str | None = None,
         _env_parse_enums: bool | None = None,
         _cli_prog_name: str | None = None,
         _cli_parse_args: bool | list[str] | tuple[str, ...] | None = None,
-        _cli_settings_source: CliSettingsSource[Any] | None = None,
+        _cli_settings_source: CliSettingsSource[object] | None = None,
         _cli_parse_none_str: str | None = None,
         _cli_hide_none_type: bool | None = None,
         _cli_avoid_json: bool | None = None,
@@ -170,9 +174,8 @@ class BaseSettings(BaseModel):
         _secrets_dir: PathType | None = None,
         **values: Any,
     ) -> None:
-        # Uses something other than `self` the first arg to allow "self" as a settable attribute
         super().__init__(
-            **__pydantic_self__._settings_build_values(
+            **self._settings_build_values(
                 values,
                 _case_sensitive=_case_sensitive,
                 _nested_model_default_partial_update=_nested_model_default_partial_update,
@@ -181,6 +184,7 @@ class BaseSettings(BaseModel):
                 _env_file_encoding=_env_file_encoding,
                 _env_ignore_empty=_env_ignore_empty,
                 _env_nested_delimiter=_env_nested_delimiter,
+                _env_nested_max_split=_env_nested_max_split,
                 _env_parse_none_str=_env_parse_none_str,
                 _env_parse_enums=_env_parse_enums,
                 _cli_prog_name=_cli_prog_name,
@@ -235,6 +239,7 @@ class BaseSettings(BaseModel):
         _env_file_encoding: str | None = None,
         _env_ignore_empty: bool | None = None,
         _env_nested_delimiter: str | None = None,
+        _env_nested_max_split: int | None = None,
         _env_parse_none_str: str | None = None,
         _env_parse_enums: bool | None = None,
         _cli_prog_name: str | None = None,
@@ -272,6 +277,11 @@ class BaseSettings(BaseModel):
             _env_nested_delimiter
             if _env_nested_delimiter is not None
             else self.model_config.get('env_nested_delimiter')
+        )
+        env_nested_max_split = (
+            _env_nested_max_split
+            if _env_nested_max_split is not None
+            else self.model_config.get('env_nested_max_split')
         )
         env_parse_none_str = (
             _env_parse_none_str if _env_parse_none_str is not None else self.model_config.get('env_parse_none_str')
@@ -336,6 +346,7 @@ class BaseSettings(BaseModel):
             case_sensitive=case_sensitive,
             env_prefix=env_prefix,
             env_nested_delimiter=env_nested_delimiter,
+            env_nested_max_split=env_nested_max_split,
             env_ignore_empty=env_ignore_empty,
             env_parse_none_str=env_parse_none_str,
             env_parse_enums=env_parse_enums,
@@ -347,6 +358,7 @@ class BaseSettings(BaseModel):
             case_sensitive=case_sensitive,
             env_prefix=env_prefix,
             env_nested_delimiter=env_nested_delimiter,
+            env_nested_max_split=env_nested_max_split,
             env_ignore_empty=env_ignore_empty,
             env_parse_none_str=env_parse_none_str,
             env_parse_enums=env_parse_enums,
@@ -415,6 +427,7 @@ class BaseSettings(BaseModel):
         env_file_encoding=None,
         env_ignore_empty=False,
         env_nested_delimiter=None,
+        env_nested_max_split=None,
         env_parse_none_str=None,
         env_parse_enums=None,
         cli_prog_name=None,
