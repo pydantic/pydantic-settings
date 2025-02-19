@@ -335,7 +335,7 @@ class BaseSettings(BaseModel):
 
         secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
-        validate_each_source = _validate_each_source if _validate_each_source is not None else self.model_config.get("validate_each_source")
+        validate_each_source = _validate_each_source if _validate_each_source is not None else self.model_config.get('validate_each_source')
 
         # Configure built-in sources
         default_settings = DefaultSettingsSource(
