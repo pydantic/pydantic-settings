@@ -428,6 +428,9 @@ class BaseSettings(BaseModel):
                             if line.get("type", "") == "missing":
                                 continue
                             line['loc'] = [source_name] + line['loc']
+                            ctx = line.get("ctx", {})
+                            ctx["source"] = source_name
+                            line['ctx'] = ctx
                             details = InitErrorDetails(**line)
                             all_line_errors.append(details)
 
