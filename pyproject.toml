@@ -58,6 +58,24 @@ Source = 'https://github.com/pydantic/pydantic-settings'
 Changelog = 'https://github.com/pydantic/pydantic-settings/releases'
 Documentation = 'https://docs.pydantic.dev/dev-v2/concepts/pydantic_settings/'
 
+[dependency-groups]
+linting = [
+    "black",
+    "mypy",
+    "pre-commit",
+    "pyupgrade",
+    "pyyaml",
+    "ruff",
+    "types-pyyaml",
+]
+testing = [
+    "coverage[toml]",
+    "pytest",
+    "pytest-examples",
+    "pytest-mock",
+    "pytest-pretty",
+]
+
 [tool.pytest.ini_options]
 testpaths = 'tests'
 filterwarnings = [
