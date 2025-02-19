@@ -485,9 +485,9 @@ def test_annotated_list_with_error_source(env):
         AnnotatedComplexSettings()
     assert exc_info.value.errors(include_url=False) == [
         {
-            'ctx': {'actual_length': 1, 'field_type': 'List', 'min_length': 2, 'source': 'EnvSettingsSource'},
+            'ctx': {'actual_length': 1, 'field_type': 'List', 'min_length': 2},
             'input': ['russet'],
-            'loc': ('apples',),
+            'loc': ('EnvSettingsSource', 'apples',),
             'msg': 'List should have at least 2 items after validation, not 1',
             'type': 'too_short',
         }
@@ -1141,10 +1141,9 @@ def test_env_file_with_env_prefix_invalid_with_sources(tmp_path):
     assert exc_info.value.errors(include_url=False) == [
         {
             'type': 'extra_forbidden',
-            'loc': ('f',),
+            'loc': ('DotEnvSettingsSource', 'f',),
             'msg': 'Extra inputs are not permitted',
-            'input': 'random value',
-            'ctx': {'source': 'DotEnvSettingsSource'}
+            'input': 'random value'
         }
     ]
 
