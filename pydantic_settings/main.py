@@ -2,6 +2,7 @@ from __future__ import annotations as _annotations
 
 import asyncio
 import inspect
+import json
 import threading
 from argparse import Namespace
 from types import SimpleNamespace
@@ -13,6 +14,7 @@ from pydantic._internal._signature import _field_name_for_signature
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.main import BaseModel
+from pydantic_core import ValidationError, InitErrorDetails
 
 from .sources import (
     ENV_FILE_SENTINEL,
@@ -31,7 +33,6 @@ from .sources import (
 )
 
 T = TypeVar('T')
-
 
 class SettingsConfigDict(ConfigDict, total=False):
     case_sensitive: bool
@@ -58,6 +59,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_ignore_unknown_args: bool | None
     cli_kebab_case: bool | None
     secrets_dir: PathType | None
+    validate_each_source: bool | None
     json_file: PathType | None
     json_file_encoding: str | None
     yaml_file: PathType | None
@@ -257,6 +259,7 @@ class BaseSettings(BaseModel):
         _cli_ignore_unknown_args: bool | None = None,
         _cli_kebab_case: bool | None = None,
         _secrets_dir: PathType | None = None,
+        _validate_each_source: bool | None = None
     ) -> dict[str, Any]:
         # Determine settings config values
         case_sensitive = _case_sensitive if _case_sensitive is not None else self.model_config.get('case_sensitive')
@@ -332,6 +335,8 @@ class BaseSettings(BaseModel):
 
         secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
+        validate_each_source = _validate_each_source if _validate_each_source is not None else self.model_config.get("validate_each_source")
+
         # Configure built-in sources
         default_settings = DefaultSettingsSource(
             self.__class__, nested_model_default_partial_update=nested_model_default_partial_update
@@ -400,6 +405,7 @@ class BaseSettings(BaseModel):
         if sources:
             state: dict[str, Any] = {}
             states: dict[str, dict[str, Any]] = {}
+            all_line_errors: list[dict[str, Any]] = []
             for source in sources:
                 if isinstance(source, PydanticBaseSettingsSource):
                     source._set_current_state(state)
@@ -410,6 +416,26 @@ class BaseSettings(BaseModel):
 
                 states[source_name] = source_state
                 state = deep_update(source_state, state)
+
+                if validate_each_source:
+                    if not source_state:
+                        continue
+                    try:
+                        _ = super(BaseSettings, self).__init__(**source_state)
+                    except ValidationError as e:
+                        line_errors = json.loads(e.json())
+                        for line in line_errors:
+                            ctx = line.get("ctx", {})
+                            ctx = {"source": source_name}
+                            line['ctx'] = ctx
+                        all_line_errors.extend(line_errors)
+
+            if all_line_errors and validate_each_source:
+                raise ValidationError.from_exception_data(
+                    title=self.__class__.__name__,
+                    line_errors=[InitErrorDetails(**l) for l in  all_line_errors],
+                    input_type="python"
+                )
             return state
         else:
             # no one should mean to do this, but I think returning an empty dict is marginally preferable
