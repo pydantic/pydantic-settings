@@ -472,6 +472,28 @@ def test_annotated_list(env):
     ]
 
 
+def test_annotated_list_with_error_source(env):
+    class AnnotatedComplexSettings(BaseSettings, validate_each_source=True):
+        apples: Annotated[List[str], MinLen(2)] = []
+
+    env.set('apples', '["russet", "granny smith"]')
+    s = AnnotatedComplexSettings()
+    assert s.apples == ['russet', 'granny smith']
+
+    env.set('apples', '["russet"]')
+    with pytest.raises(ValidationError) as exc_info:
+        AnnotatedComplexSettings()
+    assert exc_info.value.errors(include_url=False) == [
+        {
+            'ctx': {'actual_length': 1, 'field_type': 'List', 'min_length': 2, 'source': 'EnvSettingsSource'},
+            'input': ['russet'],
+            'loc': ('apples',),
+            'msg': 'List should have at least 2 items after validation, not 1',
+            'type': 'too_short',
+        }
+    ]
+
+
 def test_set_dict_model(env):
     env.set('bananas', '[1, 2, 3, 3]')
     env.set('CARROTS', '{"a": null, "b": 4}')
