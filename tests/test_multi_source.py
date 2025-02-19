@@ -58,18 +58,21 @@ def test_line_errors_from_source(monkeypatch, tmp_path):
 
     assert exc_info.value.errors(include_url=False) == [
         {
+            'ctx': {'source': 'JsonConfigSettingsSource'},
             'input': 0,
             'loc': ('JsonConfigSettingsSource', 'foobar',),
             'msg': 'Input should be a valid string',
             'type': 'string_type',
         },
         {
+            'ctx': {'source': 'EnvSettingsSource'},
             'input': 'a',
             'loc': ('EnvSettingsSource', 'nested', 'nested_field'),
             'msg': 'Input should be a valid integer, unable to parse string as an integer',
             'type': 'int_parsing'
         },
         {
+            'ctx': {'source': 'InitSettingsSource'},
             'input': 0,
             'loc': ('InitSettingsSource', 'null_field',),
             'msg': 'Input should be a valid string',
