@@ -735,6 +735,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
         env_nested_delimiter: str | None = None,
+        env_nested_max_split: int | None = None,
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
@@ -745,6 +746,10 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         self.env_nested_delimiter = (
             env_nested_delimiter if env_nested_delimiter is not None else self.config.get('env_nested_delimiter')
         )
+        self.env_nested_max_split = (
+            env_nested_max_split if env_nested_max_split is not None else self.config.get('env_nested_max_split')
+        )
+        self.maxsplit = (self.env_nested_max_split or 0) - 1
         self.env_prefix_len = len(self.env_prefix)
 
         self.env_vars = self._load_env_vars()
@@ -910,11 +915,13 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         ]
         result: dict[str, Any] = {}
         for env_name, env_val in env_vars.items():
-            if not any(env_name.startswith(prefix) for prefix in prefixes):
+            try:
+                prefix = next(prefix for prefix in prefixes if env_name.startswith(prefix))
+            except StopIteration:
                 continue
             # we remove the prefix before splitting in case the prefix has characters in common with the delimiter
-            env_name_without_prefix = env_name[self.env_prefix_len :]
-            _, *keys, last_key = env_name_without_prefix.split(self.env_nested_delimiter)
+            env_name_without_prefix = env_name[len(prefix) :]
+            *keys, last_key = env_name_without_prefix.split(self.env_nested_delimiter, self.maxsplit)
             env_var = result
             target_field: FieldInfo | None = field
             for key in keys:
@@ -964,6 +971,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
         env_nested_delimiter: str | None = None,
+        env_nested_max_split: int | None = None,
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
@@ -977,6 +985,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
             case_sensitive,
             env_prefix,
             env_nested_delimiter,
+            env_nested_max_split,
             env_ignore_empty,
             env_parse_none_str,
             env_parse_enums,
