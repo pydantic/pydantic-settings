@@ -1,5 +1,8 @@
 from __future__ import annotations as _annotations
 
+import asyncio
+import inspect
+import threading
 from argparse import Namespace
 from types import SimpleNamespace
 from typing import Any, ClassVar, TypeVar
@@ -459,10 +462,48 @@ class CliApp:
 
     @staticmethod
     def _run_cli_cmd(model: Any, cli_cmd_method_name: str, is_required: bool) -> Any:
-        if hasattr(type(model), cli_cmd_method_name):
-            getattr(type(model), cli_cmd_method_name)(model)
-        elif is_required:
-            raise SettingsError(f'Error: {type(model).__name__} class is missing {cli_cmd_method_name} entrypoint')
+        command = getattr(type(model), cli_cmd_method_name, None)
+        if command is None:
+            if is_required:
+                raise SettingsError(f'Error: {type(model).__name__} class is missing {cli_cmd_method_name} entrypoint')
+            return model
+
+        # If the method is asynchronous, we handle its execution based on the current event loop status.
+        if inspect.iscoroutinefunction(command):
+            # For asynchronous methods, we have two execution scenarios:
+            # 1. If no event loop is running in the current thread, run the coroutine directly with asyncio.run().
+            # 2. If an event loop is already running in the current thread, run the coroutine in a separate thread to avoid conflicts.
+            try:
+                # Check if an event loop is currently running in this thread.
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                # We're in a context with an active event loop (e.g., Jupyter Notebook).
+                # Running asyncio.run() here would cause conflicts, so we use a separate thread.
+                exception_container = []
+
+                def run_coro() -> None:
+                    try:
+                        # Execute the coroutine in a new event loop in this separate thread.
+                        asyncio.run(command(model))
+                    except Exception as e:
+                        exception_container.append(e)
+
+                thread = threading.Thread(target=run_coro)
+                thread.start()
+                thread.join()
+                if exception_container:
+                    # Propagate exceptions from the separate thread.
+                    raise exception_container[0]
+            else:
+                # No event loop is running; safe to run the coroutine directly.
+                asyncio.run(command(model))
+        else:
+            # For synchronous methods, call them directly.
+            command(model)
+
         return model
 
     @staticmethod

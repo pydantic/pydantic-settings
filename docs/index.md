@@ -1113,6 +1113,72 @@ For `BaseModel` and `pydantic.dataclasses.dataclass` types, `CliApp.run` will in
 * `cli_implicit_flags=True`
 * `cli_kebab_case=True`
 
+### Asynchronous CLI Commands
+
+Pydantic settings supports running asynchronous CLI commands via `CliApp.run` and `CliApp.run_subcommand`. With this feature, you can define async def methods within your Pydantic models (including subcommands) and have them executed just like their synchronous counterparts. Specifically:
+
+1. Asynchronous methods are supported: You can now mark your cli_cmd or similar CLI entrypoint methods as async def and have CliApp execute them.
+2. Subcommands may also be asynchronous: If you have nested CLI subcommands, the final (lowest-level) subcommand methods can likewise be asynchronous.
+3. Limit asynchronous methods to final subcommands: Defining parent commands as asynchronous is not recommended, because it can result in additional threads and event loops being created. For best performance and to avoid unnecessary resource usage, only implement your deepest (child) subcommands as async def.
+
+Below is a simple example demonstrating an asynchronous top-level command:
+
+```py
+from pydantic_settings import BaseSettings, CliApp
+
+
+class AsyncSettings(BaseSettings):
+    async def cli_cmd(self) -> None:
+        print('Hello from an async CLI method!')
+        #> Hello from an async CLI method!
+
+
+# If an event loop is already running, a new thread will be used;
+# otherwise, asyncio.run() is used to execute this async method.
+assert CliApp.run(AsyncSettings, cli_args=[]).model_dump() == {}
+```
+
+#### Asynchronous Subcommands
+
+As mentioned above, you can also define subcommands as async. However, only do so for the leaf (lowest-level) subcommand to avoid spawning new threads and event loops unnecessarily in parent commands:
+
+```py
+from pydantic import BaseModel
+
+from pydantic_settings import (
+    BaseSettings,
+    CliApp,
+    CliPositionalArg,
+    CliSubCommand,
+)
+
+
+class Clone(BaseModel):
+    repository: CliPositionalArg[str]
+    directory: CliPositionalArg[str]
+
+    async def cli_cmd(self) -> None:
+        # Perform async tasks here, e.g. network or I/O operations
+        print(f'Cloning async from "{self.repository}" into "{self.directory}"')
+        #> Cloning async from "repo" into "dir"
+
+
+class Git(BaseSettings):
+    clone: CliSubCommand[Clone]
+
+    def cli_cmd(self) -> None:
+        # Run the final subcommand (clone/init). It is recommended to define async methods only at the deepest level.
+        CliApp.run_subcommand(self)
+
+
+CliApp.run(Git, cli_args=['clone', 'repo', 'dir']).model_dump() == {
+    'repository': 'repo',
+    'directory': 'dir',
+}
+```
+
+When executing a subcommand with an asynchronous cli_cmd, Pydantic settings automatically detects whether the current thread already has an active event loop. If so, the async command is run in a fresh thread to avoid conflicts. Otherwise, it uses asyncio.run() in the current thread. This handling ensures your asynchronous subcommands “just work” without additional manual setup.
+
 ### Mutually Exclusive Groups
 
 CLI mutually exclusive groups can be created by inheriting from the `CliMutuallyExclusiveGroup` class.
