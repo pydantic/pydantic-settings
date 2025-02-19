@@ -421,7 +421,7 @@ class BaseSettings(BaseModel):
                     if not source_state:
                         continue
                     try:
-                        _ = super(BaseSettings, self).__init__(**source_state)
+                        _ = super().__init__(**source_state)
                     except ValidationError as e:
                         line_errors = json.loads(e.json())
                         for line in line_errors:
@@ -436,7 +436,7 @@ class BaseSettings(BaseModel):
 
             if validate_each_source:
                 try:
-                    _ = super(BaseSettings, self).__init__(**state)
+                    _ = super().__init__(**state)
                 except ValidationError as e:
                     line_errors = json.loads(e.json())
                     for line in line_errors:
