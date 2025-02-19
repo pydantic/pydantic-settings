@@ -405,7 +405,7 @@ class BaseSettings(BaseModel):
         if sources:
             state: dict[str, Any] = {}
             states: dict[str, dict[str, Any]] = {}
-            all_line_errors: list[dict[str, Any]] = []
+            all_line_errors: list[InitErrorDetails] = []
             for source in sources:
                 if isinstance(source, PydanticBaseSettingsSource):
                     source._set_current_state(state)
@@ -425,16 +425,29 @@ class BaseSettings(BaseModel):
                     except ValidationError as e:
                         line_errors = json.loads(e.json())
                         for line in line_errors:
+                            if line.get("type", "") == "missing":
+                                continue
                             ctx = line.get("ctx", {})
                             ctx["source"] = source_name
                             line['ctx'] = ctx
-                        all_line_errors.extend(line_errors)
+                            details = InitErrorDetails(**line)
+                            all_line_errors.append(details)
+
+            if validate_each_source:
+                try:
+                    _ = super(BaseSettings, self).__init__(**state)
+                except ValidationError as e:
+                    line_errors = json.loads(e.json())
+                    for line in line_errors:
+                        if line.get("type", "") != "missing":
+                            continue
+                        details = InitErrorDetails(**line)
+                        all_line_errors.append(details)
 
             if all_line_errors and validate_each_source:
                 raise ValidationError.from_exception_data(
                     title=self.__class__.__name__,
-                    line_errors=[InitErrorDetails(**l) for l in all_line_errors],
-                    input_type="python"
+                    line_errors=all_line_errors
                 )
             return state
         else:
