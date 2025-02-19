@@ -73,9 +73,9 @@ print(Settings().model_dump())
 {
     'auth_key': 'xxx',
     'api_key': 'xxx',
-    'redis_dsn': Url('redis://user:pass@localhost:6379/1'),
-    'pg_dsn': MultiHostUrl('postgres://user:pass@localhost:5432/foobar'),
-    'amqp_dsn': Url('amqp://user:pass@localhost:5672/'),
+    'redis_dsn': RedisDsn('redis://user:pass@localhost:6379/1'),
+    'pg_dsn': PostgresDsn('postgres://user:pass@localhost:5432/foobar'),
+    'amqp_dsn': AmqpDsn('amqp://user:pass@localhost:5672/'),
     'special_function': math.cos,
     'domains': set(),
     'more_settings': {'foo': 'bar', 'apple': 1},
@@ -2055,7 +2055,7 @@ class Settings(BaseSettings):
 
 
 print(Settings(database_dsn='postgres://postgres@localhost:5432/kwargs_db'))
-#> database_dsn=MultiHostUrl('postgres://postgres@localhost:5432/kwargs_db')
+#> database_dsn=PostgresDsn('postgres://postgres@localhost:5432/kwargs_db')
 ```
 
 By flipping `env_settings` and `init_settings`, environment variables now have precedence over `__init__` kwargs.
