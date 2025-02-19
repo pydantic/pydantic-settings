@@ -431,8 +431,7 @@ class BaseSettings(BaseModel):
                             ctx = line.get("ctx", {})
                             ctx["source"] = source_name
                             line['ctx'] = ctx
-                            details = InitErrorDetails(**line)
-                            all_line_errors.append(details)
+                            all_line_errors.append(line)
 
             if validate_each_source:
                 try:
@@ -442,8 +441,7 @@ class BaseSettings(BaseModel):
                     for line in line_errors:
                         if line.get("type", "") != "missing":
                             continue
-                        details = InitErrorDetails(**line)
-                        all_line_errors.append(details)
+                        all_line_errors.append(line)
 
             if all_line_errors and validate_each_source:
                 raise ValidationError.from_exception_data(
