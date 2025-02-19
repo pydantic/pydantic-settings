@@ -908,6 +908,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         Returns:
             A dictionary contains extracted values from nested env values.
         """
+        if not self.env_nested_delimiter:
+            return {}
+
         is_dict = lenient_issubclass(get_origin(field.annotation), dict)
 
         prefixes = [
