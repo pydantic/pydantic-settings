@@ -15,7 +15,7 @@ from pydantic_settings import (
 )
 
 def test_line_errors_from_source(monkeypatch, tmp_path):
-    monkeypatch.setenv("SETTINGS_NESTED__NESTED_FIELD", "a")
+    monkeypatch.setenv('SETTINGS_NESTED__NESTED_FIELD', 'a')
     p = tmp_path / 'settings.json'
     p.write_text(
         """
@@ -29,8 +29,8 @@ def test_line_errors_from_source(monkeypatch, tmp_path):
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(
             json_file=p,
-            env_prefix="SETTINGS_",
-            env_nested_delimiter="__",
+            env_prefix='SETTINGS_',
+            env_nested_delimiter='__',
             validate_each_source=True
         )
         foobar: str
