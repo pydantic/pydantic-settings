@@ -44,7 +44,7 @@ from pydantic_settings import (
     NoDecode,
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
-    SettingsConfigDict
+    SettingsConfigDict,
 )
 from pydantic_settings.sources import DefaultSettingsSource, SettingsError
 

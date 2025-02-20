@@ -4,8 +4,8 @@ Integration tests with multiple sources
 
 from typing import Tuple, Type, Union
 
-from pydantic import BaseModel, ValidationError
 import pytest
+from pydantic import BaseModel, ValidationError
 
 from pydantic_settings import (
     BaseSettings,
@@ -13,6 +13,7 @@ from pydantic_settings import (
     PydanticBaseSettingsSource,
     SettingsConfigDict,
 )
+
 
 def test_line_errors_from_source(monkeypatch, tmp_path):
     monkeypatch.setenv('SETTINGS_NESTED__NESTED_FIELD', 'a')
