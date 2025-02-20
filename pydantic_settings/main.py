@@ -14,7 +14,7 @@ from pydantic._internal._signature import _field_name_for_signature
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.main import BaseModel
-from pydantic_core import ValidationError, InitErrorDetails
+from pydantic_core import InitErrorDetails, ValidationError
 
 from .sources import (
     ENV_FILE_SENTINEL,
@@ -417,15 +417,13 @@ class BaseSettings(BaseModel):
                 states[source_name] = source_state
                 state = deep_update(source_state, state)
 
-                if validate_each_source:
-                    if not source_state:
-                        continue
+                if source_state and validate_each_source:
                     try:
                         _ = super().__init__(**source_state)
                     except ValidationError as e:
                         line_errors = json.loads(e.json())
                         for line in line_errors:
-                            if line.get("type", "") == 'missing':
+                            if line.get('type', '') == 'missing':
                                 continue
                             line['loc'] = [source_name] + line['loc']
                             ctx = line.get('ctx', {})
@@ -438,16 +436,14 @@ class BaseSettings(BaseModel):
                     _ = super().__init__(**state)
                 except ValidationError as e:
                     line_errors = json.loads(e.json())
-                    for line in line_errors:
-                        if line.get('type', '') != 'missing':
-                            continue
-                        all_line_errors.append(line)
+                    all_line_errors.extend([line for line in line_errors if line.get('type', '') == 'missing'])
 
-            if all_line_errors and validate_each_source:
-                raise ValidationError.from_exception_data(
-                    title=self.__class__.__name__,
-                    line_errors=all_line_errors
-                )
+                if all_line_errors:
+                    raise ValidationError.from_exception_data(
+                        title=self.__class__.__name__,
+                        line_errors=all_line_errors
+                    )
+
             return state
         else:
             # no one should mean to do this, but I think returning an empty dict is marginally preferable
