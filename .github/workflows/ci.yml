@@ -41,7 +41,7 @@ jobs:
     env:
       PYTHON: ${{ matrix.python }}
       OS: ${{ matrix.os }}
-      UV_PYTHON_PREFERENCE: only-manage
+      UV_PYTHON_PREFERENCE: only-managed
 
     runs-on: ${{ matrix.os }}
 
