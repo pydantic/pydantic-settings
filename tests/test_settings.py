@@ -1891,8 +1891,7 @@ def test_builtins_settings_source_repr():
         == "EnvSettingsSource(env_nested_delimiter='__', env_prefix_len=0)"
     )
     assert repr(DotEnvSettingsSource(BaseSettings, env_file='.env', env_file_encoding='utf-8')) == (
-        "DotEnvSettingsSource(env_file='.env', env_file_encoding='utf-8', "
-        'env_nested_delimiter=None, env_prefix_len=0)'
+        "DotEnvSettingsSource(env_file='.env', env_file_encoding='utf-8', env_nested_delimiter=None, env_prefix_len=0)"
     )
     assert (
         repr(SecretsSettingsSource(BaseSettings, secrets_dir='/secrets'))
