@@ -487,7 +487,10 @@ def test_annotated_list_with_error_source(env):
         {
             'ctx': {'actual_length': 1, 'field_type': 'List', 'min_length': 2, 'source': 'EnvSettingsSource'},
             'input': ['russet'],
-            'loc': ('EnvSettingsSource', 'apples',),
+            'loc': (
+                'EnvSettingsSource',
+                'apples',
+            ),
             'msg': 'List should have at least 2 items after validation, not 1',
             'type': 'too_short',
         }
@@ -1141,10 +1144,13 @@ def test_env_file_with_env_prefix_invalid_with_sources(tmp_path):
     assert exc_info.value.errors(include_url=False) == [
         {
             'type': 'extra_forbidden',
-            'loc': ('DotEnvSettingsSource', 'f',),
+            'loc': (
+                'DotEnvSettingsSource',
+                'f',
+            ),
             'msg': 'Extra inputs are not permitted',
             'input': 'random value',
-            'ctx': {'source': 'DotEnvSettingsSource'}
+            'ctx': {'source': 'DotEnvSettingsSource'},
         }
     ]
 
@@ -1925,8 +1931,7 @@ def test_builtins_settings_source_repr():
         == "EnvSettingsSource(env_nested_delimiter='__', env_prefix_len=0)"
     )
     assert repr(DotEnvSettingsSource(BaseSettings, env_file='.env', env_file_encoding='utf-8')) == (
-        "DotEnvSettingsSource(env_file='.env', env_file_encoding='utf-8', "
-        'env_nested_delimiter=None, env_prefix_len=0)'
+        "DotEnvSettingsSource(env_file='.env', env_file_encoding='utf-8', env_nested_delimiter=None, env_prefix_len=0)"
     )
     assert (
         repr(SecretsSettingsSource(BaseSettings, secrets_dir='/secrets'))

@@ -29,10 +29,7 @@ def test_line_errors_from_source(monkeypatch, tmp_path):
 
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(
-            json_file=p,
-            env_prefix='SETTINGS_',
-            env_nested_delimiter='__',
-            validate_each_source=True
+            json_file=p, env_prefix='SETTINGS_', env_nested_delimiter='__', validate_each_source=True
         )
         foobar: str
         nested: Nested
@@ -48,11 +45,7 @@ def test_line_errors_from_source(monkeypatch, tmp_path):
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
         ) -> Tuple[PydanticBaseSettingsSource, ...]:
-            return (
-                JsonConfigSettingsSource(settings_cls),
-                env_settings,
-                init_settings
-            )
+            return (JsonConfigSettingsSource(settings_cls), env_settings, init_settings)
 
     with pytest.raises(ValidationError) as exc_info:
         _ = Settings(null_field=0)
@@ -61,7 +54,10 @@ def test_line_errors_from_source(monkeypatch, tmp_path):
         {
             'ctx': {'source': 'JsonConfigSettingsSource'},
             'input': 0,
-            'loc': ('JsonConfigSettingsSource', 'foobar',),
+            'loc': (
+                'JsonConfigSettingsSource',
+                'foobar',
+            ),
             'msg': 'Input should be a valid string',
             'type': 'string_type',
         },
@@ -70,19 +66,22 @@ def test_line_errors_from_source(monkeypatch, tmp_path):
             'input': 'a',
             'loc': ('EnvSettingsSource', 'nested', 'nested_field'),
             'msg': 'Input should be a valid integer, unable to parse string as an integer',
-            'type': 'int_parsing'
+            'type': 'int_parsing',
         },
         {
             'ctx': {'source': 'InitSettingsSource'},
             'input': 0,
-            'loc': ('InitSettingsSource', 'null_field',),
+            'loc': (
+                'InitSettingsSource',
+                'null_field',
+            ),
             'msg': 'Input should be a valid string',
-            'type': 'string_type'
+            'type': 'string_type',
         },
         {
             'input': {'foobar': 0, 'nested': {'nested_field': 'a'}, 'null_field': None},
             'loc': ('extra',),
             'msg': 'Field required',
-            'type': 'missing'
-        }
+            'type': 'missing',
+        },
     ]

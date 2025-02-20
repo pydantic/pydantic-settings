@@ -34,6 +34,7 @@ from .sources import (
 
 T = TypeVar('T')
 
+
 class SettingsConfigDict(ConfigDict, total=False):
     case_sensitive: bool
     nested_model_default_partial_update: bool | None
@@ -259,7 +260,7 @@ class BaseSettings(BaseModel):
         _cli_ignore_unknown_args: bool | None = None,
         _cli_kebab_case: bool | None = None,
         _secrets_dir: PathType | None = None,
-        _validate_each_source: bool | None = None
+        _validate_each_source: bool | None = None,
     ) -> dict[str, Any]:
         # Determine settings config values
         case_sensitive = _case_sensitive if _case_sensitive is not None else self.model_config.get('case_sensitive')
@@ -335,7 +336,11 @@ class BaseSettings(BaseModel):
 
         secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
-        validate_each_source = _validate_each_source if _validate_each_source is not None else self.model_config.get('validate_each_source')
+        validate_each_source = (
+            _validate_each_source
+            if _validate_each_source is not None
+            else self.model_config.get('validate_each_source')
+        )
 
         # Configure built-in sources
         default_settings = DefaultSettingsSource(
@@ -440,8 +445,7 @@ class BaseSettings(BaseModel):
 
                 if all_line_errors:
                     raise ValidationError.from_exception_data(
-                        title=self.__class__.__name__,
-                        line_errors=all_line_errors
+                        title=self.__class__.__name__, line_errors=all_line_errors
                     )
 
             return state
