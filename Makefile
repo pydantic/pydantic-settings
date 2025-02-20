@@ -3,41 +3,35 @@ sources = pydantic_settings tests
 
 .PHONY: install
 install:
-	python -m pip install -U pip
-	pip install -r requirements/all.txt
-	pip install -e .
+	uv sync --all-extras --all-groups
 
 .PHONY: refresh-lockfiles
 refresh-lockfiles:
-	@echo "Updating requirements/*.txt files using pip-compile"
-	find requirements/ -name '*.txt' ! -name 'all.txt' -type f -delete
-	pip-compile -q --no-emit-index-url --resolver backtracking -o requirements/linting.txt requirements/linting.in
-	pip-compile -q --no-emit-index-url --resolver backtracking -o requirements/testing.txt requirements/testing.in
-	pip-compile -q --no-emit-index-url --resolver backtracking --extra toml --extra yaml --extra azure-key-vault -o requirements/pyproject.txt pyproject.toml
-	pip install --dry-run -r requirements/all.txt
+	@echo "Updating uv.lock file"
+	uv lock -U
 
 .PHONY: format
 format:
-	ruff check --fix $(sources)
-	ruff format $(sources)
+	uv run ruff check --fix $(sources)
+	uv run ruff format $(sources)
 
 .PHONY: lint
 lint:
-	ruff check $(sources)
-	ruff format --check $(sources)
+	uv run ruff check $(sources)
+	uv run ruff format --check $(sources)
 
 .PHONY: mypy
 mypy:
-	mypy pydantic_settings
+	uv run mypy pydantic_settings
 
 .PHONY: test
 test:
-	coverage run -m pytest --durations=10
+	uv run coverage run -m pytest --durations=10
 
 .PHONY: testcov
 testcov: test
 	@echo "building coverage html"
-	@coverage html
+	@uv run coverage html
 
 .PHONY: all
 all: lint mypy testcov
