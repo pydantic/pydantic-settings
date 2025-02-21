@@ -1,6 +1,6 @@
 """Utility functions for pydantic-settings sources."""
 
-from __future__ import annotations
+from __future__ import annotations as _annotations
 
 from collections import deque
 from collections.abc import Mapping, Sequence

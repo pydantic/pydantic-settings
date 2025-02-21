@@ -1,6 +1,6 @@
 """Type definitions for pydantic-settings sources."""
 
-from __future__ import annotations
+from __future__ import annotations as _annotations
 
 from collections.abc import Sequence
 from pathlib import Path
