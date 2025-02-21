@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from typing import Any, Optional, cast
+from typing import Any, Mapping, Optional, Sequence, cast
 
 from pydantic._internal._utils import is_model_class, lenient_issubclass
 from pydantic.dataclasses import is_pydantic_dataclass
