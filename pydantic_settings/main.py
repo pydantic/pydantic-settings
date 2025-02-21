@@ -14,6 +14,7 @@ from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.main import BaseModel
 
+from .exceptions import SettingsError
 from .sources import (
     ENV_FILE_SENTINEL,
     CliSettingsSource,
@@ -26,7 +27,6 @@ from .sources import (
     PydanticBaseSettingsSource,
     PydanticModel,
     SecretsSettingsSource,
-    SettingsError,
     get_subcommand,
 )
 
