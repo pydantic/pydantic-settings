@@ -1,6 +1,6 @@
 """Command-line interface settings source."""
 
-from __future__ import annotations
+from __future__ import annotations as _annotations
 
 import json
 import re

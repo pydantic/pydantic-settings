@@ -1,6 +1,6 @@
 """Azure Key Vault settings source."""
 
-from __future__ import annotations
+from __future__ import annotations as _annotations
 
 from typing import TYPE_CHECKING, Iterator, Mapping, Optional
 

@@ -1,6 +1,6 @@
 """Base classes and core functionality for pydantic-settings sources."""
 
-from __future__ import annotations
+from __future__ import annotations as _annotations
 
 import json
 import os

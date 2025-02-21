@@ -1,6 +1,6 @@
 """Utility functions for pydantic-settings sources."""
 
-from __future__ import annotations
+from __future__ import annotations as _annotations
 
 from typing import Any, Mapping, Optional, Sequence, cast
 
