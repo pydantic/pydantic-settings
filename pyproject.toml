@@ -76,6 +76,14 @@ testing = [
     "pytest-pretty",
 ]
 
+[tool.uv]
+# FIXME:
+# Workaround for [Issue #551](https://github.com/pydantic/pydantic-settings/issues/551).
+# Remove this once the issue is resolved.
+constraint-dependencies = [
+    "pydantic!=2.10.* ; python_full_version < '3.10'"
+]
+
 [tool.pytest.ini_options]
 testpaths = 'tests'
 filterwarnings = [
