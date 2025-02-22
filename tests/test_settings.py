@@ -670,10 +670,7 @@ def test_alias_resolution_init_source(env):
         last_name: str = Field(validation_alias=AliasChoices('PREFIX_LAST_NAME', 'PREFIX_SURNAME'))
 
     env.set('PREFIX_SURNAME', 'smith')
-    assert Example(name='john', PREFIX_SURNAME='doe').model_dump() == {
-        'name': 'john',
-        'last_name': 'doe'
-    }
+    assert Example(name='john', PREFIX_SURNAME='doe').model_dump() == {'name': 'john', 'last_name': 'doe'}
 
 
 def test_alias_nested_model_default_partial_update():
