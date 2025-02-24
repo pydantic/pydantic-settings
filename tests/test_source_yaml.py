@@ -12,6 +12,7 @@ from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
+    SettingsError,
     YamlConfigSettingsSource,
 )
 
@@ -89,6 +90,30 @@ def test_yaml_file(tmp_path):
     s = Settings()
     assert s.foobar == 'Hello'
     assert s.nested.nested_field == 'world!'
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYaml is not installed')
+def test_nondict_yaml_file(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('test invalid yaml')
+
+    class Settings(BaseSettings):
+        foobar: str
+        model_config = SettingsConfigDict(yaml_file=p)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: Type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls),)
+
+    with pytest.raises(SettingsError, match='Failed to parse settings from .*, expecting an object'):
+        Settings()
 
 
 @pytest.mark.skipif(yaml is None, reason='pyYaml is not installed')
