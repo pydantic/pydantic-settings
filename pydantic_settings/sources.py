@@ -388,7 +388,17 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         init_kwargs: dict[str, Any],
         nested_model_default_partial_update: bool | None = None,
     ):
-        self.init_kwargs = init_kwargs
+        self.init_kwargs = {}
+        init_kwarg_names = set(init_kwargs.keys())
+        for field_name, field_info in settings_cls.model_fields.items():
+            alias_names, *_ = _get_alias_names(field_name, field_info)
+            init_kwarg_name = init_kwarg_names & set(alias_names)
+            if init_kwarg_name:
+                preferred_alias = alias_names[0]
+                init_kwarg_names -= init_kwarg_name
+                self.init_kwargs[preferred_alias] = init_kwargs[init_kwarg_name.pop()]
+        self.init_kwargs.update({key: val for key, val in init_kwargs.items() if key in init_kwarg_names})
+
         super().__init__(settings_cls)
         self.nested_model_default_partial_update = (
             nested_model_default_partial_update
