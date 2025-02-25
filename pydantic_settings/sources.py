@@ -39,7 +39,7 @@ import typing_extensions
 from dotenv import dotenv_values
 from pydantic import AliasChoices, AliasPath, BaseModel, Json, RootModel, Secret, TypeAdapter
 from pydantic._internal._repr import Representation
-from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union, typing_base
+from pydantic._internal._typing_extra import WithArgsTypes, is_type_alias_type, origin_is_union, typing_base
 from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
@@ -1986,7 +1986,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             return '...'
         elif isinstance(obj, Representation):
             return repr(obj)
-        elif isinstance(obj, typing_extensions.TypeAliasType):
+        elif isinstance(obj, typing.ForwardRef) or is_type_alias_type(obj):
             return str(obj)
 
         if not isinstance(obj, (typing_base, WithArgsTypes, type)):
@@ -1999,9 +1999,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         elif lenient_issubclass(obj, Enum):
             return self._metavar_format_choices([val.name for val in obj])
         elif isinstance(obj, WithArgsTypes):
+            if hasattr(obj, '__qualname__'):
+                obj_qualname = obj.__qualname__
+            else:
+                obj_qualname = str(obj).replace('typing.', '').replace('typing_extensions.', '').split('[')[0]
             return self._metavar_format_choices(
-                list(map(self._metavar_format_recurse, self._get_modified_args(obj))),
-                obj_qualname=obj.__qualname__ if hasattr(obj, '__qualname__') else str(obj),
+                list(map(self._metavar_format_recurse, self._get_modified_args(obj))), obj_qualname=obj_qualname
             )
         elif obj is type(None):
             return self.cli_parse_none_str
