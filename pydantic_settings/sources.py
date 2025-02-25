@@ -39,7 +39,7 @@ import typing_extensions
 from dotenv import dotenv_values
 from pydantic import AliasChoices, AliasPath, BaseModel, Json, RootModel, Secret, TypeAdapter
 from pydantic._internal._repr import Representation
-from pydantic._internal._typing_extra import WithArgsTypes, is_type_alias_type, origin_is_union, typing_base
+from pydantic._internal._typing_extra import WithArgsTypes, origin_is_union, typing_base
 from pydantic._internal._utils import deep_update, is_model_class, lenient_issubclass
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
@@ -1986,7 +1986,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             return '...'
         elif isinstance(obj, Representation):
             return repr(obj)
-        elif isinstance(obj, typing.ForwardRef) or is_type_alias_type(obj):
+        elif isinstance(obj, typing.ForwardRef) or _is_type_alias_type(obj):
             return str(obj)
 
         if not isinstance(obj, (typing_base, WithArgsTypes, type)):
@@ -2425,3 +2425,17 @@ def _get_alias_names(
 
 def _is_function(obj: Any) -> bool:
     return isinstance(obj, (FunctionType, BuiltinFunctionType))
+
+
+# _TYPE_ALIAS_TYPES is copied from `pydantic._internal._typing_extra`.
+_TYPE_ALIAS_TYPES: tuple[type[typing_extensions.TypeAliasType], ...] = (typing_extensions.TypeAliasType,)
+if sys.version_info >= (3, 12):
+    _TYPE_ALIAS_TYPES = (*_TYPE_ALIAS_TYPES, typing.TypeAliasType)
+
+
+def _is_type_alias_type(tp: Any, /) -> typing_extensions.TypeIs[typing_extensions.TypeAliasType]:
+    """
+    Return whether the provided argument is an instance of `TypeAliasType`.
+    Copied from `pydantic._internal._typing_extra`.
+    """
+    return isinstance(tp, _TYPE_ALIAS_TYPES)
