@@ -145,8 +145,7 @@ class BaseSettings(BaseModel):
     """
 
     def __init__(
-        self,
-        /,
+        __pydantic_self__,
         _case_sensitive: bool | None = None,
         _nested_model_default_partial_update: bool | None = None,
         _env_prefix: str | None = None,
@@ -175,7 +174,7 @@ class BaseSettings(BaseModel):
         **values: Any,
     ) -> None:
         super().__init__(
-            **self._settings_build_values(
+            **__pydantic_self__._settings_build_values(
                 values,
                 _case_sensitive=_case_sensitive,
                 _nested_model_default_partial_update=_nested_model_default_partial_update,
