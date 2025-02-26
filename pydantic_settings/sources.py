@@ -165,7 +165,7 @@ class CliMutuallyExclusiveGroup(BaseModel):
     pass
 
 
-T = TypeVar('T')
+T = TypeVar('T', covariant=True)
 CliSubCommand = Annotated[Union[T, None], _CliSubCommand]
 CliPositionalArg = Annotated[T, _CliPositionalArg]
 _CliBoolFlag = TypeVar('_CliBoolFlag', bound=bool)
