@@ -158,7 +158,7 @@ class BaseSettings(BaseModel):
         _env_parse_enums: bool | None = None,
         _cli_prog_name: str | None = None,
         _cli_parse_args: bool | list[str] | tuple[str, ...] | None = None,
-        _cli_settings_source: CliSettingsSource[object] | None = None,
+        _cli_settings_source: CliSettingsSource[Any] | None = None,
         _cli_parse_none_str: str | None = None,
         _cli_hide_none_type: bool | None = None,
         _cli_avoid_json: bool | None = None,
