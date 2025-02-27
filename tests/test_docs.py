@@ -5,7 +5,9 @@ import re
 import sys
 from pathlib import Path
 
+import pydantic
 import pytest
+from packaging import version
 from pytest_examples import CodeExample, EvalExample, find_examples
 from pytest_examples.config import ExamplesConfig
 from pytest_examples.lint import black_format
@@ -19,6 +21,9 @@ def skip_docs_tests():
 
     if platform.python_implementation() != 'CPython':
         return 'not cpython'
+
+    if version.parse(pydantic.__version__) < version.parse('2.10'):
+        return 'old version of pydantic'
 
 
 class GroupModuleGlobals:

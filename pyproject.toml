@@ -58,6 +58,32 @@ Source = 'https://github.com/pydantic/pydantic-settings'
 Changelog = 'https://github.com/pydantic/pydantic-settings/releases'
 Documentation = 'https://docs.pydantic.dev/dev-v2/concepts/pydantic_settings/'
 
+[dependency-groups]
+linting = [
+    "black",
+    "mypy",
+    "pre-commit",
+    "pyupgrade",
+    "pyyaml",
+    "ruff",
+    "types-pyyaml",
+]
+testing = [
+    "coverage[toml]",
+    "pytest",
+    "pytest-examples",
+    "pytest-mock",
+    "pytest-pretty",
+]
+
+[tool.uv]
+# FIXME:
+# Workaround for [Issue #551](https://github.com/pydantic/pydantic-settings/issues/551).
+# Remove this once the issue is resolved.
+constraint-dependencies = [
+    "pydantic!=2.10.* ; python_full_version < '3.10'"
+]
+
 [tool.pytest.ini_options]
 testpaths = 'tests'
 filterwarnings = [

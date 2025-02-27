@@ -1,5 +1,0 @@
-coverage[toml]
-pytest
-pytest-mock
-pytest-examples
-pytest-pretty

@@ -1,7 +1,0 @@
-black
-ruff
-pyupgrade
-mypy
-types-PyYAML
-pyyaml==6.0.1
-pre-commit
