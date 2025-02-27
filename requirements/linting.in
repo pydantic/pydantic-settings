@@ -3,5 +3,6 @@ ruff
 pyupgrade
 mypy
 types-PyYAML
-pyyaml==6.0.1
+pyyaml==6.0.2
 pre-commit
+boto3-stubs[secretsmanager]
