@@ -8,11 +8,16 @@ import sys
 import typing
 import warnings
 from abc import ABC, abstractmethod
-
-if sys.version_info >= (3, 9):
-    from argparse import BooleanOptionalAction
-from argparse import SUPPRESS, ArgumentParser, Namespace, RawDescriptionHelpFormatter, _SubParsersAction
+from argparse import (
+    SUPPRESS,
+    ArgumentParser,
+    BooleanOptionalAction,
+    Namespace,
+    RawDescriptionHelpFormatter,
+    _SubParsersAction,
+)
 from collections import defaultdict, deque
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import asdict, is_dataclass
 from enum import Enum
 from pathlib import Path
@@ -20,15 +25,12 @@ from textwrap import dedent
 from types import BuiltinFunctionType, FunctionType, SimpleNamespace
 from typing import (
     TYPE_CHECKING,
+    Annotated,
     Any,
     Callable,
-    Dict,
     Generic,
-    Iterator,
-    Mapping,
     NoReturn,
     Optional,
-    Sequence,
     TypeVar,
     Union,
     cast,
@@ -44,7 +46,7 @@ from pydantic._internal._utils import deep_update, is_model_class, lenient_issub
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
-from typing_extensions import Annotated, _AnnotatedAlias, get_args, get_origin
+from typing_extensions import _AnnotatedAlias, get_args, get_origin
 
 from pydantic_settings.utils import path_type_label
 
@@ -412,7 +414,7 @@ class InitSettingsSource(PydanticBaseSettingsSource):
 
     def __call__(self) -> dict[str, Any]:
         return (
-            TypeAdapter(Dict[str, Any]).dump_python(self.init_kwargs)
+            TypeAdapter(dict[str, Any]).dump_python(self.init_kwargs)
             if self.nested_model_default_partial_update
             else self.init_kwargs
         )
@@ -1253,7 +1255,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 cli_parse_args = sys.argv[1:]
             elif not isinstance(cli_parse_args, (list, tuple)):
                 raise SettingsError(
-                    f'cli_parse_args must be List[str] or Tuple[str, ...], recieved {type(cli_parse_args)}'
+                    f'cli_parse_args must be a list or tuple of strings, received {type(cli_parse_args)}'
                 )
             self._load_env_vars(parsed_args=self._parse_args(self.root_parser, cli_parse_args))
 
@@ -1512,12 +1514,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
         if field_info.annotation is not bool:
             raise SettingsError(f'{cli_flag_name} argument {model.__name__}.{field_name} is not of type bool')
-        elif sys.version_info < (3, 9) and (
-            field_info.default is PydanticUndefined and field_info.default_factory is None
-        ):
-            raise SettingsError(
-                f'{cli_flag_name} argument {model.__name__}.{field_name} must have default for python versions < 3.9'
-            )
 
     def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, FieldInfo]]:
         positional_variadic_arg = []
@@ -1812,19 +1808,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _convert_bool_flag(self, kwargs: dict[str, Any], field_info: FieldInfo, model_default: Any) -> None:
         if kwargs['metavar'] == 'bool':
-            default = None
-            if field_info.default is not PydanticUndefined:
-                default = field_info.default
-            if model_default is not PydanticUndefined:
-                default = model_default
-            if sys.version_info >= (3, 9) or isinstance(default, bool):
-                if (self.cli_implicit_flags or _CliImplicitFlag in field_info.metadata) and (
-                    _CliExplicitFlag not in field_info.metadata
-                ):
-                    del kwargs['metavar']
-                    kwargs['action'] = (
-                        BooleanOptionalAction if sys.version_info >= (3, 9) else f'store_{str(not default).lower()}'
-                    )
+            if (self.cli_implicit_flags or _CliImplicitFlag in field_info.metadata) and (
+                _CliExplicitFlag not in field_info.metadata
+            ):
+                del kwargs['metavar']
+                kwargs['action'] = BooleanOptionalAction
 
     def _convert_positional_arg(
         self, kwargs: dict[str, Any], field_info: FieldInfo, preferred_alias: str, model_default: Any
