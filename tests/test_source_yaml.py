@@ -3,7 +3,7 @@ Test pydantic_settings.YamlConfigSettingsSource.
 """
 
 from pathlib import Path
-from typing import Tuple, Type, Union
+from typing import Union
 
 import pytest
 from pydantic import BaseModel
@@ -42,12 +42,12 @@ def test_yaml_not_installed(tmp_path):
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls),)
 
     with pytest.raises(ImportError, match=r'^PyYAML is not installed, run `pip install pydantic-settings\[yaml\]`$'):
@@ -78,12 +78,12 @@ def test_yaml_file(tmp_path):
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls),)
 
     s = Settings()
@@ -99,12 +99,12 @@ def test_yaml_no_file():
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls),)
 
     s = Settings()
@@ -122,12 +122,12 @@ def test_yaml_empty_file(tmp_path):
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls),)
 
     s = Settings()
@@ -156,12 +156,12 @@ def test_multiple_file_yaml(tmp_path):
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls, yaml_file=[p3, p4]),)
 
     s = Settings()

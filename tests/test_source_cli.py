@@ -5,7 +5,7 @@ import sys
 import time
 import typing
 from enum import IntEnum
-from typing import Any, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union
+from typing import Annotated, Any, Dict, Generic, List, Literal, Optional, Tuple, TypeVar, Union  # noqa: UP035
 
 import pytest
 import typing_extensions
@@ -25,7 +25,6 @@ from pydantic import (
     dataclasses as pydantic_dataclasses,
 )
 from pydantic._internal._repr import Representation
-from typing_extensions import Annotated, Literal
 
 from pydantic_settings import (
     BaseSettings,
@@ -173,7 +172,7 @@ def test_cli_nested_arg():
         v0_union: Union[SubValue, int]
         top: TopValue
 
-    args: List[str] = []
+    args: list[str] = []
     args += ['--top', '{"v1": "json-1", "v2": "json-2", "sub": {"v5": "xx"}}']
     args += ['--top.sub.v5', '5']
     args += ['--v0', '0']
@@ -205,12 +204,12 @@ def test_cli_source_prioritization(env):
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return env_settings, CliSettingsSource(settings_cls, cli_parse_args=['--foo', 'FOO FROM CLI'])
 
     env.set('FOO', 'FOO FROM ENV')
@@ -659,16 +658,16 @@ def test_cli_list_arg(prefix, arg_spaces):
         val: int
 
     class Child(BaseModel):
-        num_list: Optional[List[int]] = None
-        obj_list: Optional[List[Obj]] = None
-        str_list: Optional[List[str]] = None
-        union_list: Optional[List[Union[Obj, int]]] = None
+        num_list: Optional[list[int]] = None
+        obj_list: Optional[list[Obj]] = None
+        str_list: Optional[list[str]] = None
+        union_list: Optional[list[Union[Obj, int]]] = None
 
     class Cfg(BaseSettings):
-        num_list: Optional[List[int]] = None
-        obj_list: Optional[List[Obj]] = None
-        union_list: Optional[List[Union[Obj, int]]] = None
-        str_list: Optional[List[str]] = None
+        num_list: Optional[list[int]] = None
+        obj_list: Optional[list[Obj]] = None
+        union_list: Optional[list[Union[Obj, int]]] = None
+        str_list: Optional[list[str]] = None
         child: Optional[Child] = None
 
     def check_answer(cfg, prefix, expected):
@@ -684,7 +683,7 @@ def test_cli_list_arg(prefix, arg_spaces):
             expected['child'] = None
             assert cfg.model_dump() == expected
 
-    args: List[str] = []
+    args: list[str] = []
     args = [f'--{prefix}num_list', arg_spaces('[1,2]')]
     args += [f'--{prefix}num_list', arg_spaces('3,4')]
     args += [f'--{prefix}num_list', '5', f'--{prefix}num_list', '6']
@@ -742,7 +741,7 @@ def test_cli_list_arg(prefix, arg_spaces):
 @pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
 def test_cli_list_json_value_parsing(arg_spaces):
     class Cfg(BaseSettings):
-        json_list: List[Union[str, bool, None]]
+        json_list: list[Union[str, bool, None]]
 
     assert CliApp.run(
         Cfg,
@@ -766,13 +765,13 @@ def test_cli_list_json_value_parsing(arg_spaces):
 @pytest.mark.parametrize('prefix', ['', 'child.'])
 def test_cli_dict_arg(prefix, arg_spaces):
     class Child(BaseModel):
-        check_dict: Dict[str, str]
+        check_dict: dict[str, str]
 
     class Cfg(BaseSettings):
-        check_dict: Optional[Dict[str, str]] = None
+        check_dict: Optional[dict[str, str]] = None
         child: Optional[Child] = None
 
-    args: List[str] = []
+    args: list[str] = []
     args = [f'--{prefix}check_dict', arg_spaces('{"k1":"a","k2":"b"}')]
     args += [f'--{prefix}check_dict', arg_spaces('{"k3":"c"},{"k4":"d"}')]
     args += [f'--{prefix}check_dict', arg_spaces('{"k5":"e"}'), f'--{prefix}check_dict', arg_spaces('{"k6":"f"}')]
@@ -802,7 +801,7 @@ def test_cli_dict_arg(prefix, arg_spaces):
         arg_spaces('k32="x,y"', has_quote_comma=True),
     ]
     cfg = CliApp.run(Cfg, cli_args=args)
-    expected: Dict[str, Any] = {
+    expected: dict[str, Any] = {
         'check_dict': {
             'k1': 'a',
             'k2': 'b',
@@ -853,7 +852,7 @@ def test_cli_dict_arg(prefix, arg_spaces):
 
 def test_cli_union_dict_arg():
     class Cfg(BaseSettings):
-        union_str_dict: Union[str, Dict[str, Any]]
+        union_str_dict: Union[str, dict[str, Any]]
 
     with pytest.raises(ValidationError) as exc_info:
         args = ['--union_str_dict', 'hello world', '--union_str_dict', 'hello world']
@@ -902,7 +901,7 @@ def test_cli_union_dict_arg():
     assert cfg.model_dump() == {'union_str_dict': 'hello=world'}
 
     class Cfg(BaseSettings):
-        union_list_dict: Union[List[str], Dict[str, Any]]
+        union_list_dict: Union[list[str], dict[str, Any]]
 
     with pytest.raises(ValidationError) as exc_info:
         args = ['--union_list_dict', 'hello,world']
@@ -975,7 +974,7 @@ def test_cli_union_dict_arg():
 
 def test_cli_nested_dict_arg():
     class Cfg(BaseSettings):
-        check_dict: Dict[str, Any]
+        check_dict: dict[str, Any]
 
     args = ['--check_dict', '{"k1":{"a": 1}},{"k2":{"b": 2}}']
     cfg = CliApp.run(Cfg, cli_args=args)
@@ -1319,10 +1318,10 @@ def test_cli_variadic_positional_arg(env):
     class MainRequired(BaseSettings):
         model_config = SettingsConfigDict(cli_parse_args=True)
 
-        values: CliPositionalArg[List[int]]
+        values: CliPositionalArg[list[int]]
 
     class MainOptional(MainRequired):
-        values: CliPositionalArg[List[int]] = [1, 2, 3]
+        values: CliPositionalArg[list[int]] = [1, 2, 3]
 
     assert CliApp.run(MainOptional, cli_args=[]).model_dump() == {'values': [1, 2, 3]}
     with pytest.raises(SettingsError, match='error parsing CLI: the following arguments are required: VALUES'):
@@ -1461,8 +1460,8 @@ def test_cli_annotation_exceptions(monkeypatch):
         ):
 
             class MultipleVariadicPositionialArgs(BaseSettings, cli_parse_args=True):
-                strings: CliPositionalArg[List[str]]
-                numbers: CliPositionalArg[List[int]]
+                strings: CliPositionalArg[list[str]]
+                numbers: CliPositionalArg[list[int]]
 
             MultipleVariadicPositionialArgs()
 
@@ -1472,13 +1471,13 @@ def test_cli_annotation_exceptions(monkeypatch):
         ):
 
             class VariadicPositionialArgAndSubCommand(BaseSettings, cli_parse_args=True):
-                strings: CliPositionalArg[List[str]]
+                strings: CliPositionalArg[list[str]]
                 sub_cmd: CliSubCommand[SubCmd]
 
             VariadicPositionialArgAndSubCommand()
 
     with pytest.raises(
-        SettingsError, match=re.escape("cli_parse_args must be List[str] or Tuple[str, ...], recieved <class 'str'>")
+        SettingsError, match=re.escape("cli_parse_args must be a list or tuple of strings, received <class 'str'>")
     ):
 
         class InvalidCliParseArgsType(BaseSettings, cli_parse_args='invalid type'):
@@ -1493,63 +1492,30 @@ def test_cli_annotation_exceptions(monkeypatch):
 
         CliFlagNotBool()
 
-    if sys.version_info < (3, 9):
-        with pytest.raises(
-            SettingsError,
-            match='CliImplicitFlag argument CliFlag38NotOpt.flag must have default for python versions < 3.9',
-        ):
-
-            class CliFlag38NotOpt(BaseSettings, cli_parse_args=True):
-                flag: CliImplicitFlag[bool]
-
-            CliFlag38NotOpt()
-
 
 @pytest.mark.parametrize('enforce_required', [True, False])
 def test_cli_bool_flags(monkeypatch, enforce_required):
-    if sys.version_info < (3, 9):
+    class ExplicitSettings(BaseSettings, cli_enforce_required=enforce_required):
+        explicit_req: bool
+        explicit_opt: bool = False
+        implicit_req: CliImplicitFlag[bool]
+        implicit_opt: CliImplicitFlag[bool] = False
 
-        class ExplicitSettings(BaseSettings, cli_enforce_required=enforce_required):
-            explicit_req: bool
-            explicit_opt: bool = False
-            implicit_opt: CliImplicitFlag[bool] = False
+    class ImplicitSettings(BaseSettings, cli_implicit_flags=True, cli_enforce_required=enforce_required):
+        explicit_req: CliExplicitFlag[bool]
+        explicit_opt: CliExplicitFlag[bool] = False
+        implicit_req: bool
+        implicit_opt: bool = False
 
-        class ImplicitSettings(BaseSettings, cli_implicit_flags=True, cli_enforce_required=enforce_required):
-            explicit_req: bool
-            explicit_opt: CliExplicitFlag[bool] = False
-            implicit_opt: bool = False
+    expected = {
+        'explicit_req': True,
+        'explicit_opt': False,
+        'implicit_req': True,
+        'implicit_opt': False,
+    }
 
-        expected = {
-            'explicit_req': True,
-            'explicit_opt': False,
-            'implicit_opt': False,
-        }
-
-        assert CliApp.run(ExplicitSettings, cli_args=['--explicit_req=True']).model_dump() == expected
-        assert CliApp.run(ImplicitSettings, cli_args=['--explicit_req=True']).model_dump() == expected
-    else:
-
-        class ExplicitSettings(BaseSettings, cli_enforce_required=enforce_required):
-            explicit_req: bool
-            explicit_opt: bool = False
-            implicit_req: CliImplicitFlag[bool]
-            implicit_opt: CliImplicitFlag[bool] = False
-
-        class ImplicitSettings(BaseSettings, cli_implicit_flags=True, cli_enforce_required=enforce_required):
-            explicit_req: CliExplicitFlag[bool]
-            explicit_opt: CliExplicitFlag[bool] = False
-            implicit_req: bool
-            implicit_opt: bool = False
-
-        expected = {
-            'explicit_req': True,
-            'explicit_opt': False,
-            'implicit_req': True,
-            'implicit_opt': False,
-        }
-
-        assert CliApp.run(ExplicitSettings, cli_args=['--explicit_req=True', '--implicit_req']).model_dump() == expected
-        assert CliApp.run(ImplicitSettings, cli_args=['--explicit_req=True', '--implicit_req']).model_dump() == expected
+    assert CliApp.run(ExplicitSettings, cli_args=['--explicit_req=True', '--implicit_req']).model_dump() == expected
+    assert CliApp.run(ImplicitSettings, cli_args=['--explicit_req=True', '--implicit_req']).model_dump() == expected
 
 
 def test_cli_avoid_json(capsys, monkeypatch):
@@ -1991,15 +1957,15 @@ def test_cli_user_settings_source_exceptions():
         (str, 'str'),
         ('foobar', 'str'),
         ('SomeForwardRefString', 'str'),  # included to document current behavior; could be changed
-        (List['SomeForwardRef'], "List[ForwardRef('SomeForwardRef')]"),  # noqa: F821
+        (List['SomeForwardRef'], "List[ForwardRef('SomeForwardRef')]"),  # noqa: F821, UP006
         (Union[str, int], '{str,int}'),
         (list, 'list'),
-        (List, 'List'),
+        (List, 'List'),  # noqa: UP006
         ([1, 2, 3], 'list'),
-        (List[Dict[str, int]], 'List[Dict[str,int]]'),
-        (Tuple[str, int, float], 'Tuple[str,int,float]'),
-        (Tuple[str, ...], 'Tuple[str,...]'),
-        (Union[int, List[str], Tuple[str, int]], '{int,List[str],Tuple[str,int]}'),
+        (List[Dict[str, int]], 'List[Dict[str,int]]'),  # noqa: UP006
+        (Tuple[str, int, float], 'Tuple[str,int,float]'),  # noqa: UP006
+        (Tuple[str, ...], 'Tuple[str,...]'),  # noqa: UP006
+        (Union[int, List[str], Tuple[str, int]], '{int,List[str],Tuple[str,int]}'),  # noqa: UP006
         (foobar, 'foobar'),
         (LoggedVar, 'LoggedVar'),
         (LoggedVar(), 'LoggedVar'),
@@ -2042,12 +2008,12 @@ def test_cli_metavar_format(hide_none_type, value, expected):
     [
         (lambda: str | int, '{str,int}'),
         (lambda: list[int], 'list[int]'),
-        (lambda: List[int], 'List[int]'),
+        (lambda: List[int], 'List[int]'),  # noqa: UP006
         (lambda: list[dict[str, int]], 'list[dict[str,int]]'),
         (lambda: list[Union[str, int]], 'list[{str,int}]'),
         (lambda: list[str | int], 'list[{str,int}]'),
         (lambda: LoggedVar[int], 'LoggedVar[int]'),
-        (lambda: LoggedVar[Dict[int, str]], 'LoggedVar[Dict[int,str]]'),
+        (lambda: LoggedVar[Dict[int, str]], 'LoggedVar[Dict[int,str]]'),  # noqa: UP006
     ],
 )
 @pytest.mark.parametrize('hide_none_type', [True, False])
@@ -2357,7 +2323,7 @@ def test_cli_submodels_strip_annotated():
         b: str = '2'
         type: Literal['b'] = 'b'
 
-    def _get_type(model: Union[BaseModel, Dict]) -> str:
+    def _get_type(model: Union[BaseModel, dict]) -> str:
         if isinstance(model, dict):
             return model.get('type', 'a')
         return model.type  # type: ignore
