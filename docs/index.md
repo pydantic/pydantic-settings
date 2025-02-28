@@ -22,7 +22,8 @@ This makes it easy to:
 For example:
 
 ```py
-from typing import Any, Callable, Set
+from collections.abc import Callable
+from typing import Any
 
 from pydantic import (
     AliasChoices,
@@ -58,7 +59,7 @@ class Settings(BaseSettings):
 
     # to override domains:
     # export my_prefix_domains='["foo.com", "bar.com"]'
-    domains: Set[str] = set()
+    domains: set[str] = set()
 
     # to override more_settings:
     # export my_prefix_more_settings='{"foo": "x", "apple": 1}'
@@ -384,7 +385,7 @@ You may also populate a complex type by providing your own source class.
 ```py
 import json
 import os
-from typing import Any, List, Tuple, Type
+from typing import Any
 
 from pydantic.fields import FieldInfo
 
@@ -405,17 +406,17 @@ class MyCustomSource(EnvSettingsSource):
 
 
 class Settings(BaseSettings):
-    numbers: List[int]
+    numbers: list[int]
 
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: Type[BaseSettings],
+        settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
-    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
         return (MyCustomSource(settings_cls),)
 
 
@@ -432,20 +433,19 @@ this behavior for a field and parse the value in your own validator, you can ann
 
 ```py
 import os
-from typing import List
+from typing import Annotated
 
 from pydantic import field_validator
-from typing_extensions import Annotated
 
 from pydantic_settings import BaseSettings, NoDecode
 
 
 class Settings(BaseSettings):
-    numbers: Annotated[List[int], NoDecode]  # (1)!
+    numbers: Annotated[list[int], NoDecode]  # (1)!
 
     @field_validator('numbers', mode='before')
     @classmethod
-    def decode_numbers(cls, v: str) -> List[int]:
+    def decode_numbers(cls, v: str) -> list[int]:
         return [int(x) for x in v.split(',')]
 
 
@@ -461,7 +461,6 @@ You can also disable JSON parsing for all fields by setting the `enable_decoding
 
 ```py
 import os
-from typing import List
 
 from pydantic import field_validator
 
@@ -471,11 +470,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(enable_decoding=False)
 
-    numbers: List[int]
+    numbers: list[int]
 
     @field_validator('numbers', mode='before')
     @classmethod
-    def decode_numbers(cls, v: str) -> List[int]:
+    def decode_numbers(cls, v: str) -> list[int]:
         return [int(x) for x in v.split(',')]
 
 
@@ -489,10 +488,9 @@ This will bypass the `enable_decoding` config setting:
 
 ```py
 import os
-from typing import List
+from typing import Annotated
 
 from pydantic import field_validator
-from typing_extensions import Annotated
 
 from pydantic_settings import BaseSettings, ForceDecode, SettingsConfigDict
 
@@ -500,12 +498,12 @@ from pydantic_settings import BaseSettings, ForceDecode, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(enable_decoding=False)
 
-    numbers: Annotated[List[int], ForceDecode]
-    numbers1: List[int]  # (1)!
+    numbers: Annotated[list[int], ForceDecode]
+    numbers1: list[int]  # (1)!
 
     @field_validator('numbers1', mode='before')
     @classmethod
-    def decode_numbers1(cls, v: str) -> List[int]:
+    def decode_numbers1(cls, v: str) -> list[int]:
         return [int(x) for x in v.split(',')]
 
 
@@ -732,7 +730,6 @@ is customised](#customise-settings-sources):
 ```py
 import os
 import sys
-from typing import Tuple, Type
 
 from pydantic_settings import (
     BaseSettings,
@@ -747,12 +744,12 @@ class Settings(BaseSettings):
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: Type[BaseSettings],
+        settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
-    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
         return env_settings, CliSettingsSource(settings_cls, cli_parse_args=True)
 
 
@@ -774,13 +771,12 @@ CLI argument parsing of lists supports intermixing of any of the below three sty
 
 ```py
 import sys
-from typing import List
 
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings, cli_parse_args=True):
-    my_list: List[int]
+    my_list: list[int]
 
 
 sys.argv = ['example.py', '--my_list', '[1,2]']
@@ -809,13 +805,12 @@ These can be used in conjunction with list forms as well, e.g:
 
 ```py
 import sys
-from typing import Dict
 
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings, cli_parse_args=True):
-    my_dict: Dict[str, int]
+    my_dict: dict[str, int]
 
 
 sys.argv = ['example.py', '--my_dict', '{"k1":1,"k2":2}']
@@ -1259,13 +1254,6 @@ default, boolean fields are "explicit", meaning a boolean value must be explicit
 
 Additionally, the provided `CliImplicitFlag` and `CliExplicitFlag` annotations can be used for more granular control
 when necessary.
-
-!!! note
-    For `python < 3.9` the `--no-flag` option is not generated due to an underlying `argparse` limitation.
-
-!!! note
-    For `python < 3.9` the `CliImplicitFlag` and `CliExplicitFlag` annotations can only be applied to optional boolean
-    fields.
 
 ```py
 from pydantic_settings import BaseSettings, CliExplicitFlag, CliImplicitFlag
@@ -1802,7 +1790,6 @@ Key Vault arrays (e.g. `MySecret--0`, `MySecret--1`) are not supported.
 
 ```py
 import os
-from typing import Tuple, Type
 
 from azure.identity import DefaultAzureCredential
 from pydantic import BaseModel
@@ -1826,12 +1813,12 @@ class AzureKeyVaultSettings(BaseSettings):
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: Type[BaseSettings],
+        settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
-    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
         az_key_vault_settings = AzureKeyVaultSettingsSource(
             settings_cls,
             os.environ['AZURE_KEY_VAULT_URL'],
@@ -1863,8 +1850,6 @@ To use them, you can use the same mechanism described [here](#customise-settings
 
 
 ```py
-from typing import Tuple, Type
-
 from pydantic import BaseModel
 
 from pydantic_settings import (
@@ -1887,12 +1872,12 @@ class Settings(BaseSettings):
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: Type[BaseSettings],
+        settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
-    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
         return (TomlConfigSettingsSource(settings_cls),)
 ```
 
@@ -1914,8 +1899,6 @@ This is controlled by providing `SettingsConfigDict(pyproject_toml_table_header=
 By default, `pyproject_toml_table_header=('tool', 'pydantic-settings')` which will load variables from the `[tool.pydantic-settings]` table.
 
 ```python
-from typing import Tuple, Type
-
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -1932,12 +1915,12 @@ class Settings(BaseSettings):
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: Type[BaseSettings],
+        settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
-    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
         return (PyprojectTomlConfigSettingsSource(settings_cls),)
 
 
@@ -1977,7 +1960,6 @@ However, there are two options to change this behavior.
 
 ```python
 from pathlib import Path
-from typing import Tuple, Type
 
 from pydantic_settings import (
     BaseSettings,
@@ -1995,12 +1977,12 @@ class DiscoverSettings(BaseSettings):
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: Type[BaseSettings],
+        settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
-    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
         return (PyprojectTomlConfigSettingsSource(settings_cls),)
 
 
@@ -2012,12 +1994,12 @@ class ExplicitFilePathSettings(BaseSettings):
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: Type[BaseSettings],
+        settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
-    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
         return (
             PyprojectTomlConfigSettingsSource(
                 settings_cls, Path('~/.config').resolve() / 'pyproject.toml'
@@ -2052,8 +2034,6 @@ Each callable should take an instance of the settings class as its sole argument
 The order of the returned callables decides the priority of inputs; first item is the highest priority.
 
 ```py
-from typing import Tuple, Type
-
 from pydantic import PostgresDsn
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
@@ -2065,12 +2045,12 @@ class Settings(BaseSettings):
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: Type[BaseSettings],
+        settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
-    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
         return env_settings, init_settings, file_secret_settings
 
 
@@ -2088,7 +2068,7 @@ need to add your own custom sources, `settings_customise_sources` makes this ver
 ```py
 import json
 from pathlib import Path
-from typing import Any, Dict, Tuple, Type
+from typing import Any
 
 from pydantic.fields import FieldInfo
 
@@ -2110,7 +2090,7 @@ class JsonConfigSettingsSource(PydanticBaseSettingsSource):
 
     def get_field_value(
         self, field: FieldInfo, field_name: str
-    ) -> Tuple[Any, str, bool]:
+    ) -> tuple[Any, str, bool]:
         encoding = self.config.get('env_file_encoding')
         file_content_json = json.loads(
             Path('tests/example_test_config.json').read_text(encoding)
@@ -2123,8 +2103,8 @@ class JsonConfigSettingsSource(PydanticBaseSettingsSource):
     ) -> Any:
         return value
 
-    def __call__(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {}
+    def __call__(self) -> dict[str, Any]:
+        d: dict[str, Any] = {}
 
         for field_name, field in self.settings_cls.model_fields.items():
             field_value, field_key, value_is_complex = self.get_field_value(
@@ -2147,12 +2127,12 @@ class Settings(BaseSettings):
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: Type[BaseSettings],
+        settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
-    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
         return (
             init_settings,
             JsonConfigSettingsSource(settings_cls),
@@ -2170,7 +2150,7 @@ print(Settings())
 Each source of settings can access the output of the previous ones.
 
 ```python
-from typing import Any, Dict, Tuple
+from typing import Any
 
 from pydantic.fields import FieldInfo
 
@@ -2180,15 +2160,15 @@ from pydantic_settings import PydanticBaseSettingsSource
 class MyCustomSource(PydanticBaseSettingsSource):
     def get_field_value(
         self, field: FieldInfo, field_name: str
-    ) -> Tuple[Any, str, bool]: ...
+    ) -> tuple[Any, str, bool]: ...
 
-    def __call__(self) -> Dict[str, Any]:
+    def __call__(self) -> dict[str, Any]:
         # Retrieve the aggregated settings from previous sources
         current_state = self.current_state
         current_state.get('some_setting')
 
         # Retrive settings from all sources individually
-        # self.settings_sources_data["SettingsSourceName"]: Dict[str, Any]
+        # self.settings_sources_data["SettingsSourceName"]: dict[str, Any]
         settings_sources_data = self.settings_sources_data
         settings_sources_data['SomeSettingsSource'].get('some_setting')
 
@@ -2200,8 +2180,6 @@ class MyCustomSource(PydanticBaseSettingsSource):
 You might also want to disable a source:
 
 ```py
-from typing import Tuple, Type
-
 from pydantic import ValidationError
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
@@ -2213,12 +2191,12 @@ class Settings(BaseSettings):
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: Type[BaseSettings],
+        settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
-    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
         # here we choose to ignore arguments from init_settings
         return env_settings, file_secret_settings
 
