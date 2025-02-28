@@ -22,8 +22,3 @@ repos:
     types: [python]
     language: system
     pass_filenames: false
-  - id: pyupgrade
-    name: Pyupgrade
-    entry: pyupgrade --py38-plus
-    types: [python]
-    language: system
