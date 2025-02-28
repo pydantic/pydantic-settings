@@ -473,6 +473,31 @@ def test_annotated_list(env):
     ]
 
 
+def test_annotated_list_with_error_source(env):
+    class AnnotatedComplexSettings(BaseSettings, validate_each_source=True):
+        apples: Annotated[List[str], MinLen(2)] = []
+
+    env.set('apples', '["russet", "granny smith"]')
+    s = AnnotatedComplexSettings()
+    assert s.apples == ['russet', 'granny smith']
+
+    env.set('apples', '["russet"]')
+    with pytest.raises(ValidationError) as exc_info:
+        AnnotatedComplexSettings()
+    assert exc_info.value.errors(include_url=False) == [
+        {
+            'ctx': {'actual_length': 1, 'field_type': 'List', 'min_length': 2, 'source': 'EnvSettingsSource'},
+            'input': ['russet'],
+            'loc': (
+                'EnvSettingsSource',
+                'apples',
+            ),
+            'msg': 'List should have at least 2 items after validation, not 1',
+            'type': 'too_short',
+        }
+    ]
+
+
 def test_set_dict_model(env):
     env.set('bananas', '[1, 2, 3, 3]')
     env.set('CARROTS', '{"a": null, "b": 4}')
@@ -1112,6 +1137,33 @@ def test_env_file_with_env_prefix_invalid(tmp_path):
         Settings()
     assert exc_info.value.errors(include_url=False) == [
         {'type': 'extra_forbidden', 'loc': ('f',), 'msg': 'Extra inputs are not permitted', 'input': 'random value'}
+    ]
+
+
+def test_env_file_with_env_prefix_invalid_with_sources(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text(prefix_test_env_invalid_file)
+
+    class Settings(BaseSettings):
+        a: str
+        b: str
+        c: str
+
+        model_config = SettingsConfigDict(env_file=p, env_prefix='prefix_', validate_each_source=True)
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert exc_info.value.errors(include_url=False) == [
+        {
+            'type': 'extra_forbidden',
+            'loc': (
+                'DotEnvSettingsSource',
+                'f',
+            ),
+            'msg': 'Extra inputs are not permitted',
+            'input': 'random value',
+            'ctx': {'source': 'DotEnvSettingsSource'},
+        }
     ]
 
 
@@ -1891,8 +1943,7 @@ def test_builtins_settings_source_repr():
         == "EnvSettingsSource(env_nested_delimiter='__', env_prefix_len=0)"
     )
     assert repr(DotEnvSettingsSource(BaseSettings, env_file='.env', env_file_encoding='utf-8')) == (
-        "DotEnvSettingsSource(env_file='.env', env_file_encoding='utf-8', "
-        'env_nested_delimiter=None, env_prefix_len=0)'
+        "DotEnvSettingsSource(env_file='.env', env_file_encoding='utf-8', env_nested_delimiter=None, env_prefix_len=0)"
     )
     assert (
         repr(SecretsSettingsSource(BaseSettings, secrets_dir='/secrets'))

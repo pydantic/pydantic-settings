@@ -1793,11 +1793,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         if isinstance(group, dict):
                             group = self._add_group(parser, **group)
                         added_args += list(arg_names)
-                        self._add_argument(group, *(f'{flag_prefix[:len(name)]}{name}' for name in arg_names), **kwargs)
+                        self._add_argument(
+                            group, *(f'{flag_prefix[: len(name)]}{name}' for name in arg_names), **kwargs
+                        )
                     else:
                         added_args += list(arg_names)
                         self._add_argument(
-                            parser, *(f'{flag_prefix[:len(name)]}{name}' for name in arg_names), **kwargs
+                            parser, *(f'{flag_prefix[: len(name)]}{name}' for name in arg_names), **kwargs
                         )
 
         self._add_parser_alias_paths(parser, alias_path_args, added_args, arg_prefix, subcommand_prefix, group)
@@ -2247,7 +2249,7 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
         return AzureKeyVaultMapping(secret_client)
 
     def __repr__(self) -> str:
-        return f'{self.__class__.__name__}(url={self._url!r}, ' f'env_nested_delimiter={self.env_nested_delimiter!r})'
+        return f'{self.__class__.__name__}(url={self._url!r}, env_nested_delimiter={self.env_nested_delimiter!r})'
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
