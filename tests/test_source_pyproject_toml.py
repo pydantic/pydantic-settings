@@ -4,7 +4,7 @@ Test pydantic_settings.PyprojectTomlConfigSettingsSource.
 
 import sys
 from pathlib import Path
-from typing import Optional, Tuple, Type
+from typing import Optional
 
 import pytest
 from pydantic import BaseModel
@@ -124,8 +124,8 @@ def test_pyproject_toml_file(cd_tmp_path: Path):
 
         @classmethod
         def settings_customise_sources(
-            cls, settings_cls: Type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            cls, settings_cls: type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (PyprojectTomlConfigSettingsSource(settings_cls),)
 
     s = Settings()
@@ -166,8 +166,8 @@ def test_pyproject_toml_file_explicit(cd_tmp_path: Path):
 
         @classmethod
         def settings_customise_sources(
-            cls, settings_cls: Type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            cls, settings_cls: type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (PyprojectTomlConfigSettingsSource(settings_cls, pyproject),)
 
     s = Settings()
@@ -209,8 +209,8 @@ def test_pyproject_toml_file_parent(mocker: MockerFixture, tmp_path: Path):
 
         @classmethod
         def settings_customise_sources(
-            cls, settings_cls: Type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            cls, settings_cls: type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (PyprojectTomlConfigSettingsSource(settings_cls),)
 
     s = Settings()
@@ -241,8 +241,8 @@ def test_pyproject_toml_file_header(cd_tmp_path: Path):
 
         @classmethod
         def settings_customise_sources(
-            cls, settings_cls: Type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            cls, settings_cls: type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (PyprojectTomlConfigSettingsSource(settings_cls, pyproject),)
 
     s = Settings()
@@ -257,8 +257,8 @@ def test_pyproject_toml_no_file(cd_tmp_path: Path, depth: int):
 
         @classmethod
         def settings_customise_sources(
-            cls, settings_cls: Type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            cls, settings_cls: type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (PyprojectTomlConfigSettingsSource(settings_cls),)
 
     s = Settings()
@@ -277,8 +277,8 @@ def test_pyproject_toml_no_file_explicit(tmp_path: Path):
 
         @classmethod
         def settings_customise_sources(
-            cls, settings_cls: Type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            cls, settings_cls: type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (PyprojectTomlConfigSettingsSource(settings_cls, pyproject),)
 
     s = Settings()
@@ -311,8 +311,8 @@ def test_pyproject_toml_no_file_too_shallow(depth: int, mocker: MockerFixture, t
 
         @classmethod
         def settings_customise_sources(
-            cls, settings_cls: Type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+            cls, settings_cls: type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (PyprojectTomlConfigSettingsSource(settings_cls),)
 
     s = Settings()

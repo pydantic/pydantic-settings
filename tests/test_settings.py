@@ -4,10 +4,11 @@ import os
 import pathlib
 import sys
 import uuid
+from collections.abc import Hashable
 from datetime import date, datetime, timezone
 from enum import IntEnum
 from pathlib import Path
-from typing import Any, Callable, Dict, Generic, Hashable, List, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import Annotated, Any, Callable, Generic, Literal, Optional, TypeVar, Union
 from unittest import mock
 
 import pytest
@@ -33,7 +34,7 @@ from pydantic import (
     dataclasses as pydantic_dataclasses,
 )
 from pydantic.fields import FieldInfo
-from typing_extensions import Annotated, Literal, override
+from typing_extensions import override
 
 from pydantic_settings import (
     BaseSettings,
@@ -200,7 +201,7 @@ def test_populate_by_name_with_alias_path_when_using_name(env):
         pytest.param({'pomme': 'pomme-chosen', 'manzano': 'manzano-chosen'}, 'pomme-chosen', id='pomme-priority'),
     ],
 )
-def test_populate_by_name_with_alias_choices_when_using_alias(env, env_vars: Dict[str, str], expected_value: str):
+def test_populate_by_name_with_alias_choices_when_using_alias(env, env_vars: dict[str, str], expected_value: str):
     for k, v in env_vars.items():
         env.set(k, v)
 
@@ -280,7 +281,7 @@ def test_nested_env_with_basemodel(env):
 
 def test_merge_dict(env):
     class Settings(BaseSettings):
-        top: Dict[str, str]
+        top: dict[str, str]
 
     with pytest.raises(ValidationError):
         Settings()
@@ -334,7 +335,7 @@ def test_nested_env_delimiter(env):
 
 def test_nested_env_optional_json(env):
     class Child(BaseModel):
-        num_list: Optional[List[int]] = None
+        num_list: Optional[list[int]] = None
 
     class Cfg(BaseSettings, env_nested_delimiter='__'):
         child: Optional[Child] = None
@@ -437,8 +438,8 @@ class DateModel(BaseModel):
 
 
 class ComplexSettings(BaseSettings):
-    apples: List[str] = []
-    bananas: Set[int] = set()
+    apples: list[str] = []
+    bananas: set[int] = set()
     carrots: dict = {}
     date: DateModel = DateModel()
 
@@ -452,7 +453,7 @@ def test_list(env):
 
 def test_annotated_list(env):
     class AnnotatedComplexSettings(BaseSettings):
-        apples: Annotated[List[str], MinLen(2)] = []
+        apples: Annotated[list[str], MinLen(2)] = []
 
     env.set('apples', '["russet", "granny smith"]')
     s = AnnotatedComplexSettings()
@@ -937,12 +938,12 @@ def test_env_takes_precedence(env):
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return env_settings, init_settings
 
     env.set('BAR', 'env setting')
@@ -957,7 +958,7 @@ def test_config_file_settings_nornir(env):
     See https://github.com/pydantic/pydantic/pull/341#issuecomment-450378771
     """
 
-    def nornir_settings_source() -> Dict[str, Any]:
+    def nornir_settings_source() -> dict[str, Any]:
         return {'param_a': 'config a', 'param_b': 'config b', 'param_c': 'config c'}
 
     class Settings(BaseSettings):
@@ -968,12 +969,12 @@ def test_config_file_settings_nornir(env):
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return env_settings, init_settings, nornir_settings_source
 
     env.set('PARAM_C', 'env setting c')
@@ -1434,12 +1435,12 @@ def test_read_dotenv_vars_when_env_file_is_none():
 def test_dotenvsource_override(env):
     class StdinDotEnvSettingsSource(DotEnvSettingsSource):
         @override
-        def _read_env_file(self, file_path: Path) -> Dict[str, str]:
+        def _read_env_file(self, file_path: Path) -> dict[str, str]:
             assert str(file_path) == '-'
             return {'foo': 'stdin_foo', 'bar': 'stdin_bar'}
 
         @override
-        def _read_env_files(self) -> Dict[str, str]:
+        def _read_env_files(self) -> dict[str, str]:
             return self._read_env_file(Path('-'))
 
     source = StdinDotEnvSettingsSource(BaseSettings())
@@ -1597,7 +1598,7 @@ def test_secrets_path_json(tmp_path):
     p.write_text('{"a": "b"}')
 
     class Settings(BaseSettings):
-        foo: Dict[str, str]
+        foo: dict[str, str]
 
         model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
@@ -1624,7 +1625,7 @@ def test_secrets_path_invalid_json(tmp_path):
     p.write_text('{"a": "b"')
 
     class Settings(BaseSettings):
-        foo: Dict[str, str]
+        foo: dict[str, str]
 
         model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
@@ -1635,7 +1636,7 @@ def test_secrets_path_invalid_json(tmp_path):
 def test_secrets_missing(tmp_path):
     class Settings(BaseSettings):
         foo: str
-        bar: List[str]
+        bar: list[str]
 
         model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
@@ -1786,10 +1787,10 @@ def test_secrets_dotenv_precedence(tmp_path):
 
 
 def test_external_settings_sources_precedence(env):
-    def external_source_0() -> Dict[str, str]:
+    def external_source_0() -> dict[str, str]:
         return {'apple': 'value 0', 'banana': 'value 2'}
 
-    def external_source_1() -> Dict[str, str]:
+    def external_source_1() -> dict[str, str]:
         return {'apple': 'value 1', 'raspberry': 'value 3'}
 
     class Settings(BaseSettings):
@@ -1800,12 +1801,12 @@ def test_external_settings_sources_precedence(env):
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (
                 init_settings,
                 env_settings,
@@ -1823,7 +1824,7 @@ def test_external_settings_sources_filter_env_vars():
     vault_storage = {'user:password': {'apple': 'value 0', 'banana': 'value 2'}}
 
     class VaultSettingsSource(PydanticBaseSettingsSource):
-        def __init__(self, settings_cls: Type[BaseSettings], user: str, password: str):
+        def __init__(self, settings_cls: type[BaseSettings], user: str, password: str):
             self.user = user
             self.password = password
             super().__init__(settings_cls)
@@ -1831,7 +1832,7 @@ def test_external_settings_sources_filter_env_vars():
         def get_field_value(self, field: FieldInfo, field_name: str) -> Any:
             pass
 
-        def __call__(self) -> Dict[str, str]:
+        def __call__(self) -> dict[str, str]:
             vault_vars = vault_storage[f'{self.user}:{self.password}']
             return {
                 field_name: vault_vars[field_name]
@@ -1846,12 +1847,12 @@ def test_external_settings_sources_filter_env_vars():
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (
                 init_settings,
                 env_settings,
@@ -1899,7 +1900,7 @@ def test_builtins_settings_source_repr():
     )
 
 
-def _parse_custom_dict(value: str) -> Callable[[str], Dict[int, str]]:
+def _parse_custom_dict(value: str) -> Callable[[str], dict[int, str]]:
     """A custom parsing function passed into env parsing test."""
     res = {}
     for part in value.split(','):
@@ -1918,17 +1919,17 @@ class CustomEnvSettingsSource(EnvSettingsSource):
 
 def test_env_setting_source_custom_env_parse(env):
     class Settings(BaseSettings):
-        top: Dict[int, str]
+        top: dict[int, str]
 
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (CustomEnvSettingsSource(settings_cls),)
 
     with pytest.raises(ValidationError):
@@ -1946,17 +1947,17 @@ class BadCustomEnvSettingsSource(EnvSettingsSource):
 
 def test_env_settings_source_custom_env_parse_is_bad(env):
     class Settings(BaseSettings):
-        top: Dict[int, str]
+        top: dict[int, str]
 
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (BadCustomEnvSettingsSource(settings_cls),)
 
     env.set('top', '1=apple,2=banana')
@@ -1979,18 +1980,18 @@ def test_secret_settings_source_custom_env_parse(tmp_path):
     p.write_text('1=apple,2=banana')
 
     class Settings(BaseSettings):
-        top: Dict[int, str]
+        top: dict[int, str]
 
         model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (CustomSecretsSettingsSource(settings_cls, tmp_path),)
 
     s = Settings()
@@ -2004,17 +2005,17 @@ class BadCustomSettingsSource(EnvSettingsSource):
 
 def test_custom_source_get_field_value_error(env):
     class Settings(BaseSettings):
-        top: Dict[int, str]
+        top: dict[int, str]
 
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (BadCustomSettingsSource(settings_cls),)
 
     with pytest.raises(
@@ -2025,10 +2026,10 @@ def test_custom_source_get_field_value_error(env):
 
 def test_nested_env_complex_values(env):
     class SubSubModel(BaseSettings):
-        dvals: Dict
+        dvals: dict
 
     class SubModel(BaseSettings):
-        vals: List[str]
+        vals: list[str]
         sub_sub_model: SubSubModel
 
     class Cfg(BaseSettings):
@@ -2050,7 +2051,7 @@ def test_nested_env_complex_values(env):
 
 def test_nested_env_nonexisting_field(env):
     class SubModel(BaseSettings):
-        vals: List[str]
+        vals: list[str]
 
     class Cfg(BaseSettings):
         sub_model: SubModel
@@ -2064,7 +2065,7 @@ def test_nested_env_nonexisting_field(env):
 
 def test_nested_env_nonexisting_field_deep(env):
     class SubModel(BaseSettings):
-        vals: List[str]
+        vals: list[str]
 
     class Cfg(BaseSettings):
         sub_model: SubModel
@@ -2078,7 +2079,7 @@ def test_nested_env_nonexisting_field_deep(env):
 
 def test_nested_env_union_complex_values(env):
     class SubModel(BaseSettings):
-        vals: Union[List[str], Dict[str, str]]
+        vals: Union[list[str], dict[str, str]]
 
     class Cfg(BaseSettings):
         sub_model: SubModel
@@ -2462,7 +2463,7 @@ def test_env_parse_none_str(env):
 
 def test_env_json_field_dict(env):
     class Settings(BaseSettings):
-        x: Json[Dict[str, int]]
+        x: Json[dict[str, int]]
 
     env.set('x', '{"foo": 1}')
 
@@ -2517,9 +2518,9 @@ def test_model_config_through_class_kwargs(env):
 def test_root_model_as_field(env):
     class Foo(BaseModel):
         x: int
-        y: Dict[str, int]
+        y: dict[str, int]
 
-    FooRoot = RootModel[List[Foo]]
+    FooRoot = RootModel[list[Foo]]
 
     class Settings(BaseSettings):
         z: FooRoot
@@ -2583,7 +2584,7 @@ def test_dotenv_optional_json_field(tmp_path):
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(env_file=p)
 
-        data: Optional[Json[Dict[str, str]]] = Field(default=None)
+        data: Optional[Json[dict[str, str]]] = Field(default=None)
 
     s = Settings()
     assert s.data == {'foo': 'bar'}
@@ -2660,11 +2661,11 @@ def test_nested_field_with_alias_init_source():
 
 def test_nested_models_as_dict_value(env):
     class NestedSettings(BaseModel):
-        foo: Dict[str, int]
+        foo: dict[str, int]
 
     class Settings(BaseSettings):
         nested: NestedSettings
-        sub_dict: Dict[str, NestedSettings]
+        sub_dict: dict[str, NestedSettings]
 
         model_config = SettingsConfigDict(env_nested_delimiter='__')
 
@@ -2676,7 +2677,7 @@ def test_nested_models_as_dict_value(env):
 
 def test_env_nested_dict_value(env):
     class Settings(BaseSettings):
-        nested: Dict[str, Dict[str, Dict[str, str]]]
+        nested: dict[str, dict[str, dict[str, str]]]
 
         model_config = SettingsConfigDict(env_nested_delimiter='__')
 
@@ -2725,7 +2726,7 @@ def test_case_insensitive_nested_optional(env):
 
 def test_case_insensitive_nested_list(env):
     class NestedSettings(BaseModel):
-        FOO: List[str]
+        FOO: list[str]
 
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(env_nested_delimiter='__', case_sensitive=False)
@@ -2742,7 +2743,7 @@ def test_settings_source_current_state(env):
         def get_field_value(self, field: FieldInfo, field_name: str) -> Any:
             pass
 
-        def __call__(self) -> Dict[str, Any]:
+        def __call__(self) -> dict[str, Any]:
             current_state = self.current_state
             if current_state.get('one') == '1':
                 return {'two': '1'}
@@ -2756,12 +2757,12 @@ def test_settings_source_current_state(env):
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (env_settings, SettingsSource(settings_cls))
 
     env.set('one', '1')
@@ -2774,7 +2775,7 @@ def test_settings_source_settings_sources_data(env):
         def get_field_value(self, field: FieldInfo, field_name: str) -> Any:
             pass
 
-        def __call__(self) -> Dict[str, Any]:
+        def __call__(self) -> dict[str, Any]:
             settings_sources_data = self.settings_sources_data
             if settings_sources_data == {
                 'InitSettingsSource': {'one': True, 'two': True},
@@ -2797,12 +2798,12 @@ def test_settings_source_settings_sources_data(env):
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (env_settings, init_settings, function_settings_source, SettingsSource(settings_cls))
 
     env.set('one', '1')
@@ -2824,7 +2825,6 @@ def test_dotenv_extra_allow_similar_fields(tmp_path):
     assert s.model_dump() == {'POSTGRES_USER': 'postgres', 'postgres_name': 'name', 'postgres_user_2': 'postgres2'}
 
 
-@pytest.mark.skipif(sys.version_info < (3, 9), reason='requires python 3.9 or higher')
 def test_annotation_is_complex_root_model_check():
     """Test for https://github.com/pydantic/pydantic-settings/issues/390"""
 
@@ -2836,7 +2836,7 @@ def test_annotation_is_complex_root_model_check():
 
 def test_nested_model_field_with_alias(env):
     class NestedSettings(BaseModel):
-        foo: List[str] = Field(alias='fooalias')
+        foo: list[str] = Field(alias='fooalias')
 
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(env_nested_delimiter='__')
@@ -2851,7 +2851,7 @@ def test_nested_model_field_with_alias(env):
 
 def test_nested_model_field_with_alias_case_sensitive(monkeypatch):
     class NestedSettings(BaseModel):
-        foo: List[str] = Field(alias='fooAlias')
+        foo: list[str] = Field(alias='fooAlias')
 
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(env_nested_delimiter='__', case_sensitive=True)
@@ -2878,7 +2878,7 @@ def test_nested_model_field_with_alias_case_sensitive(monkeypatch):
 
 def test_nested_model_field_with_alias_choices(env):
     class NestedSettings(BaseModel):
-        foo: List[str] = Field(alias=AliasChoices('fooalias', 'foo-alias'))
+        foo: list[str] = Field(alias=AliasChoices('fooalias', 'foo-alias'))
 
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(env_nested_delimiter='__')
@@ -2945,13 +2945,13 @@ def test_parsing_secret_field(env):
 
 def test_field_annotated_no_decode(env):
     class Settings(BaseSettings):
-        a: List[str]  # this field will be decoded because of default `enable_decoding=True`
-        b: Annotated[List[str], NoDecode]
+        a: list[str]  # this field will be decoded because of default `enable_decoding=True`
+        b: Annotated[list[str], NoDecode]
 
         # decode the value here. the field value won't be decoded because of NoDecode
         @field_validator('b', mode='before')
         @classmethod
-        def decode_b(cls, v: str) -> List[str]:
+        def decode_b(cls, v: str) -> list[str]:
             return json.loads(v)
 
     env.set('a', '["one", "two"]')
@@ -2965,12 +2965,12 @@ def test_field_annotated_no_decode_and_disable_decoding(env):
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(enable_decoding=False)
 
-        a: Annotated[List[str], NoDecode]
+        a: Annotated[list[str], NoDecode]
 
         # decode the value here. the field value won't be decoded because of NoDecode
         @field_validator('a', mode='before')
         @classmethod
-        def decode_b(cls, v: str) -> List[str]:
+        def decode_b(cls, v: str) -> list[str]:
             return json.loads(v)
 
     env.set('a', '["one", "two"]')
@@ -2983,12 +2983,12 @@ def test_field_annotated_disable_decoding(env):
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(enable_decoding=False)
 
-        a: List[str]
+        a: list[str]
 
         # decode the value here. the field value won't be decoded because of `enable_decoding=False`
         @field_validator('a', mode='before')
         @classmethod
-        def decode_b(cls, v: str) -> List[str]:
+        def decode_b(cls, v: str) -> list[str]:
             return json.loads(v)
 
     env.set('a', '["one", "two"]')
@@ -3001,7 +3001,7 @@ def test_field_annotated_force_decode_disable_decoding(env):
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(enable_decoding=False)
 
-        a: Annotated[List[str], ForceDecode]
+        a: Annotated[list[str], ForceDecode]
 
     env.set('a', '["one", "two"]')
 

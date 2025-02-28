@@ -4,7 +4,6 @@ Test pydantic_settings.TomlConfigSettingsSource.
 
 import sys
 from pathlib import Path
-from typing import Tuple, Type
 
 import pytest
 from pydantic import BaseModel
@@ -50,12 +49,12 @@ def test_toml_file(tmp_path):
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (TomlConfigSettingsSource(settings_cls),)
 
     s = Settings()
@@ -71,12 +70,12 @@ def test_toml_no_file():
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (TomlConfigSettingsSource(settings_cls),)
 
     s = Settings()
@@ -105,12 +104,12 @@ def test_multiple_file_toml(tmp_path):
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (TomlConfigSettingsSource(settings_cls, toml_file=[p1, p2]),)
 
     s = Settings()

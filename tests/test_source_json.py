@@ -4,7 +4,7 @@ Test pydantic_settings.JsonConfigSettingsSource.
 
 import json
 from pathlib import Path
-from typing import Tuple, Type, Union
+from typing import Union
 
 from pydantic import BaseModel
 
@@ -41,12 +41,12 @@ def test_json_file(tmp_path):
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (JsonConfigSettingsSource(settings_cls),)
 
     s = Settings()
@@ -61,12 +61,12 @@ def test_json_no_file():
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (JsonConfigSettingsSource(settings_cls),)
 
     s = Settings()
@@ -89,12 +89,12 @@ def test_multiple_file_json(tmp_path):
         @classmethod
         def settings_customise_sources(
             cls,
-            settings_cls: Type[BaseSettings],
+            settings_cls: type[BaseSettings],
             init_settings: PydanticBaseSettingsSource,
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
-        ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (JsonConfigSettingsSource(settings_cls, json_file=[p5, p6]),)
 
     s = Settings()
