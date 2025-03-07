@@ -548,11 +548,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         if positional_variadic_arg:
             if len(positional_variadic_arg) > 1:
                 field_names = ', '.join([name for name, info in positional_variadic_arg])
-                raise SettingsError(f'{model.__name__} has multiple variadic positonal arguments: {field_names}')
+                raise SettingsError(f'{model.__name__} has multiple variadic positional arguments: {field_names}')
             elif subcommand_args:
                 field_names = ', '.join([name for name, info in positional_variadic_arg + subcommand_args])
                 raise SettingsError(
-                    f'{model.__name__} has variadic positonal arguments and subcommand arguments: {field_names}'
+                    f'{model.__name__} has variadic positional arguments and subcommand arguments: {field_names}'
                 )
 
         return positional_args + positional_variadic_arg + subcommand_args + optional_args

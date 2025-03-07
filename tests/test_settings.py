@@ -913,7 +913,7 @@ def test_nested_dataclass(env):
     assert s.n.bar == 'bar value'
 
 
-def test_nested_vanila_dataclass(env):
+def test_nested_vanilla_dataclass(env):
     @dataclasses.dataclass
     class MyDataclass:
         value: str
@@ -1732,7 +1732,9 @@ def test_secrets_file_is_a_directory(tmp_path):
 
         model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
-    with pytest.warns(UserWarning, match=f'attempted to load secret file "{tmp_path}/foo" but found a directory inste'):
+    with pytest.warns(
+        UserWarning, match=f'attempted to load secret file "{tmp_path}/foo" but found a directory instead'
+    ):
         Settings()
 
 

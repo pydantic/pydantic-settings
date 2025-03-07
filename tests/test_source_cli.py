@@ -1450,25 +1450,25 @@ def test_cli_annotation_exceptions(monkeypatch):
 
         with pytest.raises(
             SettingsError,
-            match='MultipleVariadicPositionialArgs has multiple variadic positonal arguments: strings, numbers',
+            match='MultipleVariadicPositionalArgs has multiple variadic positional arguments: strings, numbers',
         ):
 
-            class MultipleVariadicPositionialArgs(BaseSettings, cli_parse_args=True):
+            class MultipleVariadicPositionalArgs(BaseSettings, cli_parse_args=True):
                 strings: CliPositionalArg[list[str]]
                 numbers: CliPositionalArg[list[int]]
 
-            MultipleVariadicPositionialArgs()
+            MultipleVariadicPositionalArgs()
 
         with pytest.raises(
             SettingsError,
-            match='VariadicPositionialArgAndSubCommand has variadic positonal arguments and subcommand arguments: strings, sub_cmd',
+            match='VariadicPositionalArgAndSubCommand has variadic positional arguments and subcommand arguments: strings, sub_cmd',
         ):
 
-            class VariadicPositionialArgAndSubCommand(BaseSettings, cli_parse_args=True):
+            class VariadicPositionalArgAndSubCommand(BaseSettings, cli_parse_args=True):
                 strings: CliPositionalArg[list[str]]
                 sub_cmd: CliSubCommand[SubCmd]
 
-            VariadicPositionialArgAndSubCommand()
+            VariadicPositionalArgAndSubCommand()
 
     with pytest.raises(
         SettingsError, match=re.escape("cli_parse_args must be a list or tuple of strings, received <class 'str'>")
