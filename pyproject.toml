@@ -20,7 +20,6 @@ classifiers = [
     'Programming Language :: Python',
     'Programming Language :: Python :: 3',
     'Programming Language :: Python :: 3 :: Only',
-    'Programming Language :: Python :: 3.9',
     'Programming Language :: Python :: 3.10',
     'Programming Language :: Python :: 3.11',
     'Programming Language :: Python :: 3.12',
@@ -38,7 +37,7 @@ classifiers = [
     'Topic :: Software Development :: Libraries :: Python Modules',
     'Topic :: Internet',
 ]
-requires-python = '>=3.9'
+requires-python = '>=3.10'
 dependencies = [
     'pydantic>=2.7.0',
     'python-dotenv>=0.21.0',
@@ -47,9 +46,10 @@ dependencies = [
 dynamic = ['version']
 
 [project.optional-dependencies]
-yaml = ["pyyaml>=6.0.1"]
+yaml = ["pyyaml>=6.0.2"]
 toml = ["tomli>=2.0.1"]
 azure-key-vault = ["azure-keyvault-secrets>=4.8.0", "azure-identity>=1.16.0"]
+aws-secrets-manager = ["boto3>=1.35.0", "boto3-stubs[secretsmanager]"]
 
 [project.urls]
 Homepage = 'https://github.com/pydantic/pydantic-settings'
@@ -66,6 +66,7 @@ linting = [
     "pyyaml",
     "ruff",
     "types-pyyaml",
+    "boto3-stubs[secretsmanager]",
 ]
 testing = [
     "coverage[toml]",
@@ -73,6 +74,7 @@ testing = [
     "pytest-examples",
     "pytest-mock",
     "pytest-pretty",
+    "moto[secretsmanager]",
 ]
 
 [tool.pytest.ini_options]
@@ -80,6 +82,7 @@ testpaths = 'tests'
 filterwarnings = [
     'error',
     'ignore:This is a placeholder until pydantic-settings.*:UserWarning',
+    'ignore::DeprecationWarning:botocore.*:',
 ]
 
 [tool.coverage.run]
