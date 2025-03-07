@@ -15,14 +15,18 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: set up python
-      uses: actions/setup-python@v5
+    - name: set up uv
+      uses: astral-sh/setup-uv@v5
       with:
-        python-version: '3.10'
+        python-version: '3.12'
 
-    - run: pip install -r requirements/linting.txt -r requirements/pyproject.txt
+    - name: Install dependencies
+      # Installing pip is required for the pre-commit action:
+      run: |
+        uv sync --group linting --all-extras
+        uv pip install pip
 
-    - uses: pre-commit/action@v3.0.0
+    - uses: pre-commit/action@v3.0.1
       with:
         extra_args: --all-files
 
@@ -37,18 +41,21 @@ jobs:
     env:
       PYTHON: ${{ matrix.python }}
       OS: ${{ matrix.os }}
+      UV_PYTHON_PREFERENCE: only-managed
 
     runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: set up python
-      uses: actions/setup-python@v5
+    - name: set up uv
+      uses: astral-sh/setup-uv@v5
       with:
         python-version: ${{ matrix.python }}
 
-    - run: pip install -r requirements/testing.txt -r requirements/pyproject.txt
+    - name: Install dependencies
+      run: |
+        uv sync --group testing --all-extras
 
     - name: test
       run: make test
@@ -57,7 +64,7 @@ jobs:
         CONTEXT: ${{ runner.os }}-py${{ matrix.python }}
 
     - name: uninstall deps
-      run: pip uninstall -y PyYAML
+      run: uv pip uninstall PyYAML
 
     - name: test without deps
       run: make test
@@ -65,8 +72,8 @@ jobs:
         COVERAGE_FILE: .coverage.${{ runner.os }}-py${{ matrix.python }}-without-deps
         CONTEXT: ${{ runner.os }}-py${{ matrix.python }}-without-deps
 
-    - run: coverage combine
-    - run: coverage xml
+    - run: uv run coverage combine
+    - run: uv run coverage xml
 
     - uses: codecov/codecov-action@v4
       with:
@@ -86,9 +93,8 @@ jobs:
           jobs: ${{ toJSON(needs) }}
 
   release:
-    name: Release
     needs: [check]
-    if: "success() && startsWith(github.ref, 'refs/tags/')"
+    if: needs.check.outputs.result == 'success' && startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     environment: release
 
@@ -98,20 +104,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: set up python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.12'
 
-      - name: install
+      - name: Install 'build' library
         run: pip install -U build
 
-      - name: check GITHUB_REF matches package version
-        uses: samuelcolvin/check-python-version@v3.1
+      - name: Check version
+        id: check-tag
+        uses: samuelcolvin/check-python-version@v4.1
         with:
           version_file_path: pydantic_settings/version.py
 
-      - name: build
+      - name: Build library
         run: python -m build
 
       - name: Upload package to PyPI
