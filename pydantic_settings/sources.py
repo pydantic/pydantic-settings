@@ -1105,7 +1105,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     Args:
         cli_prog_name: The CLI program name to display in help text. Defaults to `None` if cli_parse_args is `None`.
-            Otherwse, defaults to sys.argv[0].
+            Otherwise, defaults to sys.argv[0].
         cli_parse_args: The list of CLI arguments to parse. Defaults to None.
             If set to `True`, defaults to sys.argv[1:].
         cli_parse_none_str: The CLI string value that should be parsed (e.g. "null", "void", "None", etc.) into `None`
@@ -1553,11 +1553,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         if positional_variadic_arg:
             if len(positional_variadic_arg) > 1:
                 field_names = ', '.join([name for name, info in positional_variadic_arg])
-                raise SettingsError(f'{model.__name__} has multiple variadic positonal arguments: {field_names}')
+                raise SettingsError(f'{model.__name__} has multiple variadic positional arguments: {field_names}')
             elif subcommand_args:
                 field_names = ', '.join([name for name, info in positional_variadic_arg + subcommand_args])
                 raise SettingsError(
-                    f'{model.__name__} has variadic positonal arguments and subcommand arguments: {field_names}'
+                    f'{model.__name__} has variadic positional arguments and subcommand arguments: {field_names}'
                 )
 
         return positional_args + positional_variadic_arg + subcommand_args + optional_args
