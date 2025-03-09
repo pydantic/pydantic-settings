@@ -121,7 +121,7 @@ class BaseSettings(BaseModel):
             into `None` type(None). Defaults to `None` type(None), which means no parsing should occur.
         _env_parse_enums: Parse enum field names to values. Defaults to `None.`, which means no parsing should occur.
         _cli_prog_name: The CLI program name to display in help text. Defaults to `None` if _cli_parse_args is `None`.
-            Otherwse, defaults to sys.argv[0].
+            Otherwise, defaults to sys.argv[0].
         _cli_parse_args: The list of CLI arguments to parse. Defaults to None.
             If set to `True`, defaults to sys.argv[1:].
         _cli_settings_source: Override the default CLI settings source with a user defined instance. Defaults to None.
