@@ -23,7 +23,7 @@ except ImportError:
     tomli = None
 
 
-MODULE = 'pydantic_settings.sources'
+MODULE = 'pydantic_settings.sources.providers.pyproject'
 
 SOME_TOML_DATA = """
 field = "top-level"
@@ -179,7 +179,7 @@ def test_pyproject_toml_file_explicit(cd_tmp_path: Path):
 def test_pyproject_toml_file_parent(mocker: MockerFixture, tmp_path: Path):
     cwd = tmp_path / 'child' / 'grandchild' / 'cwd'
     cwd.mkdir(parents=True)
-    mocker.patch('pydantic_settings.sources.Path.cwd', return_value=cwd)
+    mocker.patch('pydantic_settings.sources.providers.toml.Path.cwd', return_value=cwd)
     (cwd.parent.parent / 'pyproject.toml').write_text(
         """
     [tool.pydantic-settings]
@@ -290,7 +290,7 @@ def test_pyproject_toml_no_file_explicit(tmp_path: Path):
 def test_pyproject_toml_no_file_too_shallow(depth: int, mocker: MockerFixture, tmp_path: Path):
     cwd = tmp_path / 'child' / 'grandchild' / 'cwd'
     cwd.mkdir(parents=True)
-    mocker.patch('pydantic_settings.sources.Path.cwd', return_value=cwd)
+    mocker.patch('pydantic_settings.sources.providers.toml.Path.cwd', return_value=cwd)
     (tmp_path / 'pyproject.toml').write_text(
         """
     [tool.pydantic-settings]

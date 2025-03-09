@@ -46,8 +46,9 @@ from pydantic_settings import (
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
     SettingsConfigDict,
+    SettingsError,
 )
-from pydantic_settings.sources import DefaultSettingsSource, SettingsError
+from pydantic_settings.sources import DefaultSettingsSource
 
 try:
     import dotenv

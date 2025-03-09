@@ -26,12 +26,7 @@ from pydantic import (
 )
 from pydantic._internal._repr import Representation
 
-from pydantic_settings import (
-    BaseSettings,
-    CliApp,
-    PydanticBaseSettingsSource,
-    SettingsConfigDict,
-)
+from pydantic_settings import BaseSettings, CliApp, PydanticBaseSettingsSource, SettingsConfigDict, SettingsError
 from pydantic_settings.sources import (
     CLI_SUPPRESS,
     CliExplicitFlag,
@@ -41,7 +36,6 @@ from pydantic_settings.sources import (
     CliSettingsSource,
     CliSubCommand,
     CliSuppress,
-    SettingsError,
     get_subcommand,
 )
 
