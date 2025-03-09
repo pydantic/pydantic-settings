@@ -2,7 +2,8 @@
 
 from __future__ import annotations as _annotations
 
-from typing import TYPE_CHECKING, Iterator, Mapping, Optional
+from collections.abc import Iterator, Mapping
+from typing import TYPE_CHECKING, Optional
 
 from .env import EnvSettingsSource
 
