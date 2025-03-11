@@ -100,7 +100,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     Args:
         cli_prog_name: The CLI program name to display in help text. Defaults to `None` if cli_parse_args is `None`.
-            Otherwse, defaults to sys.argv[0].
+            Otherwise, defaults to sys.argv[0].
         cli_parse_args: The list of CLI arguments to parse. Defaults to None.
             If set to `True`, defaults to sys.argv[1:].
         cli_parse_none_str: The CLI string value that should be parsed (e.g. "null", "void", "None", etc.) into `None`
