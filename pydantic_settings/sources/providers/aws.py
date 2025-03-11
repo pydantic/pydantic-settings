@@ -1,10 +1,14 @@
+from __future__ import annotations as _annotations  # important for BaseSettings import to work
+
 import json
 from collections.abc import Mapping
-from typing import Optional
-
-from pydantic_settings.main import BaseSettings
+from typing import TYPE_CHECKING, Optional
 
 from .env import EnvSettingsSource
+
+if TYPE_CHECKING:
+    from pydantic_settings.main import BaseSettings
+
 
 boto3_client = None
 SecretsManagerClient = None
@@ -58,3 +62,8 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
             f'{self.__class__.__name__}(secret_id={self._secret_id!r}, '
             f'env_nested_delimiter={self.env_nested_delimiter!r})'
         )
+
+
+__all__ = [
+    'AWSSecretsManagerSettingsSource',
+]

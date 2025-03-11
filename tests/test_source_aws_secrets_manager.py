@@ -21,7 +21,7 @@ from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
 )
-from pydantic_settings.sources import import_aws_secrets_manager
+from pydantic_settings.sources.providers.aws import import_aws_secrets_manager
 
 try:
     aws_secrets_manager = True
