@@ -11,7 +11,7 @@ from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
 )
-from pydantic_settings.sources import import_azure_key_vault
+from pydantic_settings.sources.providers.azure import import_azure_key_vault
 
 try:
     azure_key_vault = True
@@ -23,7 +23,7 @@ except ImportError:
     azure_key_vault = False
 
 
-MODULE = 'pydantic_settings.sources'
+MODULE = 'pydantic_settings.sources.providers.azure'
 
 
 @pytest.mark.skipif(not azure_key_vault, reason='pydantic-settings[azure-key-vault] is not installed')
