@@ -2,6 +2,7 @@ from .exceptions import SettingsError
 from .main import BaseSettings, CliApp, SettingsConfigDict
 from .sources import (
     CLI_SUPPRESS,
+    AWSSecretsManagerSettingsSource,
     AzureKeyVaultSettingsSource,
     CliExplicitFlag,
     CliImplicitFlag,
@@ -27,6 +28,7 @@ from .version import VERSION
 
 __all__ = (
     'CLI_SUPPRESS',
+    'AWSSecretsManagerSettingsSource',
     'AzureKeyVaultSettingsSource',
     'BaseSettings',
     'CliApp',
