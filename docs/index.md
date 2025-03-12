@@ -617,7 +617,7 @@ Once you have your `.env` file filled with variables, _pydantic_ supports loadin
 If a filename is specified for `env_file`, Pydantic will only check the current working directory and
 won't check any parent directories for the `.env` file.
 
-Even when using a dotenv file, _pydantic_ will still read environment variables as well as the dotenv file,
+Even when using a dotenv file, _pydantic_ will still read environment variables and the dotenv file,
 **environment variables will always take priority over values loaded from a dotenv file**.
 
 Passing a file path via the `_env_file` keyword argument on instantiation (method 2) will override
