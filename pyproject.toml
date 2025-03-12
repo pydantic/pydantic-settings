@@ -50,6 +50,9 @@ dynamic = ['version']
 yaml = ["pyyaml>=6.0.1"]
 toml = ["tomli>=2.0.1"]
 azure-key-vault = ["azure-keyvault-secrets>=4.8.0", "azure-identity>=1.16.0"]
+gcp-secret-manager = [
+    "google-cloud-secret-manager>=2.23.1",
+]
 
 [project.urls]
 Homepage = 'https://github.com/pydantic/pydantic-settings'
