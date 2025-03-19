@@ -90,7 +90,6 @@ class TestAWSSecretsManagerSettingsSource:
         class AWSSecretsManagerSettings(BaseSettings):
             """AWSSecretsManager settings."""
 
-            SqlServerUser: str
             sql_server_user: str = Field(..., alias='SqlServerUser')
             sql_server: SqlServer = Field(..., alias='SqlServer')
 
@@ -105,14 +104,12 @@ class TestAWSSecretsManagerSettingsSource:
             ) -> tuple[PydanticBaseSettingsSource, ...]:
                 return (AWSSecretsManagerSettingsSource(settings_cls, 'test-secret'),)
 
-        expected_secret_value = 'SecretValue'
-        secret_data = {'SqlServerUser': expected_secret_value, 'SqlServer--Password': expected_secret_value}
+        secret_data = {'SqlServerUser': 'test-user', 'SqlServer--Password': 'test-password'}
 
         client = boto3.client('secretsmanager')
         client.create_secret(Name='test-secret', SecretString=json.dumps(secret_data))
 
         settings = AWSSecretsManagerSettings()  # type: ignore
 
-        assert settings.SqlServerUser == expected_secret_value
-        assert settings.sql_server_user == expected_secret_value
-        assert settings.sql_server.password == expected_secret_value
+        assert settings.sql_server_user == 'test-user'
+        assert settings.sql_server.password == 'test-password'
