@@ -68,8 +68,7 @@ class TestAWSSecretsManagerSettingsSource:
             sql_server_user: str = Field(..., alias='SqlServerUser')
             sql_server: SqlServer = Field(..., alias='SqlServer')
 
-        expected_secret_value = 'SecretValue'
-        secret_data = {'SqlServerUser': expected_secret_value, 'SqlServer--Password': expected_secret_value}
+        secret_data = {'SqlServerUser': 'test-user', 'SqlServer--Password': 'test-password'}
 
         client = boto3.client('secretsmanager')
         client.create_secret(Name='test-secret', SecretString=json.dumps(secret_data))
@@ -78,8 +77,8 @@ class TestAWSSecretsManagerSettingsSource:
 
         settings = obj()
 
-        assert settings['SqlServerUser'] == expected_secret_value
-        assert settings['SqlServer']['Password'] == expected_secret_value
+        assert settings['SqlServerUser'] == 'test-user'
+        assert settings['SqlServer']['Password'] == 'test-password'
 
     @mock_aws
     def test_aws_secrets_manager_settings_source(self) -> None:
