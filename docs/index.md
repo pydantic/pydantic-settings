@@ -1775,6 +1775,61 @@ Last, run your application inside a Docker container and supply your newly creat
 docker service create --name pydantic-with-secrets --secret my_secret_data pydantic-app:latest
 ```
 
+## AWS Secrets Manager
+
+You must set one parameter:
+
+- `secret_id`: The AWS secret id
+
+You must have the same naming convention in the key value in secret as in the field name. For example, if the key in secret is named `SqlServerPassword`, the field name must be the same. You can use an alias too.
+
+In AWS Secrets Manager, nested models are supported with the `--` separator in the key name. For example, `SqlServer--Password`.
+
+Arrays (e.g. `MySecret--0`, `MySecret--1`) are not supported.
+
+```py
+import os
+
+from pydantic import BaseModel
+
+from pydantic_settings import (
+    AWSSecretsManagerSettingsSource,
+    BaseSettings,
+    PydanticBaseSettingsSource,
+)
+
+
+class SubModel(BaseModel):
+    a: str
+
+
+class AWSSecretsManagerSettings(BaseSettings):
+    foo: str
+    bar: int
+    sub: SubModel
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        aws_secrets_manager_settings = AWSSecretsManagerSettingsSource(
+            settings_cls,
+            os.environ['AWS_SECRETS_MANAGER_SECRET_ID'],
+        )
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+            aws_secrets_manager_settings,
+        )
+```
+
 ## Azure Key Vault
 
 You must set two parameters:

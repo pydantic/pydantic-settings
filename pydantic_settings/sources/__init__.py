@@ -7,6 +7,7 @@ from .base import (
     PydanticBaseSettingsSource,
     get_subcommand,
 )
+from .providers.aws import AWSSecretsManagerSettingsSource
 from .providers.azure import AzureKeyVaultSettingsSource
 from .providers.cli import (
     CLI_SUPPRESS,
@@ -30,6 +31,7 @@ from .types import ENV_FILE_SENTINEL, DotenvType, ForceDecode, NoDecode, PathTyp
 __all__ = [
     'CLI_SUPPRESS',
     'ENV_FILE_SENTINEL',
+    'AWSSecretsManagerSettingsSource',
     'AzureKeyVaultSettingsSource',
     'CliExplicitFlag',
     'CliImplicitFlag',
