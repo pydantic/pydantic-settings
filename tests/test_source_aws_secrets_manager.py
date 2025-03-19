@@ -65,7 +65,6 @@ class TestAWSSecretsManagerSettingsSource:
         class AWSSecretsManagerSettings(BaseSettings):
             """AWSSecretsManager settings."""
 
-            SqlServerUser: str
             sql_server_user: str = Field(..., alias='SqlServerUser')
             sql_server: SqlServer = Field(..., alias='SqlServer')
 
