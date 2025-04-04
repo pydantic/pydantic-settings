@@ -102,6 +102,19 @@ def _annotation_contains_types(
     return annotation in types
 
 
+def _get_class_types(annotation: type[Any]) -> list[type[Any]]:
+    origin = get_origin(annotation)
+    if typing_objects.is_union(origin):
+        types = []
+        for arg in get_args(annotation):
+            types.extend(_get_class_types(arg))
+        return types
+    elif typing_objects.is_annotated(origin):
+        return _get_class_types(get_args(annotation)[0])
+    else:
+        return [annotation]
+
+
 def _strip_annotated(annotation: Any) -> Any:
     if typing_objects.is_annotated(get_origin(annotation)):
         return annotation.__origin__
@@ -188,6 +201,7 @@ __all__ = [
     '_annotation_is_complex',
     '_annotation_is_complex_inner',
     '_get_alias_names',
+    '_get_class_types',
     '_get_env_var_key',
     '_get_model_fields',
     '_is_function',

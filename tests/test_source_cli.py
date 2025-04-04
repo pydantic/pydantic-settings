@@ -1275,6 +1275,20 @@ def test_cli_subcommand_with_positionals():
         get_subcommand(NotSettingsConfigDict(), cli_exit_on_error=False)
 
 
+def test_cli_subcommand_with_annotated_union():
+    class Cat(BaseModel):
+        meow: str
+
+    class Dog(BaseModel):
+        woof: str
+
+    class Settings(BaseSettings):
+        animals: CliSubCommand[Annotated[Union[Cat, Dog], 'my_annotation']]
+
+    assert CliApp.run(Settings, cli_args=['Cat', '--meow=purr']).model_dump == {'animals': {'meow': 'purr'}}
+    assert CliApp.run(Settings, cli_args=['Dog', '--woof=bark']).model_dump == {'animals': {'woof': 'bark'}}
+
+
 def test_cli_union_similar_sub_models():
     class ChildA(BaseModel):
         name: str = 'child a'
