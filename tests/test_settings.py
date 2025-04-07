@@ -474,6 +474,21 @@ def test_annotated_list(env):
     ]
 
 
+def test_cli_nested_annotated_unions(env):
+    class Cat(BaseModel):
+        meow: str
+
+    class Dog(BaseModel):
+        woof: str
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+        animals: Annotated[Union[Annotated[Union[Cat, Dog], 'my_nested_annotation'], None], 'my_annotation']
+
+    env.set('ANIMALS__MEOW', 'hiss')
+    assert Settings().model_dump() == {'animals': {'meow': 'hiss'}}
+
+
 def test_set_dict_model(env):
     env.set('bananas', '[1, 2, 3, 3]')
     env.set('CARROTS', '{"a": null, "b": 4}')

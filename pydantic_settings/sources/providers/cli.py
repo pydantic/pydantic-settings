@@ -52,6 +52,7 @@ from ..utils import (
     _annotation_contains_types,
     _annotation_enum_val_to_name,
     _get_alias_names,
+    _get_class_types,
     _get_model_fields,
     _is_function,
     _strip_annotated,
@@ -497,8 +498,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 raise SettingsError(f'CliSubCommand is not outermost annotation for {model.__name__}.{field_name}')
             elif _annotation_contains_types(type_, (_CliPositionalArg,), is_include_origin=False):
                 raise SettingsError(f'CliPositionalArg is not outermost annotation for {model.__name__}.{field_name}')
-            if is_model_class(_strip_annotated(type_)) or is_pydantic_dataclass(_strip_annotated(type_)):
-                sub_models.append(_strip_annotated(type_))
+            for type_ in _get_class_types(type_):
+                if is_model_class(type_) or is_pydantic_dataclass(type_):
+                    sub_models.append(cast(type[BaseModel], type_))
         return sub_models
 
     def _verify_cli_flag_annotations(self, model: type[BaseModel], field_name: str, field_info: FieldInfo) -> None:
@@ -523,7 +525,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     alias_names, *_ = _get_alias_names(field_name, field_info)
                     if len(alias_names) > 1:
                         raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has multiple aliases')
-                    field_types = [type_ for type_ in get_args(field_info.annotation) if type_ is not type(None)]
+                    field_types = [
+                        type_ for type_ in _get_class_types(field_info.annotation) if type_ is not type(None)
+                    ]
                     for field_type in field_types:
                         if not (is_model_class(field_type) or is_pydantic_dataclass(field_type)):
                             raise SettingsError(
