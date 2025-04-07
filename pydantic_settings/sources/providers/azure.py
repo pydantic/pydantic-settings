@@ -46,7 +46,7 @@ class AzureKeyVaultMapping(Mapping[str, Optional[str]]):
         self._loaded_secrets = {}
         self._secret_client = secret_client
         self._secret_names: list[str] = [
-            secret.name for secret in self._secret_client.list_properties_of_secrets() if secret.name
+            secret.name for secret in self._secret_client.list_properties_of_secrets() if secret.name and secret.enabled
         ]
 
     def __getitem__(self, key: str) -> str | None:

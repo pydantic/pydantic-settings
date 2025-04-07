@@ -3,6 +3,7 @@ Test pydantic_settings.AzureKeyVaultSettingsSource.
 """
 
 import pytest
+from azure.keyvault.secrets import SecretClient
 from pydantic import BaseModel, Field
 from pytest_mock import MockerFixture
 
@@ -23,9 +24,6 @@ except ImportError:
     azure_key_vault = False
 
 
-MODULE = 'pydantic_settings.sources.providers.azure'
-
-
 @pytest.mark.skipif(not azure_key_vault, reason='pydantic-settings[azure-key-vault] is not installed')
 class TestAzureKeyVaultSettingsSource:
     """Test AzureKeyVaultSettingsSource."""
@@ -36,7 +34,10 @@ class TestAzureKeyVaultSettingsSource:
         class AzureKeyVaultSettings(BaseSettings):
             """AzureKeyVault settings."""
 
-        mocker.patch(f'{MODULE}.SecretClient.list_properties_of_secrets', return_value=[])
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.list_properties_of_secrets.__qualname__}',
+            return_value=[],
+        )
 
         AzureKeyVaultSettingsSource(
             AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential()
@@ -55,11 +56,17 @@ class TestAzureKeyVaultSettingsSource:
             sql_server_user: str = Field(..., alias='SqlServerUser')
             sql_server: SqlServer = Field(..., alias='SqlServer')
 
-        expected_secrets = [type('', (), {'name': 'SqlServerUser'}), type('', (), {'name': 'SqlServer--Password'})]
+        expected_secrets = [
+            type('', (), {'name': 'SqlServerUser', 'enabled': True}),
+            type('', (), {'name': 'SqlServer--Password', 'enabled': True}),
+        ]
         expected_secret_value = 'SecretValue'
-        mocker.patch(f'{MODULE}.SecretClient.list_properties_of_secrets', return_value=expected_secrets)
         mocker.patch(
-            f'{MODULE}.SecretClient.get_secret',
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.list_properties_of_secrets.__qualname__}',
+            return_value=expected_secrets,
+        )
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.get_secret.__qualname__}',
             side_effect=self._raise_resource_not_found_when_getting_parent_secret_name,
         )
         obj = AzureKeyVaultSettingsSource(
@@ -99,11 +106,17 @@ class TestAzureKeyVaultSettingsSource:
                     ),
                 )
 
-        expected_secrets = [type('', (), {'name': 'SqlServerUser'}), type('', (), {'name': 'SqlServer--Password'})]
+        expected_secrets = [
+            type('', (), {'name': 'SqlServerUser', 'enabled': True}),
+            type('', (), {'name': 'SqlServer--Password', 'enabled': True}),
+        ]
         expected_secret_value = 'SecretValue'
-        mocker.patch(f'{MODULE}.SecretClient.list_properties_of_secrets', return_value=expected_secrets)
         mocker.patch(
-            f'{MODULE}.SecretClient.get_secret',
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.list_properties_of_secrets.__qualname__}',
+            return_value=expected_secrets,
+        )
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.get_secret.__qualname__}',
             side_effect=self._raise_resource_not_found_when_getting_parent_secret_name,
         )
 
