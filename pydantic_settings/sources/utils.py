@@ -54,6 +54,10 @@ def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) ->
 
     origin = get_origin(annotation)
 
+    # Check if annotation is of the form Union[type, ...].
+    if typing_objects.is_union(origin):
+        return _union_is_complex(annotation, metadata)
+
     # Check if annotation is of the form Annotated[type, metadata].
     if typing_objects.is_annotated(origin):
         # Return result of recursive call on inner type.

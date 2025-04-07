@@ -1285,8 +1285,8 @@ def test_cli_subcommand_with_annotated_union():
     class Settings(BaseSettings):
         animals: CliSubCommand[Annotated[Union[Cat, Dog], 'my_annotation']]
 
-    assert CliApp.run(Settings, cli_args=['Cat', '--meow=purr']).model_dump == {'animals': {'meow': 'purr'}}
-    assert CliApp.run(Settings, cli_args=['Dog', '--woof=bark']).model_dump == {'animals': {'woof': 'bark'}}
+    assert CliApp.run(Settings, cli_args=['Cat', '--meow=purr']).model_dump() == {'animals': {'meow': 'purr'}}
+    assert CliApp.run(Settings, cli_args=['Dog', '--woof=bark']).model_dump() == {'animals': {'woof': 'bark'}}
 
 
 def test_cli_union_similar_sub_models():
