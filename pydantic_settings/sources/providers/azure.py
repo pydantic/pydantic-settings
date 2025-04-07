@@ -68,7 +68,6 @@ class AzureKeyVaultMapping(Mapping[str, Optional[str]]):
 class AzureKeyVaultSettingsSource(EnvSettingsSource):
     _url: str
     _credential: TokenCredential
-    _secret_client: SecretClient
 
     def __init__(
         self,
