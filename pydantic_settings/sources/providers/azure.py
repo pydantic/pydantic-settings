@@ -50,7 +50,7 @@ class AzureKeyVaultMapping(Mapping[str, Optional[str]]):
         ]
 
     def __getitem__(self, key: str) -> str | None:
-        if key not in self._loaded_secrets:
+        if key not in self._loaded_secrets and key in self._secret_names:
             try:
                 self._loaded_secrets[key] = self._secret_client.get_secret(key).value
             except Exception:

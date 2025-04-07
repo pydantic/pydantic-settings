@@ -78,6 +78,33 @@ class TestAzureKeyVaultSettingsSource:
         assert settings['SqlServerUser'] == expected_secret_value
         assert settings['SqlServer']['Password'] == expected_secret_value
 
+    def test_do_not_load_disabled_secrets(self, mocker: MockerFixture) -> None:
+        class AzureKeyVaultSettings(BaseSettings):
+            """AzureKeyVault settings."""
+
+            SqlServerPassword: str
+            DisabledSqlServerPassword: str
+
+        disabled_secret_name = 'SqlServerPassword'
+        expected_secrets = [
+            type('', (), {'name': disabled_secret_name, 'enabled': False}),
+        ]
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.list_properties_of_secrets.__qualname__}',
+            return_value=expected_secrets,
+        )
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.get_secret.__qualname__}',
+            return_value=KeyVaultSecret(SecretProperties(), 'SecretValue'),
+        )
+        obj = AzureKeyVaultSettingsSource(
+            AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential()
+        )
+
+        settings = obj()
+
+        assert disabled_secret_name not in settings
+
     def test_azure_key_vault_settings_source(self, mocker: MockerFixture) -> None:
         """Test AzureKeyVaultSettingsSource."""
 
