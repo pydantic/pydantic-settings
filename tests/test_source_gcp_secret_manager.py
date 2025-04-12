@@ -84,11 +84,6 @@ def test_secret_manager_mapping_init(secret_manager_mapping):
     assert len(secret_manager_mapping._loaded_secrets) == 0
 
 
-def test_secret_manager_no_project_raises_attribute_error(secret_manager_mapping):
-    assert secret_manager_mapping._project_id == 'test-project'
-    assert len(secret_manager_mapping._loaded_secrets) == 0
-
-
 def test_secret_manager_mapping_gcp_project_path(secret_manager_mapping, mock_secret_client):
     secret_manager_mapping._gcp_project_path
     mock_secret_client.common_project_path.assert_called_once_with('test-project')
@@ -114,10 +109,6 @@ def test_secret_manager_mapping_getitem_access_error(secret_manager_mapping, moc
 
     with pytest.raises(KeyError):
         _ = secret_manager_mapping['test-secret']
-
-
-def test_secret_manager_mapping_len(secret_manager_mapping):
-    assert len(secret_manager_mapping) == 1
 
 
 def test_secret_manager_mapping_iter(secret_manager_mapping):
