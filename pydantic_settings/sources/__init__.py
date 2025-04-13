@@ -18,6 +18,7 @@ from .providers.cli import (
     CliSettingsSource,
     CliSubCommand,
     CliSuppress,
+    CliUnknownArgs,
 )
 from .providers.dotenv import DotEnvSettingsSource, read_env_file
 from .providers.env import EnvSettingsSource
@@ -40,6 +41,7 @@ __all__ = [
     'CliSettingsSource',
     'CliSubCommand',
     'CliSuppress',
+    'CliUnknownArgs',
     'DefaultSettingsSource',
     'DotEnvSettingsSource',
     'DotenvType',

@@ -57,6 +57,10 @@ class _CliExplicitFlag:
     pass
 
 
+class _CliUnknownArgs:
+    pass
+
+
 __all__ = [
     'DEFAULT_PATH',
     'ENV_FILE_SENTINEL',
@@ -70,4 +74,5 @@ __all__ = [
     '_CliImplicitFlag',
     '_CliPositionalArg',
     '_CliSubCommand',
+    '_CliUnknownArgs',
 ]

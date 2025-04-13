@@ -35,7 +35,7 @@ from typing import (
 )
 
 import typing_extensions
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic._internal._repr import Representation
 from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
@@ -47,7 +47,7 @@ from typing_inspection.introspection import is_union_origin
 
 from ...exceptions import SettingsError
 from ...utils import _lenient_issubclass, _WithArgsTypes
-from ..types import _CliExplicitFlag, _CliImplicitFlag, _CliPositionalArg, _CliSubCommand
+from ..types import NoDecode, _CliExplicitFlag, _CliImplicitFlag, _CliPositionalArg, _CliSubCommand, _CliUnknownArgs
 from ..utils import (
     _annotation_contains_types,
     _annotation_enum_val_to_name,
@@ -86,6 +86,7 @@ CliImplicitFlag = Annotated[_CliBoolFlag, _CliImplicitFlag]
 CliExplicitFlag = Annotated[_CliBoolFlag, _CliExplicitFlag]
 CLI_SUPPRESS = SUPPRESS
 CliSuppress = Annotated[T, CLI_SUPPRESS]
+CliUnknownArgs = Annotated[list[str], Field(default=[]), _CliUnknownArgs, NoDecode]
 
 
 class CliSettingsSource(EnvSettingsSource, Generic[T]):
@@ -364,6 +365,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if not any(field_name for field_name in parsed_args.keys() if f'{last_selected_subcommand}.' in field_name):
                 parsed_args[last_selected_subcommand] = '{}'
 
+        parsed_args.update(self._cli_unknown_args)
+
         self.env_vars = parse_env_vars(
             cast(Mapping[str, str], parsed_args),
             self.case_sensitive,
@@ -630,8 +633,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         add_subparsers_method: Callable[..., Any] | None = ArgumentParser.add_subparsers,
         formatter_class: Any = RawDescriptionHelpFormatter,
     ) -> None:
+        self._cli_unknown_args: dict[str, list[str]] = {}
+
         def _parse_known_args(*args: Any, **kwargs: Any) -> Namespace:
-            return ArgumentParser.parse_known_args(*args, **kwargs)[0]
+            args, unknown_args = ArgumentParser.parse_known_args(*args, **kwargs)
+            for dest in self._cli_unknown_args:
+                self._cli_unknown_args[dest] = unknown_args
+            return cast(Namespace, args)
 
         self._root_parser = root_parser
         if parse_args_method is None:
@@ -755,10 +763,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 if not arg_names or (kwargs['dest'] in added_args):
                     continue
 
-                if is_append_action:
-                    kwargs['action'] = 'append'
-                    if _annotation_contains_types(field_info.annotation, (dict, Mapping), is_strip_annotated=True):
-                        self._cli_dict_args[kwargs['dest']] = field_info.annotation
+                self._convert_append_action(kwargs, field_info, is_append_action)
 
                 if _CliPositionalArg in field_info.metadata:
                     arg_names, flag_prefix = self._convert_positional_arg(
@@ -783,6 +788,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         alias_names,
                         model_default=model_default,
                     )
+                elif _CliUnknownArgs in field_info.metadata:
+                    self._cli_unknown_args[kwargs['dest']] = []
                 elif not is_alias_path_only:
                     if group is not None:
                         if isinstance(group, dict):
@@ -804,6 +811,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         if self.cli_kebab_case:
             return name.replace('_', '-')
         return name
+
+    def _convert_append_action(self, kwargs: dict[str, Any], field_info: FieldInfo, is_append_action: bool) -> None:
+        if is_append_action:
+            kwargs['action'] = 'append'
+            if _annotation_contains_types(field_info.annotation, (dict, Mapping), is_strip_annotated=True):
+                self._cli_dict_args[kwargs['dest']] = field_info.annotation
 
     def _convert_bool_flag(self, kwargs: dict[str, Any], field_info: FieldInfo, model_default: Any) -> None:
         if kwargs['metavar'] == 'bool':

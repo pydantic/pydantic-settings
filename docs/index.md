@@ -1309,24 +1309,25 @@ class ImplicitSettings(BaseSettings, cli_parse_args=True, cli_implicit_flags=Tru
     """
 ```
 
-#### Ignore Unknown Arguments
+#### Ignore and Retrieve Unknown Arguments
 
 Change whether to ignore unknown CLI arguments and only parse known ones using `cli_ignore_unknown_args`. By default, the CLI
-does not ignore any args.
+does not ignore any args. Ignored arguments can then be retrieved using the `CliUnknownArgs` annotation.
 
 ```py
 import sys
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, CliUnknownArgs
 
 
 class Settings(BaseSettings, cli_parse_args=True, cli_ignore_unknown_args=True):
     good_arg: str
+    ignored_args: CliUnknownArgs
 
 
 sys.argv = ['example.py', '--bad-arg=bad', 'ANOTHER_BAD_ARG', '--good_arg=hello world']
 print(Settings().model_dump())
-#> {'good_arg': 'hello world'}
+#> {'good_arg': 'hello world', 'ignored_args': ['--bad-arg=bad', 'ANOTHER_BAD_ARG']}
 ```
 
 #### CLI Kebab Case for Arguments
