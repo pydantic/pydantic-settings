@@ -2137,9 +2137,25 @@ def test_cli_app_exceptions():
 
 
 def test_cli_suppress(capsys, monkeypatch):
+    class DeepHiddenSubModel(BaseModel):
+        deep_hidden_a: int
+        deep_hidden_b: int
+
+    class HiddenSubModel(BaseModel):
+        hidden_a: int
+        hidden_b: int
+        deep_hidden_obj: DeepHiddenSubModel
+
+    class SubModel(BaseModel):
+        visible_a: int
+        visible_b: int
+        deep_hidden_obj: CliSuppress[DeepHiddenSubModel]
+
     class Settings(BaseSettings, cli_parse_args=True):
         field_a: CliSuppress[int] = 0
         field_b: str = Field(default=1, description=CLI_SUPPRESS)
+        hidden_obj: CliSuppress[HiddenSubModel]
+        visible_obj: SubModel
 
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
@@ -2149,10 +2165,18 @@ def test_cli_suppress(capsys, monkeypatch):
 
         assert (
             capsys.readouterr().out
-            == f"""usage: example.py [-h]
+            == f"""usage: example.py [-h] [--visible_obj JSON] [--visible_obj.visible_a int]
+                  [--visible_obj.visible_b int]
 
 {ARGPARSE_OPTIONS_TEXT}:
-  -h, --help  show this help message and exit
+  -h, --help            show this help message and exit
+
+visible_obj options:
+  --visible_obj JSON    set visible_obj from JSON string
+  --visible_obj.visible_a int
+                        (required)
+  --visible_obj.visible_b int
+                        (required)
 """
         )
 
