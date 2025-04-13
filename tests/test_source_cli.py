@@ -36,6 +36,7 @@ from pydantic_settings.sources import (
     CliSettingsSource,
     CliSubCommand,
     CliSuppress,
+    CliUnknownArgs,
     get_subcommand,
 )
 
@@ -1728,14 +1729,26 @@ def test_cli_ignore_unknown_args():
     class Cfg(BaseSettings, cli_ignore_unknown_args=True):
         this: str = 'hello'
         that: int = 123
+        ignored_args: CliUnknownArgs
+
+    cfg = CliApp.run(Cfg, cli_args=['--this=hi', '--that=456'])
+    assert cfg.model_dump() == {'this': 'hi', 'that': 456, 'ignored_args': []}
 
     cfg = CliApp.run(Cfg, cli_args=['not_my_positional_arg', '--not-my-optional-arg=456'])
-    assert cfg.model_dump() == {'this': 'hello', 'that': 123}
+    assert cfg.model_dump() == {
+        'this': 'hello',
+        'that': 123,
+        'ignored_args': ['not_my_positional_arg', '--not-my-optional-arg=456'],
+    }
 
     cfg = CliApp.run(
         Cfg, cli_args=['not_my_positional_arg', '--not-my-optional-arg=456', '--this=goodbye', '--that=789']
     )
-    assert cfg.model_dump() == {'this': 'goodbye', 'that': 789}
+    assert cfg.model_dump() == {
+        'this': 'goodbye',
+        'that': 789,
+        'ignored_args': ['not_my_positional_arg', '--not-my-optional-arg=456'],
+    }
 
 
 def test_cli_flag_prefix_char():
