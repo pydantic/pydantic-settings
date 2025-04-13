@@ -2413,3 +2413,17 @@ positional arguments:
   --deep-arg str  (required)
 """
         )
+
+
+def test_cli_json_optional_default():
+    class Nested(BaseModel):
+        foo: int = 1
+        bar: int = 2
+
+    class Options(BaseSettings):
+        nested: Nested = Nested(foo=3, bar=4)
+
+    assert CliApp.run(Options, cli_args=[]).model_dump() == {'nested': {'foo': 3, 'bar': 4}}
+    assert CliApp.run(Options, cli_args=['--nested']).model_dump() == {'nested': {'foo': 1, 'bar': 2}}
+    assert CliApp.run(Options, cli_args=['--nested={}']).model_dump() == {'nested': {'foo': 1, 'bar': 2}}
+    assert CliApp.run(Options, cli_args=['--nested.foo=5']).model_dump() == {'nested': {'foo': 5, 'bar': 2}}
