@@ -665,6 +665,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         group: Any,
         alias_prefixes: list[str],
         model_default: Any,
+        is_model_suppressed: bool = False,
     ) -> ArgumentParser:
         subparsers: Any = None
         alias_path_args: dict[str, str] = {}
@@ -738,7 +739,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 is_parser_submodel = sub_models and not is_append_action
                 kwargs: dict[str, Any] = {}
                 kwargs['default'] = CLI_SUPPRESS
-                kwargs['help'] = self._help_format(field_name, field_info, model_default)
+                kwargs['help'] = self._help_format(field_name, field_info, model_default, is_model_suppressed)
                 kwargs['metavar'] = self._metavar_format(field_info.annotation)
                 kwargs['required'] = (
                     self.cli_enforce_required and field_info.is_required() and model_default is PydanticUndefined
@@ -782,6 +783,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         field_info,
                         alias_names,
                         model_default=model_default,
+                        is_model_suppressed=is_model_suppressed,
                     )
                 elif not is_alias_path_only:
                     if group is not None:
@@ -869,6 +871,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         field_info: FieldInfo,
         alias_names: tuple[str, ...],
         model_default: Any,
+        is_model_suppressed: bool,
     ) -> None:
         if issubclass(model, CliMutuallyExclusiveGroup):
             # Argparse has deprecated "calling add_argument_group() or add_mutually_exclusive_group() on a
@@ -906,11 +909,14 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 model_group_kwargs['description'] = desc_header
 
         preferred_alias = alias_names[0]
+        is_model_suppressed = self._is_field_suppressed(field_info) or is_model_suppressed
         if not self.cli_avoid_json:
             added_args.append(arg_names[0])
             kwargs['nargs'] = '?'
             kwargs['const'] = '{}'
-            kwargs['help'] = f'set {arg_names[0]} from JSON string (default: {{}})'
+            kwargs['help'] = kwargs['help'] = (
+                CLI_SUPPRESS if is_model_suppressed else f'set {arg_names[0]} from JSON string (default: {{}})'
+            )
             model_group = self._add_group(parser, **model_group_kwargs)
             self._add_argument(model_group, *(f'{flag_prefix}{name}' for name in arg_names), **kwargs)
         for model in sub_models:
@@ -923,6 +929,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 group=model_group if model_group else model_group_kwargs,
                 alias_prefixes=[f'{arg_prefix}{name}.' for name in alias_names[1:]],
                 model_default=model_default,
+                is_model_suppressed=is_model_suppressed,
             )
 
     def _add_parser_alias_paths(
@@ -1015,9 +1022,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _metavar_format(self, obj: Any) -> str:
         return self._metavar_format_recurse(obj).replace(', ', ',')
 
-    def _help_format(self, field_name: str, field_info: FieldInfo, model_default: Any) -> str:
+    def _help_format(
+        self, field_name: str, field_info: FieldInfo, model_default: Any, is_model_suppressed: bool
+    ) -> str:
         _help = field_info.description if field_info.description else ''
-        if _help == CLI_SUPPRESS or CLI_SUPPRESS in field_info.metadata:
+        if is_model_suppressed or self._is_field_suppressed(field_info):
             return CLI_SUPPRESS
 
         if field_info.is_required() and model_default in (PydanticUndefined, None):
@@ -1037,3 +1046,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 default = f'(default factory: {self._metavar_format(field_info.default_factory)})'
             _help += f' {default}' if _help else default
         return _help.replace('%', '%%') if issubclass(type(self._root_parser), ArgumentParser) else _help
+
+    def _is_field_suppressed(self, field_info: FieldInfo) -> bool:
+        _help = field_info.description if field_info.description else ''
+        return _help == CLI_SUPPRESS or CLI_SUPPRESS in field_info.metadata
