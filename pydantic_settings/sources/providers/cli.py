@@ -908,7 +908,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         preferred_alias = alias_names[0]
         if not self.cli_avoid_json:
             added_args.append(arg_names[0])
-            kwargs['help'] = f'set {arg_names[0]} from JSON string'
+            kwargs['nargs'] = '?'
+            kwargs['const'] = '{}'
+            kwargs['help'] = f'set {arg_names[0]} from JSON string (default: {{}})'
             model_group = self._add_group(parser, **model_group_kwargs)
             self._add_argument(model_group, *(f'{flag_prefix}{name}' for name in arg_names), **kwargs)
         for model in sub_models:

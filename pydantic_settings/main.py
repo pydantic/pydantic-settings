@@ -559,6 +559,7 @@ class CliApp:
         if not issubclass(model_cls, BaseSettings):
 
             class CliAppBaseSettings(BaseSettings, model_cls):  # type: ignore
+                __doc__ = model_cls.__doc__
                 model_config = SettingsConfigDict(
                     nested_model_default_partial_update=True,
                     case_sensitive=True,
