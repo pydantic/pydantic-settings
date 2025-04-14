@@ -2174,7 +2174,7 @@ def test_cli_suppress(capsys, monkeypatch):
   -h, --help            show this help message and exit
 
 visible_obj options:
-  --visible_obj JSON    set visible_obj from JSON string
+  --visible_obj [JSON]  set visible_obj from JSON string (default: {{}})
   --visible_obj.visible_a int
                         (required)
   --visible_obj.visible_b int
