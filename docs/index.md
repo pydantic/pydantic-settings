@@ -1888,6 +1888,99 @@ class AzureKeyVaultSettings(BaseSettings):
         )
 ```
 
+## Google Cloud Secret Manager
+
+Google Cloud Secret Manager allows you to store, manage, and access sensitive information as secrets in Google Cloud Platform. This integration lets you retrieve secrets directly from GCP Secret Manager for use in your Pydantic settings.
+
+### Installation
+
+The Google Cloud Secret Manager integration requires additional dependencies:
+
+```bash
+pip install "pydantic-settings[gcp-secret-manager]"
+```
+
+### Basic Usage
+
+To use Google Cloud Secret Manager, you need to:
+
+1. Create a `GoogleSecretManagerSettingsSource`. (See [GCP Authentication](#gcp-authentication) for authentication options.)
+2. Add this source to your settings customization pipeline
+
+   ```py
+   from pydantic import BaseModel
+
+   from pydantic_settings import (
+       BaseSettings,
+       GoogleSecretManagerSettingsSource,
+       PydanticBaseSettingsSource,
+       SettingsConfigDict,
+   )
+
+
+   class Database(BaseModel):
+       password: str
+       user: str
+
+
+   class Settings(BaseSettings):
+       database: Database
+
+       model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+       @classmethod
+       def settings_customise_sources(
+           cls,
+           settings_cls: type[BaseSettings],
+           init_settings: PydanticBaseSettingsSource,
+           env_settings: PydanticBaseSettingsSource,
+           dotenv_settings: PydanticBaseSettingsSource,
+           file_secret_settings: PydanticBaseSettingsSource,
+       ) -> tuple[PydanticBaseSettingsSource, ...]:
+           # Create the GCP Secret Manager settings source
+           gcp_settings = GoogleSecretManagerSettingsSource(
+               settings_cls,
+               # If not provided, will use google.auth.default()
+               # to get credentials from the environemnt
+               # credentials=your_credentials,
+               # If not provided, will use google.auth.default()
+               # to get project_id from the environemnt
+               project_id='your-gcp-project-id',
+           )
+
+           return (
+               init_settings,
+               env_settings,
+               dotenv_settings,
+               file_secret_settings,
+               gcp_settings,
+           )
+   ```
+
+### GCP Authentication
+
+The `GoogleSecretManagerSettingsSource` supports several authentication methods:
+
+1. **Default credentials** - If you don't provide credentials or project ID, it will use [`google.auth.default()`](https://google-auth.readthedocs.io/en/master/reference/google.auth.html#google.auth.default) to obtain them. This works with:
+
+   - Service account credentials from `GOOGLE_APPLICATION_CREDENTIALS` environment variable
+   - User credentials from `gcloud auth application-default login`
+   - Compute Engine, GKE, Cloud Run, or Cloud Functions default service accounts
+
+2. **Explicit credentials** - You can also provide `credentials` directly. e.g. `sa_credentials = google.oauth2.service_account.Credentials.from_service_account_file('path/to/service-account.json')` and then `GoogleSecretManagerSettingsSource(credentials=sa_credentials)`
+
+### Nested Models
+
+For nested models, Secret Manager supports the `env_nested_delimiter` setting as long as it complies with the [naming rules](https://cloud.google.com/secret-manager/docs/creating-and-accessing-secrets#create-a-secret). In the example above, you would create secrets named `database__password` and `database__user` in Secret Manager.
+
+### Important Notes
+
+1. **Case Sensitivity**: By default, secret names are case-sensitive.
+2. **Secret Naming**: Create secrets in Google Secret Manager with names that match your field names (including any prefix). According the [Secret Manager documentation](https://cloud.google.com/secret-manager/docs/creating-and-accessing-secrets#create-a-secret), a secret name can contain uppercase and lowercase letters, numerals, hyphens, and underscores. The maximum allowed length for a name is 255 characters.
+3. **Secret Versions**: The GoogleSecretManagerSettingsSource uses the "latest" version of secrets.
+
+For more details on creating and managing secrets in Google Cloud Secret Manager, see the [official Google Cloud documentation](https://cloud.google.com/secret-manager/docs).
+
 ## Other settings source
 
 Other settings sources are available for common configuration files:
