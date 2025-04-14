@@ -21,6 +21,7 @@ from .providers.cli import (
 )
 from .providers.dotenv import DotEnvSettingsSource, read_env_file
 from .providers.env import EnvSettingsSource
+from .providers.gcp import GoogleSecretManagerSettingsSource
 from .providers.json import JsonConfigSettingsSource
 from .providers.pyproject import PyprojectTomlConfigSettingsSource
 from .providers.secrets import SecretsSettingsSource
@@ -45,6 +46,7 @@ __all__ = [
     'DotenvType',
     'EnvSettingsSource',
     'ForceDecode',
+    'GoogleSecretManagerSettingsSource',
     'InitSettingsSource',
     'JsonConfigSettingsSource',
     'NoDecode',
