@@ -914,7 +914,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             added_args.append(arg_names[0])
             kwargs['nargs'] = '?'
             kwargs['const'] = '{}'
-            kwargs['help'] = kwargs['help'] = CLI_SUPPRESS if is_model_suppressed else f'set {arg_names[0]} from JSON string (default: {{}})'
+            kwargs['help'] = kwargs['help'] = (
+                CLI_SUPPRESS if is_model_suppressed else f'set {arg_names[0]} from JSON string (default: {{}})'
+            )
             model_group = self._add_group(parser, **model_group_kwargs)
             self._add_argument(model_group, *(f'{flag_prefix}{name}' for name in arg_names), **kwargs)
         for model in sub_models:
