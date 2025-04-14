@@ -2167,7 +2167,7 @@ def test_cli_suppress(capsys, monkeypatch):
 
         assert (
             capsys.readouterr().out
-            == f"""usage: example.py [-h] [--visible_obj JSON] [--visible_obj.visible_a int]
+            == f"""usage: example.py [-h] [--visible_obj [JSON]] [--visible_obj.visible_a int]
                   [--visible_obj.visible_b int]
 
 {ARGPARSE_OPTIONS_TEXT}:
