@@ -13,6 +13,7 @@ from .cli import (
 )
 from .dotenv import DotEnvSettingsSource
 from .env import EnvSettingsSource
+from .gcp import GoogleSecretManagerSettingsSource
 from .json import JsonConfigSettingsSource
 from .pyproject import PyprojectTomlConfigSettingsSource
 from .secrets import SecretsSettingsSource
@@ -31,6 +32,7 @@ __all__ = [
     'CliSuppress',
     'DotEnvSettingsSource',
     'EnvSettingsSource',
+    'GoogleSecretManagerSettingsSource',
     'JsonConfigSettingsSource',
     'PyprojectTomlConfigSettingsSource',
     'SecretsSettingsSource',
