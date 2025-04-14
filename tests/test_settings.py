@@ -2348,13 +2348,18 @@ def test_env_json_field(env):
 
 
 def test_env_parse_enums(env):
-    class Settings(BaseSettings):
+    class NestedEnum(BaseModel):
+        fruit: FruitsEnum
+
+    class Settings(BaseSettings, env_nested_delimiter='__'):
         fruit: FruitsEnum
         union_fruit: Optional[Union[int, FruitsEnum]] = None
+        nested: NestedEnum
 
     with pytest.raises(ValidationError) as exc_info:
         env.set('FRUIT', 'kiwi')
         env.set('UNION_FRUIT', 'kiwi')
+        env.set('NESTED__FRUIT', 'kiwi')
         s = Settings()
     assert exc_info.value.errors(include_url=False) == [
         {
@@ -2385,22 +2390,43 @@ def test_env_parse_enums(env):
             'msg': 'Input should be 0, 1 or 2',
             'type': 'enum',
         },
+        {
+            'ctx': {
+                'expected': '0, 1 or 2',
+            },
+            'input': 'kiwi',
+            'loc': (
+                'nested',
+                'fruit',
+            ),
+            'msg': 'Input should be 0, 1 or 2',
+            'type': 'enum',
+        },
     ]
 
     env.set('FRUIT', str(FruitsEnum.lime.value))
     env.set('UNION_FRUIT', str(FruitsEnum.lime.value))
+    env.set('NESTED__FRUIT', str(FruitsEnum.lime.value))
     s = Settings()
     assert s.fruit == FruitsEnum.lime
+    assert s.union_fruit == FruitsEnum.lime
+    assert s.nested.fruit == FruitsEnum.lime
 
     env.set('FRUIT', 'kiwi')
     env.set('UNION_FRUIT', 'kiwi')
+    env.set('NESTED__FRUIT', 'kiwi')
     s = Settings(_env_parse_enums=True)
     assert s.fruit == FruitsEnum.kiwi
+    assert s.union_fruit == FruitsEnum.kiwi
+    assert s.nested.fruit == FruitsEnum.kiwi
 
     env.set('FRUIT', str(FruitsEnum.lime.value))
     env.set('UNION_FRUIT', str(FruitsEnum.lime.value))
+    env.set('NESTED__FRUIT', str(FruitsEnum.lime.value))
     s = Settings(_env_parse_enums=True)
     assert s.fruit == FruitsEnum.lime
+    assert s.union_fruit == FruitsEnum.lime
+    assert s.nested.fruit == FruitsEnum.lime
 
 
 def test_env_parse_none_str(env):
