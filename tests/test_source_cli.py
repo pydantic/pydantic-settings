@@ -500,14 +500,14 @@ def test_cli_help_union_of_models(capsys, monkeypatch):
             Car()
         assert (
             capsys.readouterr().out
-            == f"""usage: example.py [-h] [--driver JSON] [--driver.meow str] [--driver.bark str]
-                  [--driver.caww str] [--driver.tweet str]
+            == f"""usage: example.py [-h] [--driver [JSON]] [--driver.meow str]
+                  [--driver.bark str] [--driver.caww str] [--driver.tweet str]
 
 {ARGPARSE_OPTIONS_TEXT}:
   -h, --help          show this help message and exit
 
 driver options:
-  --driver JSON       set driver from JSON string
+  --driver [JSON]     set driver from JSON string (default: {{}})
   --driver.meow str   (default: purr)
   --driver.bark str   (default: bark)
   --driver.caww str   (default: caww)
@@ -541,17 +541,17 @@ def test_cli_help_default_or_none_model(capsys, monkeypatch):
             Settings()
         assert (
             capsys.readouterr().out
-            == f"""usage: example.py [-h] [--flag bool] [--sub_model JSON]
-                  [--sub_model.flag bool] [--sub_model.deep JSON]
+            == f"""usage: example.py [-h] [--flag bool] [--sub_model [JSON]]
+                  [--sub_model.flag bool] [--sub_model.deep [JSON]]
                   [--sub_model.deep.flag bool]
-                  [--sub_model.deep.deeper {{JSON,null}}]
+                  [--sub_model.deep.deeper [{{JSON,null}}]]
                   [--sub_model.deep.deeper.flag bool]
-                  [--opt_model {{JSON,null}}] [--opt_model.flag bool]
-                  [--opt_model.deeper {{JSON,null}}]
-                  [--opt_model.deeper.flag bool] [--fact_model JSON]
-                  [--fact_model.flag bool] [--fact_model.deep JSON]
+                  [--opt_model [{{JSON,null}}]] [--opt_model.flag bool]
+                  [--opt_model.deeper [{{JSON,null}}]]
+                  [--opt_model.deeper.flag bool] [--fact_model [JSON]]
+                  [--fact_model.flag bool] [--fact_model.deep [JSON]]
                   [--fact_model.deep.flag bool]
-                  [--fact_model.deep.deeper {{JSON,null}}]
+                  [--fact_model.deep.deeper [{{JSON,null}}]]
                   [--fact_model.deep.deeper.flag bool]
 
 {ARGPARSE_OPTIONS_TEXT}:
@@ -559,21 +559,22 @@ def test_cli_help_default_or_none_model(capsys, monkeypatch):
   --flag bool           (default: True)
 
 sub_model options:
-  --sub_model JSON      set sub_model from JSON string
+  --sub_model [JSON]    set sub_model from JSON string (default: {{}})
   --sub_model.flag bool
                         (default: False)
 
 sub_model.deep options:
-  --sub_model.deep JSON
-                        set sub_model.deep from JSON string
+  --sub_model.deep [JSON]
+                        set sub_model.deep from JSON string (default: {{}})
   --sub_model.deep.flag bool
                         (default: True)
 
 sub_model.deep.deeper options:
   default: null (undefined)
 
-  --sub_model.deep.deeper {{JSON,null}}
-                        set sub_model.deep.deeper from JSON string
+  --sub_model.deep.deeper [{{JSON,null}}]
+                        set sub_model.deep.deeper from JSON string (default:
+                        {{}})
   --sub_model.deep.deeper.flag bool
                         (ifdef: required)
 
@@ -581,33 +582,34 @@ opt_model options:
   default: null (undefined)
   Group Doc
 
-  --opt_model {{JSON,null}}
-                        set opt_model from JSON string
+  --opt_model [{{JSON,null}}]
+                        set opt_model from JSON string (default: {{}})
   --opt_model.flag bool
                         (ifdef: required)
 
 opt_model.deeper options:
   default: null (undefined)
 
-  --opt_model.deeper {{JSON,null}}
-                        set opt_model.deeper from JSON string
+  --opt_model.deeper [{{JSON,null}}]
+                        set opt_model.deeper from JSON string (default: {{}})
   --opt_model.deeper.flag bool
                         (ifdef: required)
 
 fact_model options:
-  --fact_model JSON     set fact_model from JSON string
+  --fact_model [JSON]   set fact_model from JSON string (default: {{}})
   --fact_model.flag bool
                         (default factory: <lambda>)
 
 fact_model.deep options:
-  --fact_model.deep JSON
-                        set fact_model.deep from JSON string
+  --fact_model.deep [JSON]
+                        set fact_model.deep from JSON string (default: {{}})
   --fact_model.deep.flag bool
                         (default factory: <lambda>)
 
 fact_model.deep.deeper options:
-  --fact_model.deep.deeper {{JSON,null}}
-                        set fact_model.deep.deeper from JSON string
+  --fact_model.deep.deeper [{{JSON,null}}]
+                        set fact_model.deep.deeper from JSON string (default:
+                        {{}})
   --fact_model.deep.deeper.flag bool
                         (default factory: <lambda>)
 """
@@ -1530,13 +1532,13 @@ def test_cli_avoid_json(capsys, monkeypatch):
 
         assert (
             capsys.readouterr().out
-            == f"""usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
+            == f"""usage: example.py [-h] [--sub_model [JSON]] [--sub_model.v1 int]
 
 {ARGPARSE_OPTIONS_TEXT}:
   -h, --help          show this help message and exit
 
 sub_model options:
-  --sub_model JSON    set sub_model from JSON string
+  --sub_model [JSON]  set sub_model from JSON string (default: {{}})
   --sub_model.v1 int  (required)
 """
         )
@@ -1574,13 +1576,13 @@ def test_cli_remove_empty_groups(capsys, monkeypatch):
 
         assert (
             capsys.readouterr().out
-            == f"""usage: example.py [-h] [--sub_model JSON]
+            == f"""usage: example.py [-h] [--sub_model [JSON]]
 
 {ARGPARSE_OPTIONS_TEXT}:
-  -h, --help        show this help message and exit
+  -h, --help          show this help message and exit
 
 sub_model options:
-  --sub_model JSON  set sub_model from JSON string
+  --sub_model [JSON]  set sub_model from JSON string (default: {{}})
 """
         )
 
@@ -1654,7 +1656,7 @@ def test_cli_use_class_docs_for_groups(capsys, monkeypatch):
 
         assert (
             capsys.readouterr().out
-            == f"""usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
+            == f"""usage: example.py [-h] [--sub_model [JSON]] [--sub_model.v1 int]
 
 My application help text.
 
@@ -1664,7 +1666,7 @@ My application help text.
 sub_model options:
   The help text from the field description
 
-  --sub_model JSON    set sub_model from JSON string
+  --sub_model [JSON]  set sub_model from JSON string (default: {{}})
   --sub_model.v1 int  (required)
 """
         )
@@ -1674,7 +1676,7 @@ sub_model options:
 
         assert (
             capsys.readouterr().out
-            == f"""usage: example.py [-h] [--sub_model JSON] [--sub_model.v1 int]
+            == f"""usage: example.py [-h] [--sub_model [JSON]] [--sub_model.v1 int]
 
 My application help text.
 
@@ -1684,7 +1686,7 @@ My application help text.
 sub_model options:
   The help text from the class docstring
 
-  --sub_model JSON    set sub_model from JSON string
+  --sub_model [JSON]  set sub_model from JSON string (default: {{}})
   --sub_model.v1 int  (required)
 """
         )
@@ -2150,9 +2152,25 @@ def test_cli_app_exceptions():
 
 
 def test_cli_suppress(capsys, monkeypatch):
+    class DeepHiddenSubModel(BaseModel):
+        deep_hidden_a: int
+        deep_hidden_b: int
+
+    class HiddenSubModel(BaseModel):
+        hidden_a: int
+        hidden_b: int
+        deep_hidden_obj: DeepHiddenSubModel
+
+    class SubModel(BaseModel):
+        visible_a: int
+        visible_b: int
+        deep_hidden_obj: CliSuppress[DeepHiddenSubModel]
+
     class Settings(BaseSettings, cli_parse_args=True):
         field_a: CliSuppress[int] = 0
         field_b: str = Field(default=1, description=CLI_SUPPRESS)
+        hidden_obj: CliSuppress[HiddenSubModel]
+        visible_obj: SubModel
 
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
@@ -2162,10 +2180,18 @@ def test_cli_suppress(capsys, monkeypatch):
 
         assert (
             capsys.readouterr().out
-            == f"""usage: example.py [-h]
+            == f"""usage: example.py [-h] [--visible_obj [JSON]] [--visible_obj.visible_a int]
+                  [--visible_obj.visible_b int]
 
 {ARGPARSE_OPTIONS_TEXT}:
-  -h, --help  show this help message and exit
+  -h, --help            show this help message and exit
+
+visible_obj options:
+  --visible_obj [JSON]  set visible_obj from JSON string (default: {{}})
+  --visible_obj.visible_a int
+                        (required)
+  --visible_obj.visible_b int
+                        (required)
 """
         )
 
@@ -2424,3 +2450,17 @@ positional arguments:
   --deep-arg str  (required)
 """
         )
+
+
+def test_cli_json_optional_default():
+    class Nested(BaseModel):
+        foo: int = 1
+        bar: int = 2
+
+    class Options(BaseSettings):
+        nested: Nested = Nested(foo=3, bar=4)
+
+    assert CliApp.run(Options, cli_args=[]).model_dump() == {'nested': {'foo': 3, 'bar': 4}}
+    assert CliApp.run(Options, cli_args=['--nested']).model_dump() == {'nested': {'foo': 1, 'bar': 2}}
+    assert CliApp.run(Options, cli_args=['--nested={}']).model_dump() == {'nested': {'foo': 1, 'bar': 2}}
+    assert CliApp.run(Options, cli_args=['--nested.foo=5']).model_dump() == {'nested': {'foo': 5, 'bar': 2}}
