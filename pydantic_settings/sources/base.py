@@ -261,7 +261,7 @@ class InitSettingsSource(PydanticBaseSettingsSource):
     ):
         self.init_kwargs = {}
         init_kwarg_names = set(init_kwargs.keys())
-        for field_name, field_info in settings_cls.model_fields.items():
+        for field_name, field_info in settings_cls.__pydantic_fields__.items():
             alias_names, *_ = _get_alias_names(field_name, field_info)
             init_kwarg_name = init_kwarg_names & set(alias_names)
             if init_kwarg_name:
