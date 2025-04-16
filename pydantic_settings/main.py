@@ -572,7 +572,7 @@ class CliApp:
 
             model = CliAppBaseSettings(**model_init_data)
             model_init_data = {}
-            for field_name, field_info in model.__pydantic_fields__.items():
+            for field_name, field_info in type(model).model_fields.items():
                 model_init_data[_field_name_for_signature(field_name, field_info)] = getattr(model, field_name)
 
         return CliApp._run_cli_cmd(model_cls(**model_init_data), cli_cmd_method_name, is_required=False)
