@@ -22,7 +22,7 @@ except ImportError:
 
 
 def test_repr() -> None:
-    source = TomlConfigSettingsSource(BaseSettings(), Path('config.toml'))
+    source = TomlConfigSettingsSource(BaseSettings, Path('config.toml'))
     assert repr(source) == 'TomlConfigSettingsSource(toml_file=config.toml)'
 
 
