@@ -17,7 +17,7 @@ from pydantic_settings import (
 
 
 def test_repr() -> None:
-    source = JsonConfigSettingsSource(BaseSettings(), Path('config.json'))
+    source = JsonConfigSettingsSource(BaseSettings, Path('config.json'))
     assert repr(source) == 'JsonConfigSettingsSource(json_file=config.json)'
 
 

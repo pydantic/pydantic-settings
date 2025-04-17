@@ -22,7 +22,7 @@ except ImportError:
 
 
 def test_repr() -> None:
-    source = YamlConfigSettingsSource(BaseSettings(), Path('config.yaml'))
+    source = YamlConfigSettingsSource(BaseSettings, Path('config.yaml'))
     assert repr(source) == 'YamlConfigSettingsSource(yaml_file=config.yaml)'
 
 
