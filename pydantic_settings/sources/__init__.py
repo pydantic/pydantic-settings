@@ -1,6 +1,7 @@
 """Package for handling configuration sources in pydantic-settings."""
 
 from .base import (
+    ConfigFileSourceMixin,
     DefaultSettingsSource,
     InitSettingsSource,
     PydanticBaseEnvSettingsSource,
@@ -55,6 +56,7 @@ __all__ = [
     'PathType',
     'PydanticBaseEnvSettingsSource',
     'PydanticBaseSettingsSource',
+    'ConfigFileSourceMixin',
     'PydanticModel',
     'PyprojectTomlConfigSettingsSource',
     'SecretsSettingsSource',
