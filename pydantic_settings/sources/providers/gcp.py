@@ -29,7 +29,7 @@ def import_gcp_secret_manager() -> None:
         from google.cloud.secretmanager import SecretManagerServiceClient
     except ImportError as e:
         raise ImportError(
-            'GCP Secret Namager dependencies are not installed, run `pip install pydantic-settings[gcp-secret-manager]`'
+            'GCP Secret Manager dependencies are not installed, run `pip install pydantic-settings[gcp-secret-manager]`'
         ) from e
 
 
