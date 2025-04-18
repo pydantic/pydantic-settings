@@ -5,6 +5,7 @@ from .base import (
     InitSettingsSource,
     PydanticBaseEnvSettingsSource,
     PydanticBaseSettingsSource,
+    ConfigFileSourceMixin,
     get_subcommand,
 )
 from .providers.aws import AWSSecretsManagerSettingsSource
@@ -55,6 +56,7 @@ __all__ = [
     'PathType',
     'PydanticBaseEnvSettingsSource',
     'PydanticBaseSettingsSource',
+    'ConfigFileSourceMixin',
     'PydanticModel',
     'PyprojectTomlConfigSettingsSource',
     'SecretsSettingsSource',
