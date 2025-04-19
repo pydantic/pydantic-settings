@@ -166,3 +166,34 @@ def test_multiple_file_yaml(tmp_path):
 
     s = Settings()
     assert s.model_dump() == {'yaml3': 3, 'yaml4': 4}
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
+def test_yaml_nested_key(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text(
+        """
+    foobar: "Hello"
+    nested:
+        nested_field: "world!"
+    """
+    )
+
+    class Settings(BaseSettings):
+        nested_field: str
+
+        model_config = SettingsConfigDict(yaml_file=p, yaml_nested_key='nested')
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.nested_field == 'world!'

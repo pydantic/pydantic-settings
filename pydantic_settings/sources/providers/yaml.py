@@ -39,6 +39,7 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         settings_cls: type[BaseSettings],
         yaml_file: PathType | None = DEFAULT_PATH,
         yaml_file_encoding: str | None = None,
+        yaml_nested_key: str | None = None,
     ):
         self.yaml_file_path = yaml_file if yaml_file != DEFAULT_PATH else settings_cls.model_config.get('yaml_file')
         self.yaml_file_encoding = (
@@ -46,7 +47,13 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
             if yaml_file_encoding is not None
             else settings_cls.model_config.get('yaml_file_encoding')
         )
+        self.yaml_nested_key = (
+            yaml_nested_key if yaml_nested_key is not None else settings_cls.model_config.get('yaml_nested_key')
+        )
         self.yaml_data = self._read_files(self.yaml_file_path)
+
+        if self.yaml_nested_key:
+            self.yaml_data = self.yaml_data[self.yaml_nested_key]
         super().__init__(settings_cls, self.yaml_data)
 
     def _read_file(self, file_path: Path) -> dict[str, Any]:
