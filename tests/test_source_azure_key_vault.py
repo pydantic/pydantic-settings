@@ -3,7 +3,6 @@ Test pydantic_settings.AzureKeyVaultSettingsSource.
 """
 
 import pytest
-from azure.keyvault.secrets import SecretClient
 from pydantic import BaseModel, Field
 from pytest_mock import MockerFixture
 
@@ -19,7 +18,7 @@ try:
     import_azure_key_vault()
     from azure.core.exceptions import ResourceNotFoundError
     from azure.identity import DefaultAzureCredential
-    from azure.keyvault.secrets import KeyVaultSecret, SecretProperties
+    from azure.keyvault.secrets import KeyVaultSecret, SecretClient, SecretProperties
 except ImportError:
     azure_key_vault = False
 
