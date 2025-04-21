@@ -55,7 +55,12 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         self.yaml_data = self._read_files(self.yaml_file_path)
 
         if self.yaml_config_section:
-            self.yaml_data = self.yaml_data[self.yaml_config_section]
+            try:
+                self.yaml_data = self.yaml_data[self.yaml_config_section]
+            except KeyError:
+                raise KeyError(
+                    f'yaml_config_section key "{self.yaml_config_section}" not found in {self.yaml_file_path}'
+                )
         super().__init__(settings_cls, self.yaml_data)
 
     def _read_file(self, file_path: Path) -> dict[str, Any]:
