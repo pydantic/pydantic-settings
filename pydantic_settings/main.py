@@ -62,6 +62,14 @@ class SettingsConfigDict(ConfigDict, total=False):
     json_file_encoding: str | None
     yaml_file: PathType | None
     yaml_file_encoding: str | None
+    yaml_config_section: str | None
+    """
+    Specifies the top-level key in a YAML file from which to load the settings.
+    If provided, the settings will be loaded from the nested section under this key.
+    This is useful when the YAML file contains multiple configuration sections
+    and you only want to load a specific subset into your settings model.
+    """
+
     pyproject_toml_depth: int
     """
     Number of levels **up** from the current working directory to attempt to find a pyproject.toml
@@ -446,6 +454,7 @@ class BaseSettings(BaseModel):
         json_file_encoding=None,
         yaml_file=None,
         yaml_file_encoding=None,
+        yaml_config_section=None,
         toml_file=None,
         secrets_dir=None,
         protected_namespaces=('model_validate', 'model_dump', 'settings_customise_sources'),
