@@ -2169,7 +2169,7 @@ def test_cli_suppress(capsys, monkeypatch):
     class Settings(BaseSettings, cli_parse_args=True):
         field_a: CliSuppress[int] = 0
         field_b: str = Field(default=1, description=CLI_SUPPRESS)
-        hidden_obj: CliSuppress[HiddenSubModel]
+        hidden_obj: CliSuppress[HiddenSubModel] = Field(description='hidden_obj description')
         visible_obj: SubModel
 
     with monkeypatch.context() as m:
