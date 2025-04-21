@@ -169,7 +169,7 @@ def test_multiple_file_yaml(tmp_path):
 
 
 @pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
-def test_yaml_nested_key(tmp_path):
+def test_yaml_config_section(tmp_path):
     p = tmp_path / '.env'
     p.write_text(
         """
@@ -182,7 +182,7 @@ def test_yaml_nested_key(tmp_path):
     class Settings(BaseSettings):
         nested_field: str
 
-        model_config = SettingsConfigDict(yaml_file=p, yaml_nested_key='nested')
+        model_config = SettingsConfigDict(yaml_file=p, yaml_config_section='nested')
 
         @classmethod
         def settings_customise_sources(
