@@ -2159,16 +2159,16 @@ def test_cli_suppress(capsys, monkeypatch):
     class HiddenSubModel(BaseModel):
         hidden_a: int
         hidden_b: int
-        deep_hidden_obj: DeepHiddenSubModel
+        deep_hidden_obj: DeepHiddenSubModel = Field(description='deep_hidden_obj description')
 
     class SubModel(BaseModel):
         visible_a: int
         visible_b: int
-        deep_hidden_obj: CliSuppress[DeepHiddenSubModel]
+        deep_hidden_obj: CliSuppress[DeepHiddenSubModel] = Field(description='deep_hidden_obj description')
 
     class Settings(BaseSettings, cli_parse_args=True):
         field_a: CliSuppress[int] = 0
-        field_b: str = Field(default=1, description=CLI_SUPPRESS)
+        field_b: str = Field(default='hi', description=CLI_SUPPRESS)
         hidden_obj: CliSuppress[HiddenSubModel] = Field(description='hidden_obj description')
         visible_obj: SubModel
 
