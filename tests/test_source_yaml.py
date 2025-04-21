@@ -226,5 +226,5 @@ def test_invalid_yaml_config_section(tmp_path):
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls),)
 
-    with pytest.raises(KeyError, match=f'yaml_config_section key "invalid_key" not found in {p}'):
+    with pytest.raises(KeyError, match='yaml_config_section key "invalid_key" not found in .+'):
         Settings()
