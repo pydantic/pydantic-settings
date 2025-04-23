@@ -29,11 +29,12 @@ from .providers.pyproject import PyprojectTomlConfigSettingsSource
 from .providers.secrets import SecretsSettingsSource
 from .providers.toml import TomlConfigSettingsSource
 from .providers.yaml import YamlConfigSettingsSource
-from .types import ENV_FILE_SENTINEL, DotenvType, ForceDecode, NoDecode, PathType, PydanticModel
+from .types import DEFAULT_PATH, ENV_FILE_SENTINEL, DotenvType, ForceDecode, NoDecode, PathType, PydanticModel
 
 __all__ = [
     'CLI_SUPPRESS',
     'ENV_FILE_SENTINEL',
+    'DEFAULT_PATH',
     'AWSSecretsManagerSettingsSource',
     'AzureKeyVaultSettingsSource',
     'CliExplicitFlag',
