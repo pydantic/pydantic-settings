@@ -160,3 +160,31 @@ class TestAzureKeyVaultSettingsSource:
             raise ResourceNotFoundError()
 
         return key_vault_secret
+
+    def test_dash_to_underscore_translation_enabled_by_default(self, mocker: MockerFixture) -> None:
+        """Test that dashes in secret names are mapped to underscores in field names."""
+
+        class AzureKeyVaultSettings(BaseSettings):
+            my_field: str
+
+        expected_secrets = [
+            type('', (), {'name': 'my-field', 'enabled': True}),
+        ]
+        expected_secret_value = 'SecretValue'
+
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.list_properties_of_secrets.__qualname__}',
+            return_value=expected_secrets,
+        )
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.get_secret.__qualname__}',
+            return_value=KeyVaultSecret(SecretProperties(), expected_secret_value),
+        )
+
+        obj = AzureKeyVaultSettingsSource(
+            AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential()
+        )
+
+        settings = obj()
+
+        assert settings['my_field'] == expected_secret_value
