@@ -923,11 +923,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
         preferred_alias = alias_names[0]
         is_model_suppressed = self._is_field_suppressed(field_info) or is_model_suppressed
+        if is_model_suppressed:
+            model_group_kwargs['description'] = CLI_SUPPRESS
         if not self.cli_avoid_json:
             added_args.append(arg_names[0])
             kwargs['nargs'] = '?'
             kwargs['const'] = '{}'
-            kwargs['help'] = kwargs['help'] = (
+            kwargs['help'] = (
                 CLI_SUPPRESS if is_model_suppressed else f'set {arg_names[0]} from JSON string (default: {{}})'
             )
             model_group = self._add_group(parser, **model_group_kwargs)
