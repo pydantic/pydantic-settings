@@ -412,21 +412,24 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             if not annotation or not hasattr(annotation, 'model_fields'):
                 values[name] = value
                 continue
+            else:
+                model_fields: dict[str, FieldInfo] = annotation.model_fields
 
             # Find field in sub model by looking in fields case insensitively
-            for sub_model_field_name, f in annotation.model_fields.items():
-                if not f.validation_alias and sub_model_field_name.lower() == name.lower():
-                    sub_model_field = f
+            for sub_model_field_name, sub_model_field in model_fields.items():
+                aliases, _ = _get_alias_names(sub_model_field_name, sub_model_field)
+                _search = (alias for alias in aliases if alias.lower() == name.lower())
+                if field_key := next(_search, None):
                     break
 
-            if not sub_model_field:
+            if not field_key:
                 values[name] = value
                 continue
 
             if _lenient_issubclass(sub_model_field.annotation, BaseModel) and isinstance(value, dict):
-                values[sub_model_field_name] = self._replace_field_names_case_insensitively(sub_model_field, value)
+                values[field_key] = self._replace_field_names_case_insensitively(sub_model_field, value)
             else:
-                values[sub_model_field_name] = value
+                values[field_key] = value
 
         return values
 
