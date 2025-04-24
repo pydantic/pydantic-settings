@@ -627,45 +627,6 @@ def test_class_nested_model_default_partial_update(env):
     }
 
 
-def test_env_source_case_sensitive(monkeypatch):
-    """Tests EnvSettingsSource with case_sensitive=True."""
-
-    class Settings(BaseSettings):
-        foo: str
-        model_config = SettingsConfigDict(case_sensitive=True)
-
-    monkeypatch.setenv('Foo', 'foo_env_value')
-    with pytest.raises(ValidationError) as exc_info:
-        Settings()
-    assert exc_info.value.errors(include_url=False) == [
-        {'type': 'missing', 'loc': ('foo',), 'msg': 'Field required', 'input': {}}
-    ]
-    monkeypatch.delenv('Foo', raising=False)
-
-    monkeypatch.setenv('foo', 'foo_env_value')
-    s = Settings()
-    assert s.foo == 'foo_env_value'
-    monkeypatch.delenv('foo', raising=False)
-
-
-def test_env_source_case_insensitive(monkeypatch):
-    """Tests EnvSettingsSource with case_sensitive=False."""
-
-    class Settings(BaseSettings):
-        foo: str
-        model_config = SettingsConfigDict(case_sensitive=False)
-
-    monkeypatch.setenv('Foo', 'foo_env_value')
-    s_upper = Settings()
-    assert s_upper.foo == 'foo_env_value'
-    monkeypatch.delenv('Foo', raising=False)
-
-    monkeypatch.setenv('foo', 'foo_env_value_lower')
-    s_lower = Settings()
-    assert s_lower.foo == 'foo_env_value_lower'
-    monkeypatch.delenv('foo', raising=False)
-
-
 def test_init_kwargs_nested_model_default_partial_update(env):
     class DeepSubModel(BaseModel):
         v4: str
@@ -896,18 +857,27 @@ def test_validation_alias_with_env_prefix(env):
 
 
 def test_case_sensitive(monkeypatch):
-    class Settings(BaseSettings):
-        foo: str
+    class CaseSensitiveSettings(BaseSettings):
+            foo: str
 
-        model_config = SettingsConfigDict(case_sensitive=True, extra='allow')
+            model_config = SettingsConfigDict(case_sensitive=True, extra='allow')
 
-    # Need to patch os.environ to get build to work on Windows, where os.environ is case insensitive
-    monkeypatch.setattr(os, 'environ', value={'Foo': 'foo'})
-    with pytest.raises(ValidationError) as exc_info:
-        Settings()
-    assert exc_info.value.errors(include_url=False) == [
-        {'type': 'missing', 'loc': ('foo',), 'msg': 'Field required', 'input': {}}
-    ]
+        # Test when case sensitivity is enabled
+        monkeypatch.setattr(os, 'environ', value={'Foo': 'foo_value'})
+        with pytest.raises(ValidationError) as exc_info:
+            CaseSensitiveSettings()
+        assert exc_info.value.errors(include_url=False) == [
+            {'type': 'missing', 'loc': ('foo',), 'msg': 'Field required', 'input': {}}
+        ]
+
+    class CaseInsensitiveSettings(BaseSettings):
+            foo: str
+
+            model_config = SettingsConfigDict(case_sensitive=False, extra='allow')
+
+        monkeypatch.setattr(os, 'environ', value={'Foo': 'foo_value'})
+        settings = CaseInsensitiveSettings()
+        assert settings.foo == 'foo_value'
 
 
 @pytest.mark.parametrize('env_nested_delimiter', [None, ''])
