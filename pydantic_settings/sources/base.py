@@ -258,19 +258,37 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         settings_cls: type[BaseSettings],
         init_kwargs: dict[str, Any],
         nested_model_default_partial_update: bool | None = None,
+        case_sensitive: bool | None = None,
     ):
-        self.init_kwargs = {}
-        init_kwarg_names = set(init_kwargs.keys())
-        for field_name, field_info in settings_cls.model_fields.items():
-            alias_names, *_ = _get_alias_names(field_name, field_info)
-            init_kwarg_name = init_kwarg_names & set(alias_names)
-            if init_kwarg_name:
-                preferred_alias = alias_names[0]
-                init_kwarg_names -= init_kwarg_name
-                self.init_kwargs[preferred_alias] = init_kwargs[init_kwarg_name.pop()]
-        self.init_kwargs.update({key: val for key, val in init_kwargs.items() if key in init_kwarg_names})
-
         super().__init__(settings_cls)
+
+        self.case_sensitive = case_sensitive if case_sensitive is not None else self.config.get('case_sensitive', False)
+
+        self.init_kwargs = {}
+        init_kwargs_processed = set()
+
+        init_kwargs_lookup: dict[str, str]
+        if not self.case_sensitive:
+            init_kwargs_lookup = {k.lower(): k for k in init_kwargs}
+        else:
+            init_kwargs_lookup = {k: k for k in init_kwargs}
+
+        for field_name, field_info in settings_cls.model_fields.items():
+            canonical_aliases, _ = _get_alias_names(field_name, field_info, case_sensitive=True)
+            preferred_alias = canonical_aliases[0]
+
+            match_aliases, _ = _get_alias_names(field_name, field_info, case_sensitive=self.case_sensitive)
+            for alias in match_aliases:
+                original_kwarg_key = init_kwargs_lookup.get(alias)
+                if original_kwarg_key is not None and original_kwarg_key not in init_kwargs_processed:
+                    self.init_kwargs[preferred_alias] = init_kwargs[original_kwarg_key]
+                    init_kwargs_processed.add(original_kwarg_key)
+                    break
+
+        for original_key, value in init_kwargs.items():
+            if original_key not in init_kwargs_processed:
+                self.init_kwargs[original_key] = value
+
         self.nested_model_default_partial_update = (
             nested_model_default_partial_update
             if nested_model_default_partial_update is not None
@@ -278,7 +296,6 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         )
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
-        # Nothing to do here. Only implement the return statement to make mypy happy
         return None, '', False
 
     def __call__(self) -> dict[str, Any]:
@@ -289,7 +306,11 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         )
 
     def __repr__(self) -> str:
-        return f'{self.__class__.__name__}(init_kwargs={self.init_kwargs!r})'
+        return (
+            f'{self.__class__.__name__}(init_kwargs={self.init_kwargs!r}, '
+            f'case_sensitive={self.case_sensitive!r}, '
+            f'nested_model_default_partial_update={self.nested_model_default_partial_update!r})'
+        )
 
 
 class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):

@@ -860,7 +860,7 @@ def test_case_sensitive(monkeypatch):
     class Settings(BaseSettings):
         foo: str
 
-        model_config = SettingsConfigDict(case_sensitive=True)
+        model_config = SettingsConfigDict(case_sensitive=True, extra='allow')
 
     # Need to patch os.environ to get build to work on Windows, where os.environ is case insensitive
     monkeypatch.setattr(os, 'environ', value={'Foo': 'foo'})
