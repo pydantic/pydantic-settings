@@ -306,11 +306,7 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         )
 
     def __repr__(self) -> str:
-        return (
-            f'{self.__class__.__name__}(init_kwargs={self.init_kwargs!r}, '
-            f'case_sensitive={self.case_sensitive!r}, '
-            f'nested_model_default_partial_update={self.nested_model_default_partial_update!r})'
-        )
+        return f'{self.__class__.__name__}(init_kwargs={self.init_kwargs!r})'
 
 
 class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
