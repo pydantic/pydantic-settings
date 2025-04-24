@@ -881,40 +881,40 @@ def test_case_sensitive(monkeypatch):
 
 def test_init_settings_source_extra_fields_case_sensitive(monkeypatch):
     class CaseSensitiveSettings(BaseSettings):
-        foo: str = Field(..., alias="FOO")
-        model_config = SettingsConfigDict(case_sensitive=True, extra="allow")
+        foo: str = Field(..., alias='FOO')
+        model_config = SettingsConfigDict(case_sensitive=True, extra='allow')
 
     # Test case-sensitive with missing alias
-    monkeypatch.setattr(os, "environ", value={})
-    init_kwargs = {"Foo": "wrong_value", "extra_field": "extra_value"}
+    monkeypatch.setattr(os, 'environ', value={})
+    init_kwargs = {'Foo': 'wrong_value', 'extra_field': 'extra_value'}
     with pytest.raises(ValidationError) as exc_info:
         CaseSensitiveSettings(**init_kwargs)
     assert exc_info.value.errors(include_url=False) == [
         {
-            "type": "missing",
-            "loc": ("FOO",),
-            "msg": "Field required",
-            "input": init_kwargs,
+            'type': 'missing',
+            'loc': ('FOO',),
+            'msg': 'Field required',
+            'input': init_kwargs,
         }
     ]
 
     # Test case-sensitive with correct alias and extra field
-    monkeypatch.setattr(os, "environ", value={})
-    init_kwargs = {"FOO": "foo_value", "extra_field": "extra_value"}
+    monkeypatch.setattr(os, 'environ', value={})
+    init_kwargs = {'FOO': 'foo_value', 'extra_field': 'extra_value'}
     settings = CaseSensitiveSettings(**init_kwargs)
-    assert settings.foo == "foo_value"
-    assert settings.__pydantic_extra__ == {"extra_field": "extra_value"}
+    assert settings.foo == 'foo_value'
+    assert settings.__pydantic_extra__ == {'extra_field': 'extra_value'}
 
     class CaseInsensitiveSettings(BaseSettings):
-        foo: str = Field(..., alias="FOO")
-        model_config = SettingsConfigDict(case_sensitive=False, extra="allow")
+        foo: str = Field(..., alias='FOO')
+        model_config = SettingsConfigDict(case_sensitive=False, extra='allow')
 
     # Test case-insensitive with extra field
-    monkeypatch.setattr(os, "environ", value={})
-    init_kwargs = {"Foo": "foo_value", "extra_field": "extra_value"}
+    monkeypatch.setattr(os, 'environ', value={})
+    init_kwargs = {'Foo': 'foo_value', 'extra_field': 'extra_value'}
     settings = CaseInsensitiveSettings(**init_kwargs)
-    assert settings.foo == "foo_value"
-    assert settings.__pydantic_extra__ == {"extra_field": "extra_value"}
+    assert settings.foo == 'foo_value'
+    assert settings.__pydantic_extra__ == {'extra_field': 'extra_value'}
 
 
 @pytest.mark.parametrize('env_nested_delimiter', [None, ''])
