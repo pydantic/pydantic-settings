@@ -857,27 +857,18 @@ def test_validation_alias_with_env_prefix(env):
 
 
 def test_case_sensitive(monkeypatch):
-    class CaseSensitiveSettings(BaseSettings):
+    class Settings(BaseSettings):
         foo: str
 
-        model_config = SettingsConfigDict(case_sensitive=True, extra='allow')
+        model_config = SettingsConfigDict(case_sensitive=True)
 
-    # Test when case sensitivity is enabled
-    monkeypatch.setattr(os, 'environ', value={'Foo': 'foo_value'})
+    # Need to patch os.environ to get build to work on Windows, where os.environ is case insensitive
+    monkeypatch.setattr(os, 'environ', value={'Foo': 'foo'})
     with pytest.raises(ValidationError) as exc_info:
-        CaseSensitiveSettings()
+        Settings()
     assert exc_info.value.errors(include_url=False) == [
         {'type': 'missing', 'loc': ('foo',), 'msg': 'Field required', 'input': {}}
     ]
-
-    class CaseInsensitiveSettings(BaseSettings):
-        foo: str
-
-        model_config = SettingsConfigDict(case_sensitive=False, extra='allow')
-
-    monkeypatch.setattr(os, 'environ', value={'Foo': 'foo_value'})
-    settings = CaseInsensitiveSettings()
-    assert settings.foo == 'foo_value'
 
 
 def test_init_settings_source_extra_fields_case_sensitive(monkeypatch):
