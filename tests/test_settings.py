@@ -879,6 +879,7 @@ def test_case_sensitive(monkeypatch):
     settings = CaseInsensitiveSettings()
     assert settings.foo == 'foo_value'
 
+
 def test_init_settings_source_extra_fields_case_sensitive(monkeypatch):
     class CaseSensitiveSettings(BaseSettings):
         foo: str = Field(..., alias='FOO')
