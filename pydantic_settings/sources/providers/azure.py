@@ -82,7 +82,7 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
         settings_cls: type[BaseSettings],
         url: str,
         credential: TokenCredential,
-        dash_to_underscore: bool = True,
+        dash_to_underscore: bool = False,
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
         env_parse_none_str: str | None = None,
