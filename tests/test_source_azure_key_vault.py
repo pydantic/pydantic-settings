@@ -161,7 +161,7 @@ class TestAzureKeyVaultSettingsSource:
 
         return key_vault_secret
 
-    def test_dash_to_underscore_translation_enabled_by_default(self, mocker: MockerFixture) -> None:
+    def test_dash_to_underscore_translation(self, mocker: MockerFixture) -> None:
         """Test that dashes in secret names are mapped to underscores in field names."""
 
         class AzureKeyVaultSettings(BaseSettings):
@@ -182,7 +182,10 @@ class TestAzureKeyVaultSettingsSource:
         )
 
         obj = AzureKeyVaultSettingsSource(
-            AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential()
+            AzureKeyVaultSettings,
+            'https://my-resource.vault.azure.net/',
+            DefaultAzureCredential(),
+            dash_to_underscore=True,
         )
 
         settings = obj()
