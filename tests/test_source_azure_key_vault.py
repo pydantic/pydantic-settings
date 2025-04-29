@@ -166,9 +166,29 @@ class TestAzureKeyVaultSettingsSource:
 
         class AzureKeyVaultSettings(BaseSettings):
             my_field: str
+            alias_field: str = Field(..., alias='Secret-Alias')
+
+            @classmethod
+            def settings_customise_sources(
+                cls,
+                settings_cls: type[BaseSettings],
+                init_settings: PydanticBaseSettingsSource,
+                env_settings: PydanticBaseSettingsSource,
+                dotenv_settings: PydanticBaseSettingsSource,
+                file_secret_settings: PydanticBaseSettingsSource,
+            ) -> tuple[PydanticBaseSettingsSource, ...]:
+                return (
+                    AzureKeyVaultSettingsSource(
+                        settings_cls,
+                        'https://my-resource.vault.azure.net/',
+                        DefaultAzureCredential(),
+                        dash_to_underscore=True,
+                    ),
+                )
 
         expected_secrets = [
             type('', (), {'name': 'my-field', 'enabled': True}),
+            type('', (), {'name': 'Secret-Alias', 'enabled': True}),
         ]
         expected_secret_value = 'SecretValue'
 
@@ -181,13 +201,7 @@ class TestAzureKeyVaultSettingsSource:
             return_value=KeyVaultSecret(SecretProperties(), expected_secret_value),
         )
 
-        obj = AzureKeyVaultSettingsSource(
-            AzureKeyVaultSettings,
-            'https://my-resource.vault.azure.net/',
-            DefaultAzureCredential(),
-            dash_to_underscore=True,
-        )
+        settings = AzureKeyVaultSettings()
 
-        settings = obj()
-
-        assert settings['my_field'] == expected_secret_value
+        assert settings.my_field == expected_secret_value
+        assert settings.alias_field == expected_secret_value
