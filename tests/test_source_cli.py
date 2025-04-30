@@ -2464,3 +2464,30 @@ def test_cli_json_optional_default():
     assert CliApp.run(Options, cli_args=['--nested']).model_dump() == {'nested': {'foo': 1, 'bar': 2}}
     assert CliApp.run(Options, cli_args=['--nested={}']).model_dump() == {'nested': {'foo': 1, 'bar': 2}}
     assert CliApp.run(Options, cli_args=['--nested.foo=5']).model_dump() == {'nested': {'foo': 5, 'bar': 2}}
+
+
+def test_cli_parse_args_from_model_config_is_respected_with_settings_customise_sources(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class MySettings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+
+        foo: str
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (CliSettingsSource(settings_cls),)
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--foo', 'bar'])
+
+        cfg = CliApp.run(MySettings)
+
+        assert cfg.model_dump() == {'foo': 'bar'}
