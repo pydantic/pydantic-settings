@@ -160,3 +160,48 @@ class TestAzureKeyVaultSettingsSource:
             raise ResourceNotFoundError()
 
         return key_vault_secret
+
+    def test_dash_to_underscore_translation(self, mocker: MockerFixture) -> None:
+        """Test that dashes in secret names are mapped to underscores in field names."""
+
+        class AzureKeyVaultSettings(BaseSettings):
+            my_field: str
+            alias_field: str = Field(..., alias='Secret-Alias')
+
+            @classmethod
+            def settings_customise_sources(
+                cls,
+                settings_cls: type[BaseSettings],
+                init_settings: PydanticBaseSettingsSource,
+                env_settings: PydanticBaseSettingsSource,
+                dotenv_settings: PydanticBaseSettingsSource,
+                file_secret_settings: PydanticBaseSettingsSource,
+            ) -> tuple[PydanticBaseSettingsSource, ...]:
+                return (
+                    AzureKeyVaultSettingsSource(
+                        settings_cls,
+                        'https://my-resource.vault.azure.net/',
+                        DefaultAzureCredential(),
+                        dash_to_underscore=True,
+                    ),
+                )
+
+        expected_secrets = [
+            type('', (), {'name': 'my-field', 'enabled': True}),
+            type('', (), {'name': 'Secret-Alias', 'enabled': True}),
+        ]
+        expected_secret_value = 'SecretValue'
+
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.list_properties_of_secrets.__qualname__}',
+            return_value=expected_secrets,
+        )
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.get_secret.__qualname__}',
+            return_value=KeyVaultSecret(SecretProperties(), expected_secret_value),
+        )
+
+        settings = AzureKeyVaultSettings()
+
+        assert settings.my_field == expected_secret_value
+        assert settings.alias_field == expected_secret_value
