@@ -1925,6 +1925,7 @@ class AzureKeyVaultSettings(BaseSettings):
             settings_cls,
             os.environ['AZURE_KEY_VAULT_URL'],
             DefaultAzureCredential(),
+            dash_to_underscore=True,
         )
         return (az_key_vault_settings,)
 ```
