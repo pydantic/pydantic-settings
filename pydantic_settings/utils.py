@@ -26,7 +26,7 @@ def path_type_label(p: Path) -> str:
         if method(p):
             return name
 
-    return 'unknown'
+    return 'unknown'  # pragma: no cover
 
 
 # TODO remove and replace usage by `isinstance(cls, type) and issubclass(cls, class_or_tuple)`

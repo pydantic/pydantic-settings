@@ -79,6 +79,7 @@ testing = [
     "pytest-mock",
     "pytest-pretty",
     "moto[secretsmanager]",
+    "diff-cover>=9.2.0",
 ]
 
 [tool.pytest.ini_options]
@@ -89,19 +90,35 @@ filterwarnings = [
     'ignore::DeprecationWarning:botocore.*:',
 ]
 
+# https://coverage.readthedocs.io/en/latest/config.html#run
 [tool.coverage.run]
-source = ['pydantic_settings']
+include = [
+    "pydantic_settings/**/*.py",
+    "tests/**/*.py",
+]
 branch = true
-context = '${CONTEXT}'
 
+# https://coverage.readthedocs.io/en/latest/config.html#report
 [tool.coverage.report]
+skip_covered = true
+show_missing = true
+ignore_errors = true
 precision = 2
 exclude_lines = [
     'pragma: no cover',
     'raise NotImplementedError',
-    'raise NotImplemented',
     'if TYPE_CHECKING:',
+    'if typing.TYPE_CHECKING:',
     '@overload',
+    '@deprecated',
+    '@typing.overload',
+    '@abstractmethod',
+    '\(Protocol\):$',
+    'typing.assert_never',
+    '$\s*assert_never\(',
+    'if __name__ == .__main__.:',
+    'except ImportError as _import_error:',
+    '$\s*pass$',
 ]
 
 [tool.coverage.paths]

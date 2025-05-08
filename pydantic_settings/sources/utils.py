@@ -46,7 +46,7 @@ def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) ->
     if annotation is not None and _lenient_issubclass(annotation, RootModel) and annotation is not RootModel:
         annotation = cast('type[RootModel[Any]]', annotation)
         root_annotation = annotation.model_fields['root'].annotation
-        if root_annotation is not None:
+        if root_annotation is not None:  # pragma: no branch
             annotation = root_annotation
 
     if any(isinstance(md, Json) for md in metadata):  # type: ignore[misc]

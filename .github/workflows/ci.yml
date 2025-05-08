@@ -57,10 +57,12 @@ jobs:
       run: |
         uv sync --group testing --all-extras
 
+    - run: mkdir coverage
+
     - name: test
       run: make test
       env:
-        COVERAGE_FILE: .coverage.${{ runner.os }}-py${{ matrix.python }}
+        COVERAGE_FILE: coverage/.coverage.${{ runner.os }}-py${{ matrix.python }}
         CONTEXT: ${{ runner.os }}-py${{ matrix.python }}
 
     - name: uninstall deps
@@ -69,20 +71,63 @@ jobs:
     - name: test without deps
       run: make test
       env:
-        COVERAGE_FILE: .coverage.${{ runner.os }}-py${{ matrix.python }}-without-deps
+        COVERAGE_FILE: coverage/.coverage.${{ runner.os }}-py${{ matrix.python }}-without-deps
         CONTEXT: ${{ runner.os }}-py${{ matrix.python }}-without-deps
 
-    - run: uv run coverage combine
-    - run: uv run coverage xml
-
-    - uses: codecov/codecov-action@v4
+    - name: store coverage files
+      uses: actions/upload-artifact@v4
       with:
-        file: ./coverage.xml
-        env_vars: PYTHON,OS
+        name: coverage-${{ matrix.python }}-${{ runner.os }}
+        path: coverage
+        include-hidden-files: true
+
+  coverage:
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # needed for diff-cover
+          fetch-depth: 0
+
+      - name: get coverage files
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: coverage
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync --group testing --all-extras
+
+      - run: uv run coverage combine coverage
+
+      - run: uv run coverage html --show-contexts --title "Pydantic Settings coverage for ${{ github.sha }}"
+
+      - name: Store coverage html
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: htmlcov
+          include-hidden-files: true
+
+      - run: uv run coverage xml
+
+      - run: uv run diff-cover coverage.xml --html-report index.html
+
+      - name: Store diff coverage html
+        uses: actions/upload-artifact@v4
+        with:
+          name: diff-coverage-html
+          path: index.html
+
+      - run: uv run coverage report --fail-under 98
 
   check:  # This job does nothing and is only used for the branch protection
     if: always()
-    needs: [lint, test]
+    needs: [lint, test, coverage]
     runs-on: ubuntu-latest
 
     outputs:

@@ -21,7 +21,7 @@ def import_aws_secrets_manager() -> None:
     try:
         from boto3 import client as boto3_client
         from mypy_boto3_secretsmanager.client import SecretsManagerClient
-    except ImportError as e:
+    except ImportError as e:  # pragma: no cover
         raise ImportError(
             'AWS Secrets Manager dependencies are not installed, run `pip install pydantic-settings[aws-secrets-manager]`'
         ) from e
