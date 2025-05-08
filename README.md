@@ -1,6 +1,6 @@
 # pydantic-settings
 
-[![CI](https://github.com/pydantic/pydantic-settings/workflows/CI/badge.svg?event=push)](https://github.com/pydantic/pydantic-settings/actions?query=event%3Apush+branch%3Amain+workflow%3ACI)
+[![CI](https://github.com/pydantic/pydantic-settings/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/pydantic/pydantic-settings/actions/workflows/ci.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/pydantic/pydantic-settings/branch/main/graph/badge.svg)](https://codecov.io/gh/pydantic/pydantic-settings)
 [![pypi](https://img.shields.io/pypi/v/pydantic-settings.svg)](https://pypi.python.org/pypi/pydantic-settings)
 [![license](https://img.shields.io/github/license/pydantic/pydantic-settings.svg)](https://github.com/pydantic/pydantic-settings/blob/main/LICENSE)
