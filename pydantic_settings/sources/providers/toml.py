@@ -33,7 +33,7 @@ def import_toml() -> None:
             return
         try:
             import tomli
-        except ImportError as e:
+        except ImportError as e:  # pragma: no cover
             raise ImportError('tomli is not installed, run `pip install pydantic-settings[toml]`') from e
     else:
         if tomllib is not None:

@@ -44,6 +44,14 @@ class TestAWSSecretsManagerSettingsSource:
     """Test AWSSecretsManagerSettingsSource."""
 
     @mock_aws
+    def test_repr(self) -> None:
+        client = boto3.client('secretsmanager')
+        client.create_secret(Name='test-secret', SecretString='{}')
+
+        source = AWSSecretsManagerSettingsSource(BaseSettings, 'test-secret')
+        assert repr(source) == "AWSSecretsManagerSettingsSource(secret_id='test-secret', env_nested_delimiter='--')"
+
+    @mock_aws
     def test___init__(self) -> None:
         """Test __init__."""
 

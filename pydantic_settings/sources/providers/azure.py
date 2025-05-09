@@ -30,7 +30,7 @@ def import_azure_key_vault() -> None:
         from azure.core.credentials import TokenCredential
         from azure.core.exceptions import ResourceNotFoundError
         from azure.keyvault.secrets import SecretClient
-    except ImportError as e:
+    except ImportError as e:  # pragma: no cover
         raise ImportError(
             'Azure Key Vault dependencies are not installed, run `pip install pydantic-settings[azure-key-vault]`'
         ) from e
