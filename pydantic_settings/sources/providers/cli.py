@@ -450,8 +450,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _consume_object_or_array(self, item: str, merged_list: list[str]) -> str:
         count = 1
         close_delim = '}' if item.startswith('{') else ']'
+        in_str = False
         for consumed in range(1, len(item)):
-            if item[consumed] in ('{', '['):
+            if item[consumed] == '"' and item[consumed - 1] != '\\':
+                in_str = not in_str
+            elif in_str:
+                continue
+            elif item[consumed] in ('{', '['):
                 count += 1
             elif item[consumed] in ('}', ']'):
                 count -= 1
