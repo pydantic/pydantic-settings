@@ -2452,6 +2452,40 @@ positional arguments:
         )
 
 
+def test_cli_with_unbalanced_brackets_in_json_string():
+    class StrToStrDictOptions(BaseSettings):
+        nested: dict[str, str]
+
+    assert CliApp.run(StrToStrDictOptions, cli_args=['--nested={"test": "{"}']).model_dump() == {
+        'nested': {'test': '{'}
+    }
+    assert CliApp.run(StrToStrDictOptions, cli_args=['--nested={"test": "}"}']).model_dump() == {
+        'nested': {'test': '}'}
+    }
+    assert CliApp.run(StrToStrDictOptions, cli_args=['--nested={"test": "["}']).model_dump() == {
+        'nested': {'test': '['}
+    }
+    assert CliApp.run(StrToStrDictOptions, cli_args=['--nested={"test": "]"}']).model_dump() == {
+        'nested': {'test': ']'}
+    }
+
+    class StrToListDictOptions(BaseSettings):
+        nested: dict[str, list[str]]
+
+    assert CliApp.run(StrToListDictOptions, cli_args=['--nested={"test": ["{"]}']).model_dump() == {
+        'nested': {'test': ['{']}
+    }
+    assert CliApp.run(StrToListDictOptions, cli_args=['--nested={"test": ["}"]}']).model_dump() == {
+        'nested': {'test': ['}']}
+    }
+    assert CliApp.run(StrToListDictOptions, cli_args=['--nested={"test": ["["]}']).model_dump() == {
+        'nested': {'test': ['[']}
+    }
+    assert CliApp.run(StrToListDictOptions, cli_args=['--nested={"test": ["]"]}']).model_dump() == {
+        'nested': {'test': [']']}
+    }
+
+
 def test_cli_json_optional_default():
     class Nested(BaseModel):
         foo: int = 1
