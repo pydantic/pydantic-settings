@@ -36,7 +36,7 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
         self,
         settings_cls: type[BaseSettings],
         secret_id: str,
-        region: str | None = None, 
+        region: str | None = None,
         env_prefix: str | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
