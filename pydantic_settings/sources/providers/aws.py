@@ -42,7 +42,7 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
         env_parse_enums: bool | None = None,
     ) -> None:
         import_aws_secrets_manager()
-        self._secretsmanager_client = boto3_client("secretsmanager", region=region)  # type: ignore
+        self._secretsmanager_client = boto3_client('secretsmanager', region=region)  # type: ignore
         self._secret_id = secret_id
         super().__init__(
             settings_cls,
