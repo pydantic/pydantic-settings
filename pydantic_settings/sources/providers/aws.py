@@ -29,18 +29,20 @@ def import_aws_secrets_manager() -> None:
 
 class AWSSecretsManagerSettingsSource(EnvSettingsSource):
     _secret_id: str
+    _region: str
     _secretsmanager_client: SecretsManagerClient  # type: ignore
 
     def __init__(
         self,
         settings_cls: type[BaseSettings],
         secret_id: str,
+        region: str | None = None, 
         env_prefix: str | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
     ) -> None:
         import_aws_secrets_manager()
-        self._secretsmanager_client = boto3_client('secretsmanager')  # type: ignore
+        self._secretsmanager_client = boto3_client('secretsmanager', region = region)  # type: ignore
         self._secret_id = secret_id
         super().__init__(
             settings_cls,
