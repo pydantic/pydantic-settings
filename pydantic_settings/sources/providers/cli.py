@@ -119,6 +119,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             (e.g. --flag, --no-flag). Defaults to `False`.
         cli_ignore_unknown_args: Whether to ignore unknown CLI args and parse only known ones. Defaults to `False`.
         cli_kebab_case: CLI args use kebab case. Defaults to `False`.
+        cli_aliases: Mapping of alias name to field path. Defaults to `None`.
         case_sensitive: Whether CLI "--arg" names should be read with case-sensitivity. Defaults to `True`.
             Note: Case-insensitive matching is only supported on the internal root parser and does not apply to CLI
             subcommands.
@@ -150,6 +151,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_implicit_flags: bool | None = None,
         cli_ignore_unknown_args: bool | None = None,
         cli_kebab_case: bool | None = None,
+        cli_aliases: Mapping[str, str] | None = None,
         case_sensitive: bool | None = True,
         root_parser: Any = None,
         parse_args_method: Callable[..., Any] | None = None,
@@ -214,6 +216,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         )
         self.cli_kebab_case = (
             cli_kebab_case if cli_kebab_case is not None else settings_cls.model_config.get('cli_kebab_case', False)
+        )
+        self.cli_aliases = (
+            cli_aliases if cli_aliases is not None else settings_cls.model_config.get('cli_aliases', None)
         )
 
         case_sensitive = case_sensitive if case_sensitive is not None else True
@@ -767,6 +772,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     else f'{arg_prefix}{preferred_alias}'
                 )
 
+                if self.cli_aliases and kwargs['dest'] in self.cli_aliases:
+                    raise SettingsError(
+                        f'{model.__name__}.{field_name} has multiple aliases: {preferred_alias} and {self.cli_aliases[kwargs["dest"]]}'
+                    )
+
                 arg_names = self._get_arg_names(arg_prefix, subcommand_prefix, alias_prefixes, alias_names, added_args)
                 if not arg_names or (kwargs['dest'] in added_args):
                     continue
@@ -874,6 +884,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 )
                 if arg_name not in added_args:
                     arg_names.append(arg_name)
+
+        if self.cli_aliases:
+            for alias, name in self.cli_aliases.items():
+                if name in arg_names and alias not in added_args:
+                    arg_names.append(alias)
+
         return arg_names
 
     def _add_parser_submodels(
