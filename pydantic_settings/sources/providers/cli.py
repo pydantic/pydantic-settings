@@ -119,6 +119,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             (e.g. --flag, --no-flag). Defaults to `False`.
         cli_ignore_unknown_args: Whether to ignore unknown CLI args and parse only known ones. Defaults to `False`.
         cli_kebab_case: CLI args use kebab case. Defaults to `False`.
+        cli_shortcuts: Mapping of target field name to alias names. Defaults to `None`.
         case_sensitive: Whether CLI "--arg" names should be read with case-sensitivity. Defaults to `True`.
             Note: Case-insensitive matching is only supported on the internal root parser and does not apply to CLI
             subcommands.
@@ -150,6 +151,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_implicit_flags: bool | None = None,
         cli_ignore_unknown_args: bool | None = None,
         cli_kebab_case: bool | None = None,
+        cli_shortcuts: Mapping[str, str | list[str]] | None = None,
         case_sensitive: bool | None = True,
         root_parser: Any = None,
         parse_args_method: Callable[..., Any] | None = None,
@@ -214,6 +216,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         )
         self.cli_kebab_case = (
             cli_kebab_case if cli_kebab_case is not None else settings_cls.model_config.get('cli_kebab_case', False)
+        )
+        self.cli_shortcuts = (
+            cli_shortcuts if cli_shortcuts is not None else settings_cls.model_config.get('cli_shortcuts', None)
         )
 
         case_sensitive = case_sensitive if case_sensitive is not None else True
@@ -874,6 +879,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 )
                 if arg_name not in added_args:
                     arg_names.append(arg_name)
+
+        if self.cli_shortcuts:
+            for target, aliases in self.cli_shortcuts.items():
+                if target in arg_names:
+                    alias_list = [aliases] if isinstance(aliases, str) else aliases
+                    arg_names.extend(alias for alias in alias_list if alias not in added_args)
+
         return arg_names
 
     def _add_parser_submodels(
