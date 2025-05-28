@@ -35,12 +35,13 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
         self,
         settings_cls: type[BaseSettings],
         secret_id: str,
+        region_name: str | None = None,
         env_prefix: str | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
     ) -> None:
         import_aws_secrets_manager()
-        self._secretsmanager_client = boto3_client('secretsmanager')  # type: ignore
+        self._secretsmanager_client = boto3_client('secretsmanager', region_name=region_name)  # type: ignore
         self._secret_id = secret_id
         super().__init__(
             settings_cls,
