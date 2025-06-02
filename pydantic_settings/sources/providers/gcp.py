@@ -4,7 +4,6 @@ from collections.abc import Iterator, Mapping
 from functools import cached_property
 from typing import TYPE_CHECKING, Optional
 
-from ..utils import parse_env_vars
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
