@@ -96,6 +96,11 @@ class TestGoogleSecretManagerSettingsSource:
         value = secret_manager_mapping['test-secret']
         assert value == 'test-value'
 
+    def test_secret_manager_mapping_getitem_case_insensitive_success(self, mock_secret_client):
+        case_insensitive_mapping = GoogleSecretManagerMapping(mock_secret_client, project_id='test-project', case_sensitive=False)
+        value = case_insensitive_mapping['TEST-SECRET']
+        assert value == 'test-value'
+
     def test_secret_manager_mapping_getitem_nonexistent_key(self, secret_manager_mapping):
         with pytest.raises(KeyError):
             _ = secret_manager_mapping['nonexistent-secret']
