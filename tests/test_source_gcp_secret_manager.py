@@ -57,7 +57,7 @@ def mock_secret_client(mocker: MockerFixture):
 
 @pytest.fixture
 def secret_manager_mapping(mock_secret_client):
-    return GoogleSecretManagerMapping(mock_secret_client, 'test-project')
+    return GoogleSecretManagerMapping(mock_secret_client, project_id='test-project', case_sensitive=True)
 
 
 @pytest.fixture

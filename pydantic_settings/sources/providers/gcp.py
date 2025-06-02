@@ -4,6 +4,7 @@ from collections.abc import Iterator, Mapping
 from functools import cached_property
 from typing import TYPE_CHECKING, Optional
 
+from ..utils import parse_env_vars
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
@@ -37,10 +38,11 @@ class GoogleSecretManagerMapping(Mapping[str, Optional[str]]):
     _loaded_secrets: dict[str, str | None]
     _secret_client: SecretManagerServiceClient
 
-    def __init__(self, secret_client: SecretManagerServiceClient, project_id: str) -> None:
+    def __init__(self, secret_client: SecretManagerServiceClient, project_id: str, case_sensitive: bool) -> None:
         self._loaded_secrets = {}
         self._secret_client = secret_client
         self._project_id = project_id
+        self._case_sensitive = case_sensitive
 
     @property
     def _gcp_project_path(self) -> str:
@@ -48,15 +50,20 @@ class GoogleSecretManagerMapping(Mapping[str, Optional[str]]):
 
     @cached_property
     def _secret_names(self) -> list[str]:
-        return [
-            self._secret_client.parse_secret_path(secret.name).get('secret', '')
-            for secret in self._secret_client.list_secrets(parent=self._gcp_project_path)
-        ]
+        rv: list[str] = []
+        for secret in self._secret_client.list_secrets(parent=self._gcp_project_path):
+            name = self._secret_client.parse_secret_path(secret.name).get('secret', '')
+            if not self._case_sensitive:
+                name = name.lower()
+            rv.append(name)
+        return rv
 
     def _secret_version_path(self, key: str, version: str = 'latest') -> str:
         return self._secret_client.secret_version_path(self._project_id, key, version)
 
     def __getitem__(self, key: str) -> str | None:
+        if not self._case_sensitive:
+            key = key.lower()
         if key not in self._loaded_secrets:
             # If we know the key isn't available in secret manager, raise a key error
             if key not in self._secret_names:
@@ -92,6 +99,7 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
         secret_client: SecretManagerServiceClient | None = None,
+        case_sensitive: bool | None = True,
     ) -> None:
         # Import Google Packages if they haven't already been imported
         if SecretManagerServiceClient is None or Credentials is None or google_auth_default is None:
@@ -124,7 +132,7 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
 
         super().__init__(
             settings_cls,
-            case_sensitive=True,
+            case_sensitive=case_sensitive,
             env_prefix=env_prefix,
             env_ignore_empty=False,
             env_parse_none_str=env_parse_none_str,
@@ -132,7 +140,9 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
         )
 
     def _load_env_vars(self) -> Mapping[str, Optional[str]]:
-        return GoogleSecretManagerMapping(self._secret_client, project_id=self._project_id)
+        return GoogleSecretManagerMapping(
+            self._secret_client, project_id=self._project_id, case_sensitive=self.case_sensitive
+        )
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}(project_id={self._project_id!r}, env_nested_delimiter={self.env_nested_delimiter!r})'
