@@ -50,7 +50,9 @@ class GoogleSecretManagerMapping(Mapping[str, Optional[str]]):
     @cached_property
     def _secret_names(self) -> list[str]:
         rv: list[str] = []
-        for secret in self._secret_client.list_secrets(parent=self._gcp_project_path):
+
+        secrets = self._secret_client.list_secrets(parent=self._gcp_project_path)
+        for secret in secrets:
             name = self._secret_client.parse_secret_path(secret.name).get('secret', '')
             if not self._case_sensitive:
                 name = name.lower()
