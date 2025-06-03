@@ -4,6 +4,7 @@ import asyncio
 import inspect
 import threading
 from argparse import Namespace
+from collections.abc import Mapping
 from types import SimpleNamespace
 from typing import Any, ClassVar, TypeVar
 
@@ -57,6 +58,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_implicit_flags: bool | None
     cli_ignore_unknown_args: bool | None
     cli_kebab_case: bool | None
+    cli_aliases: Mapping[str, str] | None
     secrets_dir: PathType | None
     json_file: PathType | None
     json_file_encoding: str | None
@@ -149,6 +151,7 @@ class BaseSettings(BaseModel):
             (e.g. --flag, --no-flag). Defaults to `False`.
         _cli_ignore_unknown_args: Whether to ignore unknown CLI args and parse only known ones. Defaults to `False`.
         _cli_kebab_case: CLI args use kebab case. Defaults to `False`.
+        _cli_aliases: Mapping of alias name to field path. Defaults to `None`.
         _secrets_dir: The secret files directory or a sequence of directories. Defaults to `None`.
     """
 
@@ -178,6 +181,7 @@ class BaseSettings(BaseModel):
         _cli_implicit_flags: bool | None = None,
         _cli_ignore_unknown_args: bool | None = None,
         _cli_kebab_case: bool | None = None,
+        _cli_aliases: Mapping[str, str] | None = None,
         _secrets_dir: PathType | None = None,
         **values: Any,
     ) -> None:
@@ -208,6 +212,7 @@ class BaseSettings(BaseModel):
                 _cli_implicit_flags=_cli_implicit_flags,
                 _cli_ignore_unknown_args=_cli_ignore_unknown_args,
                 _cli_kebab_case=_cli_kebab_case,
+                _cli_aliases=_cli_aliases,
                 _secrets_dir=_secrets_dir,
             )
         )
@@ -263,6 +268,7 @@ class BaseSettings(BaseModel):
         _cli_implicit_flags: bool | None = None,
         _cli_ignore_unknown_args: bool | None = None,
         _cli_kebab_case: bool | None = None,
+        _cli_aliases: Mapping[str, str] | None = None,
         _secrets_dir: PathType | None = None,
     ) -> dict[str, Any]:
         # Determine settings config values
@@ -336,6 +342,7 @@ class BaseSettings(BaseModel):
             else self.model_config.get('cli_ignore_unknown_args')
         )
         cli_kebab_case = _cli_kebab_case if _cli_kebab_case is not None else self.model_config.get('cli_kebab_case')
+        cli_aliases = _cli_aliases if _cli_aliases is not None else self.model_config.get('cli_aliases')
 
         secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
@@ -401,6 +408,7 @@ class BaseSettings(BaseModel):
                     cli_implicit_flags=cli_implicit_flags,
                     cli_ignore_unknown_args=cli_ignore_unknown_args,
                     cli_kebab_case=cli_kebab_case,
+                    cli_aliases=cli_aliases,
                     case_sensitive=case_sensitive,
                 )
                 sources = (cli_settings,) + sources
@@ -450,6 +458,7 @@ class BaseSettings(BaseModel):
         cli_implicit_flags=False,
         cli_ignore_unknown_args=False,
         cli_kebab_case=False,
+        cli_aliases=None,
         json_file=None,
         json_file_encoding=None,
         yaml_file=None,

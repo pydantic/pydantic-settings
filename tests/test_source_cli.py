@@ -2525,3 +2525,46 @@ def test_cli_parse_args_from_model_config_is_respected_with_settings_customise_s
         cfg = CliApp.run(MySettings)
 
         assert cfg.model_dump() == {'foo': 'bar'}
+
+
+def test_cli_aliases_on_flat_object():
+    class Settings(BaseSettings):
+        option: str = Field(default='foo')
+
+        model_config = SettingsConfigDict(cli_aliases={'option2': 'option'})
+
+    assert CliApp.run(Settings, cli_args=['--option2', 'bar']).model_dump() == {'option': 'bar'}
+
+
+def test_cli_aliases_on_nested_object():
+    class TwiceNested(BaseModel):
+        option: str = Field(default='foo')
+
+    class Nested(BaseModel):
+        twice_nested_option: TwiceNested = TwiceNested()
+        option: str = Field(default='foo')
+
+    class Settings(BaseSettings):
+        nested: Nested = Nested()
+
+        model_config = SettingsConfigDict(
+            cli_aliases={'option2': 'nested.option', 'twice_nested_option': 'nested.twice_nested_option.option'}
+        )
+
+    assert CliApp.run(Settings, cli_args=['--option2', 'bar', '--twice_nested_option', 'baz']).model_dump() == {
+        'nested': {'option': 'bar', 'twice_nested_option': {'option': 'baz'}}
+    }
+
+
+def test_cli_aliases_name_collision():
+    class Nested(BaseModel):
+        option: str = Field(default='foo')
+
+    class Settings(BaseSettings):
+        nested: Nested = Nested()
+        option2: str = Field(default='foo2')
+
+        model_config = SettingsConfigDict(cli_aliases={'option2': 'nested.option'})
+
+    with pytest.raises(SettingsError, match='Settings.option2 has multiple aliases: option2 and nested.option'):
+        CliApp.run(Settings, cli_args=['--option2', 'bar'])
