@@ -165,6 +165,7 @@ class TestGoogleSecretManagerSettingsSource:
                 env_settings: PydanticBaseSettingsSource,
                 dotenv_settings: PydanticBaseSettingsSource,
                 file_secret_settings: PydanticBaseSettingsSource,
+                loadcredential_settings: PydanticBaseSettingsSource,
             ) -> tuple[PydanticBaseSettingsSource, ...]:
                 google_secret_manager_settings = GoogleSecretManagerSettingsSource(
                     settings_cls, secret_client=mock_secret_client
@@ -174,6 +175,7 @@ class TestGoogleSecretManagerSettingsSource:
                     env_settings,
                     dotenv_settings,
                     file_secret_settings,
+                    loadcredential_settings,
                     google_secret_manager_settings,
                 )
 
@@ -196,6 +198,7 @@ class TestGoogleSecretManagerSettingsSource:
                 env_settings: PydanticBaseSettingsSource,
                 dotenv_settings: PydanticBaseSettingsSource,
                 file_secret_settings: PydanticBaseSettingsSource,
+                loadcredential_settings: PydanticBaseSettingsSource,
             ) -> tuple[PydanticBaseSettingsSource, ...]:
                 google_secret_manager_settings = GoogleSecretManagerSettingsSource(
                     settings_cls, secret_client=mock_secret_client
@@ -205,6 +208,7 @@ class TestGoogleSecretManagerSettingsSource:
                     env_settings,
                     dotenv_settings,
                     file_secret_settings,
+                    loadcredential_settings,
                     google_secret_manager_settings,
                 )
 

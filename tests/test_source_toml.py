@@ -54,6 +54,7 @@ def test_toml_file(tmp_path):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (TomlConfigSettingsSource(settings_cls),)
 
@@ -75,6 +76,7 @@ def test_toml_no_file():
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (TomlConfigSettingsSource(settings_cls),)
 
@@ -109,6 +111,7 @@ def test_multiple_file_toml(tmp_path):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (TomlConfigSettingsSource(settings_cls, toml_file=[p1, p2]),)
 

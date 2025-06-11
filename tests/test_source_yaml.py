@@ -47,6 +47,7 @@ def test_yaml_not_installed(tmp_path):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls),)
 
@@ -83,6 +84,7 @@ def test_yaml_file(tmp_path):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls),)
 
@@ -104,6 +106,7 @@ def test_yaml_no_file():
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls),)
 
@@ -127,6 +130,7 @@ def test_yaml_empty_file(tmp_path):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls),)
 
@@ -161,6 +165,7 @@ def test_multiple_file_yaml(tmp_path):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls, yaml_file=[p3, p4]),)
 
@@ -192,6 +197,7 @@ def test_yaml_config_section(tmp_path):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls),)
 
@@ -223,6 +229,7 @@ def test_invalid_yaml_config_section(tmp_path):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls),)
 

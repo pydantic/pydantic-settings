@@ -46,6 +46,7 @@ def test_json_file(tmp_path):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (JsonConfigSettingsSource(settings_cls),)
 
@@ -66,6 +67,7 @@ def test_json_no_file():
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (JsonConfigSettingsSource(settings_cls),)
 
@@ -94,6 +96,7 @@ def test_multiple_file_json(tmp_path):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (JsonConfigSettingsSource(settings_cls, json_file=[p5, p6]),)
 

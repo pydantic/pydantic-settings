@@ -204,6 +204,7 @@ def test_cli_source_prioritization(env):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return env_settings, CliSettingsSource(settings_cls, cli_parse_args=['--foo', 'FOO FROM CLI'])
 
@@ -2516,6 +2517,7 @@ def test_cli_parse_args_from_model_config_is_respected_with_settings_customise_s
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (CliSettingsSource(settings_cls),)
 

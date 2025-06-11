@@ -416,6 +416,7 @@ class Settings(BaseSettings):
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
+        loadcredential_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         return (MyCustomSource(settings_cls),)
 
@@ -749,6 +750,7 @@ class Settings(BaseSettings):
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
+        loadcredential_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         return env_settings, CliSettingsSource(settings_cls, cli_parse_args=True)
 
@@ -1817,6 +1819,7 @@ class AWSSecretsManagerSettings(BaseSettings):
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
+        loadcredential_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         aws_secrets_manager_settings = AWSSecretsManagerSettingsSource(
             settings_cls,
@@ -1920,6 +1923,7 @@ class AzureKeyVaultSettings(BaseSettings):
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
+        loadcredential_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         az_key_vault_settings = AzureKeyVaultSettingsSource(
             settings_cls,
@@ -1983,6 +1987,7 @@ To use Google Cloud Secret Manager, you need to:
            env_settings: PydanticBaseSettingsSource,
            dotenv_settings: PydanticBaseSettingsSource,
            file_secret_settings: PydanticBaseSettingsSource,
+           loadcredential_settings: PydanticBaseSettingsSource,
        ) -> tuple[PydanticBaseSettingsSource, ...]:
            # Create the GCP Secret Manager settings source
            gcp_settings = GoogleSecretManagerSettingsSource(
@@ -2000,6 +2005,7 @@ To use Google Cloud Secret Manager, you need to:
                env_settings,
                dotenv_settings,
                file_secret_settings,
+               loadcredential_settings,
                gcp_settings,
            )
    ```
@@ -2072,6 +2078,7 @@ class Settings(BaseSettings):
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
+        loadcredential_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         return (TomlConfigSettingsSource(settings_cls),)
 ```
@@ -2115,6 +2122,7 @@ class Settings(BaseSettings):
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
+        loadcredential_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         return (PyprojectTomlConfigSettingsSource(settings_cls),)
 
@@ -2177,6 +2185,7 @@ class DiscoverSettings(BaseSettings):
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
+        loadcredential_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         return (PyprojectTomlConfigSettingsSource(settings_cls),)
 
@@ -2194,6 +2203,7 @@ class ExplicitFilePathSettings(BaseSettings):
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
+        loadcredential_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         return (
             PyprojectTomlConfigSettingsSource(
@@ -2245,8 +2255,14 @@ class Settings(BaseSettings):
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
+        loadcredential_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        return env_settings, init_settings, file_secret_settings
+        return (
+            env_settings,
+            init_settings,
+            file_secret_settings,
+            loadcredential_settings,
+        )
 
 
 print(Settings(database_dsn='postgres://postgres@localhost:5432/kwargs_db'))
@@ -2327,12 +2343,14 @@ class Settings(BaseSettings):
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
+        loadcredential_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         return (
             init_settings,
             JsonConfigSettingsSource(settings_cls),
             env_settings,
             file_secret_settings,
+            loadcredential_settings,
         )
 
 
@@ -2391,9 +2409,10 @@ class Settings(BaseSettings):
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
+        loadcredential_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         # here we choose to ignore arguments from init_settings
-        return env_settings, file_secret_settings
+        return env_settings, file_secret_settings, loadcredential_settings
 
 
 try:

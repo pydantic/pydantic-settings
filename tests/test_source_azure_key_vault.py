@@ -125,6 +125,7 @@ class TestAzureKeyVaultSettingsSource:
                 env_settings: PydanticBaseSettingsSource,
                 dotenv_settings: PydanticBaseSettingsSource,
                 file_secret_settings: PydanticBaseSettingsSource,
+                loadcredential_settings: PydanticBaseSettingsSource,
             ) -> tuple[PydanticBaseSettingsSource, ...]:
                 return (
                     AzureKeyVaultSettingsSource(
@@ -176,6 +177,7 @@ class TestAzureKeyVaultSettingsSource:
                 env_settings: PydanticBaseSettingsSource,
                 dotenv_settings: PydanticBaseSettingsSource,
                 file_secret_settings: PydanticBaseSettingsSource,
+                loadcredential_settings: PydanticBaseSettingsSource,
             ) -> tuple[PydanticBaseSettingsSource, ...]:
                 return (
                     AzureKeyVaultSettingsSource(

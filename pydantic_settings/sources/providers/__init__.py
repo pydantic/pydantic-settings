@@ -15,6 +15,7 @@ from .dotenv import DotEnvSettingsSource
 from .env import EnvSettingsSource
 from .gcp import GoogleSecretManagerSettingsSource
 from .json import JsonConfigSettingsSource
+from .loadcredential import LoadCredentialSettingsSource
 from .pyproject import PyprojectTomlConfigSettingsSource
 from .secrets import SecretsSettingsSource
 from .toml import TomlConfigSettingsSource
@@ -34,6 +35,7 @@ __all__ = [
     'EnvSettingsSource',
     'GoogleSecretManagerSettingsSource',
     'JsonConfigSettingsSource',
+    'LoadCredentialSettingsSource',
     'PyprojectTomlConfigSettingsSource',
     'SecretsSettingsSource',
     'TomlConfigSettingsSource',

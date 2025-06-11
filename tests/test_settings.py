@@ -251,6 +251,20 @@ def test_populate_by_name_with_dotenv_when_using_both(tmp_path):
     assert s.apple == 'bongusta', 'Expected alias value to be prioritized.'
 
 
+def test_loadcredential(tmp_path, env):
+    class Settings(BaseSettings):
+        apple: str
+
+    with pytest.raises(ValidationError):
+        Settings()
+    p = tmp_path / "credentials"
+    p.mkdir()
+    env.set('CREDENTIALS_DIRECTORY', p)
+    (p / "apple").write_text('honeycrisp')
+    s = Settings()
+    assert s.apple == 'honeycrisp'
+
+
 def test_with_prefix(env):
     class Settings(BaseSettings):
         apple: str
@@ -643,9 +657,9 @@ def test_init_kwargs_nested_model_default_partial_update(env):
 
         @classmethod
         def settings_customise_sources(
-            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings, loadcredential_settings
         ):
-            return env_settings, dotenv_settings, init_settings, file_secret_settings
+            return env_settings, dotenv_settings, init_settings, file_secret_settings, loadcredential_settings
 
     env.set('SUB_MODEL__DEEP__V4', 'override-v4')
 
@@ -944,6 +958,7 @@ def test_env_takes_precedence(env):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return env_settings, init_settings
 
@@ -975,6 +990,7 @@ def test_config_file_settings_nornir(env):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return env_settings, init_settings, nornir_settings_source
 
@@ -1809,12 +1825,14 @@ def test_external_settings_sources_precedence(env):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (
                 init_settings,
                 env_settings,
                 dotenv_settings,
                 file_secret_settings,
+                loadcredential_settings,
                 external_source_0,
                 external_source_1,
             )
@@ -1855,12 +1873,14 @@ def test_external_settings_sources_filter_env_vars():
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (
                 init_settings,
                 env_settings,
                 dotenv_settings,
                 file_secret_settings,
+                loadcredential_settings,
                 VaultSettingsSource(settings_cls, user='user', password='password'),
             )
 
@@ -1931,6 +1951,7 @@ def test_env_setting_source_custom_env_parse(env):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (CustomEnvSettingsSource(settings_cls),)
 
@@ -1959,6 +1980,7 @@ def test_env_settings_source_custom_env_parse_is_bad(env):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (BadCustomEnvSettingsSource(settings_cls),)
 
@@ -1993,6 +2015,7 @@ def test_secret_settings_source_custom_env_parse(tmp_path):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (CustomSecretsSettingsSource(settings_cls, tmp_path),)
 
@@ -2017,6 +2040,7 @@ def test_custom_source_get_field_value_error(env):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (BadCustomSettingsSource(settings_cls),)
 
@@ -2808,6 +2832,7 @@ def test_settings_source_current_state(env):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (env_settings, SettingsSource(settings_cls))
 
@@ -2849,6 +2874,7 @@ def test_settings_source_settings_sources_data(env):
             env_settings: PydanticBaseSettingsSource,
             dotenv_settings: PydanticBaseSettingsSource,
             file_secret_settings: PydanticBaseSettingsSource,
+            loadcredential_settings: PydanticBaseSettingsSource,
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (env_settings, init_settings, function_settings_source, SettingsSource(settings_cls))
 

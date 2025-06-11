@@ -14,6 +14,8 @@ from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.main import BaseModel
 
+from pydantic_settings.sources.providers.loadcredential import LoadCredentialSettingsSource
+
 from .exceptions import SettingsError
 from .sources import (
     ENV_FILE_SENTINEL,
@@ -220,6 +222,7 @@ class BaseSettings(BaseModel):
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
+        loadcredential_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         """
         Define the sources and their order for loading the settings values.
@@ -234,7 +237,7 @@ class BaseSettings(BaseModel):
         Returns:
             A tuple containing the sources and their order for loading the settings values.
         """
-        return init_settings, env_settings, dotenv_settings, file_secret_settings
+        return init_settings, env_settings, dotenv_settings, file_secret_settings, loadcredential_settings
 
     def _settings_build_values(
         self,
@@ -374,6 +377,10 @@ class BaseSettings(BaseModel):
         file_secret_settings = SecretsSettingsSource(
             self.__class__, secrets_dir=secrets_dir, case_sensitive=case_sensitive, env_prefix=env_prefix
         )
+
+        loadcredential_settings = LoadCredentialSettingsSource(
+            self.__class__, case_sensitive=case_sensitive, env_prefix=env_prefix
+        )
         # Provide a hook to set built-in sources priority and add / remove sources
         sources = self.settings_customise_sources(
             self.__class__,
@@ -381,6 +388,7 @@ class BaseSettings(BaseModel):
             env_settings=env_settings,
             dotenv_settings=dotenv_settings,
             file_secret_settings=file_secret_settings,
+            loadcredential_settings=loadcredential_settings,
         ) + (default_settings,)
         if not any([source for source in sources if isinstance(source, CliSettingsSource)]):
             if isinstance(cli_settings_source, CliSettingsSource):
