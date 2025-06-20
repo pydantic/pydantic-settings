@@ -39,10 +39,7 @@ if not yaml:
     pytest.skip('PyYAML is not installed', allow_module_level=True)
 
 
-@pytest.mark.skipif(
-    not aws_secrets_manager,
-    reason='pydantic-settings[aws-secrets-manager] is not installed',
-)
+@pytest.mark.skipif(not aws_secrets_manager, reason='pydantic-settings[aws-secrets-manager] is not installed')
 class TestAWSSecretsManagerSettingsSource:
     """Test AWSSecretsManagerSettingsSource."""
 
@@ -79,10 +76,7 @@ class TestAWSSecretsManagerSettingsSource:
             sql_server_user: str = Field(..., alias='SqlServerUser')
             sql_server: SqlServer = Field(..., alias='SqlServer')
 
-        secret_data = {
-            'SqlServerUser': 'test-user',
-            'SqlServer--Password': 'test-password',
-        }
+        secret_data = {'SqlServerUser': 'test-user', 'SqlServer--Password': 'test-password'}
 
         client = boto3.client('secretsmanager')
         client.create_secret(Name='test-secret', SecretString=json.dumps(secret_data))
@@ -155,10 +149,7 @@ class TestAWSSecretsManagerSettingsSource:
             ) -> tuple[PydanticBaseSettingsSource, ...]:
                 return (AWSSecretsManagerSettingsSource(settings_cls, 'test-secret'),)
 
-        secret_data = {
-            'SqlServerUser': 'test-user',
-            'SqlServer--Password': 'test-password',
-        }
+        secret_data = {'SqlServerUser': 'test-user', 'SqlServer--Password': 'test-password'}
 
         client = boto3.client('secretsmanager')
         client.create_secret(Name='test-secret', SecretString=json.dumps(secret_data))

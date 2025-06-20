@@ -1,6 +1,4 @@
-from __future__ import (
-    annotations as _annotations,
-)  # important for BaseSettings import to work
+from __future__ import annotations as _annotations  # important for BaseSettings import to work
 
 import json
 from collections.abc import Mapping
