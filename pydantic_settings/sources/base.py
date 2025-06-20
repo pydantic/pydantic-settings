@@ -426,7 +426,11 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                 values[name] = value
                 continue
 
-            if _lenient_issubclass(sub_model_field.annotation, BaseModel) and isinstance(value, dict):
+            if (
+                sub_model_field is not None
+                and _lenient_issubclass(sub_model_field.annotation, BaseModel)
+                and isinstance(value, dict)
+            ):
                 values[field_key] = self._replace_field_names_case_insensitively(sub_model_field, value)
             else:
                 values[field_key] = value
