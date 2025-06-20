@@ -599,7 +599,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     if matched:
                         arg = matched.group(1).lower() + matched.group(2)
                     insensitive_args.append(arg)
-                return parser_method(root_parser, insensitive_args, namespace)  # type: ignore
+                return parser_method(root_parser, insensitive_args, namespace)
 
             return parse_args_insensitive_method
 
