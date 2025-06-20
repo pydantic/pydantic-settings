@@ -2525,3 +2525,52 @@ def test_cli_parse_args_from_model_config_is_respected_with_settings_customise_s
         cfg = CliApp.run(MySettings)
 
         assert cfg.model_dump() == {'foo': 'bar'}
+
+
+def test_cli_shortcuts_on_flat_object():
+    class Settings(BaseSettings):
+        option: str = Field(default='foo')
+        list_option: str = Field(default='fizz')
+
+        model_config = SettingsConfigDict(cli_shortcuts={'option': 'option2', 'list_option': ['list_option2']})
+
+    assert CliApp.run(Settings, cli_args=['--option2', 'bar', '--list_option2', 'buzz']).model_dump() == {
+        'option': 'bar',
+        'list_option': 'buzz',
+    }
+
+
+def test_cli_shortcuts_on_nested_object():
+    class TwiceNested(BaseModel):
+        option: str = Field(default='foo')
+
+    class Nested(BaseModel):
+        twice_nested_option: TwiceNested = TwiceNested()
+        option: str = Field(default='foo')
+
+    class Settings(BaseSettings):
+        nested: Nested = Nested()
+
+        model_config = SettingsConfigDict(
+            cli_shortcuts={'nested.option': 'option2', 'nested.twice_nested_option.option': 'twice_nested_option'}
+        )
+
+    assert CliApp.run(Settings, cli_args=['--option2', 'bar', '--twice_nested_option', 'baz']).model_dump() == {
+        'nested': {'option': 'bar', 'twice_nested_option': {'option': 'baz'}}
+    }
+
+
+def test_cli_shortcuts_alias_collision_applies_to_first_target_field():
+    class Nested(BaseModel):
+        option: str = Field(default='foo')
+
+    class Settings(BaseSettings):
+        nested: Nested = Nested()
+        option2: str = Field(default='foo2')
+
+        model_config = SettingsConfigDict(cli_shortcuts={'option2': 'abc', 'nested.option': 'abc'})
+
+    assert CliApp.run(Settings, cli_args=['--abc', 'bar']).model_dump() == {
+        'nested': {'option': 'bar'},
+        'option2': 'foo2',
+    }
