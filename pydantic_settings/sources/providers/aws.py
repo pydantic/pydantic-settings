@@ -4,6 +4,7 @@ import json
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Optional
 
+from ..utils import parse_env_vars
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
@@ -36,6 +37,7 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
         settings_cls: type[BaseSettings],
         secret_id: str,
         region_name: str | None = None,
+        case_sensitive: bool | None = True,
         env_prefix: str | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
@@ -45,7 +47,7 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
         self._secret_id = secret_id
         super().__init__(
             settings_cls,
-            case_sensitive=True,
+            case_sensitive=case_sensitive,
             env_prefix=env_prefix,
             env_nested_delimiter='--',
             env_ignore_empty=False,
@@ -56,7 +58,12 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
     def _load_env_vars(self) -> Mapping[str, Optional[str]]:
         response = self._secretsmanager_client.get_secret_value(SecretId=self._secret_id)  # type: ignore
 
-        return json.loads(response['SecretString'])
+        return parse_env_vars(
+            json.loads(response['SecretString']),
+            self.case_sensitive,
+            self.env_ignore_empty,
+            self.env_parse_none_str,
+        )
 
     def __repr__(self) -> str:
         return (
