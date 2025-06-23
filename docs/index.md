@@ -1691,8 +1691,6 @@ class Settings(BaseSettings):
 
 If a shortcut collides (is mapped to multiple fields), it will apply to the first matching field in the model.
 
-See the [test cases](../tests/test_source_cli.py) for more advanced usage and edge cases.
-
 ### Integrating with Existing Parsers
 
 A CLI settings source can be integrated with existing parsers by overriding the default CLI settings source with a user
