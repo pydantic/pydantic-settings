@@ -416,6 +416,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                 model_fields: dict[str, FieldInfo] = annotation.model_fields
 
             # Find field in sub model by looking in fields case insensitively
+            field_key: str | None = None
             for sub_model_field_name, sub_model_field in model_fields.items():
                 aliases, _ = _get_alias_names(sub_model_field_name, sub_model_field)
                 _search = (alias for alias in aliases if alias.lower() == name.lower())
