@@ -2,6 +2,7 @@ from __future__ import annotations as _annotations
 
 import asyncio
 import inspect
+import json
 import threading
 from argparse import Namespace
 from collections.abc import Mapping
@@ -646,7 +647,7 @@ class CliApp:
 
         model_field_definitions: dict[str, Any] = {}
         for field_name, field_info in base_settings_cls.model_fields.items():
-            model_field_definitions[_field_name_for_signature(field_name, field_info)] = (
+            model_field_definitions[field_name] = (
                 field_info.annotation,
                 FieldInfo.merge_field_infos(field_info, default=getattr(model, field_name)),
             )
@@ -656,7 +657,11 @@ class CliApp:
             cli_serialize_cls, cli_parse_args=[], root_parser=_CliInternalArgSerializer()
         )
 
-        return [
-            f'{cli_settings.cli_flag_prefix_char * min(len(arg), 2)}{arg}={val}'
-            for arg, val in cli_settings.env_vars.items()
-        ]
+        cli_args = []
+        for arg, value in cli_settings.env_vars.items():
+            cli_args.append(f'{cli_settings.cli_flag_prefix_char * min(len(arg), 2)}{arg}')
+            if isinstance(value, (dict, list, set)):
+                cli_args.append(json.dumps(value))
+            else:
+                cli_args.append(str(value))
+        return cli_args
