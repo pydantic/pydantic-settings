@@ -8,11 +8,12 @@ from collections.abc import Mapping
 from types import SimpleNamespace
 from typing import Any, ClassVar, TypeVar
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, create_model
 from pydantic._internal._config import config_keys
 from pydantic._internal._signature import _field_name_for_signature
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
+from pydantic.fields import FieldInfo
 from pydantic.main import BaseModel
 
 from .exceptions import SettingsError
@@ -30,6 +31,7 @@ from .sources import (
     SecretsSettingsSource,
     get_subcommand,
 )
+from .sources.providers.cli import _CliInternalArgSerializer
 
 T = TypeVar('T')
 
@@ -478,6 +480,25 @@ class CliApp:
     """
 
     @staticmethod
+    def _get_base_settings_cls(model_cls: type[Any]) -> type[BaseSettings]:
+        if issubclass(model_cls, BaseSettings):
+            return model_cls
+
+        class CliAppBaseSettings(BaseSettings, model_cls):  # type: ignore
+            __doc__ = model_cls.__doc__
+            model_config = SettingsConfigDict(
+                nested_model_default_partial_update=True,
+                case_sensitive=True,
+                cli_hide_none_type=True,
+                cli_avoid_json=True,
+                cli_enforce_required=True,
+                cli_implicit_flags=True,
+                cli_kebab_case=True,
+            )
+
+        return CliAppBaseSettings
+
+    @staticmethod
     def _run_cli_cmd(model: Any, cli_cmd_method_name: str, is_required: bool) -> Any:
         command = getattr(type(model), cli_cmd_method_name, None)
         if command is None:
@@ -575,22 +596,10 @@ class CliApp:
         model_init_data['_cli_exit_on_error'] = cli_exit_on_error
         model_init_data['_cli_settings_source'] = cli_settings
         if not issubclass(model_cls, BaseSettings):
-
-            class CliAppBaseSettings(BaseSettings, model_cls):  # type: ignore
-                __doc__ = model_cls.__doc__
-                model_config = SettingsConfigDict(
-                    nested_model_default_partial_update=True,
-                    case_sensitive=True,
-                    cli_hide_none_type=True,
-                    cli_avoid_json=True,
-                    cli_enforce_required=True,
-                    cli_implicit_flags=True,
-                    cli_kebab_case=True,
-                )
-
-            model = CliAppBaseSettings(**model_init_data)
+            base_settings_cls = CliApp._get_base_settings_cls(model_cls)
+            model = base_settings_cls(**model_init_data)
             model_init_data = {}
-            for field_name, field_info in type(model).model_fields.items():
+            for field_name, field_info in base_settings_cls.model_fields.items():
                 model_init_data[_field_name_for_signature(field_name, field_info)] = getattr(model, field_name)
 
         return CliApp._run_cli_cmd(model_cls(**model_init_data), cli_cmd_method_name, is_required=False)
@@ -619,3 +628,35 @@ class CliApp:
 
         subcommand = get_subcommand(model, is_required=True, cli_exit_on_error=cli_exit_on_error)
         return CliApp._run_cli_cmd(subcommand, cli_cmd_method_name, is_required=True)
+
+    @staticmethod
+    def serialize(model: PydanticModel) -> list[str]:
+        """
+        Serializes the CLI arguments for a Pydantic data model.
+
+        Args:
+            model: The data model to serialize.
+
+        Returns:
+            The serialized CLI arguments for the data model.
+        """
+
+        model_cls = type(model)
+        base_settings_cls = CliApp._get_base_settings_cls(model_cls)
+
+        model_field_definitions: dict[str, Any] = {}
+        for field_name, field_info in base_settings_cls.model_fields.items():
+            model_field_definitions[_field_name_for_signature(field_name, field_info)] = (
+                field_info.annotation,
+                FieldInfo.merge_field_infos(field_info, default=getattr(model, field_name)),
+            )
+
+        cli_serialize_cls = create_model('CliSerialize', __base__=base_settings_cls, **model_field_definitions)
+        cli_settings = CliSettingsSource[Any](
+            cli_serialize_cls, cli_parse_args=[], root_parser=_CliInternalArgSerializer()
+        )
+
+        return [
+            f'{cli_settings.cli_flag_prefix_char * min(len(arg), 2)}{arg}={val}'
+            for arg, val in cli_settings.env_vars.items()
+        ]

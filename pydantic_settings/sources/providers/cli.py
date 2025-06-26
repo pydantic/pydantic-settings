@@ -74,6 +74,10 @@ class _CliInternalArgParser(ArgumentParser):
         super().error(message)
 
 
+class _CliInternalArgSerializer(_CliInternalArgParser):
+    pass
+
+
 class CliMutuallyExclusiveGroup(BaseModel):
     pass
 
@@ -758,7 +762,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 )
                 is_parser_submodel = sub_models and not is_append_action
                 kwargs: dict[str, Any] = {}
-                kwargs['default'] = CLI_SUPPRESS
+                kwargs['default'] = (
+                    CLI_SUPPRESS
+                    if is_parser_submodel or not isinstance(self.root_parser, _CliInternalArgSerializer)
+                    else getattr(model_default, field_name)
+                    if hasattr(model_default, field_name)
+                    else field_info.default
+                )
                 kwargs['help'] = self._help_format(field_name, field_info, model_default, is_model_suppressed)
                 kwargs['metavar'] = self._metavar_format(field_info.annotation)
                 kwargs['required'] = (
