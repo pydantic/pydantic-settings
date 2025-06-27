@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -99,3 +100,20 @@ def cli_test_env():
     yield setenv
 
     setenv.clear()
+
+
+def pytest_ignore_collect(collection_path: Path, config) -> bool:
+    """
+    Ignore collection of test files that contain syntax unsupported
+    by the current Python version.
+    """
+    py312_tests = {'test_settings_py312.py'}
+
+    if sys.version_info < (3, 12) and collection_path.name in py312_tests:
+        print(
+            f"\nSkipping collection of '{collection_path.name}' on Python "
+            f'{sys.version_info.major}.{sys.version_info.minor} due to syntax requirements.'
+        )
+        return True
+
+    return None
