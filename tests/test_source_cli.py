@@ -1974,6 +1974,9 @@ def test_cli_user_settings_source_exceptions():
     with pytest.raises(SettingsError, match='CLI settings source prefix is invalid: 123'):
         CliSettingsSource(Cfg, cli_prefix='123')
 
+    with pytest.raises(SettingsError, match='Root parser is not _CliInternalArgSerializer'):
+        CliSettingsSource[Any](Cfg, cli_parse_args=[])._serialized_args()
+
     class Food(BaseModel):
         fruit: FruitsEnum = FruitsEnum.kiwi
 

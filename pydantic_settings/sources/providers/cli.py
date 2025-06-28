@@ -669,7 +669,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self._cli_dict_args: dict[str, type[Any] | None] = {}
         self._cli_subcommands: defaultdict[str, dict[str, str]] = defaultdict(dict)
         self._is_serialize_args = isinstance(root_parser, _CliInternalArgSerializer)
-        self._serialized_positional_args: dict[str, Any] = {}
+        self._serialize_positional_args: dict[str, Any] = {}
         self._add_parser_args(
             parser=self.root_parser,
             model=self.settings_cls,
@@ -871,7 +871,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             kwargs['nargs'] = '?'
 
         if self._is_serialize_args:
-            self._serialized_positional_args[kwargs['dest']] = kwargs['default']
+            self._serialize_positional_args[kwargs['dest']] = kwargs['default']
             kwargs['nargs'] = '*'
 
         kwargs['default'] = PydanticUndefined
@@ -1131,11 +1131,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         if not alias_nested_paths:
             alias_path_only_defaults.setdefault(dest, [])
             alias_default = alias_path_only_defaults[dest]
-            assert isinstance(alias_default, list)
         else:
             alias_path_only_defaults.setdefault(dest, {})
             current_path = alias_path_only_defaults[dest]
-            assert isinstance(current_path, dict)
 
             for nested_path in alias_nested_paths[:-1]:
                 current_path.setdefault(nested_path, {})
@@ -1148,16 +1146,17 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         alias_default[alias_path_index] = default
 
     def _serialized_args(self) -> list[str]:
-        assert self._is_serialize_args
+        if not self._is_serialize_args:
+            raise SettingsError('Root parser is not _CliInternalArgSerializer')
 
         cli_args = []
-        for arg, values in self._serialized_positional_args.items():
+        for arg, values in self._serialize_positional_args.items():
             for value in values if isinstance(values, list) else [values]:
                 value = json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
                 cli_args.append(value)
 
         for arg, value in self.env_vars.items():
-            if arg not in self._serialized_positional_args:
+            if arg not in self._serialize_positional_args:
                 value = json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
                 cli_args.append(f'{self.cli_flag_prefix_char * min(len(arg), 2)}{arg}')
                 cli_args.append(value)
