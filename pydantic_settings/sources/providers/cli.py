@@ -35,7 +35,7 @@ from typing import (
 )
 
 import typing_extensions
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, AliasPath, BaseModel, Field
 from pydantic._internal._repr import Representation
 from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
@@ -693,6 +693,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     ) -> ArgumentParser:
         subparsers: Any = None
         alias_path_args: dict[str, str] = {}
+        alias_path_only_defaults: dict[str, Any] = {}
         # Ignore model default if the default is a model and not a subclass of the current model.
         model_default = (
             None
@@ -760,14 +761,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 is_append_action = _annotation_contains_types(
                     field_info.annotation, (list, set, dict, Sequence, Mapping), is_strip_annotated=True
                 )
-                is_parser_submodel = sub_models and not is_append_action
+                is_parser_submodel = bool(sub_models) and not is_append_action
                 kwargs: dict[str, Any] = {}
-                kwargs['default'] = (
-                    CLI_SUPPRESS
-                    if is_parser_submodel or not isinstance(self.root_parser, _CliInternalArgSerializer)
-                    else getattr(model_default, field_name)
-                    if hasattr(model_default, field_name)
-                    else field_info.default
+                kwargs['default'] = self._get_cli_default_value(
+                    field_name, field_info, model_default, is_parser_submodel
                 )
                 kwargs['help'] = self._help_format(field_name, field_info, model_default, is_model_suppressed)
                 kwargs['metavar'] = self._metavar_format(field_info.annotation)
@@ -827,8 +824,14 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         self._add_argument(
                             parser, *(f'{flag_prefix[: len(name)]}{name}' for name in arg_names), **kwargs
                         )
+                elif kwargs['default'] != CLI_SUPPRESS:
+                    self._update_alias_path_only_defaults(
+                        kwargs['dest'], kwargs['default'], field_info, alias_path_only_defaults
+                    )
 
-        self._add_parser_alias_paths(parser, alias_path_args, added_args, arg_prefix, subcommand_prefix, group)
+        self._add_parser_alias_paths(
+            parser, alias_path_args, added_args, arg_prefix, subcommand_prefix, group, alias_path_only_defaults
+        )
         return parser
 
     def _check_kebab_name(self, name: str) -> str:
@@ -984,6 +987,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         arg_prefix: str,
         subcommand_prefix: str,
         group: Any,
+        alias_path_only_defaults: dict[str, Any],
     ) -> None:
         if alias_path_args:
             context = parser
@@ -999,9 +1003,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     else f'{arg_prefix.replace(subcommand_prefix, "", 1)}{name}'
                 )
                 kwargs: dict[str, Any] = {}
-                kwargs['default'] = CLI_SUPPRESS
                 kwargs['help'] = 'pydantic alias path'
                 kwargs['dest'] = f'{arg_prefix}{name}'
+                kwargs['default'] = alias_path_only_defaults.get(kwargs['dest'], CLI_SUPPRESS)
                 if metavar == 'dict' or is_nested_alias_path:
                     kwargs['metavar'] = 'dict'
                 else:
@@ -1094,3 +1098,47 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _is_field_suppressed(self, field_info: FieldInfo) -> bool:
         _help = field_info.description if field_info.description else ''
         return _help == CLI_SUPPRESS or CLI_SUPPRESS in field_info.metadata
+
+    def _get_cli_default_value(
+        self, field_name: str, field_info: FieldInfo, model_default: Any, is_parser_submodel: bool = False
+    ) -> Any:
+        if is_parser_submodel or not isinstance(self.root_parser, _CliInternalArgSerializer):
+            return CLI_SUPPRESS
+
+        if hasattr(model_default, field_name):
+            return getattr(model_default, field_name)
+
+        return field_info.default
+
+    def _update_alias_path_only_defaults(
+        self, dest: str, default: Any, field_info: FieldInfo, alias_path_only_defaults: dict[str, Any]
+    ) -> None:
+        alias_path: AliasPath = [
+            alias if isinstance(alias, AliasPath) else cast(AliasPath, alias.choices[0])
+            for alias in (field_info.alias, field_info.validation_alias)
+            if isinstance(alias, (AliasPath, AliasChoices))
+        ][0]
+
+        alias_nested_paths: list[str] = alias_path.path[1:-1]  # type: ignore
+        if '.' in dest:
+            alias_nested_paths = dest.split('.') + alias_nested_paths
+            dest = alias_nested_paths.pop(0)
+
+        if not alias_nested_paths:
+            alias_path_only_defaults.setdefault(dest, [])
+            alias_default = alias_path_only_defaults[dest]
+            assert isinstance(alias_default, list)
+        else:
+            alias_path_only_defaults.setdefault(dest, {})
+            current_path = alias_path_only_defaults[dest]
+            assert isinstance(current_path, dict)
+
+            for nested_path in alias_nested_paths[:-1]:
+                current_path.setdefault(nested_path, {})
+                current_path = current_path[nested_path]
+            current_path.setdefault(alias_nested_paths[-1], [])
+            alias_default = current_path[alias_nested_paths[-1]]
+
+        alias_path_index = cast(int, alias_path.path[-1])
+        alias_default.extend([''] * max(alias_path_index + 1 - len(alias_default), 0))
+        alias_default[alias_path_index] = default

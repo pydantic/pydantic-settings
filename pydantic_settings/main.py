@@ -642,9 +642,7 @@ class CliApp:
             The serialized CLI arguments for the data model.
         """
 
-        model_cls = type(model)
-        base_settings_cls = CliApp._get_base_settings_cls(model_cls)
-
+        base_settings_cls = CliApp._get_base_settings_cls(type(model))
         model_field_definitions: dict[str, Any] = {}
         for field_name, field_info in base_settings_cls.model_fields.items():
             model_field_definitions[field_name] = (
