@@ -668,6 +668,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self._formatter_class = formatter_class
         self._cli_dict_args: dict[str, type[Any] | None] = {}
         self._cli_subcommands: defaultdict[str, dict[str, str]] = defaultdict(dict)
+        self._is_serialize_args = isinstance(root_parser, _CliInternalArgSerializer)
+        self._serialized_positional_args: dict[str, Any] = {}
         self._add_parser_args(
             parser=self.root_parser,
             model=self.settings_cls,
@@ -858,8 +860,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     ) -> tuple[list[str], str]:
         flag_prefix = ''
         arg_names = [kwargs['dest']]
-        kwargs['default'] = PydanticUndefined
-        kwargs['metavar'] = self._check_kebab_name(preferred_alias.upper())
 
         # Note: CLI positional args are always strictly required at the CLI. Therefore, use field_info.is_required in
         # conjunction with model_default instead of the derived kwargs['required'].
@@ -869,6 +869,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             kwargs['nargs'] = '+' if is_required else '*'
         elif not is_required:
             kwargs['nargs'] = '?'
+
+        if self._is_serialize_args:
+            self._serialized_positional_args[kwargs['dest']] = kwargs['default']
+            kwargs['nargs'] = '*'
+
+        kwargs['default'] = PydanticUndefined
+        kwargs['metavar'] = self._check_kebab_name(preferred_alias.upper())
 
         del kwargs['dest']
         del kwargs['required']
@@ -957,7 +964,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         is_model_suppressed = self._is_field_suppressed(field_info) or is_model_suppressed
         if is_model_suppressed:
             model_group_kwargs['description'] = CLI_SUPPRESS
-        if not self.cli_avoid_json:
+        if not self.cli_avoid_json and not self._is_serialize_args:
             added_args.append(arg_names[0])
             kwargs['nargs'] = '?'
             kwargs['const'] = '{}'
@@ -1100,15 +1107,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         return _help == CLI_SUPPRESS or CLI_SUPPRESS in field_info.metadata
 
     def _get_cli_default_value(
-        self, field_name: str, field_info: FieldInfo, model_default: Any, is_parser_submodel: bool = False
+        self, field_name: str, field_info: FieldInfo, model_default: Any, is_parser_submodel: bool
     ) -> Any:
         if is_parser_submodel or not isinstance(self.root_parser, _CliInternalArgSerializer):
             return CLI_SUPPRESS
 
-        if hasattr(model_default, field_name):
-            return getattr(model_default, field_name)
-
-        return field_info.default
+        return getattr(model_default, field_name, field_info.default)
 
     def _update_alias_path_only_defaults(
         self, dest: str, default: Any, field_info: FieldInfo, alias_path_only_defaults: dict[str, Any]
@@ -1142,3 +1146,20 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         alias_path_index = cast(int, alias_path.path[-1])
         alias_default.extend([''] * max(alias_path_index + 1 - len(alias_default), 0))
         alias_default[alias_path_index] = default
+
+    def _serialized_args(self) -> list[str]:
+        assert self._is_serialize_args
+
+        cli_args = []
+        for arg, values in self._serialized_positional_args.items():
+            for value in values if isinstance(values, list) else [values]:
+                value = json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
+                cli_args.append(value)
+
+        for arg, value in self.env_vars.items():
+            if arg not in self._serialized_positional_args:
+                value = json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
+                cli_args.append(f'{self.cli_flag_prefix_char * min(len(arg), 2)}{arg}')
+                cli_args.append(value)
+
+        return cli_args
