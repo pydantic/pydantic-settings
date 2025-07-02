@@ -35,7 +35,7 @@ from typing import (
 )
 
 import typing_extensions
-from pydantic import AliasChoices, AliasPath, BaseModel, Field
+from pydantic import AliasChoices, AliasPath, BaseModel, Field, create_model
 from pydantic._internal._repr import Representation
 from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
@@ -47,7 +47,15 @@ from typing_inspection.introspection import is_union_origin
 
 from ...exceptions import SettingsError
 from ...utils import _lenient_issubclass, _WithArgsTypes
-from ..types import NoDecode, _CliExplicitFlag, _CliImplicitFlag, _CliPositionalArg, _CliSubCommand, _CliUnknownArgs
+from ..types import (
+    NoDecode,
+    PydanticModel,
+    _CliExplicitFlag,
+    _CliImplicitFlag,
+    _CliPositionalArg,
+    _CliSubCommand,
+    _CliUnknownArgs,
+)
 from ..utils import (
     _annotation_contains_types,
     _annotation_enum_val_to_name,
@@ -536,7 +544,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         positional_args, subcommand_args, optional_args = [], [], []
         for field_name, field_info in _get_model_fields(model).items():
             if _CliSubCommand in field_info.metadata:
-                if not field_info.is_required():
+                if not field_info.is_required() and not self._is_serialize_args:
                     raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has a default value')
                 else:
                     alias_names, *_ = _get_alias_names(field_name, field_info)
@@ -719,6 +727,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     subcommand_name = f'{arg_prefix}{subcommand_alias}'
                     subcommand_dest = f'{arg_prefix}{preferred_alias}'
                     self._cli_subcommands[f'{arg_prefix}:subcommand'][subcommand_name] = subcommand_dest
+                    self._serialize_positional_args[subcommand_dest] = (
+                        self._subcommand_serialized_args(subcommand_alias, field_info.default)
+                        if self._is_serialize_args and field_info.default not in (PydanticUndefined, None)
+                        else PydanticUndefined
+                    )
 
                     subcommand_help = None if len(sub_models) > 1 else field_info.description
                     if self.cli_use_class_docs_for_groups:
@@ -1109,7 +1122,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _get_cli_default_value(
         self, field_name: str, field_info: FieldInfo, model_default: Any, is_parser_submodel: bool
     ) -> Any:
-        if is_parser_submodel or not isinstance(self.root_parser, _CliInternalArgSerializer):
+        if is_parser_submodel or not self._is_serialize_args:
             return CLI_SUPPRESS
 
         return getattr(model_default, field_name, field_info.default)
@@ -1145,12 +1158,29 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         alias_default.extend([''] * max(alias_path_index + 1 - len(alias_default), 0))
         alias_default[alias_path_index] = default
 
+    def _subcommand_serialized_args(self, subcommand_alias: str, subcommand_model: PydanticModel) -> list[str]:
+        model_field_definitions: dict[str, Any] = {}
+        for field_name, field_info in _get_model_fields(type(subcommand_model)).items():
+            model_field_definitions[field_name] = (
+                field_info.annotation,
+                FieldInfo.merge_field_infos(field_info, default=getattr(subcommand_model, field_name)),
+            )
+
+        cli_serialize_cls = create_model(
+            'CliSerialize', __config__=self.settings_cls.model_config, **model_field_definitions
+        )
+        return [f'{subcommand_alias} '] + CliSettingsSource[Any](
+            cli_serialize_cls, cli_parse_args=[], root_parser=_CliInternalArgSerializer()
+        )._serialized_args()
+
     def _serialized_args(self) -> list[str]:
         if not self._is_serialize_args:
             raise SettingsError('Root parser is not _CliInternalArgSerializer')
 
         cli_args = []
         for arg, values in self._serialize_positional_args.items():
+            if values == PydanticUndefined:
+                continue
             for value in values if isinstance(values, list) else [values]:
                 value = json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
                 cli_args.append(value)
@@ -1158,7 +1188,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         for arg, value in self.env_vars.items():
             if arg not in self._serialize_positional_args:
                 value = json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
-                cli_args.append(f'{self.cli_flag_prefix_char * min(len(arg), 2)}{arg}')
+                cli_args.append(f'{self.cli_flag_prefix_char * min(len(arg), 2)}{self._check_kebab_name(arg)}')
                 cli_args.append(value)
 
         return cli_args
