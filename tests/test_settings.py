@@ -488,6 +488,15 @@ def test_annotated_with_type(env):
     s = AnnotatedComplexSettings()
     assert s.apples == ['russet', 'granny smith']
 
+    T = TypeVar('T')
+    MinLenList = TypeAliasType('MinLenList', Annotated[Union[list[T], tuple[T]], MinLen(2)], type_params=(T,))
+
+    class AnnotatedComplexSettings(BaseSettings):
+        apples: MinLenList[str]
+
+    s = AnnotatedComplexSettings()
+    assert s.apples == ['russet', 'granny smith']
+
 
 def test_set_dict_model(env):
     env.set('bananas', '[1, 2, 3, 3]')

@@ -356,7 +356,9 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
         if not v_alias or self.config.get('populate_by_name', False):
             annotation = field.annotation
-            if typing_objects.is_typealiastype(annotation):
+            if annotation and (
+                typing_objects.is_typealiastype(annotation) or typing_objects.is_typealiastype(get_origin(annotation))
+            ):
                 annotation = _strip_annotated(annotation.__value__)
             if is_union_origin(get_origin(annotation)) and _union_is_complex(annotation, field.metadata):
                 field_info.append((field_name, self._apply_case_sensitive(self.env_prefix + field_name), True))
