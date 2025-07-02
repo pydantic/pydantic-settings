@@ -2639,3 +2639,51 @@ def test_cli_serialize_positional_args(env):
     serialized_cli_args = CliApp.serialize(cfg)
     assert serialized_cli_args == ['0', '1', '2', '3', '4', '5']
     assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+
+
+def test_cli_serialize_subcommand_args(env):
+    @pydantic_dataclasses.dataclass
+    class FooPlugin:
+        my_feature: bool = False
+
+    @pydantic_dataclasses.dataclass
+    class BarPlugin:
+        my_feature: bool = False
+
+    @pydantic_dataclasses.dataclass
+    class Plugins:
+        foo: CliSubCommand[FooPlugin]
+        bar: CliSubCommand[BarPlugin]
+
+    class Clone(BaseModel):
+        repository: CliPositionalArg[str]
+        directory: CliPositionalArg[str]
+        local: bool = False
+        shared: bool = False
+
+    class Init(BaseModel):
+        directory: CliPositionalArg[str]
+        quiet: bool = False
+        bare: bool = False
+
+    class Git(BaseModel):
+        clone: CliSubCommand[Clone]
+        init: CliSubCommand[Init]
+        plugins: CliSubCommand[Plugins]
+
+    assert CliApp.serialize(Git(clone=None, init=None, plugins=None)) == []
+    assert CliApp.serialize(Git(clone=None, init=None, plugins=Plugins(foo=FooPlugin(), bar=None))) == [
+        'plugins ',
+        'foo ',
+        '--my-feature',
+        'False',
+    ]
+    assert CliApp.serialize(Git(clone=Clone(repository='repo', directory='dir'), init=None, plugins=None)) == [
+        'clone ',
+        'repo',
+        'dir',
+        '--local',
+        'False',
+        '--shared',
+        'False',
+    ]

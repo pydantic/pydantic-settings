@@ -1179,7 +1179,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
         cli_args = []
         for arg, values in self._serialize_positional_args.items():
-            if values == PydanticUndefined:
+            if values is PydanticUndefined:
                 continue
             for value in values if isinstance(values, list) else [values]:
                 value = json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
