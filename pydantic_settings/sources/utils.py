@@ -40,12 +40,10 @@ def parse_env_vars(
     }
 
 
-def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
+def _annotation_is_complex(annotation: Any, metadata: list[Any]) -> bool:
     # If the model is a root model, the root annotation should be used to
     # evaluate the complexity.
-    if annotation and (
-        typing_objects.is_typealiastype(annotation) or typing_objects.is_typealiastype(get_origin(annotation))
-    ):
+    if typing_objects.is_typealiastype(annotation) or typing_objects.is_typealiastype(get_origin(annotation)):
         annotation = annotation.__value__
     if annotation is not None and _lenient_issubclass(annotation, RootModel) and annotation is not RootModel:
         annotation = cast('type[RootModel[Any]]', annotation)
