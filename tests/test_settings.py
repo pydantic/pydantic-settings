@@ -34,7 +34,7 @@ from pydantic import (
     dataclasses as pydantic_dataclasses,
 )
 from pydantic.fields import FieldInfo
-from typing_extensions import override
+from typing_extensions import TypeAliasType, override
 
 from pydantic_settings import (
     BaseSettings,
@@ -472,6 +472,30 @@ def test_annotated_list(env):
             'type': 'too_short',
         }
     ]
+
+
+def test_annotated_with_type(env):
+    """https://github.com/pydantic/pydantic-settings/issues/536.
+
+    PEP 695 type aliases need to be analyzed when determining if an annotation is complex.
+    """
+    MinLenList = TypeAliasType('MinLenList', Annotated[Union[list[str], list[int]], MinLen(2)])
+
+    class AnnotatedComplexSettings(BaseSettings):
+        apples: MinLenList
+
+    env.set('apples', '["russet", "granny smith"]')
+    s = AnnotatedComplexSettings()
+    assert s.apples == ['russet', 'granny smith']
+
+    T = TypeVar('T')
+    MinLenList = TypeAliasType('MinLenList', Annotated[Union[list[T], tuple[T]], MinLen(2)], type_params=(T,))
+
+    class AnnotatedComplexSettings(BaseSettings):
+        apples: MinLenList[str]
+
+    s = AnnotatedComplexSettings()
+    assert s.apples == ['russet', 'granny smith']
 
 
 def test_set_dict_model(env):

@@ -16,6 +16,7 @@ from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
 from pydantic._internal._utils import is_model_class
 from pydantic.fields import FieldInfo
 from typing_extensions import get_args
+from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
 
 from ..exceptions import SettingsError
@@ -25,6 +26,7 @@ from .utils import (
     _annotation_is_complex,
     _get_alias_names,
     _get_model_fields,
+    _strip_annotated,
     _union_is_complex,
 )
 
@@ -353,7 +355,10 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                 field_info.append((v_alias, self._apply_case_sensitive(v_alias), False))
 
         if not v_alias or self.config.get('populate_by_name', False):
-            if is_union_origin(get_origin(field.annotation)) and _union_is_complex(field.annotation, field.metadata):
+            annotation = field.annotation
+            if typing_objects.is_typealiastype(annotation) or typing_objects.is_typealiastype(get_origin(annotation)):
+                annotation = _strip_annotated(annotation.__value__)  # type: ignore[union-attr]
+            if is_union_origin(get_origin(annotation)) and _union_is_complex(annotation, field.metadata):
                 field_info.append((field_name, self._apply_case_sensitive(self.env_prefix + field_name), True))
             else:
                 field_info.append((field_name, self._apply_case_sensitive(self.env_prefix + field_name), False))
