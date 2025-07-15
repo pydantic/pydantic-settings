@@ -35,7 +35,7 @@ from typing import (
 )
 
 import typing_extensions
-from pydantic import AliasChoices, AliasPath, BaseModel, Field
+from pydantic import BaseModel, Field
 from pydantic._internal._repr import Representation
 from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
@@ -72,10 +72,6 @@ class _CliInternalArgParser(ArgumentParser):
         if not self._cli_exit_on_error:
             raise SettingsError(f'error parsing CLI: {message}')
         super().error(message)
-
-
-class _CliInternalArgSerializer(_CliInternalArgParser):
-    pass
 
 
 class CliMutuallyExclusiveGroup(BaseModel):
@@ -668,8 +664,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self._formatter_class = formatter_class
         self._cli_dict_args: dict[str, type[Any] | None] = {}
         self._cli_subcommands: defaultdict[str, dict[str, str]] = defaultdict(dict)
-        self._is_serialize_args = isinstance(root_parser, _CliInternalArgSerializer)
-        self._serialize_positional_args: dict[str, Any] = {}
         self._add_parser_args(
             parser=self.root_parser,
             model=self.settings_cls,
@@ -695,7 +689,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     ) -> ArgumentParser:
         subparsers: Any = None
         alias_path_args: dict[str, str] = {}
-        alias_path_only_defaults: dict[str, Any] = {}
         # Ignore model default if the default is a model and not a subclass of the current model.
         model_default = (
             None
@@ -763,11 +756,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 is_append_action = _annotation_contains_types(
                     field_info.annotation, (list, set, dict, Sequence, Mapping), is_strip_annotated=True
                 )
-                is_parser_submodel = bool(sub_models) and not is_append_action
+                is_parser_submodel = sub_models and not is_append_action
                 kwargs: dict[str, Any] = {}
-                kwargs['default'] = self._get_cli_default_value(
-                    field_name, field_info, model_default, is_parser_submodel
-                )
+                kwargs['default'] = CLI_SUPPRESS
                 kwargs['help'] = self._help_format(field_name, field_info, model_default, is_model_suppressed)
                 kwargs['metavar'] = self._metavar_format(field_info.annotation)
                 kwargs['required'] = (
@@ -826,14 +817,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         self._add_argument(
                             parser, *(f'{flag_prefix[: len(name)]}{name}' for name in arg_names), **kwargs
                         )
-                elif kwargs['default'] != CLI_SUPPRESS:
-                    self._update_alias_path_only_defaults(
-                        kwargs['dest'], kwargs['default'], field_info, alias_path_only_defaults
-                    )
 
-        self._add_parser_alias_paths(
-            parser, alias_path_args, added_args, arg_prefix, subcommand_prefix, group, alias_path_only_defaults
-        )
+        self._add_parser_alias_paths(parser, alias_path_args, added_args, arg_prefix, subcommand_prefix, group)
         return parser
 
     def _check_kebab_name(self, name: str) -> str:
@@ -860,6 +845,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     ) -> tuple[list[str], str]:
         flag_prefix = ''
         arg_names = [kwargs['dest']]
+        kwargs['default'] = PydanticUndefined
+        kwargs['metavar'] = self._check_kebab_name(preferred_alias.upper())
 
         # Note: CLI positional args are always strictly required at the CLI. Therefore, use field_info.is_required in
         # conjunction with model_default instead of the derived kwargs['required'].
@@ -869,13 +856,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             kwargs['nargs'] = '+' if is_required else '*'
         elif not is_required:
             kwargs['nargs'] = '?'
-
-        if self._is_serialize_args:
-            self._serialize_positional_args[kwargs['dest']] = kwargs['default']
-            kwargs['nargs'] = '*'
-
-        kwargs['default'] = PydanticUndefined
-        kwargs['metavar'] = self._check_kebab_name(preferred_alias.upper())
 
         del kwargs['dest']
         del kwargs['required']
@@ -964,7 +944,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         is_model_suppressed = self._is_field_suppressed(field_info) or is_model_suppressed
         if is_model_suppressed:
             model_group_kwargs['description'] = CLI_SUPPRESS
-        if not self.cli_avoid_json and not self._is_serialize_args:
+        if not self.cli_avoid_json:
             added_args.append(arg_names[0])
             kwargs['nargs'] = '?'
             kwargs['const'] = '{}'
@@ -994,7 +974,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         arg_prefix: str,
         subcommand_prefix: str,
         group: Any,
-        alias_path_only_defaults: dict[str, Any],
     ) -> None:
         if alias_path_args:
             context = parser
@@ -1010,9 +989,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     else f'{arg_prefix.replace(subcommand_prefix, "", 1)}{name}'
                 )
                 kwargs: dict[str, Any] = {}
+                kwargs['default'] = CLI_SUPPRESS
                 kwargs['help'] = 'pydantic alias path'
                 kwargs['dest'] = f'{arg_prefix}{name}'
-                kwargs['default'] = alias_path_only_defaults.get(kwargs['dest'], CLI_SUPPRESS)
                 if metavar == 'dict' or is_nested_alias_path:
                     kwargs['metavar'] = 'dict'
                 else:
@@ -1105,60 +1084,3 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _is_field_suppressed(self, field_info: FieldInfo) -> bool:
         _help = field_info.description if field_info.description else ''
         return _help == CLI_SUPPRESS or CLI_SUPPRESS in field_info.metadata
-
-    def _get_cli_default_value(
-        self, field_name: str, field_info: FieldInfo, model_default: Any, is_parser_submodel: bool
-    ) -> Any:
-        if is_parser_submodel or not isinstance(self.root_parser, _CliInternalArgSerializer):
-            return CLI_SUPPRESS
-
-        return getattr(model_default, field_name, field_info.default)
-
-    def _update_alias_path_only_defaults(
-        self, dest: str, default: Any, field_info: FieldInfo, alias_path_only_defaults: dict[str, Any]
-    ) -> None:
-        alias_path: AliasPath = [
-            alias if isinstance(alias, AliasPath) else cast(AliasPath, alias.choices[0])
-            for alias in (field_info.alias, field_info.validation_alias)
-            if isinstance(alias, (AliasPath, AliasChoices))
-        ][0]
-
-        alias_nested_paths: list[str] = alias_path.path[1:-1]  # type: ignore
-        if '.' in dest:
-            alias_nested_paths = dest.split('.') + alias_nested_paths
-            dest = alias_nested_paths.pop(0)
-
-        if not alias_nested_paths:
-            alias_path_only_defaults.setdefault(dest, [])
-            alias_default = alias_path_only_defaults[dest]
-        else:
-            alias_path_only_defaults.setdefault(dest, {})
-            current_path = alias_path_only_defaults[dest]
-
-            for nested_path in alias_nested_paths[:-1]:
-                current_path.setdefault(nested_path, {})
-                current_path = current_path[nested_path]
-            current_path.setdefault(alias_nested_paths[-1], [])
-            alias_default = current_path[alias_nested_paths[-1]]
-
-        alias_path_index = cast(int, alias_path.path[-1])
-        alias_default.extend([''] * max(alias_path_index + 1 - len(alias_default), 0))
-        alias_default[alias_path_index] = default
-
-    def _serialized_args(self) -> list[str]:
-        if not self._is_serialize_args:
-            raise SettingsError('Root parser is not _CliInternalArgSerializer')
-
-        cli_args = []
-        for arg, values in self._serialize_positional_args.items():
-            for value in values if isinstance(values, list) else [values]:
-                value = json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
-                cli_args.append(value)
-
-        for arg, value in self.env_vars.items():
-            if arg not in self._serialize_positional_args:
-                value = json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
-                cli_args.append(f'{self.cli_flag_prefix_char * min(len(arg), 2)}{arg}')
-                cli_args.append(value)
-
-        return cli_args
