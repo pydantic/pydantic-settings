@@ -35,7 +35,7 @@ from typing import (
 )
 
 import typing_extensions
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, AliasPath, BaseModel, Field, create_model
 from pydantic._internal._repr import Representation
 from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
@@ -47,7 +47,15 @@ from typing_inspection.introspection import is_union_origin
 
 from ...exceptions import SettingsError
 from ...utils import _lenient_issubclass, _WithArgsTypes
-from ..types import NoDecode, _CliExplicitFlag, _CliImplicitFlag, _CliPositionalArg, _CliSubCommand, _CliUnknownArgs
+from ..types import (
+    NoDecode,
+    PydanticModel,
+    _CliExplicitFlag,
+    _CliImplicitFlag,
+    _CliPositionalArg,
+    _CliSubCommand,
+    _CliUnknownArgs,
+)
 from ..utils import (
     _annotation_contains_types,
     _annotation_enum_val_to_name,
@@ -1084,3 +1092,116 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _is_field_suppressed(self, field_info: FieldInfo) -> bool:
         _help = field_info.description if field_info.description else ''
         return _help == CLI_SUPPRESS or CLI_SUPPRESS in field_info.metadata
+
+    @classmethod
+    def _update_alias_path_only_default(
+        cls, arg_name: str, value: Any, field_info: FieldInfo, alias_path_only_defaults: dict[str, Any]
+    ) -> tuple[str, list[Any] | dict[str, Any]]:
+        alias_path: AliasPath = [
+            alias if isinstance(alias, AliasPath) else cast(AliasPath, alias.choices[0])
+            for alias in (field_info.alias, field_info.validation_alias)
+            if isinstance(alias, (AliasPath, AliasChoices))
+        ][0]
+
+        alias_nested_paths: list[str] = alias_path.path[1:-1]  # type: ignore
+        if '.' in arg_name:
+            alias_nested_paths = arg_name.split('.') + alias_nested_paths
+            arg_name = alias_nested_paths.pop(0)
+
+        if not alias_nested_paths:
+            alias_path_only_defaults.setdefault(arg_name, [])
+            alias_default = alias_path_only_defaults[arg_name]
+        else:
+            alias_path_only_defaults.setdefault(arg_name, {})
+            current_path = alias_path_only_defaults[arg_name]
+
+            for nested_path in alias_nested_paths[:-1]:
+                current_path.setdefault(nested_path, {})
+                current_path = current_path[nested_path]
+            current_path.setdefault(alias_nested_paths[-1], [])
+            alias_default = current_path[alias_nested_paths[-1]]
+
+        alias_path_index = cast(int, alias_path.path[-1])
+        alias_default.extend([''] * max(alias_path_index + 1 - len(alias_default), 0))
+        alias_default[alias_path_index] = value
+        return arg_name, alias_path_only_defaults[arg_name]
+
+    @classmethod
+    def _serialized_args(cls, model: PydanticModel, model_config: Any, prefix: str = '') -> list[str]:
+        model_field_definitions: dict[str, Any] = {}
+        for field_name, field_info in _get_model_fields(type(model)).items():
+            model_default = getattr(model, field_name)
+            if field_info.default == model_default:
+                continue
+            if _CliSubCommand in field_info.metadata and model_default is None:
+                continue
+            model_field_definitions[field_name] = (field_info.annotation, field_info)
+        cli_serialize_cls = create_model('CliSerialize', __config__=model_config, **model_field_definitions)
+
+        added_args: set[str] = set()
+        alias_path_args: dict[str, str] = {}
+        alias_path_only_defaults: dict[str, Any] = {}
+        optional_args: list[str | list[Any] | dict[str, Any]] = []
+        positional_args: list[str | list[Any] | dict[str, Any]] = []
+        subcommand_args: list[str] = []
+        cli_settings = CliSettingsSource[Any](cli_serialize_cls)
+        for field_name, field_info in _get_model_fields(cli_serialize_cls).items():
+            model_default = getattr(model, field_name)
+            alias_names, is_alias_path_only = _get_alias_names(
+                field_name, field_info, alias_path_args=alias_path_args, case_sensitive=cli_settings.case_sensitive
+            )
+            preferred_alias = alias_names[0]
+            if _CliSubCommand in field_info.metadata:
+                subcommand_args.append(preferred_alias)
+                subcommand_args += cls._serialized_args(model_default, model_config)
+                continue
+            if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
+                positional_args += cls._serialized_args(
+                    model_default, model_config, prefix=f'{prefix}{preferred_alias}.'
+                )
+                continue
+
+            arg_name = f'{prefix}{cls._check_kebab_name(cli_settings, preferred_alias)}'
+            value: str | list[Any] | dict[str, Any] = (
+                json.dumps(model_default) if isinstance(model_default, (dict, list, set)) else str(model_default)
+            )
+
+            if is_alias_path_only:
+                # For alias path only, we wont know the complete value until we've finished parsing the entire class. In
+                # this case, insert value as a non-string reference pointing to the relevant alias_path_only_defaults
+                # entry and convert into completed string value later.
+                arg_name, value = cls._update_alias_path_only_default(
+                    arg_name, value, field_info, alias_path_only_defaults
+                )
+
+            if arg_name in added_args:
+                continue
+            added_args.add(arg_name)
+
+            if _CliPositionalArg in field_info.metadata:
+                if is_alias_path_only:
+                    positional_args.append(value)
+                    continue
+                for value in model_default if isinstance(model_default, list) else [model_default]:
+                    value = json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
+                    positional_args.append(value)
+                continue
+
+            flag_chars = f'{cli_settings.cli_flag_prefix_char * min(len(arg_name), 2)}'
+
+            kwargs = {'metavar': cls._metavar_format(cli_settings, field_info.annotation)}
+            cls._convert_bool_flag(cli_settings, kwargs, field_info, model_default)
+            # Note: cls._convert_bool_flag will add action to kwargs if value is implicit bool flag
+            if 'action' in kwargs and model_default is False:
+                flag_chars += 'no-'
+
+            optional_args.append(f'{flag_chars}{arg_name}')
+
+            # If implicit bool flag, do not add a value
+            if 'action' not in kwargs:
+                optional_args.append(value)
+
+        serialized_args: list[str] = []
+        serialized_args += [json.dumps(value) if not isinstance(value, str) else value for value in optional_args]
+        serialized_args += [json.dumps(value) if not isinstance(value, str) else value for value in positional_args]
+        return serialized_args + subcommand_args

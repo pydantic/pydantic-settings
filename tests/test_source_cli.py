@@ -297,6 +297,21 @@ def test_cli_alias_arg(capsys, monkeypatch, avoid_json):
         'alias_str': 'str',
     }
 
+    serialized_cli_args = CliApp.serialize(cfg)
+    assert serialized_cli_args == [
+        '-a',
+        'a',
+        '--path1',
+        '["", "b1"]',
+        '-b',
+        'b',
+        '--path2',
+        '{"deep": ["", "b2"]}',
+        '--str',
+        'str',
+    ]
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+
 
 @pytest.mark.parametrize('avoid_json', [True, False])
 def test_cli_alias_nested_arg(capsys, monkeypatch, avoid_json):
@@ -332,6 +347,19 @@ def test_cli_alias_nested_arg(capsys, monkeypatch, avoid_json):
             'alias_str': 'str',
         }
     }
+
+    serialized_cli_args = CliApp.serialize(cfg)
+    assert serialized_cli_args == [
+        '--nest.a',
+        'a',
+        '--nest',
+        '{"path1": ["", "b1"], "path2": {"deep": ["", "b2"]}}',
+        '--nest.b',
+        'b',
+        '--nest.str',
+        'str',
+    ]
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
 
 
 def test_cli_alias_exceptions(capsys, monkeypatch):
@@ -2574,3 +2602,9 @@ def test_cli_shortcuts_alias_collision_applies_to_first_target_field():
         'nested': {'option': 'bar'},
         'option2': 'foo2',
     }
+
+
+# ADD TEST KEBAB CASE
+# ADD TEST SUBCOMMAND BEFORE POSITIONAL
+# ADD TEST IMPLICIT BOOL FLAGS
+# ADD TEST ONLY SERIALIZE NON-DEFAULT VALUES
