@@ -1152,7 +1152,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             )
             preferred_alias = alias_names[0]
             if _CliSubCommand in field_info.metadata:
-                subcommand_args.append(preferred_alias)
+                subcommand_args.append(cls._check_kebab_name(cli_settings, preferred_alias))
                 subcommand_args += cls._serialized_args(model_default, model_config)
                 continue
             if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
@@ -1188,7 +1188,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 continue
 
             flag_chars = f'{cli_settings.cli_flag_prefix_char * min(len(arg_name), 2)}'
-
             kwargs = {'metavar': cls._metavar_format(cli_settings, field_info.annotation)}
             cls._convert_bool_flag(cli_settings, kwargs, field_info, model_default)
             # Note: cls._convert_bool_flag will add action to kwargs if value is implicit bool flag
