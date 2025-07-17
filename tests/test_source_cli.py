@@ -2378,6 +2378,25 @@ def test_cli_invalid_abbrev():
         )
 
 
+def test_cli_subcommand_invalid_abbrev():
+    class Child(BaseModel):
+        bacon: str = ''
+        badger: str = ''
+
+    class MySettings(BaseSettings):
+        child: CliSubCommand[Child]
+
+    with pytest.raises(
+        SettingsError,
+        match='error parsing CLI: unrecognized arguments: --bac cli abbrev are invalid for internal parser',
+    ):
+        CliApp.run(
+            MySettings,
+            cli_args=['child', '--bac', 'cli abbrev are invalid for internal parser'],
+            cli_exit_on_error=False,
+        )
+
+
 def test_cli_submodels_strip_annotated():
     class PolyA(BaseModel):
         a: int = 1
@@ -2639,3 +2658,25 @@ def test_cli_serialize_positional_args(env):
     serialized_cli_args = CliApp.serialize(cfg)
     assert serialized_cli_args == ['0', '1', '2', '3', '4', '5']
     assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+
+
+def test_cli_app_with_separate_parser(monkeypatch):
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+        pet: Literal['dog', 'cat', 'bird']
+
+    parser = argparse.ArgumentParser()
+
+    # The actual parsing of command line argument should not happen here.
+    cli_settings = CliSettingsSource(Cfg, root_parser=parser)
+
+    parser.add_argument('-e', '--extra', dest='extra', default=0, action='count')
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--pet', 'dog', '-eeee'])
+
+        parsed_args = parser.parse_args()
+
+    assert parsed_args.extra == 4
+    # With parsed arguments passed to CliApp.run, the parser should not need to be called again.
+    assert CliApp.run(Cfg, cli_args=parsed_args, cli_settings_source=cli_settings).model_dump() == {'pet': 'dog'}
