@@ -168,9 +168,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self.cli_prog_name = (
             cli_prog_name if cli_prog_name is not None else settings_cls.model_config.get('cli_prog_name', sys.argv[0])
         )
-        self.cli_parse_args = (
-            cli_parse_args if cli_parse_args is not None else settings_cls.model_config.get('cli_parse_args', None)
-        )
         self.cli_hide_none_type = (
             cli_hide_none_type
             if cli_hide_none_type is not None
@@ -259,14 +256,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             add_subparsers_method=add_subparsers_method,
             formatter_class=formatter_class,
         )
-        if self.cli_parse_args not in (None, False):
-            if self.cli_parse_args is True:
-                self.cli_parse_args = sys.argv[1:]
-            elif not isinstance(self.cli_parse_args, (list, tuple)):
+
+        if cli_parse_args not in (None, False):
+            if cli_parse_args is True:
+                cli_parse_args = sys.argv[1:]
+            elif not isinstance(cli_parse_args, (list, tuple)):
                 raise SettingsError(
-                    f'cli_parse_args must be a list or tuple of strings, received {type(self.cli_parse_args)}'
+                    f'cli_parse_args must be a list or tuple of strings, received {type(cli_parse_args)}'
                 )
-            self._load_env_vars(parsed_args=self._parse_args(self.root_parser, self.cli_parse_args))
+            self._load_env_vars(parsed_args=self._parse_args(self.root_parser, cli_parse_args))
 
     @overload
     def __call__(self) -> dict[str, Any]: ...
