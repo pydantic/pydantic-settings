@@ -2531,6 +2531,33 @@ def test_cli_json_optional_default():
     assert CliApp.run(Options, cli_args=['--nested.foo=5']).model_dump() == {'nested': {'foo': 5, 'bar': 2}}
 
 
+def test_cli_parse_args_from_model_config_is_respected_with_settings_customise_sources(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class MySettings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+
+        foo: str
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (CliSettingsSource(settings_cls),)
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--foo', 'bar'])
+
+        cfg = CliApp.run(MySettings)
+
+        assert cfg.model_dump() == {'foo': 'bar'}
+
+
 def test_cli_shortcuts_on_flat_object():
     class Settings(BaseSettings):
         option: str = Field(default='foo')
@@ -2612,3 +2639,25 @@ def test_cli_serialize_positional_args(env):
     serialized_cli_args = CliApp.serialize(cfg)
     assert serialized_cli_args == ['0', '1', '2', '3', '4', '5']
     assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+
+
+def test_cli_app_with_separate_parser(monkeypatch):
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+        pet: Literal['dog', 'cat', 'bird']
+
+    parser = argparse.ArgumentParser()
+
+    # The actual parsing of command line argument should not happen here.
+    cli_settings = CliSettingsSource(Cfg, root_parser=parser)
+
+    parser.add_argument('-e', '--extra', dest='extra', default=0, action='count')
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--pet', 'dog', '-eeee'])
+
+        parsed_args = parser.parse_args()
+
+    assert parsed_args.extra == 4
+    # With parsed arguments passed to CliApp.run, the parser should not need to be called again.
+    assert CliApp.run(Cfg, cli_args=parsed_args, cli_settings_source=cli_settings).model_dump() == {'pet': 'dog'}
