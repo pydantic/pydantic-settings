@@ -2378,6 +2378,25 @@ def test_cli_invalid_abbrev():
         )
 
 
+def test_cli_subcommand_invalid_abbrev():
+    class Child(BaseModel):
+        bacon: str = ''
+        badger: str = ''
+
+    class MySettings(BaseSettings):
+        child: CliSubCommand[Child]
+
+    with pytest.raises(
+        SettingsError,
+        match='error parsing CLI: unrecognized arguments: --bac cli abbrev are invalid for internal parser',
+    ):
+        CliApp.run(
+            MySettings,
+            cli_args=['child', '--bac', 'cli abbrev are invalid for internal parser'],
+            cli_exit_on_error=False,
+        )
+
+
 def test_cli_submodels_strip_annotated():
     class PolyA(BaseModel):
         a: int = 1
