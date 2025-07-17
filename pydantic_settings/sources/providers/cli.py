@@ -747,6 +747,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                             help=subcommand_help,
                             formatter_class=self._formatter_class,
                             description=None if model.__doc__ is None else dedent(model.__doc__),
+                            allow_abbrev=False,
                         ),
                         model=model,
                         added_args=[],
