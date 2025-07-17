@@ -109,7 +109,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
         # As `extra` config is allowed in dotenv settings source, We have to
         # update data with extra env variables from dotenv file.
         for env_name, env_value in self.env_vars.items():
-            if not env_value or env_name in data:
+            if not env_value or env_name in data or (self.env_prefix and env_name in self.settings_cls.model_fields):
                 continue
             env_used = False
             for field_name, field in self.settings_cls.model_fields.items():

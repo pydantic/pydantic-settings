@@ -3000,6 +3000,61 @@ def test_dotenv_env_prefix_env_without_prefix(tmp_path):
     assert s.model_dump() == {'foo': 'test-foo'}
 
 
+def test_dotenv_env_prefix_env_without_prefix_ignored(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('foo=foo')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=p,
+            env_prefix='TEST_',
+            extra='ignore',
+        )
+
+        foo: str = ''
+
+    s = Settings()
+    assert s.model_dump() == {'foo': ''}
+
+
+def test_nested_model_dotenv_env_prefix_env_without_prefix_ignored(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('foo__val=1')
+
+    class Foo(BaseModel):
+        val: int = 0
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_nested_delimiter='__',
+            env_file=p,
+            env_prefix='TEST_',
+            extra='ignore',
+        )
+
+        foo: Foo = Foo()
+
+    s = Settings()
+    assert s.model_dump() == {'foo': {'val': 0}}
+
+
+def test_dotenv_env_prefix_env_with_alias_without_prefix(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('FooAlias=foo')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=p,
+            env_prefix='TEST_',
+            extra='ignore',
+        )
+
+        foo: str = Field('xxx', alias='FooAlias')
+
+    s = Settings()
+    assert s.model_dump() == {'foo': 'foo'}
+
+
 def test_parsing_secret_field(env):
     class Settings(BaseSettings):
         foo: Secret[int]
