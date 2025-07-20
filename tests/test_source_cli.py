@@ -301,14 +301,14 @@ def test_cli_alias_arg(capsys, monkeypatch, avoid_json):
     assert serialized_cli_args == [
         '-a',
         'a',
+        '--path1',
+        '["", "b1"]',
         '-b',
         'b',
-        '--str',
-        'str',
-        '--path1',
-        '["","b1"]',
         '--path2',
         '{"deep": ["", "b2"]}',
+        '--str',
+        'str',
     ]
     assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
 
@@ -352,12 +352,12 @@ def test_cli_alias_nested_arg(capsys, monkeypatch, avoid_json):
     assert serialized_cli_args == [
         '--nest.a',
         'a',
+        '--nest',
+        '{"path1": ["", "b1"], "path2": {"deep": ["", "b2"]}}',
         '--nest.b',
         'b',
         '--nest.str',
         'str',
-        '--nest',
-        '{"path1": ["", "b1"], "path2": {"deep": ["", "b2"]}}',
     ]
     assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
 
@@ -1539,8 +1539,19 @@ def test_cli_bool_flags(monkeypatch, enforce_required):
         'implicit_opt': False,
     }
 
-    assert CliApp.run(ExplicitSettings, cli_args=['--explicit_req=True', '--implicit_req']).model_dump() == expected
-    assert CliApp.run(ImplicitSettings, cli_args=['--explicit_req=True', '--implicit_req']).model_dump() == expected
+    explicit_settings = CliApp.run(ExplicitSettings, cli_args=['--explicit_req=True', '--implicit_req'])
+    assert explicit_settings.model_dump() == expected
+
+    implicit_settings = CliApp.run(ImplicitSettings, cli_args=['--explicit_req=True', '--implicit_req'])
+    assert implicit_settings.model_dump() == expected
+
+    serialized_args = CliApp.serialize(explicit_settings)
+    assert serialized_args == ['--explicit_req', 'True', '--implicit_req']
+    assert CliApp.run(ExplicitSettings, cli_args=serialized_args).model_dump() == expected
+
+    serialized_args = CliApp.serialize(implicit_settings)
+    assert serialized_args == ['--explicit_req', 'True', '--implicit_req']
+    assert CliApp.run(ImplicitSettings, cli_args=serialized_args).model_dump() == expected
 
 
 def test_cli_avoid_json(capsys, monkeypatch):
@@ -1973,9 +1984,6 @@ def test_cli_user_settings_source_exceptions():
 
     with pytest.raises(SettingsError, match='CLI settings source prefix is invalid: 123'):
         CliSettingsSource(Cfg, cli_prefix='123')
-
-    with pytest.raises(SettingsError, match='Root parser is not _CliInternalArgSerializer'):
-        CliSettingsSource[Any](Cfg, cli_parse_args=[])._serialized_args()
 
     class Food(BaseModel):
         fruit: FruitsEnum = FruitsEnum.kiwi
@@ -2432,7 +2440,7 @@ def test_cli_kebab_case(capsys, monkeypatch):
         root_subcmd: CliSubCommand[SubModel]
         root_arg: str
 
-    assert CliApp.run(
+    root = CliApp.run(
         Root,
         cli_args=[
             '--root-arg=hi',
@@ -2442,13 +2450,27 @@ def test_cli_kebab_case(capsys, monkeypatch):
             'hey',
             '--deep-arg=bye',
         ],
-    ).model_dump() == {
+    )
+    assert root.model_dump() == {
         'root_arg': 'hi',
         'root_subcmd': {
             'sub_arg': 'hello',
             'sub_subcmd': {'deep_pos_arg': 'hey', 'deep_arg': 'bye'},
         },
     }
+
+    serialized_cli_args = CliApp.serialize(root)
+    assert serialized_cli_args == [
+        '--root-arg',
+        'hi',
+        'root-subcmd',
+        '--sub-arg',
+        'hello',
+        'sub-subcmd',
+        '--deep-arg',
+        'bye',
+        'hey',
+    ]
 
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
@@ -2626,7 +2648,7 @@ def test_cli_shortcuts_alias_collision_applies_to_first_target_field():
     }
 
 
-def test_cli_serialize_positional_args(env):
+def test_cli_serialize_positional_args():
     class Nested(BaseModel):
         deep: CliPositionalArg[int]
 
@@ -2680,3 +2702,44 @@ def test_cli_app_with_separate_parser(monkeypatch):
     assert parsed_args.extra == 4
     # With parsed arguments passed to CliApp.run, the parser should not need to be called again.
     assert CliApp.run(Cfg, cli_args=parsed_args, cli_settings_source=cli_settings).model_dump() == {'pet': 'dog'}
+
+
+def test_cli_serialize_non_default_values():
+    class Cfg(BaseSettings):
+        default_val: int = 123
+        non_default_val: int
+
+    cfg = Cfg(non_default_val=456)
+    assert cfg.model_dump() == {'default_val': 123, 'non_default_val': 456}
+
+    serialized_cli_args = CliApp.serialize(cfg)
+    assert serialized_cli_args == ['--non_default_val', '456']
+
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+
+
+def test_cli_serialize_ordering():
+    class NestedCfg(BaseSettings):
+        positional: CliPositionalArg[str]
+        optional: int
+
+    class Cfg(BaseSettings):
+        command: CliSubCommand[NestedCfg]
+        positional: CliPositionalArg[str]
+        optional: int
+
+    cfg = Cfg(optional=0, positional='pos_1', command=NestedCfg(optional=2, positional='pos_3'))
+    assert cfg.model_dump() == {'command': {'optional': 2, 'positional': 'pos_3'}, 'optional': 0, 'positional': 'pos_1'}
+
+    serialized_cli_args = CliApp.serialize(cfg)
+    assert serialized_cli_args == [
+        '--optional',
+        '0',
+        'pos_1',
+        'command',
+        '--optional',
+        '2',
+        'pos_3',
+    ]
+
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()

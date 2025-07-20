@@ -8,12 +8,11 @@ from collections.abc import Mapping
 from types import SimpleNamespace
 from typing import Any, ClassVar, TypeVar
 
-from pydantic import ConfigDict, create_model
+from pydantic import ConfigDict
 from pydantic._internal._config import config_keys
 from pydantic._internal._signature import _field_name_for_signature
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
-from pydantic.fields import FieldInfo
 from pydantic.main import BaseModel
 
 from .exceptions import SettingsError
@@ -31,7 +30,6 @@ from .sources import (
     SecretsSettingsSource,
     get_subcommand,
 )
-from .sources.providers.cli import _CliInternalArgSerializer
 
 T = TypeVar('T')
 
@@ -416,8 +414,8 @@ class BaseSettings(BaseModel):
                 )
                 sources = (cli_settings,) + sources
         # We ensure that if command line arguments haven't been parsed yet, we do so.
-        elif cli_parse_args and not custom_cli_sources[0].env_vars:
-            custom_cli_sources[0](args=cli_parse_args)
+        elif cli_parse_args not in (None, False) and not custom_cli_sources[0].env_vars:
+            custom_cli_sources[0](args=cli_parse_args)  # type: ignore
 
         if sources:
             state: dict[str, Any] = {}
@@ -647,14 +645,4 @@ class CliApp:
         """
 
         base_settings_cls = CliApp._get_base_settings_cls(type(model))
-        model_field_definitions: dict[str, Any] = {}
-        for field_name, field_info in base_settings_cls.model_fields.items():
-            model_field_definitions[field_name] = (
-                field_info.annotation,
-                FieldInfo.merge_field_infos(field_info, default=getattr(model, field_name)),
-            )
-
-        cli_serialize_cls = create_model('CliSerialize', __base__=base_settings_cls, **model_field_definitions)
-        return CliSettingsSource[Any](
-            cli_serialize_cls, cli_parse_args=[], root_parser=_CliInternalArgSerializer()
-        )._serialized_args()
+        return CliSettingsSource._serialized_args(model, base_settings_cls.model_config)
