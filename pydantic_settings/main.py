@@ -415,7 +415,7 @@ class BaseSettings(BaseModel):
                 sources = (cli_settings,) + sources
         # We ensure that if command line arguments haven't been parsed yet, we do so.
         elif cli_parse_args not in (None, False) and not custom_cli_sources[0].env_vars:
-            custom_cli_sources[0](args=cli_parse_args) # type: ignore
+            custom_cli_sources[0](args=cli_parse_args)  # type: ignore
 
         if sources:
             state: dict[str, Any] = {}
