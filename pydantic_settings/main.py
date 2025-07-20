@@ -389,7 +389,8 @@ class BaseSettings(BaseModel):
             dotenv_settings=dotenv_settings,
             file_secret_settings=file_secret_settings,
         ) + (default_settings,)
-        if not any([source for source in sources if isinstance(source, CliSettingsSource)]):
+        custom_cli_sources = [source for source in sources if isinstance(source, CliSettingsSource)]
+        if not any(custom_cli_sources):
             if isinstance(cli_settings_source, CliSettingsSource):
                 sources = (cli_settings_source,) + sources
             elif cli_parse_args is not None:
@@ -412,6 +413,10 @@ class BaseSettings(BaseModel):
                     case_sensitive=case_sensitive,
                 )
                 sources = (cli_settings,) + sources
+        # We ensure that if command line arguments haven't been parsed yet, we do so.
+        elif cli_parse_args not in (None, False) and not custom_cli_sources[0].env_vars:
+            custom_cli_sources[0](args=cli_parse_args)
+
         if sources:
             state: dict[str, Any] = {}
             states: dict[str, dict[str, Any]] = {}
