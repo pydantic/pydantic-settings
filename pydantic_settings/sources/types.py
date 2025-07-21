@@ -4,13 +4,13 @@ from __future__ import annotations as _annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Union
 
 if TYPE_CHECKING:
     from pydantic._internal._dataclasses import PydanticDataclass
     from pydantic.main import BaseModel
 
-    PydanticModel = TypeVar('PydanticModel', bound=Union[PydanticDataclass, BaseModel])
+    PydanticModel = Union[PydanticDataclass, BaseModel]
 else:
     PydanticModel = Any
 
