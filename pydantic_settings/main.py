@@ -3,6 +3,7 @@ from __future__ import annotations as _annotations
 import asyncio
 import inspect
 import threading
+import warnings
 from argparse import Namespace
 from collections.abc import Mapping
 from types import SimpleNamespace
@@ -24,10 +25,14 @@ from .sources import (
     DotenvType,
     EnvSettingsSource,
     InitSettingsSource,
+    JsonConfigSettingsSource,
     PathType,
     PydanticBaseSettingsSource,
     PydanticModel,
+    PyprojectTomlConfigSettingsSource,
     SecretsSettingsSource,
+    TomlConfigSettingsSource,
+    YamlConfigSettingsSource,
     get_subcommand,
 )
 
@@ -417,6 +422,8 @@ class BaseSettings(BaseModel):
         elif cli_parse_args not in (None, False) and not custom_cli_sources[0].env_vars:
             custom_cli_sources[0](args=cli_parse_args)  # type: ignore
 
+        self._settings_warn_unused_config_keys(sources, self.model_config)
+
         if sources:
             state: dict[str, Any] = {}
             states: dict[str, dict[str, Any]] = {}
@@ -435,6 +442,36 @@ class BaseSettings(BaseModel):
             # no one should mean to do this, but I think returning an empty dict is marginally preferable
             # to an informative error and much better than a confusing error
             return {}
+
+    @staticmethod
+    def _settings_warn_unused_config_keys(sources: tuple[object, ...], model_config: SettingsConfigDict) -> None:
+        """
+        Warns if any values in model_config were set but the corresponding settings source has not been initialised.
+
+        The list alternative sources and their config keys can be found here:
+        https://docs.pydantic.dev/latest/concepts/pydantic_settings/#other-settings-source
+
+        Args:
+            sources: The tuple of configured sources
+        """
+
+        def warn_if_not_used(source_type: type[PydanticBaseSettingsSource], keys: tuple[str, ...]) -> None:
+            if not any(isinstance(source, source_type) for source in sources):
+                for key in keys:
+                    if model_config.get(key) is not None:
+                        warnings.warn(
+                            f'Config key `{key}` is set in model_config but will be ignored because no '
+                            f'{source_type.__name__} source is configured. To use this config key, add a '
+                            f'{source_type.__name__} source to the settings sources via the '
+                            'settings_customise_sources hook.',
+                            UserWarning,
+                            stacklevel=3,
+                        )
+
+        warn_if_not_used(JsonConfigSettingsSource, ('json_file', 'json_file_encoding'))
+        warn_if_not_used(PyprojectTomlConfigSettingsSource, ('pyproject_toml_depth', 'pyproject_toml_table_header'))
+        warn_if_not_used(TomlConfigSettingsSource, ('toml_file',))
+        warn_if_not_used(YamlConfigSettingsSource, ('yaml_file', 'yaml_file_encoding', 'yaml_config_section'))
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         extra='forbid',
