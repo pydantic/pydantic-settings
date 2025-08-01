@@ -3132,3 +3132,36 @@ def test_field_annotated_force_decode_disable_decoding(env):
 
     s = Settings()
     assert s.model_dump() == {'a': ['one', 'two']}
+
+
+def test_warns_if_config_keys_are_set_but_source_is_missing():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            json_file='config.json',
+            pyproject_toml_depth=2,
+            toml_file='config.toml',
+            yaml_file='config.yaml',
+            yaml_config_section='myapp',
+        )
+
+    with pytest.warns() as record:
+        Settings()
+
+    assert len(record) == 5
+
+    key_class_pairs = [
+        ('json_file', 'JsonConfigSettingsSource'),
+        ('pyproject_toml_depth', 'PyprojectTomlConfigSettingsSource'),
+        ('toml_file', 'TomlConfigSettingsSource'),
+        ('yaml_file', 'YamlConfigSettingsSource'),
+        ('yaml_config_section', 'YamlConfigSettingsSource'),
+    ]
+
+    for warning, key_class_pair in zip(record, key_class_pairs):
+        assert warning.category is UserWarning
+        expected_message = (
+            f'Config key `{key_class_pair[0]}` is set in model_config but will be ignored because no '
+            f'{key_class_pair[1]} source is configured. To use this config key, add a {key_class_pair[1]} '
+            f'source to the settings sources via the settings_customise_sources hook.'
+        )
+        assert warning.message.args[0] == expected_message
