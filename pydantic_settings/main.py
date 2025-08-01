@@ -453,6 +453,7 @@ class BaseSettings(BaseModel):
 
         Args:
             sources: The tuple of configured sources
+            model_config: The model config to check for unused config keys
         """
 
         def warn_if_not_used(source_type: type[PydanticBaseSettingsSource], keys: tuple[str, ...]) -> None:
