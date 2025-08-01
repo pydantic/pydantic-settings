@@ -3135,20 +3135,20 @@ def test_field_annotated_force_decode_disable_decoding(env):
 
 
 def test_warns_if_config_keys_are_set_but_source_is_missing():
-    config = SettingsConfigDict(
-        json_file='config.json',
-        pyproject_toml_depth=2,
-        toml_file='config.toml',
-        yaml_file='config.yaml',
-        yaml_config_section='myapp',
-    )
-
-    sources = ()  # No sources configured
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            json_file='config.json',
+            pyproject_toml_depth=2,
+            toml_file='config.toml',
+            yaml_file='config.yaml',
+            yaml_config_section='myapp',
+        )
 
     with pytest.warns() as record:
-        BaseSettings._settings_warn_unused_config_keys(sources, config)
+        Settings()
 
     assert len(record) == 5
+    assert all(warning.category is UserWarning for warning in record)
 
     key_class_pairs = [
         ('json_file', 'JsonConfigSettingsSource'),
@@ -3158,7 +3158,14 @@ def test_warns_if_config_keys_are_set_but_source_is_missing():
         ('yaml_config_section', 'YamlConfigSettingsSource'),
     ]
 
-    for warning in record:
-        assert warning.category is UserWarning
-        assert any(key in warning.message.args[0] for key, _ in key_class_pairs)
-        assert any(cls in warning.message.args[0] for _, cls in key_class_pairs)
+    for key_class_pair in key_class_pairs:
+        expected_message = (
+            f'Config key `{key_class_pair[0]}` is set in model_config but will be ignored because no '
+            f'{key_class_pair[1]} source is configured. To use this config key, add a {key_class_pair[1]} '
+            f'source to the settings sources via the settings_customise_sources hook.'
+        )
+
+        warning_count = sum(warning.message.args[0] == expected_message for warning in record)
+        assert warning_count == 1, (
+            f'Expected exactly one warning with message "{expected_message}", but found {warning_count} instead.'
+        )
