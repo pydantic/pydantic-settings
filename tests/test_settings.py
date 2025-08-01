@@ -3148,7 +3148,6 @@ def test_warns_if_config_keys_are_set_but_source_is_missing():
         Settings()
 
     assert len(record) == 5
-    assert all(warning.category is UserWarning for warning in record)
 
     key_class_pairs = [
         ('json_file', 'JsonConfigSettingsSource'),
@@ -3158,14 +3157,11 @@ def test_warns_if_config_keys_are_set_but_source_is_missing():
         ('yaml_config_section', 'YamlConfigSettingsSource'),
     ]
 
-    for key_class_pair in key_class_pairs:
+    for warning, key_class_pair in zip(record, key_class_pairs):
+        assert warning.category is UserWarning
         expected_message = (
             f'Config key `{key_class_pair[0]}` is set in model_config but will be ignored because no '
             f'{key_class_pair[1]} source is configured. To use this config key, add a {key_class_pair[1]} '
             f'source to the settings sources via the settings_customise_sources hook.'
         )
-
-        warning_count = sum(warning.message.args[0] == expected_message for warning in record)
-        assert warning_count == 1, (
-            f'Expected exactly one warning with message "{expected_message}", but found {warning_count} instead.'
-        )
+        assert warning.message.args[0] == expected_message
