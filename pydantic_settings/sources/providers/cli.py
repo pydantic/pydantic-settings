@@ -494,6 +494,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         for field_name, val in list(parsed_args.items()):
             if isinstance(val, list):
                 if self._is_nested_alias_path_only_workaround(parsed_args, field_name, val):
+                    # Workaround for nested alias path environment variables not being handled.
+                    # See https://github.com/pydantic/pydantic-settings/issues/670
                     continue
                 parsed_args[field_name] = self._merge_parsed_list(val, field_name)
             elif field_name.endswith(':subcommand') and val is not None:
@@ -529,6 +531,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _is_nested_alias_path_only_workaround(
         self, parsed_args: dict[str, list[str] | str], field_name: str, val: list[str]
     ) -> bool:
+        """
+        Workaround for nested alias path environment variables not being handled.
+        See https://github.com/pydantic/pydantic-settings/issues/670
+        """
         known_arg = self._parser_map[field_name].values()
         if not known_arg:
             return False
