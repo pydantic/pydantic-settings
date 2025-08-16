@@ -334,8 +334,12 @@ def test_cli_alias_nested_arg(capsys, monkeypatch, avoid_json):
             'b',
             '--nest.str',
             'str',
-            '--nest',
-            '{"path0": ["a0","b0","c0"], "path1": ["a1","b1","c1"], "path2": {"deep": ["a2","b2","c2"]}}',
+            '--nest.path0',
+            '["a0","b0","c0"]',
+            '--nest.path1',
+            '["a1","b1","c1"]',
+            '--nest.path2',
+            '{"deep": ["a2","b2","c2"]}',
         ],
     )
     assert cfg.model_dump() == {
@@ -352,10 +356,12 @@ def test_cli_alias_nested_arg(capsys, monkeypatch, avoid_json):
     assert serialized_cli_args == [
         '--nest.a',
         'a',
-        '--nest',
-        '{"path1": ["", "b1"], "path2": {"deep": ["", "b2"]}}',
+        '--nest.path1',
+        '["", "b1"]',
         '--nest.b',
         'b',
+        '--nest.path2',
+        '{"deep": ["", "b2"]}',
         '--nest.str',
         'str',
     ]
