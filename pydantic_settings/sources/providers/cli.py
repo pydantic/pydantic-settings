@@ -497,6 +497,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     # Workaround for nested alias path environment variables not being handled.
                     # See https://github.com/pydantic/pydantic-settings/issues/670
                     continue
+
+                cli_arg = self._parser_map.get(field_name, {}).get(None)
+                if cli_arg and cli_arg.is_no_decode:
+                    parsed_args[field_name] = ','.join(val)
+                    continue
+
                 parsed_args[field_name] = self._merge_parsed_list(val, field_name)
             elif field_name.endswith(':subcommand') and val is not None:
                 selected_subcommands.append(self._parser_map[field_name][val].dest)
@@ -535,7 +541,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         Workaround for nested alias path environment variables not being handled.
         See https://github.com/pydantic/pydantic-settings/issues/670
         """
-        known_arg = self._parser_map[field_name].values()
+        known_arg = self._parser_map.get(field_name, {}).values()
         if not known_arg:
             return False
         arg = next(iter(known_arg))
@@ -573,18 +579,21 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _merged_list_to_str(self, merged_list: list[str], field_name: str) -> str:
         decode_list: list[str] = []
         is_use_decode: Optional[bool] = None
-        cli_arg_map = self._parser_map.get(field_name)
+        cli_arg_map = self._parser_map.get(field_name, {})
         for index, item in enumerate(merged_list):
-            cli_arg = cli_arg_map.get(index) if cli_arg_map else None
+            cli_arg = cli_arg_map.get(index)
             is_decode = cli_arg is None or not cli_arg.is_no_decode
             if is_use_decode is None:
                 is_use_decode = is_decode
             elif is_use_decode != is_decode:
                 raise SettingsError('Mixing Decode and NoDecode across different AliasPath fields is not allowed')
-            if isinstance(item, str) and is_use_decode:
+            if is_use_decode:
                 item = item.replace('\\', '\\\\')
+            elif item.startswith('"') and item.endswith('"'):
+                item = item[1:-1]
             decode_list.append(item)
-        return f'[{",".join(decode_list)}]'
+        merged_list_str = ','.join(decode_list)
+        return f'[{merged_list_str}]' if is_use_decode else merged_list_str
 
     def _merge_parsed_list(self, parsed_list: list[str], field_name: str) -> str:
         try:
@@ -1304,8 +1313,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     positional_args.append(value)
                 continue
 
-            # Note: prepend 'no-' for boolean optional action flag if model_default value is False
-            if arg.kwargs.get('action') == BooleanOptionalAction and model_default is False:
+            # Note: prepend 'no-' for boolean optional action flag if model_default value is False and flag is not a short option
+            if arg.kwargs.get('action') == BooleanOptionalAction and model_default is False and flag_chars == '--':
                 flag_chars += 'no-'
 
             optional_args.append(f'{flag_chars}{arg_name}')

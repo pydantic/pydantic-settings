@@ -5,6 +5,7 @@ import sys
 import time
 import typing
 from enum import IntEnum
+from pathlib import Path, PureWindowsPath
 from typing import Annotated, Any, Dict, Generic, List, Literal, Optional, Tuple, TypeVar, Union  # noqa: UP035
 
 import pytest
@@ -20,13 +21,23 @@ from pydantic import (
     Field,
     Tag,
     ValidationError,
+    field_validator,
+    model_validator,
 )
 from pydantic import (
     dataclasses as pydantic_dataclasses,
 )
 from pydantic._internal._repr import Representation
 
-from pydantic_settings import BaseSettings, CliApp, PydanticBaseSettingsSource, SettingsConfigDict, SettingsError
+from pydantic_settings import (
+    BaseSettings,
+    CliApp,
+    ForceDecode,
+    NoDecode,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    SettingsError,
+)
 from pydantic_settings.sources import (
     CLI_SUPPRESS,
     CliExplicitFlag,
@@ -1547,16 +1558,33 @@ def test_cli_bool_flags(monkeypatch, enforce_required):
 
     explicit_settings = CliApp.run(ExplicitSettings, cli_args=['--explicit_req=True', '--implicit_req'])
     assert explicit_settings.model_dump() == expected
-
-    implicit_settings = CliApp.run(ImplicitSettings, cli_args=['--explicit_req=True', '--implicit_req'])
-    assert implicit_settings.model_dump() == expected
-
     serialized_args = CliApp.serialize(explicit_settings)
     assert serialized_args == ['--explicit_req', 'True', '--implicit_req']
     assert CliApp.run(ExplicitSettings, cli_args=serialized_args).model_dump() == expected
 
+    implicit_settings = CliApp.run(ImplicitSettings, cli_args=['--explicit_req=True', '--implicit_req'])
+    assert implicit_settings.model_dump() == expected
     serialized_args = CliApp.serialize(implicit_settings)
     assert serialized_args == ['--explicit_req', 'True', '--implicit_req']
+    assert CliApp.run(ImplicitSettings, cli_args=serialized_args).model_dump() == expected
+
+    expected = {
+        'explicit_req': False,
+        'explicit_opt': False,
+        'implicit_req': False,
+        'implicit_opt': False,
+    }
+
+    explicit_settings = CliApp.run(ExplicitSettings, cli_args=['--explicit_req=False', '--no-implicit_req'])
+    assert explicit_settings.model_dump() == expected
+    serialized_args = CliApp.serialize(explicit_settings)
+    assert serialized_args == ['--explicit_req', 'False', '--no-implicit_req']
+    assert CliApp.run(ExplicitSettings, cli_args=serialized_args).model_dump() == expected
+
+    implicit_settings = CliApp.run(ImplicitSettings, cli_args=['--explicit_req=False', '--no-implicit_req'])
+    assert implicit_settings.model_dump() == expected
+    serialized_args = CliApp.serialize(implicit_settings)
+    assert serialized_args == ['--explicit_req', 'False', '--no-implicit_req']
     assert CliApp.run(ImplicitSettings, cli_args=serialized_args).model_dump() == expected
 
 
@@ -2749,3 +2777,55 @@ def test_cli_serialize_ordering():
     ]
 
     assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+
+
+def test_cli_decoding():
+    PATH_A_STR = str(PureWindowsPath(Path.cwd()))
+    PATH_B_STR = str(PureWindowsPath(Path.cwd() / 'subdir'))
+
+    class PathsDecode(BaseSettings):
+        path_a: Path = Field(validation_alias=AliasPath('paths', 0))
+        path_b: Path = Field(validation_alias=AliasPath('paths', 1))
+
+    assert CliApp.run(PathsDecode, cli_args=['--paths', PATH_A_STR, '--paths', PATH_B_STR]).model_dump() == {
+        'path_a': Path(PATH_A_STR),
+        'path_b': Path(PATH_B_STR),
+    }
+
+    class PathsListNoDecode(BaseSettings):
+        paths: Annotated[list[Path], NoDecode]
+
+        @field_validator('paths', mode='before')
+        @classmethod
+        def decode_path_a(cls, paths: str) -> list[Path]:
+            return [Path(p) for p in paths.split(',')]
+
+    assert CliApp.run(PathsListNoDecode, cli_args=['--paths', f'{PATH_A_STR},{PATH_B_STR}']).model_dump() == {
+        'paths': [Path(PATH_A_STR), Path(PATH_B_STR)]
+    }
+
+    class PathsAliasNoDecode(BaseSettings):
+        path_a: Annotated[Path, NoDecode] = Field(validation_alias=AliasPath('paths', 0))
+        path_b: Annotated[Path, NoDecode] = Field(validation_alias=AliasPath('paths', 1))
+
+        @model_validator(mode='before')
+        @classmethod
+        def intercept_kwargs(cls, data: Any) -> Any:
+            data['paths'] = [Path(p) for p in data['paths'].split(',')]
+            return data
+
+    assert CliApp.run(PathsAliasNoDecode, cli_args=['--paths', f'{PATH_A_STR},{PATH_B_STR}']).model_dump() == {
+        'path_a': Path(PATH_A_STR),
+        'path_b': Path(PATH_B_STR),
+    }
+
+    with pytest.raises(
+        SettingsError,
+        match='Parsing error encountered for paths: Mixing Decode and NoDecode across different AliasPath fields is not allowed',
+    ):
+
+        class PathsMixedDecode(BaseSettings):
+            path_a: Annotated[Path, ForceDecode] = Field(validation_alias=AliasPath('paths', 0))
+            path_b: Annotated[Path, NoDecode] = Field(validation_alias=AliasPath('paths', 1))
+
+        CliApp.run(PathsMixedDecode, cli_args=['--paths', PATH_A_STR, '--paths', PATH_B_STR])
