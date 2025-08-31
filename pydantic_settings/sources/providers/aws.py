@@ -37,19 +37,21 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
         settings_cls: type[BaseSettings],
         secret_id: str,
         region_name: str | None = None,
+        endpoint_url: str | None = None,
         case_sensitive: bool | None = True,
         env_prefix: str | None = None,
+        env_nested_delimiter: str | None = '--',
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
     ) -> None:
         import_aws_secrets_manager()
-        self._secretsmanager_client = boto3_client('secretsmanager', region_name=region_name)  # type: ignore
+        self._secretsmanager_client = boto3_client('secretsmanager', region_name=region_name, endpoint_url=endpoint_url)  # type: ignore
         self._secret_id = secret_id
         super().__init__(
             settings_cls,
             case_sensitive=case_sensitive,
             env_prefix=env_prefix,
-            env_nested_delimiter='--',
+            env_nested_delimiter=env_nested_delimiter,
             env_ignore_empty=False,
             env_parse_none_str=env_parse_none_str,
             env_parse_enums=env_parse_enums,
