@@ -1305,9 +1305,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 value = self._update_alias_path_only_default(arg_name, value, field_info, alias_path_only_defaults)
 
             if _CliPositionalArg in field_info.metadata:
-                if arg.is_alias_path_only:
-                    positional_args.append(value)
-                    continue
                 for value in model_default if isinstance(model_default, list) else [model_default]:
                     value = json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
                     positional_args.append(value)
