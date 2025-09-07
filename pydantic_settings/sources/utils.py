@@ -138,7 +138,10 @@ def _get_model_fields(model_cls: type[Any]) -> dict[str, Any]:
 
 
 def _get_alias_names(
-    field_name: str, field_info: Any, alias_path_args: dict[str, str] = {}, case_sensitive: bool = True
+    field_name: str,
+    field_info: Any,
+    alias_path_args: Optional[dict[str, Optional[int]]] = None,
+    case_sensitive: bool = True,
 ) -> tuple[tuple[str, ...], bool]:
     """Get alias names for a field, handling alias paths and case sensitivity."""
     from pydantic import AliasChoices, AliasPath
@@ -168,7 +171,10 @@ def _get_alias_names(
         for alias_path in new_alias_paths:
             name = cast(str, alias_path.path[0])
             name = name.lower() if not case_sensitive else name
-            alias_path_args[name] = 'dict' if len(alias_path.path) > 2 else 'list'
+            if alias_path_args is not None:
+                alias_path_args[name] = (
+                    alias_path.path[1] if len(alias_path.path) > 1 and isinstance(alias_path.path[1], int) else None
+                )
             if not alias_names and is_alias_path_only:
                 alias_names.append(name)
     if not case_sensitive:

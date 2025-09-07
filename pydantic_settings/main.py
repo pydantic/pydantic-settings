@@ -683,4 +683,4 @@ class CliApp:
         """
 
         base_settings_cls = CliApp._get_base_settings_cls(type(model))
-        return CliSettingsSource._serialized_args(model, base_settings_cls.model_config)
+        return CliSettingsSource[Any](base_settings_cls)._serialized_args(model)
