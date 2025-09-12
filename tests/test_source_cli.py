@@ -19,6 +19,7 @@ from pydantic import (
     DirectoryPath,
     Discriminator,
     Field,
+    RootModel,
     Tag,
     ValidationError,
     field_validator,
@@ -1778,19 +1779,30 @@ sub_model options:
 
 
 def test_cli_enforce_required(env):
+    class MyRootModel(RootModel[str]):
+        root: str
+
     class Settings(BaseSettings, cli_exit_on_error=False):
         my_required_field: str
+        my_root_model_required_field: MyRootModel
 
     env.set('MY_REQUIRED_FIELD', 'hello from environment')
+    env.set('MY_ROOT_MODEL_REQUIRED_FIELD', 'hi from environment')
 
     assert Settings(_cli_parse_args=[], _cli_enforce_required=False).model_dump() == {
-        'my_required_field': 'hello from environment'
+        'my_required_field': 'hello from environment',
+        'my_root_model_required_field': 'hi from environment',
     }
 
     with pytest.raises(
         SettingsError, match='error parsing CLI: the following arguments are required: --my_required_field'
     ):
         Settings(_cli_parse_args=[], _cli_enforce_required=True).model_dump()
+
+    with pytest.raises(
+        SettingsError, match='error parsing CLI: the following arguments are required: --my_root_model_required_field'
+    ):
+        Settings(_cli_parse_args=['--my_required_field', 'hello from cli'], _cli_enforce_required=True).model_dump()
 
 
 def test_cli_exit_on_error(capsys, monkeypatch):

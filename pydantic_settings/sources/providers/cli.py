@@ -956,7 +956,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
                 self._convert_bool_flag(arg.kwargs, field_info, model_default)
 
-                if arg.is_parser_submodel:
+                if arg.is_parser_submodel and not getattr(field_info.annotation, '__pydantic_root_model__', False):
                     self._add_parser_submodels(
                         parser,
                         model,
@@ -1107,6 +1107,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             model_group_kwargs['description'] = CLI_SUPPRESS
         if not self.cli_avoid_json:
             added_args.append(arg_names[0])
+            kwargs['required'] = False
             kwargs['nargs'] = '?'
             kwargs['const'] = '{}'
             kwargs['help'] = (
@@ -1205,8 +1206,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             )
         elif obj is type(None):
             return self.cli_parse_none_str
-        elif is_model_class(obj):
-            return 'JSON'
+        elif is_model_class(obj) or is_pydantic_dataclass(obj):
+            return (
+                self._metavar_format_recurse(_get_model_fields(obj)['root'].annotation)
+                if getattr(obj, '__pydantic_root_model__', False)
+                else 'JSON'
+            )
         elif isinstance(obj, type):
             return obj.__qualname__
         else:
