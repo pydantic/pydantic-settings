@@ -59,13 +59,13 @@ class AzureKeyVaultMapping(Mapping[str, Optional[str]]):
     def __getitem__(self, key: str) -> str | None:
         key_snake = to_snake(key)
 
-        if key_snake not in self._loaded_secrets and key_snake in self._secret_map:
-            self._loaded_secrets[key_snake] = self._secret_client.get_secret(self._secret_map[key_snake]).value
+        if key_snake not in self._loaded_secrets:
+            if key_snake in self._secret_map:
+                self._loaded_secrets[key_snake] = self._secret_client.get_secret(self._secret_map[key_snake]).value
+            else:
+                raise KeyError(key)
 
-        try:
-            return self._loaded_secrets[key_snake]
-        except Exception:
-            raise KeyError(key)
+        return self._loaded_secrets[key_snake]
 
     def __len__(self) -> int:
         return len(self._secret_map)
