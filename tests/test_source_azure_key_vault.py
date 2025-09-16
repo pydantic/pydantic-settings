@@ -46,14 +46,13 @@ class TestAzureKeyVaultSettingsSource:
         """Test __call__."""
 
         class SqlServer(BaseModel):
-            password: str = Field(..., alias='Password')
+            password: str
 
         class AzureKeyVaultSettings(BaseSettings):
             """AzureKeyVault settings."""
 
-            SqlServerUser: str
-            sql_server_user: str = Field(..., alias='SqlServerUser')
-            sql_server: SqlServer = Field(..., alias='SqlServer')
+            sql_server_user: str
+            sql_server: SqlServer
 
         expected_secrets = [
             type('', (), {'name': 'SqlServerUser', 'enabled': True}),
@@ -74,14 +73,14 @@ class TestAzureKeyVaultSettingsSource:
 
         settings = obj()
 
-        assert settings['SqlServerUser'] == expected_secret_value
-        assert settings['SqlServer']['Password'] == expected_secret_value
+        assert settings['sql_server_user'] == expected_secret_value
+        assert settings['sql_server']['password'] == expected_secret_value
 
     def test_do_not_load_disabled_secrets(self, mocker: MockerFixture) -> None:
         class AzureKeyVaultSettings(BaseSettings):
             """AzureKeyVault settings."""
 
-            SqlServerPassword: str
+            sql_server_password: str
             DisabledSqlServerPassword: str
 
         disabled_secret_name = 'SqlServerPassword'
@@ -108,14 +107,13 @@ class TestAzureKeyVaultSettingsSource:
         """Test AzureKeyVaultSettingsSource."""
 
         class SqlServer(BaseModel):
-            password: str = Field(..., alias='Password')
+            password: str
 
         class AzureKeyVaultSettings(BaseSettings):
             """AzureKeyVault settings."""
 
-            SqlServerUser: str
-            sql_server_user: str = Field(..., alias='SqlServerUser')
-            sql_server: SqlServer = Field(..., alias='SqlServer')
+            sql_server_user: str
+            sql_server: SqlServer
 
             @classmethod
             def settings_customise_sources(
@@ -148,7 +146,6 @@ class TestAzureKeyVaultSettingsSource:
 
         settings = AzureKeyVaultSettings()  # type: ignore
 
-        assert settings.SqlServerUser == expected_secret_value
         assert settings.sql_server_user == expected_secret_value
         assert settings.sql_server.password == expected_secret_value
 
@@ -161,12 +158,17 @@ class TestAzureKeyVaultSettingsSource:
 
         return key_vault_secret
 
-    def test_dash_to_underscore_translation(self, mocker: MockerFixture) -> None:
-        """Test that dashes in secret names are mapped to underscores in field names."""
+    def test_snake_case_translation(self, mocker: MockerFixture) -> None:
+        """Test that secret names are mapped to snake case in field names."""
+
+        class NestedModel(BaseModel):
+            nested_field: str
 
         class AzureKeyVaultSettings(BaseSettings):
             my_field: str
-            alias_field: str = Field(..., alias='Secret-Alias')
+            alias_field: str = Field(alias='Secret-Alias')
+            alias_field_2: str = Field(alias='another-SECRET-AliaS')
+            nested_model: NestedModel
 
             @classmethod
             def settings_customise_sources(
@@ -182,13 +184,14 @@ class TestAzureKeyVaultSettingsSource:
                         settings_cls,
                         'https://my-resource.vault.azure.net/',
                         DefaultAzureCredential(),
-                        dash_to_underscore=True,
                     ),
                 )
 
         expected_secrets = [
             type('', (), {'name': 'my-field', 'enabled': True}),
             type('', (), {'name': 'Secret-Alias', 'enabled': True}),
+            type('', (), {'name': 'another-SECRET-AliaS', 'enabled': True}),
+            type('', (), {'name': 'NestedModel--NestedField', 'enabled': True}),
         ]
         expected_secret_value = 'SecretValue'
 
@@ -205,3 +208,5 @@ class TestAzureKeyVaultSettingsSource:
 
         assert settings.my_field == expected_secret_value
         assert settings.alias_field == expected_secret_value
+        assert settings.alias_field_2 == expected_secret_value
+        assert settings.nested_model.nested_field == expected_secret_value
