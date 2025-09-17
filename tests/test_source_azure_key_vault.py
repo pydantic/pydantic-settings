@@ -52,12 +52,12 @@ class TestAzureKeyVaultSettingsSource:
             """AzureKeyVault settings."""
 
             SqlServerUser: str
-            # sql_server_user: str = Field(..., alias='SqlServerUser')
-            # sql_server: SqlServer = Field(..., alias='SqlServer')
+            sql_server_user: str = Field(..., alias='SqlServerUser')
+            sql_server: SqlServer = Field(..., alias='SqlServer')
 
         expected_secrets = [
             type('', (), {'name': 'SqlServerUser', 'enabled': True}),
-            # type('', (), {'name': 'SqlServer--Password', 'enabled': True}),
+            type('', (), {'name': 'SqlServer--Password', 'enabled': True}),
         ]
         expected_secret_value = 'SecretValue'
         mocker.patch(
