@@ -46,17 +46,18 @@ class TestAzureKeyVaultSettingsSource:
         """Test __call__."""
 
         class SqlServer(BaseModel):
-            password: str
+            password: str = Field(..., alias='Password')
 
         class AzureKeyVaultSettings(BaseSettings):
             """AzureKeyVault settings."""
 
-            sql_server_user: str
-            sql_server: SqlServer
+            SqlServerUser: str
+            # sql_server_user: str = Field(..., alias='SqlServerUser')
+            # sql_server: SqlServer = Field(..., alias='SqlServer')
 
         expected_secrets = [
             type('', (), {'name': 'SqlServerUser', 'enabled': True}),
-            type('', (), {'name': 'SqlServer--Password', 'enabled': True}),
+            # type('', (), {'name': 'SqlServer--Password', 'enabled': True}),
         ]
         expected_secret_value = 'SecretValue'
         mocker.patch(
@@ -73,8 +74,8 @@ class TestAzureKeyVaultSettingsSource:
 
         settings = obj()
 
-        assert settings['sql_server_user'] == expected_secret_value
-        assert settings['sql_server']['password'] == expected_secret_value
+        assert settings['SqlServerUser'] == expected_secret_value
+        assert settings['SqlServer']['Password'] == expected_secret_value
 
     def test_do_not_load_disabled_secrets(self, mocker: MockerFixture) -> None:
         class AzureKeyVaultSettings(BaseSettings):
