@@ -42,7 +42,12 @@ class AzureKeyVaultMapping(Mapping[str, Optional[str]]):
     _secret_client: SecretClient
     _secret_names: list[str]
 
-    def __init__(self, secret_client: SecretClient, case_sensitive: bool, snake_case_conversion: bool) -> None:
+    def __init__(
+        self,
+        secret_client: SecretClient,
+        case_sensitive: bool,
+        snake_case_conversion: bool,
+    ) -> None:
         self._loaded_secrets = {}
         self._secret_client = secret_client
         self._case_sensitive = case_sensitive
