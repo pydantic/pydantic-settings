@@ -699,6 +699,21 @@ def test_alias_resolution_init_source(env):
     assert Example(name='john', PREFIX_SURNAME='doe').model_dump() == {'name': 'john', 'last_name': 'doe'}
 
 
+@pytest.mark.xfail(
+    reason='This test is expected to fail in some sessions due to `InitSettingsSource`s non-deterministic behaviour.'
+    "Simply repeating through parameterization won't help as the underlying reason is the non-deterministic "
+    'nature of python sets, which will remain constant within the same session.'
+)
+def test_init_kwargs_alias_resolution_deterministic():
+    class Example(BaseSettings):
+        name: str
+        last_name: str = Field(validation_alias=AliasChoices('surname', 'last_name'))
+
+    result = Example(name='john', surname='doe', last_name='smith').model_dump()
+
+    assert result == {'name': 'john', 'last_name': 'doe'}
+
+
 def test_alias_nested_model_default_partial_update():
     class SubModel(BaseModel):
         v1: str = 'default'
