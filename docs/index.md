@@ -1978,7 +1978,6 @@ The Azure Key Vault source accepts a `snake_case_convertion` option, disabled by
 import os
 
 from azure.identity import DefaultAzureCredential
-from pydantic import Field
 
 from pydantic_settings import (
     AzureKeyVaultSettingsSource,
