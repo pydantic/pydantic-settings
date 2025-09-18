@@ -205,3 +205,63 @@ class TestAzureKeyVaultSettingsSource:
 
         assert settings.my_field == expected_secret_value
         assert settings.alias_field == expected_secret_value
+
+    def test_snake_case_conversion(self, mocker: MockerFixture) -> None:
+        """Test that secret names are mapped to snake case in field names."""
+
+        class NestedModel(BaseModel):
+            nested_field: str
+
+        class AzureKeyVaultSettings(BaseSettings):
+            my_field_from_kebab_case: str
+            my_field_from_pascal_case: str
+            my_field_from_camel_case: str
+            alias_field: str = Field(alias='Secret-Alias')
+            alias_field_2: str = Field(alias='another-SECRET-AliaS')
+            nested_model: NestedModel
+
+            @classmethod
+            def settings_customise_sources(
+                cls,
+                settings_cls: type[BaseSettings],
+                init_settings: PydanticBaseSettingsSource,
+                env_settings: PydanticBaseSettingsSource,
+                dotenv_settings: PydanticBaseSettingsSource,
+                file_secret_settings: PydanticBaseSettingsSource,
+            ) -> tuple[PydanticBaseSettingsSource, ...]:
+                return (
+                    AzureKeyVaultSettingsSource(
+                        settings_cls,
+                        'https://my-resource.vault.azure.net/',
+                        DefaultAzureCredential(),
+                        snake_case_conversion=True,
+                    ),
+                )
+
+        expected_secrets = [
+            type('', (), {'name': 'my-field-from-kebab-case', 'enabled': True}),
+            type('', (), {'name': 'MyFieldFromPascalCase', 'enabled': True}),
+            type('', (), {'name': 'myFieldFromCamelCase', 'enabled': True}),
+            type('', (), {'name': 'Secret-Alias', 'enabled': True}),
+            type('', (), {'name': 'another-SECRET-AliaS', 'enabled': True}),
+            type('', (), {'name': 'NestedModel--NestedField', 'enabled': True}),
+        ]
+        expected_secret_value = 'SecretValue'
+
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.list_properties_of_secrets.__qualname__}',
+            return_value=expected_secrets,
+        )
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.get_secret.__qualname__}',
+            return_value=KeyVaultSecret(SecretProperties(), expected_secret_value),
+        )
+
+        settings = AzureKeyVaultSettings()
+
+        assert settings.my_field_from_kebab_case == expected_secret_value
+        assert settings.my_field_from_pascal_case == expected_secret_value
+        assert settings.my_field_from_camel_case == expected_secret_value
+        assert settings.alias_field == expected_secret_value
+        assert settings.alias_field_2 == expected_secret_value
+        assert settings.nested_model.nested_field == expected_secret_value
