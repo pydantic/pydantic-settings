@@ -2589,6 +2589,39 @@ positional arguments:
         )
 
 
+def test_cli_kebab_case_enums():
+    class Example1(IntEnum):
+        example_a = 0
+        example_b = 1
+
+    class Example2(IntEnum):
+        example_c = 2
+        example_d = 3
+
+    class SettingsNoEnum(BaseSettings):
+        model_config = SettingsConfigDict(cli_kebab_case='no_enums')
+        example: Union[Example1, Example2]
+        mybool: bool
+
+    class SettingsAll(BaseSettings):
+        model_config = SettingsConfigDict(cli_kebab_case='all')
+        example: Union[Example1, Example2]
+        mybool: bool
+
+    assert CliApp.run(
+        SettingsNoEnum,
+        cli_args=['--example', 'example_a', '--mybool=true'],
+    ).model_dump() == {'example': Example1.example_a, 'mybool': True}
+
+    assert CliApp.run(SettingsAll, cli_args=['--example', 'example-c', '--mybool=true']).model_dump() == {
+        'example': Example2.example_c,
+        'mybool': True,
+    }
+
+    with pytest.raises(ValueError, match='Input should be kebab-case "example-a", not "example_a"'):
+        CliApp.run(SettingsAll, cli_args=['--example', 'example_a', '--mybool=true'])
+
+
 def test_cli_with_unbalanced_brackets_in_json_string():
     class StrToStrDictOptions(BaseSettings):
         nested: dict[str, str]
