@@ -13,7 +13,7 @@ from pydantic import AliasChoices, AliasPath, BaseModel, TypeAdapter
 from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
     get_origin,
 )
-from pydantic._internal._utils import is_model_class
+from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.fields import FieldInfo
 from typing_extensions import get_args
 from typing_inspection import typing_objects
@@ -202,7 +202,9 @@ class ConfigFileSourceMixin(ABC):
         for file in files:
             file_path = Path(file).expanduser()
             if file_path.is_file():
-                vars.update(self._read_file(file_path))
+                file_data = self._read_file(file_path)
+                # Deep merge so later files override earlier nested keys instead of replacing whole objects
+                vars = deep_update(vars, file_data)
         return vars
 
     @abstractmethod
@@ -265,12 +267,27 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         init_kwarg_names = set(init_kwargs.keys())
         for field_name, field_info in settings_cls.model_fields.items():
             alias_names, *_ = _get_alias_names(field_name, field_info)
-            init_kwarg_name = init_kwarg_names & set(alias_names)
+            # When populate_by_name is True, allow using the field name as an input key,
+            # but normalize to the preferred alias to keep keys consistent across sources.
+            matchable_names = set(alias_names)
+            include_name = settings_cls.model_config.get('populate_by_name', False)
+            if include_name:
+                matchable_names.add(field_name)
+            init_kwarg_name = init_kwarg_names & matchable_names
             if init_kwarg_name:
-                preferred_alias = alias_names[0]
-                preferred_set_alias = next(alias for alias in alias_names if alias in init_kwarg_name)
+                preferred_alias = alias_names[0] if alias_names else field_name
+                # Choose provided key deterministically: prefer the first alias in alias_names order;
+                # fall back to field_name if allowed and provided.
+                provided_key = next((alias for alias in alias_names if alias in init_kwarg_names), None)
+                if provided_key is None and include_name and field_name in init_kwarg_names:
+                    provided_key = field_name
+                # provided_key should not be None here because init_kwarg_name is non-empty
+                assert provided_key is not None
                 init_kwarg_names -= init_kwarg_name
-                self.init_kwargs[preferred_alias] = init_kwargs[preferred_set_alias]
+                self.init_kwargs[preferred_alias] = init_kwargs[provided_key]
+        # Include any remaining init kwargs (e.g., extras) unchanged
+        # Note: If populate_by_name is True and the provided key is the field name, but
+        # no alias exists, we keep it as-is so it can be processed as extra if allowed.
         self.init_kwargs.update({key: val for key, val in init_kwargs.items() if key in init_kwarg_names})
 
         super().__init__(settings_cls)
