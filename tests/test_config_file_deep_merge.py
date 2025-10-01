@@ -28,12 +28,12 @@ from pydantic_settings import (
 )
 
 
-def test_init_kwargs_override_env_for_alias_with_populate_by_name(monkeypatch):
+def test_init_kwargs_override_env_for_alias_with_populate_by_name(env):
     class Settings(BaseSettings):
         abc: AnyHttpUrl = Field(validation_alias='my_abc')
         model_config = SettingsConfigDict(populate_by_name=True, extra='allow')
 
-    monkeypatch.setenv('MY_ABC', 'http://localhost.com/')
+    env.set('MY_ABC', 'http://localhost.com/')
 
     # Passing by field name should be accepted (populate_by_name=True) and should
     # override env-derived value. Also ensures init > env precedence with validation_alias.

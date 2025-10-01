@@ -2,7 +2,6 @@ from __future__ import annotations as _annotations
 
 from pathlib import Path
 
-import pytest
 from pydantic import AnyHttpUrl, Field
 
 from pydantic_settings import (
@@ -12,39 +11,27 @@ from pydantic_settings import (
 )
 
 
-@pytest.fixture(autouse=True)
-def clear_env(monkeypatch):
-    monkeypatch.delenv('FOO', raising=False)
-    monkeypatch.delenv('BAR', raising=False)
-    monkeypatch.delenv('NESTED', raising=False)
-    monkeypatch.delenv('NESTED__X', raising=False)
-    monkeypatch.delenv('NESTED__Y', raising=False)
-
-
-def test_init_kwargs_override_env_for_alias_with_populate_by_name(monkeypatch):
+def test_init_kwargs_override_env_for_alias_with_populate_by_name(env):
     class Settings(BaseSettings):
         abc: AnyHttpUrl = Field(validation_alias='my_abc')
         model_config = SettingsConfigDict(populate_by_name=True, extra='allow')
 
-    monkeypatch.setenv('MY_ABC', 'http://localhost.com/')
-
+    env.set('MY_ABC', 'http://localhost.com')
     # Passing by field name should be accepted (populate_by_name=True) and should
     # override env-derived value. Also ensures init > env precedence with validation_alias.
     assert str(Settings(abc='http://prod.localhost.com/').abc) == 'http://prod.localhost.com/'
 
 
-def test_precedence_init_over_env(tmp_path: Path, monkeypatch):
+def test_precedence_init_over_env(tmp_path: Path, env):
     class Settings(BaseSettings):
         foo: str
 
-    monkeypatch.setenv('FOO', 'from-env')
-
-    # init should win over env
+    env.set('FOO', 'from-env')
     s = Settings(foo='from-init')
     assert s.foo == 'from-init'
 
 
-def test_precedence_env_over_dotenv(tmp_path: Path, monkeypatch):
+def test_precedence_env_over_dotenv(tmp_path: Path, env):
     env_file = tmp_path / '.env'
     env_file.write_text('FOO=from-dotenv\n')
 
@@ -53,13 +40,12 @@ def test_precedence_env_over_dotenv(tmp_path: Path, monkeypatch):
 
         model_config = SettingsConfigDict(env_file=env_file)
 
-    # env set should override dotenv
-    monkeypatch.setenv('FOO', 'from-env')
+    env.set('FOO', 'from-env')
     s = Settings()
     assert s.foo == 'from-env'
 
 
-def test_precedence_dotenv_over_secrets(tmp_path: Path, monkeypatch):
+def test_precedence_dotenv_over_secrets(tmp_path: Path):
     # create dotenv
     env_file = tmp_path / '.env'
     env_file.write_text('FOO=from-dotenv\n')
@@ -93,7 +79,7 @@ def test_precedence_secrets_over_defaults(tmp_path: Path):
     assert s.foo == 'from-secrets'
 
 
-def test_merging_preserves_earlier_values(tmp_path: Path, monkeypatch):
+def test_merging_preserves_earlier_values(tmp_path: Path, env):
     # Prove that merging preserves earlier source values: init -> env -> dotenv -> secrets -> defaults
     # We'll populate nested from dotenv and env parts, then set a default for a, and init for b
     env_file = tmp_path / '.env'
@@ -123,7 +109,7 @@ def test_merging_preserves_earlier_values(tmp_path: Path, monkeypatch):
             return init_settings, env_settings, dotenv_settings, file_secret_settings
 
     # env contributes nested.y and overrides dotenv nested.x=1 if set; we'll set only y to prove merge
-    monkeypatch.setenv('NESTED__y', '3')
+    env.set('NESTED__y', '3')
     # init contributes b, defaults contribute a
     s = Settings(b=20)
     assert s.a == 10  # defaults preserved
