@@ -1887,14 +1887,22 @@ Value for `Settings.db.user` can be passed in env variable `MY_DB__USER`.
 
 ```py
 from pydantic import BaseModel, SecretStr
-from pydantic_settings import BaseSettings, NestedSecretsSettingsSource, SettingsConfigDict
+
+from pydantic_settings import (
+    BaseSettings,
+    NestedSecretsSettingsSource,
+    SettingsConfigDict,
+)
+
 
 class AppSettings(BaseModel):
     key: SecretStr
 
+
 class DbSettings(BaseModel):
     user: str
     passwd: SecretStr
+
 
 class Settings(BaseSettings):
     app: AppSettings
@@ -1934,12 +1942,57 @@ class Settings(BaseSettings):
     └── 📄 passwd
 ```
 ```py
+from pydantic import BaseModel, SecretStr
+
+from pydantic_settings import (
+    BaseSettings,
+    NestedSecretsSettingsSource,
+    SettingsConfigDict,
+)
+
+
+class AppSettings(BaseModel):
+    key: SecretStr
+
+
+class DbSettings(BaseModel):
+    user: str
+    passwd: SecretStr
+
+
+class Settings(BaseSettings):
+    app: AppSettings
+    db: DbSettings
+
+    model_config = SettingsConfigDict(
+        env_prefix='MY_',
+        env_nested_delimiter='__',
+        secrets_dir='secrets',
+        secrets_nested_delimiter='_',
+    )
+
     model_config = SettingsConfigDict(
         env_prefix='MY_',
         env_nested_delimiter='__',
         secrets_dir='secrets',
         secrets_nested_subdir=True,
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            NestedSecretsSettingsSource(file_secret_settings),
+        )
 ```
 
 ### Use Case: Multiple Nested Directories
@@ -1958,12 +2011,57 @@ class Settings(BaseSettings):
         └── 📄 passwd
 ```
 ```py
+from pydantic import BaseModel, SecretStr
+
+from pydantic_settings import (
+    BaseSettings,
+    NestedSecretsSettingsSource,
+    SettingsConfigDict,
+)
+
+
+class AppSettings(BaseModel):
+    key: SecretStr
+
+
+class DbSettings(BaseModel):
+    user: str
+    passwd: SecretStr
+
+
+class Settings(BaseSettings):
+    app: AppSettings
+    db: DbSettings
+
+    model_config = SettingsConfigDict(
+        env_prefix='MY_',
+        env_nested_delimiter='__',
+        secrets_dir='secrets',
+        secrets_nested_delimiter='_',
+    )
+
     model_config = SettingsConfigDict(
         env_prefix='MY_',
         env_nested_delimiter='__',
         secrets_dir=['secret/default', 'secret/override'],
         secrets_nested_subdir=True,
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            NestedSecretsSettingsSource(file_secret_settings),
+        )
 ```
 
 ### Configuration Options
