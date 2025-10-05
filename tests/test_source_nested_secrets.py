@@ -381,16 +381,16 @@ def test_invalid_options(tmp_path):
 @pytest.mark.parametrize(
     'conf,expected',
     (
-            # default settings
-            ({}, dict(field_empty='', field_none='null', field_enum=SampleEnum.TEST)),
-            # env_ignore_empty has no effect on secrets
-            ({'env_ignore_empty': True}, dict(field_empty='')),
-            ({'env_ignore_empty': False}, dict(field_empty='')),
-            # env_parse_none_str has no effect on secrets
-            ({'env_parse_none_str': 'null'}, dict(field_none='null')),
-            # env_parse_enums has no effect on secrets
-            ({'env_parse_enums': True}, dict(field_enum=SampleEnum.TEST)),
-            ({'env_parse_enums': False}, dict(field_enum=SampleEnum.TEST)),
+        # default settings
+        ({}, dict(field_empty='', field_none='null', field_enum=SampleEnum.TEST)),
+        # env_ignore_empty has no effect on secrets
+        ({'env_ignore_empty': True}, dict(field_empty='')),
+        ({'env_ignore_empty': False}, dict(field_empty='')),
+        # env_parse_none_str has no effect on secrets
+        ({'env_parse_none_str': 'null'}, dict(field_none='null')),
+        # env_parse_enums has no effect on secrets
+        ({'env_parse_enums': True}, dict(field_enum=SampleEnum.TEST)),
+        ({'env_parse_enums': False}, dict(field_enum=SampleEnum.TEST)),
     ),
 )
 def test_env_ignore_empty(conf: SettingsConfigDict, expected, tmp_path):

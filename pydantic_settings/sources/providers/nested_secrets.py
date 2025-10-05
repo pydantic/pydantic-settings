@@ -89,10 +89,7 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
         )
         if self.secrets_nested_subdir:
             if secrets_nested_delimiter or conf.get('secrets_nested_delimiter'):
-                raise SettingsError(
-                    'Options secrets_nested_delimiter and secrets_nested_subdir '
-                    'are mutually exclusive'
-                )
+                raise SettingsError('Options secrets_nested_delimiter and secrets_nested_subdir are mutually exclusive')
             else:
                 self.secrets_nested_delimiter = os.sep
 
@@ -142,22 +139,13 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
             elif self.secrets_dir_missing == 'error':
                 raise SettingsError(f'directory "{path}" does not exist')
             else:
-                raise SettingsError(
-                    f'invalid secrets_dir_missing value: {self.secrets_dir_missing}'
-                )
+                raise SettingsError(f'invalid secrets_dir_missing value: {self.secrets_dir_missing}')
         else:
             if not path.is_dir():
-                raise SettingsError(
-                    f'secrets_dir must reference a directory, '
-                    f'not a {path_type_label(path)}'
-                )
-            secrets_dir_size = sum(
-                f.stat().st_size for f in path.glob('**/*') if f.is_file()
-            )
+                raise SettingsError(f'secrets_dir must reference a directory, not a {path_type_label(path)}')
+            secrets_dir_size = sum(f.stat().st_size for f in path.glob('**/*') if f.is_file())
             if secrets_dir_size > self.secrets_dir_max_size:
-                raise SettingsError(
-                    f'secrets_dir size is above {self.secrets_dir_max_size} bytes'
-                )
+                raise SettingsError(f'secrets_dir size is above {self.secrets_dir_max_size} bytes')
 
     @staticmethod
     def load_secrets(path: Path) -> dict[str, str]:
