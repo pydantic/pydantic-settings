@@ -1,4 +1,5 @@
 from enum import Enum
+from os import sep
 from typing import Optional
 
 import pytest
@@ -126,7 +127,7 @@ def test_secrets_dir_as_arg(env, tmp_path):
             {'prefix_app_key': 'secret1', 'prefix_db/passwd': 'secret2'},
         ),
         (
-            dict(secrets_nested_subdir=True, secrets_prefix='dir1/dir2/'),
+            dict(secrets_nested_subdir=True, secrets_prefix=f'dir1{sep}dir2{sep}'),
             {'dir1/dir2/app_key': 'secret1', 'dir1/dir2/db/passwd': 'secret2'},
         ),
     ),
