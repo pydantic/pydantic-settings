@@ -111,6 +111,7 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
             env_prefix=self.secrets_prefix,
             env_nested_delimiter=self.secrets_nested_delimiter,
             env_ignore_empty=False,  # match SecretsSettingsSource behaviour
+            env_parse_enums=True,  # we can pass everything here, it will still behave as "True"
             env_parse_none_str=None,  # match SecretsSettingsSource behaviour
         )
         self.env_parse_none_str = None  # update manually because of None

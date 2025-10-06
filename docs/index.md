@@ -1968,13 +1968,6 @@ class Settings(BaseSettings):
         env_prefix='MY_',
         env_nested_delimiter='__',
         secrets_dir='secrets',
-        secrets_nested_delimiter='_',
-    )
-
-    model_config = SettingsConfigDict(
-        env_prefix='MY_',
-        env_nested_delimiter='__',
-        secrets_dir='secrets',
         secrets_nested_subdir=True,
     )
 
@@ -2036,14 +2029,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix='MY_',
         env_nested_delimiter='__',
-        secrets_dir='secrets',
-        secrets_nested_delimiter='_',
-    )
-
-    model_config = SettingsConfigDict(
-        env_prefix='MY_',
-        env_nested_delimiter='__',
-        secrets_dir=['secret/default', 'secret/override'],
+        secrets_dir=['secrets/default', 'secrets/override'],
         secrets_nested_subdir=True,
     )
 
