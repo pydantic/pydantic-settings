@@ -56,6 +56,8 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
             conf.get('secrets_dir_missing'),
             'warn',
         )
+        if self.secrets_dir_missing not in ('ok', 'warn', 'error'):
+            raise SettingsError(f'invalid secrets_dir_missing value: {self.secrets_dir_missing}')
         self.secrets_dir_max_size: int = first_not_none(
             secrets_dir_max_size,
             conf.get('secrets_dir_max_size'),
@@ -140,7 +142,7 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
             elif self.secrets_dir_missing == 'error':
                 raise SettingsError(f'directory "{path}" does not exist')
             else:
-                raise SettingsError(f'invalid secrets_dir_missing value: {self.secrets_dir_missing}')
+                raise ValueError  # unreachable, checked before
         else:
             if not path.is_dir():
                 raise SettingsError(f'secrets_dir must reference a directory, not a {path_type_label(path)}')
