@@ -159,11 +159,6 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
     def __repr__(self) -> str:
         return f'NestedSecretsSettingsSource(secrets_dir={self.secrets_dir!r})'
 
-    def __call__(self) -> dict[str, Any]:
-        res = super().__call__()
-        # breakpoint()  # this is the most informative place to debug
-        return res
-
 
 def first_not_none(*objs: Any) -> Any:
     return next(filter(lambda o: o is not None, objs), None)

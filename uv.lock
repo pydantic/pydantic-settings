@@ -604,15 +604,6 @@ wheels = [
 ]
 
 [[package]]
-name = "dirlay"
-version = "0.4.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/58/3d/06ed57638b6ac4e257f035dd0927226700db82bc2ab99e331c4e442a8faa/dirlay-0.4.0.tar.gz", hash = "sha256:0eebe0ac89dbbe46574f44aee2d605c6a9238c532fc1609578c813e225d270b0", size = 122834 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/85/00/b6078d86a0d8660fd39785489d3edca142d427b78a135be6c32992e56e2e/dirlay-0.4.0-py2.py3-none-any.whl", hash = "sha256:5fdd4eb0b7a4c3cf90f553db3f492851290f192fe0479d224c05eda7d76469a7", size = 13762 },
-]
-
-[[package]]
 name = "distlib"
 version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1368,7 +1359,6 @@ linting = [
 testing = [
     { name = "coverage", extra = ["toml"] },
     { name = "diff-cover" },
-    { name = "dirlay" },
     { name = "moto" },
     { name = "pytest" },
     { name = "pytest-examples" },
@@ -1404,7 +1394,6 @@ linting = [
 testing = [
     { name = "coverage", extras = ["toml"] },
     { name = "diff-cover", specifier = ">=9.2.0" },
-    { name = "dirlay", specifier = ">=0.4.0,<0.5.0" },
     { name = "moto", extras = ["secretsmanager"] },
     { name = "pytest" },
     { name = "pytest-examples" },
