@@ -51,13 +51,13 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
             secrets_dir,
             conf.get('secrets_dir'),
         )
-        if secrets_dir_missing not in ('ok', 'warn', 'error'):
-            raise SettingsError(f'invalid secrets_dir_missing value: {secrets_dir_missing}')
         self.secrets_dir_missing: Literal['ok', 'warn', 'error'] = first_not_none(
             secrets_dir_missing,
             conf.get('secrets_dir_missing'),
             'warn',
         )
+        if self.secrets_dir_missing not in ('ok', 'warn', 'error'):
+            raise SettingsError(f'invalid secrets_dir_missing value: {self.secrets_dir_missing}')
         self.secrets_dir_max_size: int = first_not_none(
             secrets_dir_max_size,
             conf.get('secrets_dir_max_size'),
