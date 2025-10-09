@@ -27,10 +27,13 @@ class SetEnv:
             os.environ.pop(n)
 
 
-class Dir(Path):
+class Dir:
+    def __init__(self, basedir: Path) -> None:
+        self.basedir = basedir
+
     def write(self, files: dict[str, str]) -> None:
         for path, content in files.items():
-            file_path = self / path
+            file_path = self.basedir / path
             file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(content)
 

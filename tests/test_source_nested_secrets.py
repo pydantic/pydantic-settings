@@ -86,7 +86,7 @@ def test_delimited_name(env, tmp_files):
     class Settings(AppSettings):
         model_config = SettingsConfigDict(
             env_nested_delimiter='__',
-            secrets_dir=tmp_files,
+            secrets_dir=tmp_files.basedir,
             secrets_nested_delimiter='___',
         )
 
@@ -111,7 +111,7 @@ def test_secrets_dir_as_arg(env, tmp_files):
             secrets_nested_delimiter='__',
         )
 
-    assert Settings(_secrets_dir=tmp_files).model_dump() == {
+    assert Settings(_secrets_dir=tmp_files.basedir).model_dump() == {
         'app_key': 'secret1',
         'db': {'user': 'user', 'passwd': 'secret2'},
     }
@@ -141,7 +141,7 @@ def test_prefix(conf: SettingsConfigDict, secrets, env, tmp_files):
     class Settings(AppSettings):
         model_config = SettingsConfigDict(
             env_nested_delimiter='__',
-            secrets_dir=tmp_files,
+            secrets_dir=tmp_files.basedir,
             **conf,
         )
 
@@ -162,7 +162,7 @@ def test_subdir(env, tmp_files):
 
     class Settings(AppSettings):
         model_config = SettingsConfigDict(
-            secrets_dir=tmp_files,
+            secrets_dir=tmp_files.basedir,
             env_nested_delimiter='__',
             secrets_nested_subdir=True,
         )
@@ -180,12 +180,12 @@ def test_symlink_subdir(env, tmp_files):
         'app_key': 'secret1',
         'db_random/passwd': 'secret2',  # file in subdir that is not directly referenced in our settings
     })
-    tmp_files.joinpath('db').symlink_to(tmp_files.joinpath('db_random'))
+    tmp_files.basedir.joinpath('db').symlink_to(tmp_files.basedir.joinpath('db_random'))
     # fmt: on
 
     class Settings(AppSettings):
         model_config = SettingsConfigDict(
-            secrets_dir=tmp_files,
+            secrets_dir=tmp_files.basedir,
             env_nested_delimiter='__',
             secrets_nested_subdir=True,
         )
@@ -300,7 +300,7 @@ def test_symlink_subdir(env, tmp_files):
     ),
 )
 def test_multiple_secrets_dirs(conf: SettingsConfigDict, secrets, dirs, expected, tmp_files):
-    secrets_dirs = [tmp_files / d for d in dirs] if isinstance(dirs, list) else tmp_files / dirs  # fmt:
+    secrets_dirs = [tmp_files.basedir / d for d in dirs] if isinstance(dirs, list) else tmp_files.basedir / dirs
     tmp_files.write(secrets)
 
     class Settings(BaseSettings):
@@ -353,11 +353,11 @@ def test_strip_whitespace(env, tmp_files):
     class Settings(AppSettings):
         model_config = SettingsConfigDict(
             env_nested_delimiter='__',
-            secrets_dir=tmp_files,
+            secrets_dir=tmp_files.basedir,
             secrets_nested_delimiter='__',
         )
 
-    assert Settings(_secrets_dir=tmp_files).model_dump() == {
+    assert Settings(_secrets_dir=tmp_files.basedir).model_dump() == {
         'app_key': 'secret1',
         'db': {'user': 'user', 'passwd': 'secret2'},
     }
@@ -406,10 +406,10 @@ def test_env_ignore_empty(conf: SettingsConfigDict, expected, tmp_files):
         field_enum: Optional[SampleEnum] = None
 
     class Original(Settings):
-        model_config = SettingsConfigDict(secrets_dir=tmp_files, **conf)
+        model_config = SettingsConfigDict(secrets_dir=tmp_files.basedir, **conf)
 
     class Evaluated(Settings):
-        model_config = SettingsConfigDict(secrets_dir=tmp_files, **conf)
+        model_config = SettingsConfigDict(secrets_dir=tmp_files.basedir, **conf)
 
         @classmethod
         def settings_customise_sources(
