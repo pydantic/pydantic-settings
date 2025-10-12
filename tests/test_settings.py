@@ -649,6 +649,17 @@ def test_class_nested_model_default_partial_update(env):
 
     env.set('NESTED_A__V0', 'True')
     env.set('NESTED_B__V0', 'True')
+    assert SettingsDefaultsA().model_dump() == {
+        'nested_a': {'v0': True, 'v1': True},
+        'nested_b': {'v0': True, 'v1': True},
+        'nested_c': {'v0': False, 'v1': True},
+        'nested_d': {'v0': False, 'v1': True},
+    }
+    assert SettingsDefaultsA().model_dump(exclude_unset=True) == {
+        'nested_a': {'v0': True, 'v1': True},
+        'nested_b': {'v0': True, 'v1': True},
+    }
+
     env.set('NESTED_C__V0', 'True')
     env.set('NESTED_D__V0', 'True')
     assert SettingsDefaultsA().model_dump() == {
