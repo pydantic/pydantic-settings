@@ -25,6 +25,7 @@ from .providers.dotenv import DotEnvSettingsSource, read_env_file
 from .providers.env import EnvSettingsSource
 from .providers.gcp import GoogleSecretManagerSettingsSource
 from .providers.json import JsonConfigSettingsSource
+from .providers.nested_secrets import NestedSecretsSettingsSource
 from .providers.pyproject import PyprojectTomlConfigSettingsSource
 from .providers.secrets import SecretsSettingsSource
 from .providers.toml import TomlConfigSettingsSource
@@ -53,6 +54,7 @@ __all__ = [
     'GoogleSecretManagerSettingsSource',
     'InitSettingsSource',
     'JsonConfigSettingsSource',
+    'NestedSecretsSettingsSource',
     'NoDecode',
     'PathType',
     'PydanticBaseEnvSettingsSource',
