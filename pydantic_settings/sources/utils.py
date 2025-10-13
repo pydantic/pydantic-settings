@@ -92,15 +92,24 @@ def _annotation_contains_types(
     types: tuple[Any, ...],
     is_include_origin: bool = True,
     is_strip_annotated: bool = False,
+    is_instance: bool = False,
 ) -> bool:
     """Check if a type annotation contains any of the specified types."""
     if is_strip_annotated:
         annotation = _strip_annotated(annotation)
-    if is_include_origin is True and get_origin(annotation) in types:
-        return True
-    for type_ in get_args(annotation):
-        if _annotation_contains_types(type_, types, is_include_origin=True, is_strip_annotated=is_strip_annotated):
+    if is_include_origin is True:
+        origin = get_origin(annotation)
+        if origin in types:
             return True
+        if is_instance and any(isinstance(origin, type_) for type_ in types):
+            return True
+    for type_ in get_args(annotation):
+        if _annotation_contains_types(
+            type_, types, is_include_origin=True, is_strip_annotated=is_strip_annotated, is_instance=is_instance
+        ):
+            return True
+    if is_instance and any(isinstance(annotation, type_) for type_ in types):
+        return True
     return annotation in types
 
 
