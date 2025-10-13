@@ -7,7 +7,7 @@ import warnings
 from argparse import Namespace
 from collections.abc import Mapping
 from types import SimpleNamespace
-from typing import Any, ClassVar, TypeVar
+from typing import Any, ClassVar, Literal, TypeVar
 
 from pydantic import ConfigDict
 from pydantic._internal._config import config_keys
@@ -62,7 +62,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_flag_prefix_char: str
     cli_implicit_flags: bool | None
     cli_ignore_unknown_args: bool | None
-    cli_kebab_case: bool | None
+    cli_kebab_case: bool | Literal['all', 'no_enums'] | None
     cli_shortcuts: Mapping[str, str | list[str]] | None
     secrets_dir: PathType | None
     json_file: PathType | None
@@ -185,7 +185,7 @@ class BaseSettings(BaseModel):
         _cli_flag_prefix_char: str | None = None,
         _cli_implicit_flags: bool | None = None,
         _cli_ignore_unknown_args: bool | None = None,
-        _cli_kebab_case: bool | None = None,
+        _cli_kebab_case: bool | Literal['all', 'no_enums'] | None = None,
         _cli_shortcuts: Mapping[str, str | list[str]] | None = None,
         _secrets_dir: PathType | None = None,
         **values: Any,
@@ -272,7 +272,7 @@ class BaseSettings(BaseModel):
         _cli_flag_prefix_char: str | None = None,
         _cli_implicit_flags: bool | None = None,
         _cli_ignore_unknown_args: bool | None = None,
-        _cli_kebab_case: bool | None = None,
+        _cli_kebab_case: bool | Literal['all', 'no_enums'] | None = None,
         _cli_shortcuts: Mapping[str, str | list[str]] | None = None,
         _secrets_dir: PathType | None = None,
     ) -> dict[str, Any]:
