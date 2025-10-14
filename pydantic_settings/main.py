@@ -426,6 +426,7 @@ class BaseSettings(BaseModel):
 
         if sources:
             state: dict[str, Any] = {}
+            defaults: dict[str, Any] = {}
             states: dict[str, dict[str, Any]] = {}
             for source in sources:
                 if isinstance(source, PydanticBaseSettingsSource):
@@ -435,8 +436,15 @@ class BaseSettings(BaseModel):
                 source_name = source.__name__ if hasattr(source, '__name__') else type(source).__name__
                 source_state = source()
 
+                if isinstance(source, DefaultSettingsSource):
+                    defaults = source_state
+
                 states[source_name] = source_state
                 state = deep_update(source_state, state)
+
+            # Strip any default values not explicity set before returning final state
+            state = {key: val for key, val in state.items() if key not in defaults or defaults[key] != val}
+
             return state
         else:
             # no one should mean to do this, but I think returning an empty dict is marginally preferable
