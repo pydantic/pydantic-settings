@@ -3200,3 +3200,41 @@ def test_warns_if_config_keys_are_set_but_source_is_missing():
             f'source to the settings sources via the settings_customise_sources hook.'
         )
         assert warning.message.args[0] == expected_message
+
+
+def test_env_strict_coercion(env):
+    class SubModel(BaseModel):
+        my_str: str
+        my_int: int
+
+    class Settings(BaseSettings, env_nested_delimiter='__'):
+        my_str: str
+        my_int: int
+        sub_model: SubModel
+
+    env.set('MY_STR', '0')
+    env.set('MY_INT', '0')
+    env.set('SUB_MODEL__MY_STR', '1')
+    env.set('SUB_MODEL__MY_INT', '1')
+    Settings().model_dump() == {
+        'my_str': '0',
+        'my_int': 0,
+        'sub_model': {
+            'my_str': '1',
+            'my_int': 1,
+        },
+    }
+
+    class StrictSettings(BaseSettings, env_nested_delimiter='__', strict=True):
+        my_str: str
+        my_int: int
+        sub_model: SubModel
+
+    StrictSettings().model_dump() == {
+        'my_str': '0',
+        'my_int': 0,
+        'sub_model': {
+            'my_str': '1',
+            'my_int': 1,
+        },
+    }
