@@ -40,6 +40,7 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         yaml_file: PathType | None = DEFAULT_PATH,
         yaml_file_encoding: str | None = None,
         yaml_config_section: str | None = None,
+        deep_merge: bool = False,
     ):
         self.yaml_file_path = yaml_file if yaml_file != DEFAULT_PATH else settings_cls.model_config.get('yaml_file')
         self.yaml_file_encoding = (
@@ -52,7 +53,7 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
             if yaml_config_section is not None
             else settings_cls.model_config.get('yaml_config_section')
         )
-        self.yaml_data = self._read_files(self.yaml_file_path)
+        self.yaml_data = self._read_files(self.yaml_file_path, deep_merge=deep_merge)
 
         if self.yaml_config_section:
             try:

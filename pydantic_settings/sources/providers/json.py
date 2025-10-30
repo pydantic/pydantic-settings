@@ -26,6 +26,7 @@ class JsonConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         settings_cls: type[BaseSettings],
         json_file: PathType | None = DEFAULT_PATH,
         json_file_encoding: str | None = None,
+        deep_merge: bool = False,
     ):
         self.json_file_path = json_file if json_file != DEFAULT_PATH else settings_cls.model_config.get('json_file')
         self.json_file_encoding = (
@@ -33,7 +34,7 @@ class JsonConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
             if json_file_encoding is not None
             else settings_cls.model_config.get('json_file_encoding')
         )
-        self.json_data = self._read_files(self.json_file_path)
+        self.json_data = self._read_files(self.json_file_path, deep_merge=deep_merge)
         super().__init__(settings_cls, self.json_data)
 
     def _read_file(self, file_path: Path) -> dict[str, Any]:
