@@ -3,7 +3,7 @@ import warnings
 from functools import reduce
 from glob import iglob
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from ...exceptions import SettingsError
 from ...utils import path_type_label
@@ -23,17 +23,17 @@ SECRETS_DIR_MAX_SIZE = 16 * 2**20  # 16 MiB seems to be a reasonable default
 class NestedSecretsSettingsSource(EnvSettingsSource):
     def __init__(
         self,
-        file_secret_settings: Union[PydanticBaseSettingsSource, SecretsSettingsSource],
+        file_secret_settings: PydanticBaseSettingsSource | SecretsSettingsSource,
         secrets_dir: Optional['PathType'] = None,
-        secrets_dir_missing: Optional[Literal['ok', 'warn', 'error']] = None,
-        secrets_dir_max_size: Optional[int] = None,
-        secrets_case_sensitive: Optional[bool] = None,
-        secrets_prefix: Optional[str] = None,
-        secrets_nested_delimiter: Optional[str] = None,
-        secrets_nested_subdir: Optional[bool] = None,
+        secrets_dir_missing: Literal['ok', 'warn', 'error'] | None = None,
+        secrets_dir_max_size: int | None = None,
+        secrets_case_sensitive: bool | None = None,
+        secrets_prefix: str | None = None,
+        secrets_nested_delimiter: str | None = None,
+        secrets_nested_subdir: bool | None = None,
         # args for compatibility with SecretsSettingsSource, don't use directly
-        case_sensitive: Optional[bool] = None,
-        env_prefix: Optional[str] = None,
+        case_sensitive: bool | None = None,
+        env_prefix: str | None = None,
     ) -> None:
         # We allow the first argument to be settings_cls like original
         # SecretsSettingsSource. However, it is recommended to pass
@@ -46,7 +46,7 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
         )
         # config options
         conf = settings_cls.model_config
-        self.secrets_dir: Optional[PathType] = first_not_none(
+        self.secrets_dir: PathType | None = first_not_none(
             getattr(file_secret_settings, 'secrets_dir', None),
             secrets_dir,
             conf.get('secrets_dir'),
@@ -79,7 +79,7 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
         )
 
         # nested options
-        self.secrets_nested_delimiter: Optional[str] = first_not_none(
+        self.secrets_nested_delimiter: str | None = first_not_none(
             secrets_nested_delimiter,
             conf.get('secrets_nested_delimiter'),
             conf.get('env_nested_delimiter'),
