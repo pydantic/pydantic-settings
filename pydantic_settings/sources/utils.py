@@ -6,12 +6,11 @@ from collections import deque
 from collections.abc import Mapping, Sequence
 from dataclasses import is_dataclass
 from enum import Enum
-from typing import Any, Optional, cast
+from typing import Any, cast, get_args, get_origin
 
 from pydantic import BaseModel, Json, RootModel, Secret
 from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
-from typing_extensions import get_args, get_origin
 from typing_inspection import typing_objects
 
 from ..exceptions import SettingsError
@@ -120,7 +119,7 @@ def _strip_annotated(annotation: Any) -> Any:
         return annotation
 
 
-def _annotation_enum_val_to_name(annotation: type[Any] | None, value: Any) -> Optional[str]:
+def _annotation_enum_val_to_name(annotation: type[Any] | None, value: Any) -> str | None:
     for type_ in (annotation, get_origin(annotation), *get_args(annotation)):
         if _lenient_issubclass(type_, Enum):
             if value in tuple(val.value for val in type_):
@@ -149,7 +148,7 @@ def _get_model_fields(model_cls: type[Any]) -> dict[str, Any]:
 def _get_alias_names(
     field_name: str,
     field_info: Any,
-    alias_path_args: Optional[dict[str, Optional[int]]] = None,
+    alias_path_args: dict[str, int | None] | None = None,
     case_sensitive: bool = True,
 ) -> tuple[tuple[str, ...], bool]:
     """Get alias names for a field, handling alias paths and case sensitivity."""

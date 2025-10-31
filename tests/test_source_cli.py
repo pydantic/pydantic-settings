@@ -6,7 +6,7 @@ import time
 import typing
 from enum import IntEnum
 from pathlib import Path, PureWindowsPath
-from typing import Annotated, Any, Dict, Generic, List, Literal, Optional, Tuple, TypeVar, Union  # noqa: UP035
+from typing import Annotated, Any, Dict, Generic, List, Literal, Tuple, TypeVar, Union  # noqa: UP035
 
 import pytest
 import typing_extensions
@@ -176,7 +176,7 @@ def test_cli_nested_arg():
 
     class Cfg(BaseSettings):
         v0: str
-        v0_union: Union[SubValue, int]
+        v0_union: SubValue | int
         top: TopValue
 
     args: list[str] = []
@@ -549,7 +549,7 @@ def test_cli_help_union_of_models(capsys, monkeypatch):
         roar: str = 'roar'
 
     class Car(BaseSettings, cli_parse_args=True):
-        driver: Union[Cat, Dog, Bird] = Tiger(meow='purr')
+        driver: Cat | Dog | Bird = Tiger(meow='purr')
 
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
@@ -580,7 +580,7 @@ def test_cli_help_default_or_none_model(capsys, monkeypatch):
 
     class DeepSubModel(BaseModel):
         flag: bool
-        deeper: Optional[DeeperSubModel] = None
+        deeper: DeeperSubModel | None = None
 
     class SubModel(BaseModel):
         flag: bool
@@ -589,7 +589,7 @@ def test_cli_help_default_or_none_model(capsys, monkeypatch):
     class Settings(BaseSettings, cli_parse_args=True):
         flag: bool = True
         sub_model: SubModel = SubModel(flag=False)
-        opt_model: Optional[DeepSubModel] = Field(None, description='Group Doc')
+        opt_model: DeepSubModel | None = Field(None, description='Group Doc')
         fact_model: SubModel = Field(default_factory=lambda: SubModel(flag=True))
 
     with monkeypatch.context() as m:
@@ -713,17 +713,17 @@ def test_cli_list_arg(prefix, arg_spaces):
         val: int
 
     class Child(BaseModel):
-        num_list: Optional[list[int]] = None
-        obj_list: Optional[list[Obj]] = None
-        str_list: Optional[list[str]] = None
-        union_list: Optional[list[Union[Obj, int]]] = None
+        num_list: list[int] | None = None
+        obj_list: list[Obj] | None = None
+        str_list: list[str] | None = None
+        union_list: list[Obj | int] | None = None
 
     class Cfg(BaseSettings):
-        num_list: Optional[list[int]] = None
-        obj_list: Optional[list[Obj]] = None
-        union_list: Optional[list[Union[Obj, int]]] = None
-        str_list: Optional[list[str]] = None
-        child: Optional[Child] = None
+        num_list: list[int] | None = None
+        obj_list: list[Obj] | None = None
+        union_list: list[Obj | int] | None = None
+        str_list: list[str] | None = None
+        child: Child | None = None
 
     def check_answer(cfg, prefix, expected):
         if prefix:
@@ -796,7 +796,7 @@ def test_cli_list_arg(prefix, arg_spaces):
 @pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
 def test_cli_list_json_value_parsing(arg_spaces):
     class Cfg(BaseSettings):
-        json_list: list[Union[str, bool, None]]
+        json_list: list[str | bool | None]
 
     assert CliApp.run(
         Cfg,
@@ -823,8 +823,8 @@ def test_cli_dict_arg(prefix, arg_spaces):
         check_dict: dict[str, str]
 
     class Cfg(BaseSettings):
-        check_dict: Optional[dict[str, str]] = None
-        child: Optional[Child] = None
+        check_dict: dict[str, str] | None = None
+        child: Child | None = None
 
     args: list[str] = []
     args = [f'--{prefix}check_dict', arg_spaces('{"k1":"a","k2":"b"}')]
@@ -907,7 +907,7 @@ def test_cli_dict_arg(prefix, arg_spaces):
 
 def test_cli_union_dict_arg():
     class Cfg(BaseSettings):
-        union_str_dict: Union[str, dict[str, Any]]
+        union_str_dict: str | dict[str, Any]
 
     with pytest.raises(ValidationError) as exc_info:
         args = ['--union_str_dict', 'hello world', '--union_str_dict', 'hello world']
@@ -956,7 +956,7 @@ def test_cli_union_dict_arg():
     assert cfg.model_dump() == {'union_str_dict': 'hello=world'}
 
     class Cfg(BaseSettings):
-        union_list_dict: Union[list[str], dict[str, Any]]
+        union_list_dict: list[str] | dict[str, Any]
 
     with pytest.raises(ValidationError) as exc_info:
         args = ['--union_list_dict', 'hello,world']
@@ -1066,7 +1066,7 @@ def test_cli_subcommand_union(capsys, monkeypatch):
     class Root1(BaseSettings):
         """Root Help"""
 
-        subcommand: CliSubCommand[Union[AlphaCmd, BetaCmd, GammaCmd]] = Field(description='Field Help')
+        subcommand: CliSubCommand[AlphaCmd | BetaCmd | GammaCmd] = Field(description='Field Help')
 
     alpha = CliApp.run(Root1, cli_args=['AlphaCmd', '-a=alpha'])
     assert get_subcommand(alpha).model_dump() == {'a': 'alpha'}
@@ -1126,7 +1126,7 @@ subcommands:
     class Root2(BaseSettings):
         """Root Help"""
 
-        subcommand: CliSubCommand[Union[AlphaCmd, GammaCmd]] = Field(description='Field Help')
+        subcommand: CliSubCommand[AlphaCmd | GammaCmd] = Field(description='Field Help')
         beta: CliSubCommand[BetaCmd] = Field(description='Field Beta Help')
 
     alpha = CliApp.run(Root2, cli_args=['AlphaCmd', '-a=alpha'])
@@ -1188,7 +1188,7 @@ subcommands:
         """Root Help"""
 
         beta: CliSubCommand[BetaCmd] = Field(description='Field Beta Help')
-        subcommand: CliSubCommand[Union[AlphaCmd, GammaCmd]] = Field(description='Field Help')
+        subcommand: CliSubCommand[AlphaCmd | GammaCmd] = Field(description='Field Help')
 
     alpha = CliApp.run(Root3, cli_args=['AlphaCmd', '-a=alpha'])
     assert get_subcommand(alpha).model_dump() == {'a': 'alpha'}
@@ -1346,7 +1346,7 @@ def test_cli_union_similar_sub_models():
         diff_b: str = 'child b difference'
 
     class Cfg(BaseSettings):
-        child: Union[ChildA, ChildB]
+        child: ChildA | ChildB
 
     cfg = CliApp.run(Cfg, cli_args=['--child.name', 'new name a', '--child.diff_a', 'new diff a'])
     assert cfg.model_dump() == {'child': {'name': 'new name a', 'diff_a': 'new diff a'}}
@@ -1399,7 +1399,7 @@ def test_cli_enums(capsys, monkeypatch):
 
     class Cfg(BaseSettings):
         pet: Pet = Pet.dog
-        union_pet: Union[Pet, int] = 43
+        union_pet: Pet | int = 43
 
     cfg = CliApp.run(Cfg, cli_args=['--pet', 'cat', '--union_pet', 'dog'])
     assert cfg.model_dump() == {'pet': Pet.cat, 'union_pet': Pet.dog}
@@ -1470,7 +1470,7 @@ def test_cli_annotation_exceptions(monkeypatch):
         ):
 
             class SubCommandNotOutermost(BaseSettings, cli_parse_args=True):
-                subcmd: Union[int, CliSubCommand[SubCmd]]
+                subcmd: int | CliSubCommand[SubCmd]
 
             SubCommandNotOutermost()
 
@@ -1487,7 +1487,7 @@ def test_cli_annotation_exceptions(monkeypatch):
         ):
 
             class SubCommandMultipleTypes(BaseSettings, cli_parse_args=True):
-                subcmd: CliSubCommand[Union[SubCmd, str]]
+                subcmd: CliSubCommand[SubCmd | str]
 
             SubCommandMultipleTypes()
 
@@ -1505,7 +1505,7 @@ def test_cli_annotation_exceptions(monkeypatch):
         ):
 
             class PositionalArgNotOutermost(BaseSettings, cli_parse_args=True):
-                pos_arg: Union[int, CliPositionalArg[str]]
+                pos_arg: int | CliPositionalArg[str]
 
             PositionalArgNotOutermost()
 
@@ -1687,7 +1687,7 @@ sub_model options:
 
 def test_cli_hide_none_type(capsys, monkeypatch):
     class Settings(BaseSettings):
-        v0: Optional[str]
+        v0: str | None
 
         model_config = SettingsConfigDict(cli_parse_args=True)
 
@@ -2064,7 +2064,7 @@ def test_cli_user_settings_source_exceptions():
         ('foobar', 'str'),
         ('SomeForwardRefString', 'str'),  # included to document current behavior; could be changed
         (List['SomeForwardRef'], "List[ForwardRef('SomeForwardRef')]"),  # noqa: F821, UP006
-        (Union[str, int], '{str,int}'),
+        (str | int, '{str,int}'),
         (list, 'list'),
         (List, 'List'),  # noqa: UP006
         ([1, 2, 3], 'list'),
@@ -2081,7 +2081,7 @@ def test_cli_user_settings_source_exceptions():
         (typing.Literal['a', 'b', 'c'], '{a,b,c}'),
         (typing_extensions.Literal['a', 'b', 'c'], '{a,b,c}'),
         (SimpleSettings, 'JSON'),
-        (Union[SimpleSettings, SettingWithIgnoreEmpty], 'JSON'),
+        (SimpleSettings | SettingWithIgnoreEmpty, 'JSON'),
         (Union[SimpleSettings, str, SettingWithIgnoreEmpty], '{JSON,str}'),
         (Union[str, SimpleSettings, SettingWithIgnoreEmpty], '{str,JSON}'),
         (Annotated[SimpleSettings, 'annotation'], 'JSON'),
@@ -2116,7 +2116,7 @@ def test_cli_metavar_format(hide_none_type, value, expected):
         (lambda: list[int], 'list[int]'),
         (lambda: List[int], 'List[int]'),  # noqa: UP006
         (lambda: list[dict[str, int]], 'list[dict[str,int]]'),
-        (lambda: list[Union[str, int]], 'list[{str,int}]'),
+        (lambda: list[str | int], 'list[{str,int}]'),
         (lambda: list[str | int], 'list[{str,int}]'),
         (lambda: LoggedVar[int], 'LoggedVar[int]'),
         (lambda: LoggedVar[Dict[int, str]], 'LoggedVar[Dict[int,str]]'),  # noqa: UP006
@@ -2295,9 +2295,9 @@ visible_obj options:
 
 def test_cli_mutually_exclusive_group(capsys, monkeypatch):
     class Circle(CliMutuallyExclusiveGroup):
-        radius: Optional[float] = 21
-        diameter: Optional[float] = 22
-        perimeter: Optional[float] = 23
+        radius: float | None = 21
+        diameter: float | None = 22
+        perimeter: float | None = 23
 
     class Settings(BaseModel):
         circle_optional: Circle = Circle(radius=None, diameter=None, perimeter=24)
@@ -2369,9 +2369,9 @@ circle-required options (mutually exclusive):
 
 def test_cli_mutually_exclusive_group_exceptions():
     class Circle(CliMutuallyExclusiveGroup):
-        radius: Optional[float] = 21
-        diameter: Optional[float] = 22
-        perimeter: Optional[float] = 23
+        radius: float | None = 21
+        diameter: float | None = 22
+        perimeter: float | None = 23
 
     class Settings(BaseSettings):
         circle: Circle
@@ -2395,13 +2395,13 @@ def test_cli_mutually_exclusive_group_exceptions():
         pass
 
     class SettingsInvalidUnion(BaseSettings):
-        union: Union[Circle, SubModel]
+        union: Circle | SubModel
 
     with pytest.raises(SettingsError, match='cannot use union with CliMutuallyExclusiveGroup'):
         CliApp.run(SettingsInvalidUnion)
 
     class CircleInvalidSubModel(Circle):
-        square: Optional[SubModel] = None
+        square: SubModel | None = None
 
     class SettingsInvalidOptSubModel(BaseModel):
         circle: CircleInvalidSubModel = CircleInvalidSubModel()
@@ -2472,12 +2472,12 @@ def test_cli_submodels_strip_annotated():
         b: str = '2'
         type: Literal['b'] = 'b'
 
-    def _get_type(model: Union[BaseModel, dict]) -> str:
+    def _get_type(model: BaseModel | dict) -> str:
         if isinstance(model, dict):
             return model.get('type', 'a')
         return model.type  # type: ignore
 
-    Poly = Annotated[Union[Annotated[PolyA, Tag('a')], Annotated[PolyB, Tag('b')]], Discriminator(_get_type)]
+    Poly = Annotated[Annotated[PolyA, Tag('a')] | Annotated[PolyB, Tag('b')], Discriminator(_get_type)]
 
     class WithUnion(BaseSettings):
         poly: Poly
@@ -2600,12 +2600,12 @@ def test_cli_kebab_case_enums():
 
     class SettingsNoEnum(BaseSettings):
         model_config = SettingsConfigDict(cli_kebab_case='no_enums')
-        example: Union[Example1, Example2]
+        example: Example1 | Example2
         mybool: bool
 
     class SettingsAll(BaseSettings):
         model_config = SettingsConfigDict(cli_kebab_case='all')
-        example: Union[Example1, Example2]
+        example: Example1 | Example2
         mybool: bool
 
     assert CliApp.run(

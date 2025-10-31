@@ -2,7 +2,7 @@ from __future__ import annotations as _annotations  # important for BaseSettings
 
 import json
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ..utils import parse_env_vars
 from .env import EnvSettingsSource
@@ -57,7 +57,7 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
             env_parse_enums=env_parse_enums,
         )
 
-    def _load_env_vars(self) -> Mapping[str, Optional[str]]:
+    def _load_env_vars(self) -> Mapping[str, str | None]:
         response = self._secretsmanager_client.get_secret_value(SecretId=self._secret_id)  # type: ignore
 
         return parse_env_vars(

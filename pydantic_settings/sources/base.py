@@ -7,7 +7,7 @@ import os
 from abc import ABC, abstractmethod
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, cast, get_args
 
 from pydantic import AliasChoices, AliasPath, BaseModel, TypeAdapter
 from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
@@ -15,7 +15,6 @@ from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
 )
 from pydantic._internal._utils import is_model_class
 from pydantic.fields import FieldInfo
-from typing_extensions import get_args
 from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
 
@@ -36,7 +35,7 @@ if TYPE_CHECKING:
 
 def get_subcommand(
     model: PydanticModel, is_required: bool = True, cli_exit_on_error: bool | None = None
-) -> Optional[PydanticModel]:
+) -> PydanticModel | None:
     """
     Get the subcommand from a model.
 
