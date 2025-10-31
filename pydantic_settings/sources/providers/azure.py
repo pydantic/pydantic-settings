@@ -3,7 +3,7 @@
 from __future__ import annotations as _annotations
 
 from collections.abc import Iterator, Mapping
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from pydantic.alias_generators import to_snake
 from pydantic.fields import FieldInfo
@@ -37,7 +37,7 @@ def import_azure_key_vault() -> None:
         ) from e
 
 
-class AzureKeyVaultMapping(Mapping[str, Optional[str]]):
+class AzureKeyVaultMapping(Mapping[str, str | None]):
     _loaded_secrets: dict[str, str | None]
     _secret_client: SecretClient
     _secret_names: list[str]
@@ -121,7 +121,7 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
             env_parse_enums=env_parse_enums,
         )
 
-    def _load_env_vars(self) -> Mapping[str, Optional[str]]:
+    def _load_env_vars(self) -> Mapping[str, str | None]:
         secret_client = SecretClient(vault_url=self._url, credential=self._credential)
         return AzureKeyVaultMapping(
             secret_client=secret_client,

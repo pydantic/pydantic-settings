@@ -3,7 +3,6 @@ Test pydantic_settings.YamlConfigSettingsSource.
 """
 
 from pathlib import Path
-from typing import Union
 
 import pytest
 from pydantic import BaseModel
@@ -72,7 +71,7 @@ def test_yaml_file(tmp_path):
     class Settings(BaseSettings):
         foobar: str
         nested: Nested
-        null_field: Union[str, None]
+        null_field: str | None
         model_config = SettingsConfigDict(yaml_file=p)
 
         @classmethod

@@ -1,6 +1,5 @@
 from enum import Enum
 from os import sep
-from typing import Optional
 
 import pytest
 from pydantic import BaseModel
@@ -17,11 +16,11 @@ from pydantic_settings.sources.providers.nested_secrets import SECRETS_DIR_MAX_S
 
 class DbSettings(BaseModel):
     user: str
-    passwd: Optional[str] = None
+    passwd: str | None = None
 
 
 class AppSettings(BaseSettings):
-    app_key: Optional[str] = None
+    app_key: str | None = None
     db: DbSettings
 
     @classmethod
@@ -304,8 +303,8 @@ def test_multiple_secrets_dirs(conf: SettingsConfigDict, secrets, dirs, expected
     tmp_files.write(secrets)
 
     class Settings(BaseSettings):
-        key1: Optional[str] = None
-        key2: Optional[str] = None
+        key1: str | None = None
+        key2: str | None = None
 
         model_config = SettingsConfigDict(secrets_dir=secrets_dirs, **conf)
 
@@ -401,9 +400,9 @@ def test_env_ignore_empty(conf: SettingsConfigDict, expected, tmp_files):
     )
 
     class Settings(BaseSettings):
-        field_empty: Optional[str] = None
-        field_none: Optional[str] = None
-        field_enum: Optional[SampleEnum] = None
+        field_empty: str | None = None
+        field_none: str | None = None
+        field_enum: SampleEnum | None = None
 
     class Original(Settings):
         model_config = SettingsConfigDict(secrets_dir=tmp_files.basedir, **conf)

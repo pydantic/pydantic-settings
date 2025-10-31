@@ -1,9 +1,6 @@
-import sys
 import types
 from pathlib import Path
-from typing import Any, _GenericAlias  # type: ignore [attr-defined]
-
-from typing_extensions import get_origin
+from typing import Any, _GenericAlias, get_origin  # type: ignore [attr-defined]
 
 _PATH_TYPE_LABELS = {
     Path.is_dir: 'directory',
@@ -42,7 +39,4 @@ def _lenient_issubclass(cls: Any, class_or_tuple: Any) -> bool:  # pragma: no co
         raise
 
 
-if sys.version_info < (3, 10):
-    _WithArgsTypes = tuple()
-else:
-    _WithArgsTypes = (_GenericAlias, types.GenericAlias, types.UnionType)
+_WithArgsTypes = (_GenericAlias, types.GenericAlias, types.UnionType)

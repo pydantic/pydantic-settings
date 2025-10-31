@@ -4,7 +4,6 @@ Test pydantic_settings.PyprojectTomlConfigSettingsSource.
 
 import sys
 from pathlib import Path
-from typing import Optional
 
 import pytest
 from pydantic import BaseModel
@@ -273,7 +272,7 @@ def test_pyproject_toml_no_file_explicit(tmp_path: Path):
     class Settings(BaseSettings):
         model_config = SettingsConfigDict()
 
-        field: Optional[str] = None
+        field: str | None = None
 
         @classmethod
         def settings_customise_sources(
@@ -302,10 +301,10 @@ def test_pyproject_toml_no_file_too_shallow(depth: int, mocker: MockerFixture, t
     )
 
     class Nested(BaseModel):
-        nested_field: Optional[str] = None
+        nested_field: str | None = None
 
     class Settings(BaseSettings):
-        foobar: Optional[str] = None
+        foobar: str | None = None
         nested: Nested = Nested()
         model_config = SettingsConfigDict(pyproject_toml_depth=depth)
 
