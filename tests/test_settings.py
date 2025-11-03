@@ -29,6 +29,7 @@ from pydantic import (
     Tag,
     ValidationError,
     field_validator,
+    model_validator,
 )
 from pydantic import (
     dataclasses as pydantic_dataclasses,
@@ -722,6 +723,25 @@ def test_alias_resolution_init_source(env):
 
     env.set('PREFIX_SURNAME', 'smith')
     assert Example(name='john', PREFIX_SURNAME='doe').model_dump() == {'name': 'john', 'last_name': 'doe'}
+
+    class Settings(BaseSettings):
+        NAME: str = Field(
+            default='',
+            validation_alias=AliasChoices('NAME', 'OLD_NAME'),
+        )
+
+        @model_validator(mode='before')
+        def check_for_deprecated_attributes(cls, data: Any) -> Any:
+            if isinstance(data, dict):
+                old_keys = {k for k in data.keys() if k.startswith('OLD_')}
+                assert not old_keys
+            return data
+
+    s = Settings(NAME='foo')
+    s.model_dump() == {'NAME': 'foo'}
+
+    with pytest.raises(ValidationError, match="Assertion failed, assert not {'OLD_NAME'}"):
+        Settings(OLD_NAME='foo')
 
 
 def test_init_kwargs_alias_resolution_deterministic():
