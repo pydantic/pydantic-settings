@@ -549,6 +549,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             elif field_name.endswith(':subcommand') and val is not None:
                 selected_subcommands.append(self._parser_map[field_name][val].dest)
             elif self.cli_kebab_case == 'all':
+                if isinstance(val, bool):
+                    continue
                 snake_val = val.replace('-', '_')
                 cli_arg = self._parser_map.get(field_name, {}).get(None)
                 if (
