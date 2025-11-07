@@ -2353,7 +2353,10 @@ def test_protected_namespace_defaults():
     # pydantic default
     with pytest.warns(
         UserWarning,
-        match='Field "model_dump_prefixed_field" in Model has conflict with protected namespace "model_dump"',
+        match=(
+            'Field "model_dump_prefixed_field" in Model has conflict with protected namespace "model_dump"|'
+            r"Field 'model_dump_prefixed_field' in 'Model' conflicts with protected namespace 'model_dump'\..*"
+        ),
     ):
 
         class Model(BaseSettings):
@@ -2362,18 +2365,21 @@ def test_protected_namespace_defaults():
     # pydantic-settings default
     with pytest.warns(
         UserWarning,
-        match='Field "settings_customise_sources_prefixed_field" in Model1 has conflict with protected namespace "settings_customise_sources"',
+        match=(
+            'Field "settings_customise_sources_prefixed_field" in Model1 has conflict with protected namespace "settings_customise_sources"|'
+            r"Field 'settings_customise_sources_prefixed_field' in 'Model1' conflicts with protected namespace 'settings_customise_sources'\..*"
+        ),
     ):
 
         class Model1(BaseSettings):
             settings_customise_sources_prefixed_field: str
 
     with pytest.raises(
-        NameError,
+        (NameError, ValueError),
         match=(
-            'Field "settings_customise_sources" conflicts with member <bound method '
-            "BaseSettings.settings_customise_sources of <class 'pydantic_settings.main.BaseSettings'>> "
-            'of protected namespace "settings_customise_sources".'
+            r'Field (["\'])settings_customise_sources\1 conflicts with member <bound method '
+            r"BaseSettings\.settings_customise_sources of <class 'pydantic_settings\.main\.BaseSettings'>> "
+            r'of protected namespace \1settings_customise_sources\1\.'
         ),
     ):
 
