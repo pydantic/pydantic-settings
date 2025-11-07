@@ -6,12 +6,11 @@ from collections import deque
 from collections.abc import Mapping, Sequence
 from dataclasses import is_dataclass
 from enum import Enum
-from typing import Any, Optional, cast
+from typing import Any, cast, get_args, get_origin
 
 from pydantic import BaseModel, Json, RootModel, Secret
 from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
-from typing_extensions import get_args, get_origin
 from typing_inspection import typing_objects
 
 from ..exceptions import SettingsError
@@ -40,9 +39,11 @@ def parse_env_vars(
     }
 
 
-def _annotation_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
+def _annotation_is_complex(annotation: Any, metadata: list[Any]) -> bool:
     # If the model is a root model, the root annotation should be used to
     # evaluate the complexity.
+    if typing_objects.is_typealiastype(annotation) or typing_objects.is_typealiastype(get_origin(annotation)):
+        annotation = annotation.__value__
     if annotation is not None and _lenient_issubclass(annotation, RootModel) and annotation is not RootModel:
         annotation = cast('type[RootModel[Any]]', annotation)
         root_annotation = annotation.model_fields['root'].annotation
@@ -90,15 +91,24 @@ def _annotation_contains_types(
     types: tuple[Any, ...],
     is_include_origin: bool = True,
     is_strip_annotated: bool = False,
+    is_instance: bool = False,
 ) -> bool:
     """Check if a type annotation contains any of the specified types."""
     if is_strip_annotated:
         annotation = _strip_annotated(annotation)
-    if is_include_origin is True and get_origin(annotation) in types:
-        return True
-    for type_ in get_args(annotation):
-        if _annotation_contains_types(type_, types, is_include_origin=True, is_strip_annotated=is_strip_annotated):
+    if is_include_origin is True:
+        origin = get_origin(annotation)
+        if origin in types:
             return True
+        if is_instance and any(isinstance(origin, type_) for type_ in types):
+            return True
+    for type_ in get_args(annotation):
+        if _annotation_contains_types(
+            type_, types, is_include_origin=True, is_strip_annotated=is_strip_annotated, is_instance=is_instance
+        ):
+            return True
+    if is_instance and any(isinstance(annotation, type_) for type_ in types):
+        return True
     return annotation in types
 
 
@@ -109,7 +119,7 @@ def _strip_annotated(annotation: Any) -> Any:
         return annotation
 
 
-def _annotation_enum_val_to_name(annotation: type[Any] | None, value: Any) -> Optional[str]:
+def _annotation_enum_val_to_name(annotation: type[Any] | None, value: Any) -> str | None:
     for type_ in (annotation, get_origin(annotation), *get_args(annotation)):
         if _lenient_issubclass(type_, Enum):
             if value in tuple(val.value for val in type_):
@@ -136,7 +146,10 @@ def _get_model_fields(model_cls: type[Any]) -> dict[str, Any]:
 
 
 def _get_alias_names(
-    field_name: str, field_info: Any, alias_path_args: dict[str, str] = {}, case_sensitive: bool = True
+    field_name: str,
+    field_info: Any,
+    alias_path_args: dict[str, int | None] | None = None,
+    case_sensitive: bool = True,
 ) -> tuple[tuple[str, ...], bool]:
     """Get alias names for a field, handling alias paths and case sensitivity."""
     from pydantic import AliasChoices, AliasPath
@@ -166,7 +179,10 @@ def _get_alias_names(
         for alias_path in new_alias_paths:
             name = cast(str, alias_path.path[0])
             name = name.lower() if not case_sensitive else name
-            alias_path_args[name] = 'dict' if len(alias_path.path) > 2 else 'list'
+            if alias_path_args is not None:
+                alias_path_args[name] = (
+                    alias_path.path[1] if len(alias_path.path) > 1 and isinstance(alias_path.path[1], int) else None
+                )
             if not alias_names and is_alias_path_only:
                 alias_names.append(name)
     if not case_sensitive:

@@ -5,18 +5,21 @@ from collections.abc import Mapping
 from typing import (
     TYPE_CHECKING,
     Any,
+    get_args,
+    get_origin,
 )
 
+from pydantic import Json, TypeAdapter, ValidationError
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
-from typing_extensions import get_args, get_origin
 from typing_inspection.introspection import is_union_origin
 
 from ...utils import _lenient_issubclass
 from ..base import PydanticBaseEnvSettingsSource
 from ..types import EnvNoneType
 from ..utils import (
+    _annotation_contains_types,
     _annotation_enum_name_to_val,
     _get_model_fields,
     _union_is_complex,
@@ -125,7 +128,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     return value
         elif value is not None:
             # simplest case, field is not complex, we only need to add the value if it was found
-            return value
+            return self._coerce_env_val_strict(field, value)
 
     def _field_is_complex(self, field: FieldInfo) -> tuple[bool, bool]:
         """
@@ -256,9 +259,30 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                             raise e
             if isinstance(env_var, dict):
                 if last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] == {}:
-                    env_var[last_key] = env_val
-
+                    env_var[last_key] = self._coerce_env_val_strict(target_field, env_val)
         return result
+
+    def _coerce_env_val_strict(self, field: FieldInfo | None, value: Any) -> Any:
+        """
+        Coerce environment string values based on field annotation if model config is `strict=True`.
+
+        Args:
+            field: The field.
+            value: The value to coerce.
+
+        Returns:
+            The coerced value if successful, otherwise the original value.
+        """
+        try:
+            if self.config.get('strict') and isinstance(value, str) and field is not None:
+                if value == self.env_parse_none_str:
+                    return value
+                if not _annotation_contains_types(field.annotation, (Json,), is_instance=True):
+                    return TypeAdapter(field.annotation).validate_python(value)
+        except ValidationError:
+            # Allow validation error to be raised at time of instatiation
+            pass
+        return value
 
     def __repr__(self) -> str:
         return (

@@ -1173,6 +1173,29 @@ CliApp.run(Git, cli_args=['clone', 'repo', 'dir']).model_dump() == {
 
 When executing a subcommand with an asynchronous cli_cmd, Pydantic settings automatically detects whether the current thread already has an active event loop. If so, the async command is run in a fresh thread to avoid conflicts. Otherwise, it uses asyncio.run() in the current thread. This handling ensures your asynchronous subcommands "just work" without additional manual setup.
 
+### Serializing CLI Arguments
+
+An instantiated Pydantic model can be serialized into its CLI arguments using the `CliApp.serialize` method.
+
+```py
+from pydantic import BaseModel
+
+from pydantic_settings import CliApp
+
+
+class Nested(BaseModel):
+    that: int
+
+
+class Settings(BaseModel):
+    this: str
+    nested: Nested
+
+
+print(CliApp.serialize(Settings(this='hello', nested=Nested(that=123))))
+#> ['--this', 'hello', '--nested.that', '123']
+```
+
 ### Mutually Exclusive Groups
 
 CLI mutually exclusive groups can be created by inheriting from the `CliMutuallyExclusiveGroup` class.
@@ -1331,7 +1354,9 @@ print(Settings().model_dump())
 
 #### CLI Kebab Case for Arguments
 
-Change whether CLI arguments should use kebab case by enabling `cli_kebab_case`.
+Change whether CLI arguments should use kebab case by enabling `cli_kebab_case`. By default, `cli_kebab_case=True` will
+ignore enum fields, and is equivalent to `cli_kebab_case='no_enums'`. To apply kebab case to everything, including
+enums, use `cli_kebab_case='all'`.
 
 ```py
 import sys
@@ -1691,8 +1716,6 @@ class Settings(BaseSettings):
 
 If a shortcut collides (is mapped to multiple fields), it will apply to the first matching field in the model.
 
-See the [test cases](../tests/test_source_cli.py) for more advanced usage and edge cases.
-
 ### Integrating with Existing Parsers
 
 A CLI settings source can be integrated with existing parsers by overriding the default CLI settings source with a user
@@ -1836,6 +1859,248 @@ Last, run your application inside a Docker container and supply your newly creat
 docker service create --name pydantic-with-secrets --secret my_secret_data pydantic-app:latest
 ```
 
+## Nested Secrets
+
+The default secrets implementation, `SecretsSettingsSource`, has behaviour that is not always desired or sufficient.
+For example, the default implementation does not support secret fields in nested submodels.
+
+`NestedSecretsSettingsSource` can be used as a drop-in replacement to `SecretsSettingsSource` to adjust the default behaviour.
+All differences are summarized in the table below.
+
+| `SecretsSettingsSource`                                                                                                                                         | `NestedSecretsSettingsSourcee`                                                                                                    |
+|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| Secret fields must belong to a top level model.                                                                                                                 | Secrets can be fields of nested models.                                                                                           |
+| Secret files can be placed in `secrets_dir`s only.                                                                                                              | Secret files can be placed in subdirectories for nested models.                                                                   |
+| Secret files discovery is based on the same configuration options that are used by `EnvSettingsSource`: `case_sensitive`, `env_nested_delimiter`, `env_prefix`. | Default options are respected, but can be overridden with `secrets_case_sensitive`, `secrets_nested_delimiter`, `secrets_prefix`. |
+| When `secrets_dir` is missing on the file system, a warning is generated.                                                                                       | Use `secrets_dir_missing` options to choose whether to issue warning, raise error, or silently ignore.                            |
+
+### Use Case: Plain Directory Layout
+
+```text
+📂 secrets
+├── 📄 app_key
+└── 📄 db_passwd
+```
+
+In the example below, secrets nested delimiter `'_'` is different from env nested delimiter `'__'`.
+Value for `Settings.db.user` can be passed in env variable `MY_DB__USER`.
+
+```py
+from pydantic import BaseModel, SecretStr
+
+from pydantic_settings import (
+    BaseSettings,
+    NestedSecretsSettingsSource,
+    SettingsConfigDict,
+)
+
+
+class AppSettings(BaseModel):
+    key: SecretStr
+
+
+class DbSettings(BaseModel):
+    user: str
+    passwd: SecretStr
+
+
+class Settings(BaseSettings):
+    app: AppSettings
+    db: DbSettings
+
+    model_config = SettingsConfigDict(
+        env_prefix='MY_',
+        env_nested_delimiter='__',
+        secrets_dir='secrets',
+        secrets_nested_delimiter='_',
+    )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            NestedSecretsSettingsSource(file_secret_settings),
+        )
+```
+
+### Use Case: Nested Directory Layout
+
+```text
+📂 secrets
+├── 📂 app
+│   └── 📄 key
+└── 📂 db
+    └── 📄 passwd
+```
+```py
+from pydantic import BaseModel, SecretStr
+
+from pydantic_settings import (
+    BaseSettings,
+    NestedSecretsSettingsSource,
+    SettingsConfigDict,
+)
+
+
+class AppSettings(BaseModel):
+    key: SecretStr
+
+
+class DbSettings(BaseModel):
+    user: str
+    passwd: SecretStr
+
+
+class Settings(BaseSettings):
+    app: AppSettings
+    db: DbSettings
+
+    model_config = SettingsConfigDict(
+        env_prefix='MY_',
+        env_nested_delimiter='__',
+        secrets_dir='secrets',
+        secrets_nested_subdir=True,
+    )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            NestedSecretsSettingsSource(file_secret_settings),
+        )
+```
+
+### Use Case: Multiple Nested Directories
+
+```text
+📂 secrets
+├── 📂 default
+│   ├── 📂 app
+│   │   └── 📄 key
+│   └── 📂 db
+│       └── 📄 passwd
+└── 📂 override
+    ├── 📂 app
+    │   └── 📄 key
+    └── 📂 db
+        └── 📄 passwd
+```
+```py
+from pydantic import BaseModel, SecretStr
+
+from pydantic_settings import (
+    BaseSettings,
+    NestedSecretsSettingsSource,
+    SettingsConfigDict,
+)
+
+
+class AppSettings(BaseModel):
+    key: SecretStr
+
+
+class DbSettings(BaseModel):
+    user: str
+    passwd: SecretStr
+
+
+class Settings(BaseSettings):
+    app: AppSettings
+    db: DbSettings
+
+    model_config = SettingsConfigDict(
+        env_prefix='MY_',
+        env_nested_delimiter='__',
+        secrets_dir=['secrets/default', 'secrets/override'],
+        secrets_nested_subdir=True,
+    )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            NestedSecretsSettingsSource(file_secret_settings),
+        )
+```
+
+### Configuration Options
+
+#### secrets_dir
+
+Path to secrets directory, same as `SecretsSettingsSource.secrets_dir`. If `list`, the last match wins.
+If `secrets_dir` is passed in both source constructor and model config, values are not merged (constructor wins).
+
+#### secrets_dir_missing
+
+If `secrets_dir` does not exist, original `SecretsSettingsSource` issues a warning.
+However, this may be undesirable, for example if we don't mount Docker Secrets in e.g. dev environment.
+Use `secrets_dir_missing` to choose:
+
+* `'ok'` — do nothing if `secrets_dir` does not exist
+* `'warn'` (default) — print warning, same as `SecretsSettingsSource`
+* `'error'` — raise `SettingsError`
+
+If multiple `secrets_dir` passed, the same `secrets_dir_missing` action applies to each of them.
+
+#### secrets_dir_max_size
+
+Limit the size of `secrets_dir` for security reasons, defaults to `SECRETS_DIR_MAX_SIZE` equal to 16 MiB.
+
+`NestedSecretsSettingsSource` is a thin wrapper around `EnvSettingsSource`,
+which loads all potential secrets on initialization. This could lead to `MemoryError` if we mount
+a large file under `secrets_dir`.
+
+If multiple `secrets_dir` passed, the limit applies to each directory independently.
+
+#### secrets_case_sensitive
+
+Same as `case_sensitive`, but works for secrets only. If not specified, defaults to `case_sensitive`.
+
+#### secrets_nested_delimiter
+
+Same as `env_nested_delimiter`, but works for secrets only. If not specified, defaults to `env_nested_delimiter`.
+This option is used to implement _nested secrets directory_ layout and allows to do even nasty things
+like `/run/secrets/model/delim/nested1/delim/nested2`.
+
+#### secrets_nested_subdir
+
+Boolean flag to turn on _nested secrets directory_ mode, `False` by default. If `True`, sets `secrets_nested_delimiter`
+to `os.sep`. Raises `SettingsError` if `secrets_nested_delimiter` is already specified.
+
+#### secrets_prefix
+
+Secret path prefix, similar to `env_prefix`, but works for secrets only. Defaults to `env_prefix`
+if not specified. Works in both plain and nested directory modes, like
+`'/run/secrets/prefix_model__nested'` and `'/run/secrets/prefix_model/nested'`.
+
+
 ## AWS Secrets Manager
 
 You must set one parameter:
@@ -1948,6 +2213,45 @@ class AzureKeyVaultSettings(BaseSettings):
             az_key_vault_settings,
         )
 ```
+
+### Snake case conversion
+
+The Azure Key Vault source accepts a `snake_case_convertion` option, disabled by default, to convert Key Vault secret names by mapping them to Python's snake_case field names, without the need to use aliases.
+
+```py
+import os
+
+from azure.identity import DefaultAzureCredential
+
+from pydantic_settings import (
+    AzureKeyVaultSettingsSource,
+    BaseSettings,
+    PydanticBaseSettingsSource,
+)
+
+
+class AzureKeyVaultSettings(BaseSettings):
+    my_setting: str
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        az_key_vault_settings = AzureKeyVaultSettingsSource(
+            settings_cls,
+            os.environ['AZURE_KEY_VAULT_URL'],
+            DefaultAzureCredential(),
+            snake_case_conversion=True,
+        )
+        return (az_key_vault_settings,)
+```
+
+This setup will load Azure Key Vault secrets (e.g., `MySetting`, `mySetting`, `my-secret` or `MY-SECRET`), mapping them to the snake case version (`my_setting` in this case).
 
 ### Dash to underscore mapping
 
@@ -2400,7 +2704,7 @@ print(Settings())
 #> foobar='test'
 ```
 
-#### Accesing the result of previous sources
+#### Accessing the result of previous sources
 
 Each source of settings can access the output of the previous ones.
 

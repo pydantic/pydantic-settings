@@ -3,10 +3,11 @@ from __future__ import annotations as _annotations
 import asyncio
 import inspect
 import threading
+import warnings
 from argparse import Namespace
 from collections.abc import Mapping
 from types import SimpleNamespace
-from typing import Any, ClassVar, TypeVar
+from typing import Any, ClassVar, Literal, TypeVar
 
 from pydantic import ConfigDict
 from pydantic._internal._config import config_keys
@@ -24,12 +25,17 @@ from .sources import (
     DotenvType,
     EnvSettingsSource,
     InitSettingsSource,
+    JsonConfigSettingsSource,
     PathType,
     PydanticBaseSettingsSource,
     PydanticModel,
+    PyprojectTomlConfigSettingsSource,
     SecretsSettingsSource,
+    TomlConfigSettingsSource,
+    YamlConfigSettingsSource,
     get_subcommand,
 )
+from .sources.utils import _get_alias_names
 
 T = TypeVar('T')
 
@@ -57,7 +63,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_flag_prefix_char: str
     cli_implicit_flags: bool | None
     cli_ignore_unknown_args: bool | None
-    cli_kebab_case: bool | None
+    cli_kebab_case: bool | Literal['all', 'no_enums'] | None
     cli_shortcuts: Mapping[str, str | list[str]] | None
     secrets_dir: PathType | None
     json_file: PathType | None
@@ -180,7 +186,7 @@ class BaseSettings(BaseModel):
         _cli_flag_prefix_char: str | None = None,
         _cli_implicit_flags: bool | None = None,
         _cli_ignore_unknown_args: bool | None = None,
-        _cli_kebab_case: bool | None = None,
+        _cli_kebab_case: bool | Literal['all', 'no_enums'] | None = None,
         _cli_shortcuts: Mapping[str, str | list[str]] | None = None,
         _secrets_dir: PathType | None = None,
         **values: Any,
@@ -267,7 +273,7 @@ class BaseSettings(BaseModel):
         _cli_flag_prefix_char: str | None = None,
         _cli_implicit_flags: bool | None = None,
         _cli_ignore_unknown_args: bool | None = None,
-        _cli_kebab_case: bool | None = None,
+        _cli_kebab_case: bool | Literal['all', 'no_enums'] | None = None,
         _cli_shortcuts: Mapping[str, str | list[str]] | None = None,
         _secrets_dir: PathType | None = None,
     ) -> dict[str, Any]:
@@ -389,7 +395,8 @@ class BaseSettings(BaseModel):
             dotenv_settings=dotenv_settings,
             file_secret_settings=file_secret_settings,
         ) + (default_settings,)
-        if not any([source for source in sources if isinstance(source, CliSettingsSource)]):
+        custom_cli_sources = [source for source in sources if isinstance(source, CliSettingsSource)]
+        if not any(custom_cli_sources):
             if isinstance(cli_settings_source, CliSettingsSource):
                 sources = (cli_settings_source,) + sources
             elif cli_parse_args is not None:
@@ -412,8 +419,15 @@ class BaseSettings(BaseModel):
                     case_sensitive=case_sensitive,
                 )
                 sources = (cli_settings,) + sources
+        # We ensure that if command line arguments haven't been parsed yet, we do so.
+        elif cli_parse_args not in (None, False) and not custom_cli_sources[0].env_vars:
+            custom_cli_sources[0](args=cli_parse_args)  # type: ignore
+
+        self._settings_warn_unused_config_keys(sources, self.model_config)
+
         if sources:
             state: dict[str, Any] = {}
+            defaults: dict[str, Any] = {}
             states: dict[str, dict[str, Any]] = {}
             for source in sources:
                 if isinstance(source, PydanticBaseSettingsSource):
@@ -423,13 +437,73 @@ class BaseSettings(BaseModel):
                 source_name = source.__name__ if hasattr(source, '__name__') else type(source).__name__
                 source_state = source()
 
+                if isinstance(source, DefaultSettingsSource):
+                    defaults = source_state
+
                 states[source_name] = source_state
                 state = deep_update(source_state, state)
+
+            # Strip any default values not explicity set before returning final state
+            state = {key: val for key, val in state.items() if key not in defaults or defaults[key] != val}
+            self._settings_restore_init_kwarg_names(self.__class__, init_kwargs, state)
+
             return state
         else:
             # no one should mean to do this, but I think returning an empty dict is marginally preferable
             # to an informative error and much better than a confusing error
             return {}
+
+    @staticmethod
+    def _settings_restore_init_kwarg_names(
+        settings_cls: type[BaseSettings], init_kwargs: dict[str, Any], state: dict[str, Any]
+    ) -> None:
+        """
+        Restore the init_kwarg key names to the final merged state dictionary.
+        """
+        if init_kwargs and state:
+            state_kwarg_names = set(state.keys())
+            init_kwarg_names = set(init_kwargs.keys())
+            for field_name, field_info in settings_cls.model_fields.items():
+                alias_names, *_ = _get_alias_names(field_name, field_info)
+                matchable_names = set(alias_names)
+                include_name = settings_cls.model_config.get('populate_by_name', False)
+                if include_name:
+                    matchable_names.add(field_name)
+                init_kwarg_name = init_kwarg_names & matchable_names
+                state_kwarg_name = state_kwarg_names & matchable_names
+                if init_kwarg_name and state_kwarg_name:
+                    state[init_kwarg_name.pop()] = state.pop(state_kwarg_name.pop())
+
+    @staticmethod
+    def _settings_warn_unused_config_keys(sources: tuple[object, ...], model_config: SettingsConfigDict) -> None:
+        """
+        Warns if any values in model_config were set but the corresponding settings source has not been initialised.
+
+        The list alternative sources and their config keys can be found here:
+        https://docs.pydantic.dev/latest/concepts/pydantic_settings/#other-settings-source
+
+        Args:
+            sources: The tuple of configured sources
+            model_config: The model config to check for unused config keys
+        """
+
+        def warn_if_not_used(source_type: type[PydanticBaseSettingsSource], keys: tuple[str, ...]) -> None:
+            if not any(isinstance(source, source_type) for source in sources):
+                for key in keys:
+                    if model_config.get(key) is not None:
+                        warnings.warn(
+                            f'Config key `{key}` is set in model_config but will be ignored because no '
+                            f'{source_type.__name__} source is configured. To use this config key, add a '
+                            f'{source_type.__name__} source to the settings sources via the '
+                            'settings_customise_sources hook.',
+                            UserWarning,
+                            stacklevel=3,
+                        )
+
+        warn_if_not_used(JsonConfigSettingsSource, ('json_file', 'json_file_encoding'))
+        warn_if_not_used(PyprojectTomlConfigSettingsSource, ('pyproject_toml_depth', 'pyproject_toml_table_header'))
+        warn_if_not_used(TomlConfigSettingsSource, ('toml_file',))
+        warn_if_not_used(YamlConfigSettingsSource, ('yaml_file', 'yaml_file_encoding', 'yaml_config_section'))
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         extra='forbid',
@@ -476,6 +550,25 @@ class CliApp:
     A utility class for running Pydantic `BaseSettings`, `BaseModel`, or `pydantic.dataclasses.dataclass` as
     CLI applications.
     """
+
+    @staticmethod
+    def _get_base_settings_cls(model_cls: type[Any]) -> type[BaseSettings]:
+        if issubclass(model_cls, BaseSettings):
+            return model_cls
+
+        class CliAppBaseSettings(BaseSettings, model_cls):  # type: ignore
+            __doc__ = model_cls.__doc__
+            model_config = SettingsConfigDict(
+                nested_model_default_partial_update=True,
+                case_sensitive=True,
+                cli_hide_none_type=True,
+                cli_avoid_json=True,
+                cli_enforce_required=True,
+                cli_implicit_flags=True,
+                cli_kebab_case=True,
+            )
+
+        return CliAppBaseSettings
 
     @staticmethod
     def _run_cli_cmd(model: Any, cli_cmd_method_name: str, is_required: bool) -> Any:
@@ -575,22 +668,10 @@ class CliApp:
         model_init_data['_cli_exit_on_error'] = cli_exit_on_error
         model_init_data['_cli_settings_source'] = cli_settings
         if not issubclass(model_cls, BaseSettings):
-
-            class CliAppBaseSettings(BaseSettings, model_cls):  # type: ignore
-                __doc__ = model_cls.__doc__
-                model_config = SettingsConfigDict(
-                    nested_model_default_partial_update=True,
-                    case_sensitive=True,
-                    cli_hide_none_type=True,
-                    cli_avoid_json=True,
-                    cli_enforce_required=True,
-                    cli_implicit_flags=True,
-                    cli_kebab_case=True,
-                )
-
-            model = CliAppBaseSettings(**model_init_data)
+            base_settings_cls = CliApp._get_base_settings_cls(model_cls)
+            model = base_settings_cls(**model_init_data)
             model_init_data = {}
-            for field_name, field_info in type(model).model_fields.items():
+            for field_name, field_info in base_settings_cls.model_fields.items():
                 model_init_data[_field_name_for_signature(field_name, field_info)] = getattr(model, field_name)
 
         return CliApp._run_cli_cmd(model_cls(**model_init_data), cli_cmd_method_name, is_required=False)
@@ -619,3 +700,18 @@ class CliApp:
 
         subcommand = get_subcommand(model, is_required=True, cli_exit_on_error=cli_exit_on_error)
         return CliApp._run_cli_cmd(subcommand, cli_cmd_method_name, is_required=True)
+
+    @staticmethod
+    def serialize(model: PydanticModel) -> list[str]:
+        """
+        Serializes the CLI arguments for a Pydantic data model.
+
+        Args:
+            model: The data model to serialize.
+
+        Returns:
+            The serialized CLI arguments for the data model.
+        """
+
+        base_settings_cls = CliApp._get_base_settings_cls(type(model))
+        return CliSettingsSource[Any](base_settings_cls)._serialized_args(model)
