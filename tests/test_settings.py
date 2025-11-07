@@ -4,11 +4,11 @@ import os
 import pathlib
 import sys
 import uuid
-from collections.abc import Hashable
+from collections.abc import Callable, Hashable
 from datetime import date, datetime, timezone
 from enum import IntEnum
 from pathlib import Path
-from typing import Annotated, Any, Callable, Generic, Literal, Optional, TypeVar, Union
+from typing import Annotated, Any, Generic, Literal, TypeVar
 from unittest import mock
 
 import pytest
@@ -309,7 +309,7 @@ def test_nested_env_delimiter(env):
 
     class Cfg(BaseSettings):
         v0: str
-        v0_union: Union[SubValue, int]
+        v0_union: SubValue | int
         top: TopValue
 
         model_config = SettingsConfigDict(env_nested_delimiter='__')
@@ -337,10 +337,10 @@ def test_nested_env_delimiter(env):
 
 def test_nested_env_optional_json(env):
     class Child(BaseModel):
-        num_list: Optional[list[int]] = None
+        num_list: list[int] | None = None
 
     class Cfg(BaseSettings, env_nested_delimiter='__'):
-        child: Optional[Child] = None
+        child: Child | None = None
 
     env.set('CHILD__NUM_LIST', '[1,2,3]')
     cfg = Cfg()
@@ -410,8 +410,8 @@ def test_nested_env_max_split(env, env_prefix):
 
     class Cfg(BaseSettings):
         caregiver: Person
-        significant_other: Optional[Person] = None
-        next_of_kin: Optional[Person] = None
+        significant_other: Person | None = None
+        next_of_kin: Person | None = None
 
         model_config = SettingsConfigDict(env_nested_delimiter='_', env_nested_max_split=1)
         if env_prefix is not None:
@@ -480,7 +480,7 @@ def test_annotated_with_type(env):
 
     PEP 695 type aliases need to be analyzed when determining if an annotation is complex.
     """
-    MinLenList = TypeAliasType('MinLenList', Annotated[Union[list[str], list[int]], MinLen(2)])
+    MinLenList = TypeAliasType('MinLenList', Annotated[list[str] | list[int], MinLen(2)])
 
     class AnnotatedComplexSettings(BaseSettings):
         apples: MinLenList
@@ -490,7 +490,7 @@ def test_annotated_with_type(env):
     assert s.apples == ['russet', 'granny smith']
 
     T = TypeVar('T')
-    MinLenList = TypeAliasType('MinLenList', Annotated[Union[list[T], tuple[T]], MinLen(2)], type_params=(T,))
+    MinLenList = TypeAliasType('MinLenList', Annotated[list[T] | tuple[T], MinLen(2)], type_params=(T,))
 
     class AnnotatedComplexSettings(BaseSettings):
         apples: MinLenList[str]
@@ -528,7 +528,7 @@ def test_required_sub_model(env):
 
 def test_non_class(env):
     class Settings(BaseSettings):
-        foobar: Optional[str]
+        foobar: str | None
 
     env.set('FOOBAR', 'xxx')
     s = Settings()
@@ -862,7 +862,7 @@ def test_env_inheritance_config(env):
 
     # . Child class overrides parent prefix and field
     class Parent(BaseSettings):
-        foobar: Optional[str]
+        foobar: str | None
 
         model_config = SettingsConfigDict(env_prefix='p_')
 
@@ -1073,7 +1073,7 @@ def test_env_union_with_complex_subfields_parses_json(env):
         b: int
 
     class Settings(BaseSettings):
-        content: Union[A, B, int]
+        content: A | B | int
 
     env.set('content', '{"a": "test"}')
     s = Settings()
@@ -1088,7 +1088,7 @@ def test_env_union_with_complex_subfields_parses_plain_if_json_fails(env):
         b: int
 
     class Settings(BaseSettings):
-        content: Union[A, B, datetime]
+        content: A | B | datetime
 
     env.set('content', '{"a": "test"}')
     s = Settings()
@@ -1101,7 +1101,7 @@ def test_env_union_with_complex_subfields_parses_plain_if_json_fails(env):
 
 def test_env_union_without_complex_subfields_does_not_parse_json(env):
     class Settings(BaseSettings):
-        content: Union[datetime, str]
+        content: datetime | str
 
     env.set('content', '2020-07-05T00:00:00Z')
     s = Settings()
@@ -1342,7 +1342,7 @@ def test_env_file_override_none(tmp_path):
     p.write_text(test_env_file)
 
     class Settings(BaseSettings):
-        a: Optional[str] = None
+        a: str | None = None
 
         model_config = SettingsConfigDict(env_file=p)
 
@@ -1639,7 +1639,7 @@ def test_secrets_case_sensitive(tmp_path):
     (tmp_path / 'SECRET_VAR').write_text('foo_env_value_str')
 
     class Settings(BaseSettings):
-        secret_var: Optional[str] = None
+        secret_var: str | None = None
 
         model_config = SettingsConfigDict(secrets_dir=tmp_path, case_sensitive=True)
 
@@ -1650,7 +1650,7 @@ def test_secrets_case_insensitive(tmp_path):
     (tmp_path / 'SECRET_VAR').write_text('foo_env_value_str')
 
     class Settings(BaseSettings):
-        secret_var: Optional[str]
+        secret_var: str | None
 
         model_config = SettingsConfigDict(secrets_dir=tmp_path, case_sensitive=False)
 
@@ -1693,7 +1693,7 @@ def test_secrets_nested_optional_json(tmp_path):
         a: int
 
     class Settings(BaseSettings):
-        foo: Optional[Foo] = None
+        foo: Foo | None = None
 
         model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
@@ -1776,7 +1776,7 @@ def test_secrets_missing_location(tmp_path):
 @pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
 def test_secrets_missing_location_multiple_all(tmp_path):
     class Settings(BaseSettings):
-        foo: Optional[str] = None
+        foo: str | None = None
 
     with pytest.warns() as record:
         Settings(_secrets_dir=[tmp_path / 'dir1', tmp_path / 'dir2'])
@@ -1790,7 +1790,7 @@ def test_secrets_missing_location_multiple_all(tmp_path):
 @pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
 def test_secrets_missing_location_multiple_one(tmp_path):
     class Settings(BaseSettings):
-        foo: Optional[str] = None
+        foo: str | None = None
 
     (d1 := tmp_path / 'dir1').mkdir()
     (d1 / 'foo').write_text('secret_value')
@@ -1807,7 +1807,7 @@ def test_secrets_file_is_a_directory(tmp_path):
     p1.mkdir()
 
     class Settings(BaseSettings):
-        foo: Optional[str] = None
+        foo: str | None = None
 
         model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
@@ -1820,7 +1820,7 @@ def test_secrets_file_is_a_directory(tmp_path):
 @pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
 def test_secrets_file_is_a_directory_multiple_all(tmp_path):
     class Settings(BaseSettings):
-        foo: Optional[str] = None
+        foo: str | None = None
 
     (d1 := tmp_path / 'dir1').mkdir()
     (d2 := tmp_path / 'dir2').mkdir()
@@ -1840,7 +1840,7 @@ def test_secrets_file_is_a_directory_multiple_all(tmp_path):
 @pytest.mark.skipif(sys.platform.startswith('win'), reason='windows paths break regex')
 def test_secrets_file_is_a_directory_multiple_one(tmp_path):
     class Settings(BaseSettings):
-        foo: Optional[str] = None
+        foo: str | None = None
 
     (d1 := tmp_path / 'dir1').mkdir()
     (d2 := tmp_path / 'dir2').mkdir()
@@ -2160,7 +2160,7 @@ def test_nested_env_nonexisting_field_deep(env):
 
 def test_nested_env_union_complex_values(env):
     class SubModel(BaseSettings):
-        vals: Union[list[str], dict[str, str]]
+        vals: list[str] | dict[str, str]
 
     class Cfg(BaseSettings):
         sub_model: SubModel
@@ -2208,7 +2208,7 @@ def test_discriminated_union_with_callable_discriminator(env):
         model_config = SettingsConfigDict(env_nested_delimiter='__')
 
         # Discriminated union using a callable discriminator.
-        a_or_b: Annotated[Union[Annotated[A, Tag('a')], Annotated[B, Tag('b')]], Discriminator(get_discriminator_value)]
+        a_or_b: Annotated[Annotated[A, Tag('a')] | Annotated[B, Tag('b')], Discriminator(get_discriminator_value)]
 
     # Set up environment so that the discriminator is 'a'.
     env.set('a_or_b__x', 'a')
@@ -2227,10 +2227,10 @@ def test_json_field_with_discriminated_union(env):
     class B(BaseModel):
         x: Literal['b'] = 'b'
 
-    A_OR_B = Annotated[Union[A, B], Field(discriminator='x')]
+    A_OR_B = Annotated[A | B, Field(discriminator='x')]
 
     class Settings(BaseSettings):
-        a_or_b: Optional[Json[A_OR_B]] = None
+        a_or_b: Json[A_OR_B] | None = None
 
     # Set up environment so that the discriminator is 'a'.
     env.set('a_or_b', '{"x": "a"}')
@@ -2432,7 +2432,7 @@ def test_env_parse_enums(env):
 
     class Settings(BaseSettings, env_nested_delimiter='__'):
         fruit: FruitsEnum
-        union_fruit: Optional[Union[int, FruitsEnum]] = None
+        union_fruit: int | FruitsEnum | None = None
         nested: NestedEnum
 
     with pytest.raises(ValidationError) as exc_info:
@@ -2513,8 +2513,8 @@ def test_env_parse_none_str(env):
     env.set('y', 'y_override')
 
     class Settings(BaseSettings):
-        x: Optional[str] = 'x_default'
-        y: Optional[str] = 'y_default'
+        x: str | None = 'x_default'
+        y: str | None = 'y_default'
 
     s = Settings()
     assert s.x == 'null'
@@ -2528,13 +2528,13 @@ def test_env_parse_none_str(env):
     env.set('nested__deep__z', 'None')
 
     class NestedBaseModel(BaseModel):
-        x: Optional[str] = 'x_default'
-        y: Optional[str] = 'y_default'
-        deep: Optional[dict] = {'z': 'z_default'}
-        keep: Optional[dict] = {'z': 'None'}
+        x: str | None = 'x_default'
+        y: str | None = 'y_default'
+        deep: dict | None = {'z': 'z_default'}
+        keep: dict | None = {'z': 'None'}
 
     class NestedSettings(BaseSettings, env_nested_delimiter='__'):
-        nested: Optional[NestedBaseModel] = NestedBaseModel()
+        nested: NestedBaseModel | None = NestedBaseModel()
 
     s = NestedSettings()
     assert s.nested.x == 'None'
@@ -2676,7 +2676,7 @@ def test_path_based_root_model(env):
 
 def test_optional_field_from_env(env):
     class Settings(BaseSettings):
-        x: Optional[str] = None
+        x: str | None = None
 
     env.set('x', '123')
 
@@ -2691,7 +2691,7 @@ def test_dotenv_optional_json_field(tmp_path):
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(env_file=p)
 
-        data: Optional[Json[dict[str, str]]] = Field(default=None)
+        data: Json[dict[str, str]] | None = Field(default=None)
 
     s = Settings()
     assert s.data == {'foo': 'bar'}
@@ -2823,7 +2823,7 @@ def test_case_insensitive_nested_optional(env):
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(env_nested_delimiter='__', case_sensitive=False)
 
-        nested: Optional[NestedSettings]
+        nested: NestedSettings | None
 
     env.set('nested__FoO', 'string')
     env.set('nested__bar', '123')
@@ -2856,7 +2856,7 @@ def test_case_insensitive_nested_list(env):
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(env_nested_delimiter='__', case_sensitive=False)
 
-        nested: Optional[NestedSettings]
+        nested: NestedSettings | None
 
     env.set('nested__FOO', '["string1", "string2"]')
     s = Settings()
@@ -3032,7 +3032,7 @@ def test_dotenv_optional_nested(tmp_path):
         )
 
         not_nested: str
-        NESTED: Optional[NestedSettings]
+        NESTED: NestedSettings | None
 
     s = Settings()
     assert s.model_dump() == {'not_nested': 'works', 'NESTED': {'A': 'fails', 'b': 2}}
