@@ -583,9 +583,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             return True
         return False
 
-    def _get_merge_parsed_list_types(
-        self, parsed_list: list[str], field_name: str
-    ) -> tuple[type | None, type | None]:
+    def _get_merge_parsed_list_types(self, parsed_list: list[str], field_name: str) -> tuple[type | None, type | None]:
         merge_type = self._cli_dict_args.get(field_name, list)
         if (
             merge_type is list

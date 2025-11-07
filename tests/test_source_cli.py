@@ -2071,7 +2071,7 @@ def test_cli_user_settings_source_exceptions():
         (List[Dict[str, int]], 'List[Dict[str,int]]'),  # noqa: UP006
         (Tuple[str, int, float], 'Tuple[str,int,float]'),  # noqa: UP006
         (Tuple[str, ...], 'Tuple[str,...]'),  # noqa: UP006
-        (Union[int, List[str], Tuple[str, int]], '{int,List[str],Tuple[str,int]}'),  # noqa: UP006
+        (int | List[str] | Tuple[str, int], '{int,List[str],Tuple[str,int]}'),  # noqa: UP006
         (foobar, 'foobar'),
         (LoggedVar, 'LoggedVar'),
         (LoggedVar(), 'LoggedVar'),
@@ -2082,36 +2082,14 @@ def test_cli_user_settings_source_exceptions():
         (typing_extensions.Literal['a', 'b', 'c'], '{a,b,c}'),
         (SimpleSettings, 'JSON'),
         (SimpleSettings | SettingWithIgnoreEmpty, 'JSON'),
-        (Union[SimpleSettings, str, SettingWithIgnoreEmpty], '{JSON,str}'),
-        (Union[str, SimpleSettings, SettingWithIgnoreEmpty], '{str,JSON}'),
+        (Union[SimpleSettings, str, SettingWithIgnoreEmpty], '{JSON,str}'),  # noqa: UP007
+        (Union[str, SimpleSettings, SettingWithIgnoreEmpty], '{str,JSON}'),  # noqa: UP007
         (Annotated[SimpleSettings, 'annotation'], 'JSON'),
         (DirectoryPath, 'Path'),
         (FruitsEnum, '{pear,kiwi,lime}'),
         (time.time_ns, 'time_ns'),
         (foobar, 'foobar'),
         (CliDummyParser.add_argument, 'CliDummyParser.add_argument'),
-    ],
-)
-@pytest.mark.parametrize('hide_none_type', [True, False])
-def test_cli_metavar_format(hide_none_type, value, expected):
-    cli_settings = CliSettingsSource(SimpleSettings, cli_hide_none_type=hide_none_type)
-    if hide_none_type:
-        if value == [1, 2, 3] or isinstance(value, LoggedVar) or isinstance(value, Representation):
-            pytest.skip()
-        if value in ('foobar', 'SomeForwardRefString'):
-            expected = f"ForwardRef('{value}')"  # forward ref implicit cast
-        if typing_extensions.get_origin(value) is Union:
-            args = typing_extensions.get_args(value)
-            value = Union[args + (None,) if args else (value, None)]
-        else:
-            value = Union[(value, None)]
-    assert cli_settings._metavar_format(value) == expected
-
-
-@pytest.mark.skipif(sys.version_info < (3, 10), reason='requires python 3.10 or higher')
-@pytest.mark.parametrize(
-    'value_gen,expected',
-    [
         (lambda: str | int, '{str,int}'),
         (lambda: list[int], 'list[int]'),
         (lambda: List[int], 'List[int]'),  # noqa: UP006
@@ -2123,15 +2101,21 @@ def test_cli_metavar_format(hide_none_type, value, expected):
     ],
 )
 @pytest.mark.parametrize('hide_none_type', [True, False])
-def test_cli_metavar_format_310(hide_none_type, value_gen, expected):
-    value = value_gen()
+def test_cli_metavar_format(hide_none_type, value, expected):
+    if callable(value) and value.__name__ == '<lambda>':
+        value = value()
+
     cli_settings = CliSettingsSource(SimpleSettings, cli_hide_none_type=hide_none_type)
     if hide_none_type:
+        if value == [1, 2, 3] or isinstance(value, LoggedVar) or isinstance(value, Representation):
+            pytest.skip()
+        if value in ('foobar', 'SomeForwardRefString'):
+            expected = f"ForwardRef('{value}')"  # forward ref implicit cast
         if typing_extensions.get_origin(value) is Union:
             args = typing_extensions.get_args(value)
-            value = Union[args + (None,) if args else (value, None)]
+            value = Union[args + (None,) if args else (value, None)]  # noqa: UP007
         else:
-            value = Union[(value, None)]
+            value = Union[(value, None)]  # noqa: UP007
     assert cli_settings._metavar_format(value) == expected
 
 
