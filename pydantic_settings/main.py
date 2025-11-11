@@ -35,6 +35,7 @@ from .sources import (
     YamlConfigSettingsSource,
     get_subcommand,
 )
+from .sources.utils import _get_alias_names
 
 T = TypeVar('T')
 
@@ -444,12 +445,36 @@ class BaseSettings(BaseModel):
 
             # Strip any default values not explicity set before returning final state
             state = {key: val for key, val in state.items() if key not in defaults or defaults[key] != val}
+            self._settings_restore_init_kwarg_names(self.__class__, init_kwargs, state)
 
             return state
         else:
             # no one should mean to do this, but I think returning an empty dict is marginally preferable
             # to an informative error and much better than a confusing error
             return {}
+
+    @staticmethod
+    def _settings_restore_init_kwarg_names(
+        settings_cls: type[BaseSettings], init_kwargs: dict[str, Any], state: dict[str, Any]
+    ) -> None:
+        """
+        Restore the init_kwarg key names to the final merged state dictionary.
+        """
+        if init_kwargs and state:
+            state_kwarg_names = set(state.keys())
+            init_kwarg_names = set(init_kwargs.keys())
+            for field_name, field_info in settings_cls.model_fields.items():
+                alias_names, *_ = _get_alias_names(field_name, field_info)
+                matchable_names = set(alias_names)
+                include_name = settings_cls.model_config.get(
+                    'populate_by_name', False
+                ) or settings_cls.model_config.get('validate_by_name', False)
+                if include_name:
+                    matchable_names.add(field_name)
+                init_kwarg_name = init_kwarg_names & matchable_names
+                state_kwarg_name = state_kwarg_names & matchable_names
+                if init_kwarg_name and state_kwarg_name:
+                    state[init_kwarg_name.pop()] = state.pop(state_kwarg_name.pop())
 
     @staticmethod
     def _settings_warn_unused_config_keys(sources: tuple[object, ...], model_config: SettingsConfigDict) -> None:

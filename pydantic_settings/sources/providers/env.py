@@ -5,13 +5,14 @@ from collections.abc import Mapping
 from typing import (
     TYPE_CHECKING,
     Any,
+    get_args,
+    get_origin,
 )
 
 from pydantic import Json, TypeAdapter, ValidationError
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
-from typing_extensions import get_args, get_origin
 from typing_inspection.introspection import is_union_origin
 
 from ...utils import _lenient_issubclass

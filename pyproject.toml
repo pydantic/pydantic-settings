@@ -20,11 +20,11 @@ classifiers = [
     'Programming Language :: Python',
     'Programming Language :: Python :: 3',
     'Programming Language :: Python :: 3 :: Only',
-    'Programming Language :: Python :: 3.9',
     'Programming Language :: Python :: 3.10',
     'Programming Language :: Python :: 3.11',
     'Programming Language :: Python :: 3.12',
     'Programming Language :: Python :: 3.13',
+    'Programming Language :: Python :: 3.14',
     'Intended Audience :: Developers',
     'Intended Audience :: Information Technology',
     'Intended Audience :: System Administrators',
@@ -38,7 +38,7 @@ classifiers = [
     'Topic :: Software Development :: Libraries :: Python Modules',
     'Topic :: Internet',
 ]
-requires-python = '>=3.9'
+requires-python = '>=3.10'
 dependencies = [
     'pydantic>=2.7.0',
     'python-dotenv>=0.21.0',
@@ -128,7 +128,7 @@ source = [
 
 [tool.ruff]
 line-length = 120
-target-version = 'py39'
+target-version = 'py310'
 
 [tool.ruff.lint.pyupgrade]
 keep-runtime-typing = true

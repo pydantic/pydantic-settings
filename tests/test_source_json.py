@@ -4,7 +4,6 @@ Test pydantic_settings.JsonConfigSettingsSource.
 
 import json
 from pathlib import Path
-from typing import Union
 
 from pydantic import BaseModel
 
@@ -36,7 +35,7 @@ def test_json_file(tmp_path):
         model_config = SettingsConfigDict(json_file=p)
         foobar: str
         nested: Nested
-        null_field: Union[str, None]
+        null_field: str | None
 
         @classmethod
         def settings_customise_sources(
