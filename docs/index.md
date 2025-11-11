@@ -2446,12 +2446,15 @@ nested_field = "world!"
 You can also provide multiple files by providing a list of paths.
 
 ```py
+from pydantic import BaseModel
+
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
     TomlConfigSettingsSource,
 )
+
 
 class Nested(BaseModel):
     foo: int
@@ -2461,7 +2464,9 @@ class Nested(BaseModel):
 class Settings(BaseSettings):
     hello: str
     nested: Nested
-    model_config = SettingsConfigDict(toml_file=['config.default.toml', 'config.custom.toml'])
+    model_config = SettingsConfigDict(
+        toml_file=['config.default.toml', 'config.custom.toml']
+    )
 
     @classmethod
     def settings_customise_sources(
@@ -2507,12 +2512,15 @@ The files are merged shallowly in increasing order of priority. To enable deep m
     The `deep_merge` option is **not available** through the `SettingsConfigDict`.
 
 ```py
+from pydantic import BaseModel
+
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
     TomlConfigSettingsSource,
 )
+
 
 class Nested(BaseModel):
     foo: int
@@ -2522,7 +2530,9 @@ class Nested(BaseModel):
 class Settings(BaseSettings):
     hello: str
     nested: Nested
-    model_config = SettingsConfigDict(toml_file=['config.default.toml', 'config.custom.toml'])
+    model_config = SettingsConfigDict(
+        toml_file=['config.default.toml', 'config.custom.toml']
+    )
 
     @classmethod
     def settings_customise_sources(
