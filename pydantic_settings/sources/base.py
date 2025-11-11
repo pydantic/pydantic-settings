@@ -198,11 +198,17 @@ class ConfigFileSourceMixin(ABC):
         if isinstance(files, (str, os.PathLike)):
             files = [files]
         vars: dict[str, Any] = {}
-        update = deep_update if deep_merge else dict.update
+        update = deep_update if deep_merge else self._shallow_update
         for file in files:
             file_path = Path(file).expanduser()
             if file_path.is_file():
-                update(vars, self._read_file(file_path))
+                vars = update(vars, self._read_file(file_path))
+        return vars
+
+    def _shallow_update(self, vars: dict[str, Any], updating_vars: dict[str, Any]) -> dict[str, Any]:
+        # this mimics the semantics of pydantic._internal._utils.deep_update
+        vars = vars.copy()
+        vars.update(updating_vars)
         return vars
 
     @abstractmethod

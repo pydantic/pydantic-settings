@@ -168,6 +168,50 @@ def test_multiple_file_yaml(tmp_path):
 
 
 @pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
+@pytest.mark.parametrize('deep_merge', [False, True])
+def test_multiple_file_yaml_deep_merge(tmp_path, deep_merge):
+    p3 = tmp_path / '.env.yaml3'
+    p4 = tmp_path / '.env.yaml4'
+    p3.write_text(
+        """
+    hello: world
+
+    nested:
+      foo: 1
+      bar: 2
+    """
+    )
+    p4.write_text(
+        """
+    nested:
+      foo: 3
+    """
+    )
+
+    class Nested(BaseModel):
+        foo: int
+        bar: int = 0
+
+    class Settings(BaseSettings):
+        hello: str
+        nested: Nested
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls, yaml_file=[p3, p4], deep_merge=deep_merge),)
+
+    s = Settings()
+    assert s.model_dump() == {'hello': 'world', 'nested': {'foo': 3, 'bar': 2 if deep_merge else 0}}
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
 def test_yaml_config_section(tmp_path):
     p = tmp_path / '.env'
     p.write_text(

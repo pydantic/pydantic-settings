@@ -5,6 +5,7 @@ Test pydantic_settings.JsonConfigSettingsSource.
 import json
 from pathlib import Path
 
+import pytest
 from pydantic import BaseModel
 
 from pydantic_settings import (
@@ -98,3 +99,36 @@ def test_multiple_file_json(tmp_path):
 
     s = Settings()
     assert s.model_dump() == {'json5': 5, 'json6': 6}
+
+
+@pytest.mark.parametrize('deep_merge', [False, True])
+def test_multiple_file_json_merge(tmp_path, deep_merge):
+    p5 = tmp_path / '.env.json5'
+    p6 = tmp_path / '.env.json6'
+
+    with open(p5, 'w') as f5:
+        json.dump({'hello': 'world', 'nested': {'foo': 1, 'bar': 2}}, f5)
+    with open(p6, 'w') as f6:
+        json.dump({'nested': {'foo': 3}}, f6)
+
+    class Nested(BaseModel):
+        foo: int
+        bar: int = 0
+
+    class Settings(BaseSettings):
+        hello: str
+        nested: Nested
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (JsonConfigSettingsSource(settings_cls, json_file=[p5, p6], deep_merge=deep_merge),)
+
+    s = Settings()
+    assert s.model_dump() == {'hello': 'world', 'nested': {'foo': 3, 'bar': 2 if deep_merge else 0}}
