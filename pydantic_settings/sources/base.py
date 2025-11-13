@@ -24,6 +24,7 @@ from .types import EnvNoneType, ForceDecode, NoDecode, PathType, PydanticModel, 
 from .utils import (
     _annotation_is_complex,
     _get_alias_names,
+    _get_field_metadata,
     _get_model_fields,
     _strip_annotated,
     _union_is_complex,
@@ -179,7 +180,7 @@ class PydanticBaseSettingsSource(ABC):
             The decoded value for further preparation
         """
         if field and (
-            NoDecode in field.metadata
+            NoDecode in _get_field_metadata(field)
             or (self.config.get('enable_decoding') is False and ForceDecode not in field.metadata)
         ):
             return value

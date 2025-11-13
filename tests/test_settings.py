@@ -499,6 +499,24 @@ def test_annotated_with_type(env):
     assert s.apples == ['russet', 'granny smith']
 
 
+def test_annotated_with_type_no_decode(env):
+    A = TypeAliasType('A', Annotated[list[str], NoDecode])
+
+    class Settings(BaseSettings):
+        a: A
+
+        # decode the value here. the field value won't be decoded because of NoDecode
+        @field_validator('a', mode='before')
+        @classmethod
+        def decode_a(cls, v: str) -> list[str]:
+            return json.loads(v)
+
+    env.set('a', '["one", "two"]')
+
+    s = Settings()
+    assert s.model_dump() == {'a': ['one', 'two']}
+
+
 def test_set_dict_model(env):
     env.set('bananas', '[1, 2, 3, 3]')
     env.set('CARROTS', '{"a": null, "b": 4}')
