@@ -13,7 +13,7 @@ from pydantic import AliasChoices, AliasPath, BaseModel, TypeAdapter
 from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
     get_origin,
 )
-from pydantic._internal._utils import is_model_class
+from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.fields import FieldInfo
 from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
@@ -192,7 +192,7 @@ class PydanticBaseSettingsSource(ABC):
 
 
 class ConfigFileSourceMixin(ABC):
-    def _read_files(self, files: PathType | None) -> dict[str, Any]:
+    def _read_files(self, files: PathType | None, deep_merge: bool = False) -> dict[str, Any]:
         if files is None:
             return {}
         if isinstance(files, (str, os.PathLike)):
@@ -200,8 +200,14 @@ class ConfigFileSourceMixin(ABC):
         vars: dict[str, Any] = {}
         for file in files:
             file_path = Path(file).expanduser()
-            if file_path.is_file():
-                vars.update(self._read_file(file_path))
+            if not file_path.is_file():
+                continue
+
+            updating_vars = self._read_file(file_path)
+            if deep_merge:
+                vars = deep_update(vars, updating_vars)
+            else:
+                vars.update(updating_vars)
         return vars
 
     @abstractmethod
