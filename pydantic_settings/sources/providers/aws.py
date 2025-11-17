@@ -60,7 +60,14 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
         )
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
-        response = self._secretsmanager_client.get_secret_value(SecretId=self._secret_id, VersionId=self._version_id)  # type: ignore
+        request = {
+            'SecretId': self._secret_id,
+        }
+
+        if self._version_id:
+            request['VersionId'] = self._version_id
+
+        response = self._secretsmanager_client.get_secret_value(**request)  # type: ignore
 
         return parse_env_vars(
             json.loads(response['SecretString']),
