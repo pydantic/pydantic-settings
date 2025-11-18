@@ -60,9 +60,7 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
         )
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
-        request = {
-            'SecretId': self._secret_id,
-        }
+        request = {'SecretId': self._secret_id}
 
         if self._version_id:
             request['VersionId'] = self._version_id
