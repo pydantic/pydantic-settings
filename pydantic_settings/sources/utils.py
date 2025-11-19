@@ -72,6 +72,18 @@ def _annotation_is_complex(annotation: Any, metadata: list[Any]) -> bool:
     )
 
 
+def _get_field_metadata(field: Any) -> list[Any]:
+    annotation = field.annotation
+    metadata = field.metadata
+    if typing_objects.is_typealiastype(annotation) or typing_objects.is_typealiastype(get_origin(annotation)):
+        annotation = annotation.__value__
+    origin = get_origin(annotation)
+    if typing_objects.is_annotated(origin):
+        _, *meta = get_args(annotation)
+        metadata += meta
+    return metadata
+
+
 def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:
     if _lenient_issubclass(annotation, (str, bytes)):
         return False
