@@ -238,9 +238,7 @@ class TestGoogleSecretManagerSettingsSource:
         assert settings.my_field == 'foo'
 
     def test_secret_manager_mapping_list_secrets_error(self, secret_manager_mapping, mocker):
-        secret_manager_mapping._secret_client.list_secrets = mocker.Mock(
-            side_effect=Exception('Permission denied')
-        )
+        secret_manager_mapping._secret_client.list_secrets = mocker.Mock(side_effect=Exception('Permission denied'))
 
         with pytest.raises(Exception, match='Permission denied'):
             _ = secret_manager_mapping._secret_names
