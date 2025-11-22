@@ -112,8 +112,7 @@ class TestGoogleSecretManagerSettingsSource:
             side_effect=Exception('Access denied')
         )
 
-        with pytest.raises(KeyError):
-            _ = secret_manager_mapping['test-secret']
+        assert secret_manager_mapping['test-secret'] is None
 
     def test_secret_manager_mapping_iter(self, secret_manager_mapping):
         assert list(secret_manager_mapping) == ['test-secret']
@@ -210,3 +209,36 @@ class TestGoogleSecretManagerSettingsSource:
 
         with pytest.raises(ValidationError):
             _ = Settings()
+
+    def test_pydantic_base_settings_with_default_value(self, mock_secret_client):
+        class Settings(BaseSettings):
+            my_field: str | None = Field(default='foo')
+
+            @classmethod
+            def settings_customise_sources(
+                cls,
+                settings_cls: type[BaseSettings],
+                init_settings: PydanticBaseSettingsSource,
+                env_settings: PydanticBaseSettingsSource,
+                dotenv_settings: PydanticBaseSettingsSource,
+                file_secret_settings: PydanticBaseSettingsSource,
+            ) -> tuple[PydanticBaseSettingsSource, ...]:
+                google_secret_manager_settings = GoogleSecretManagerSettingsSource(
+                    settings_cls, secret_client=mock_secret_client
+                )
+                return (
+                    init_settings,
+                    env_settings,
+                    dotenv_settings,
+                    file_secret_settings,
+                    google_secret_manager_settings,
+                )
+
+        settings = Settings()
+        assert settings.my_field == 'foo'
+
+    def test_secret_manager_mapping_list_secrets_error(self, secret_manager_mapping, mocker):
+        secret_manager_mapping._secret_client.list_secrets = mocker.Mock(side_effect=Exception('Permission denied'))
+
+        with pytest.raises(Exception, match='Permission denied'):
+            _ = secret_manager_mapping._secret_names

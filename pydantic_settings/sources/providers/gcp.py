@@ -75,7 +75,8 @@ class GoogleSecretManagerMapping(Mapping[str, str | None]):
                     name=self._secret_version_path(key)
                 ).payload.data.decode('UTF-8')
             except Exception:
-                raise KeyError(key)
+                # If we can't access the secret, we return None
+                self._loaded_secrets[key] = None
 
         return self._loaded_secrets[key]
 
