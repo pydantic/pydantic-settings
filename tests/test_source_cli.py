@@ -2703,6 +2703,22 @@ def test_cli_kebab_case_enums():
         CliApp.run(SettingsAll, cli_args=['--example', 'example_a', '--mybool=true'])
 
 
+def test_cli_kebab_case_all_with_implicit_flag():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_kebab_case='all')
+        test_bool_flag: CliImplicitFlag[bool]
+
+    assert CliApp.run(
+        Settings,
+        cli_args=['--test-bool-flag'],
+    ).model_dump() == {'test_bool_flag': True}
+
+    assert CliApp.run(
+        Settings,
+        cli_args=['--no-test-bool-flag'],
+    ).model_dump() == {'test_bool_flag': False}
+
+
 def test_cli_with_unbalanced_brackets_in_json_string():
     class StrToStrDictOptions(BaseSettings):
         nested: dict[str, str]
