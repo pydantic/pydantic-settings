@@ -3,6 +3,7 @@
 from .aws import AWSSecretsManagerSettingsSource
 from .azure import AzureKeyVaultSettingsSource
 from .cli import (
+    CliDualFlag,
     CliExplicitFlag,
     CliImplicitFlag,
     CliMutuallyExclusiveGroup,
@@ -10,6 +11,7 @@ from .cli import (
     CliSettingsSource,
     CliSubCommand,
     CliSuppress,
+    CliToggleFlag,
 )
 from .dotenv import DotEnvSettingsSource
 from .env import EnvSettingsSource
@@ -25,6 +27,8 @@ __all__ = [
     'AzureKeyVaultSettingsSource',
     'CliExplicitFlag',
     'CliImplicitFlag',
+    'CliToggleFlag',
+    'CliDualFlag',
     'CliMutuallyExclusiveGroup',
     'CliPositionalArg',
     'CliSettingsSource',

@@ -51,10 +51,12 @@ from ..types import (
     ForceDecode,
     NoDecode,
     PydanticModel,
+    _CliDualFlag,
     _CliExplicitFlag,
     _CliImplicitFlag,
     _CliPositionalArg,
     _CliSubCommand,
+    _CliToggleFlag,
     _CliUnknownArgs,
 )
 from ..utils import (
@@ -239,6 +241,8 @@ CliPositionalArg = Annotated[T, _CliPositionalArg]
 _CliBoolFlag = TypeVar('_CliBoolFlag', bound=bool)
 CliImplicitFlag = Annotated[_CliBoolFlag, _CliImplicitFlag]
 CliExplicitFlag = Annotated[_CliBoolFlag, _CliExplicitFlag]
+CliToggleFlag = Annotated[_CliBoolFlag, _CliToggleFlag]
+CliDualFlag = Annotated[_CliBoolFlag, _CliDualFlag]
 CLI_SUPPRESS = SUPPRESS
 CliSuppress = Annotated[T, CLI_SUPPRESS]
 CliUnknownArgs = Annotated[list[str], Field(default=[]), _CliUnknownArgs, NoDecode]
@@ -721,6 +725,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             cli_flag_name = 'CliImplicitFlag'
         elif _CliExplicitFlag in field_info.metadata:
             cli_flag_name = 'CliExplicitFlag'
+        elif _CliToggleFlag in field_info.metadata:
+            cli_flag_name = 'CliToggleFlag'
+        elif _CliDualFlag in field_info.metadata:
+            cli_flag_name = 'CliDualFlag'
         else:
             return
 
@@ -1018,11 +1026,27 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _convert_bool_flag(self, kwargs: dict[str, Any], field_info: FieldInfo, model_default: Any) -> None:
         if kwargs['metavar'] == 'bool':
-            if (self.cli_implicit_flags or _CliImplicitFlag in field_info.metadata) and (
-                _CliExplicitFlag not in field_info.metadata
-            ):
-                del kwargs['metavar']
-                kwargs['action'] = BooleanOptionalAction
+            meta_bool_flags = [
+                meta for meta in field_info.metadata if issubclass(meta, _CliImplicitFlag | _CliExplicitFlag)
+            ]
+            if not meta_bool_flags and self.cli_implicit_flags:
+                meta_bool_flags = [_CliImplicitFlag]
+            if meta_bool_flags:
+                bool_flag = meta_bool_flags.pop()
+                if bool_flag is _CliImplicitFlag:
+                    bool_flag = (
+                        _CliToggleFlag
+                        if self.cli_implicit_flags == 'toggle' and isinstance(field_info.default, bool)
+                        else _CliDualFlag
+                    )
+                if bool_flag is _CliDualFlag:
+                    del kwargs['metavar']
+                    kwargs['action'] = BooleanOptionalAction
+                elif bool_flag is _CliToggleFlag:
+                    if not isinstance(field_info.default, bool):
+                        raise SettingsError('CliToggleFlag must have a default value')
+                    del kwargs['metavar']
+                    kwargs['action'] = 'store_false' if field_info.default else 'store_true'
 
     def _convert_positional_arg(
         self, kwargs: dict[str, Any], field_info: FieldInfo, preferred_alias: str, model_default: Any
