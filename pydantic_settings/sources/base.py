@@ -13,7 +13,7 @@ from pydantic import AliasChoices, AliasPath, BaseModel, TypeAdapter
 from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
     get_origin,
 )
-from pydantic._internal._utils import is_model_class
+from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.fields import FieldInfo
 from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
@@ -192,7 +192,7 @@ class PydanticBaseSettingsSource(ABC):
 
 
 class ConfigFileSourceMixin(ABC):
-    def _read_files(self, files: PathType | None) -> dict[str, Any]:
+    def _read_files(self, files: PathType | None, deep_merge: bool = False) -> dict[str, Any]:
         if files is None:
             return {}
         if isinstance(files, (str, os.PathLike)):
@@ -200,8 +200,14 @@ class ConfigFileSourceMixin(ABC):
         vars: dict[str, Any] = {}
         for file in files:
             file_path = Path(file).expanduser()
-            if file_path.is_file():
-                vars.update(self._read_file(file_path))
+            if not file_path.is_file():
+                continue
+
+            updating_vars = self._read_file(file_path)
+            if deep_merge:
+                vars = deep_update(vars, updating_vars)
+            else:
+                vars.update(updating_vars)
         return vars
 
     @abstractmethod
@@ -267,7 +273,9 @@ class InitSettingsSource(PydanticBaseSettingsSource):
             # When populate_by_name is True, allow using the field name as an input key,
             # but normalize to the preferred alias to keep keys consistent across sources.
             matchable_names = set(alias_names)
-            include_name = settings_cls.model_config.get('populate_by_name', False)
+            include_name = settings_cls.model_config.get('populate_by_name', False) or settings_cls.model_config.get(
+                'validate_by_name', False
+            )
             if include_name:
                 matchable_names.add(field_name)
             init_kwarg_name = init_kwarg_names & matchable_names
@@ -369,7 +377,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             else:  # string validation alias
                 field_info.append((v_alias, self._apply_case_sensitive(v_alias), False))
 
-        if not v_alias or self.config.get('populate_by_name', False):
+        if not v_alias or self.config.get('populate_by_name', False) or self.config.get('validate_by_name', False):
             annotation = field.annotation
             if typing_objects.is_typealiastype(annotation) or typing_objects.is_typealiastype(get_origin(annotation)):
                 annotation = _strip_annotated(annotation.__value__)  # type: ignore[union-attr]
@@ -489,7 +497,13 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             A tuple that contains the value, preferred key and a flag to determine whether value is complex.
         """
         field_value, field_key, value_is_complex = self.get_field_value(field, field_name)
-        if not (value_is_complex or (self.config.get('populate_by_name', False) and (field_key == field_name))):
+        if not (
+            value_is_complex
+            or (
+                (self.config.get('populate_by_name', False) or self.config.get('validate_by_name', False))
+                and (field_key == field_name)
+            )
+        ):
             field_infos = self._extract_field_info(field, field_name)
             preferred_key, *_ = field_infos[0]
             return field_value, preferred_key, value_is_complex

@@ -114,3 +114,47 @@ def test_multiple_file_toml(tmp_path):
 
     s = Settings()
     assert s.model_dump() == {'toml1': 1, 'toml2': 2}
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+@pytest.mark.parametrize('deep_merge', [False, True])
+def test_multiple_file_toml_merge(tmp_path, deep_merge):
+    p1 = tmp_path / '.env.toml1'
+    p2 = tmp_path / '.env.toml2'
+    p1.write_text(
+        """
+    hello = "world"
+
+    [nested]
+    foo=1
+    bar=2
+    """
+    )
+    p2.write_text(
+        """
+    [nested]
+    foo=3
+    """
+    )
+
+    class Nested(BaseModel):
+        foo: int
+        bar: int = 0
+
+    class Settings(BaseSettings):
+        hello: str
+        nested: Nested
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls, toml_file=[p1, p2], deep_merge=deep_merge),)
+
+    s = Settings()
+    assert s.model_dump() == {'hello': 'world', 'nested': {'foo': 3, 'bar': 2 if deep_merge else 0}}

@@ -466,7 +466,9 @@ class BaseSettings(BaseModel):
             for field_name, field_info in settings_cls.model_fields.items():
                 alias_names, *_ = _get_alias_names(field_name, field_info)
                 matchable_names = set(alias_names)
-                include_name = settings_cls.model_config.get('populate_by_name', False)
+                include_name = settings_cls.model_config.get(
+                    'populate_by_name', False
+                ) or settings_cls.model_config.get('validate_by_name', False)
                 if include_name:
                     matchable_names.add(field_name)
                 init_kwarg_name = init_kwarg_names & matchable_names

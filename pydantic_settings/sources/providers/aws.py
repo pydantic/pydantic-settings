@@ -43,10 +43,12 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
         env_nested_delimiter: str | None = '--',
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
+        version_id: str | None = None,
     ) -> None:
         import_aws_secrets_manager()
         self._secretsmanager_client = boto3_client('secretsmanager', region_name=region_name, endpoint_url=endpoint_url)  # type: ignore
         self._secret_id = secret_id
+        self._version_id = version_id
         super().__init__(
             settings_cls,
             case_sensitive=case_sensitive,
@@ -58,7 +60,12 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
         )
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
-        response = self._secretsmanager_client.get_secret_value(SecretId=self._secret_id)  # type: ignore
+        request = {'SecretId': self._secret_id}
+
+        if self._version_id:
+            request['VersionId'] = self._version_id
+
+        response = self._secretsmanager_client.get_secret_value(**request)  # type: ignore
 
         return parse_env_vars(
             json.loads(response['SecretString']),
