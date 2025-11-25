@@ -61,7 +61,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_exit_on_error: bool
     cli_prefix: str
     cli_flag_prefix_char: str
-    cli_implicit_flags: bool | None
+    cli_implicit_flags: bool | Literal['dual', 'toggle'] | None
     cli_ignore_unknown_args: bool | None
     cli_kebab_case: bool | Literal['all', 'no_enums'] | None
     cli_shortcuts: Mapping[str, str | list[str]] | None
@@ -153,8 +153,12 @@ class BaseSettings(BaseModel):
             Defaults to `True`.
         _cli_prefix: The root parser command line arguments prefix. Defaults to "".
         _cli_flag_prefix_char: The flag prefix character to use for CLI optional arguments. Defaults to '-'.
-        _cli_implicit_flags: Whether `bool` fields should be implicitly converted into CLI boolean flags.
-            (e.g. --flag, --no-flag). Defaults to `False`.
+        _cli_implicit_flags: Controls how `bool` fields are exposed as CLI flags.
+
+            - False (default): no implicit flags are generated; booleans must be set explicitly (e.g. --flag=true).
+            - True / 'dual': optional boolean fields generate both positive and negative forms (--flag and --no-flag).
+            - 'toggle': required boolean fields remain in 'dual' mode, while optional boolean fields generate a single
+              flag aligned with the default value (if default=False, expose --flag; if default=True, expose --no-flag).
         _cli_ignore_unknown_args: Whether to ignore unknown CLI args and parse only known ones. Defaults to `False`.
         _cli_kebab_case: CLI args use kebab case. Defaults to `False`.
         _cli_shortcuts: Mapping of target field name to alias names. Defaults to `None`.
@@ -184,7 +188,7 @@ class BaseSettings(BaseModel):
         _cli_exit_on_error: bool | None = None,
         _cli_prefix: str | None = None,
         _cli_flag_prefix_char: str | None = None,
-        _cli_implicit_flags: bool | None = None,
+        _cli_implicit_flags: bool | Literal['dual', 'toggle'] | None = None,
         _cli_ignore_unknown_args: bool | None = None,
         _cli_kebab_case: bool | Literal['all', 'no_enums'] | None = None,
         _cli_shortcuts: Mapping[str, str | list[str]] | None = None,
@@ -271,7 +275,7 @@ class BaseSettings(BaseModel):
         _cli_exit_on_error: bool | None = None,
         _cli_prefix: str | None = None,
         _cli_flag_prefix_char: str | None = None,
-        _cli_implicit_flags: bool | None = None,
+        _cli_implicit_flags: bool | Literal['dual', 'toggle'] | None = None,
         _cli_ignore_unknown_args: bool | None = None,
         _cli_kebab_case: bool | Literal['all', 'no_enums'] | None = None,
         _cli_shortcuts: Mapping[str, str | list[str]] | None = None,

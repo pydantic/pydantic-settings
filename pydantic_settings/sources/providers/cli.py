@@ -274,8 +274,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             Defaults to `True`.
         cli_prefix: Prefix for command line arguments added under the root parser. Defaults to "".
         cli_flag_prefix_char: The flag prefix character to use for CLI optional arguments. Defaults to '-'.
-        cli_implicit_flags: Whether `bool` fields should be implicitly converted into CLI boolean flags.
-            (e.g. --flag, --no-flag). Defaults to `False`.
+        cli_implicit_flags: Controls how `bool` fields are exposed as CLI flags.
+
+            - False (default): no implicit flags are generated; booleans must be set explicitly (e.g. --flag=true).
+            - True / 'dual': optional boolean fields generate both positive and negative forms (--flag and --no-flag).
+            - 'toggle': required boolean fields remain in 'dual' mode, while optional boolean fields generate a single
+              flag aligned with the default value (if default=False, expose --flag; if default=True, expose --no-flag).
         cli_ignore_unknown_args: Whether to ignore unknown CLI args and parse only known ones. Defaults to `False`.
         cli_kebab_case: CLI args use kebab case. Defaults to `False`.
         cli_shortcuts: Mapping of target field name to alias names. Defaults to `None`.
@@ -307,7 +311,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_exit_on_error: bool | None = None,
         cli_prefix: str | None = None,
         cli_flag_prefix_char: str | None = None,
-        cli_implicit_flags: bool | None = None,
+        cli_implicit_flags: bool | Literal['dual', 'toggle'] | None = None,
         cli_ignore_unknown_args: bool | None = None,
         cli_kebab_case: bool | Literal['all', 'no_enums'] | None = None,
         cli_shortcuts: Mapping[str, str | list[str]] | None = None,
@@ -1011,7 +1015,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     if isinstance(group, dict):
                         group = self._add_group(parser, **group)
                     context = parser if group is None else group
-                    arg.args = [f'{flag_prefix[: len(name)]}{name}' for name in arg_names]
+                    if arg.kwargs.get('action') == 'store_false':
+                        flag_prefix += 'no-'
+                    arg.args = [f'{flag_prefix[: 1 if len(name) == 1 else None]}{name}' for name in arg_names]
                     self._add_argument(context, *arg.args, **arg.kwargs)
                     added_args += list(arg_names)
 
@@ -1366,7 +1372,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 continue
 
             # Note: prepend 'no-' for boolean optional action flag if model_default value is False and flag is not a short option
-            if arg.kwargs.get('action') == BooleanOptionalAction and model_default is False and flag_chars == '--':
+            if (
+                arg.kwargs.get('action') in (BooleanOptionalAction, 'store_false')
+                and model_default is False
+                and flag_chars == '--'
+            ):
                 flag_chars += 'no-'
 
             optional_args.append(f'{flag_chars}{arg_name}')
