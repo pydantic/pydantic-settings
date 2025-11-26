@@ -100,6 +100,7 @@ class SettingsConfigDict(ConfigDict, total=False):
 
     toml_file: PathType | None
     enable_decoding: bool
+    lazy_load: bool
 
 
 # Extend `config_keys` by pydantic settings config keys to
@@ -159,6 +160,8 @@ class BaseSettings(BaseModel):
         _cli_kebab_case: CLI args use kebab case. Defaults to `False`.
         _cli_shortcuts: Mapping of target field name to alias names. Defaults to `None`.
         _secrets_dir: The secret files directory or a sequence of directories. Defaults to `None`.
+        _lazy_load: Defer field value resolution until fields are accessed. When enabled, field values
+            are only fetched from the source when explicitly accessed, not during settings initialization.
     """
 
     def __init__(
@@ -191,6 +194,10 @@ class BaseSettings(BaseModel):
         _secrets_dir: PathType | None = None,
         **values: Any,
     ) -> None:
+        # Temp storage for lazy sources collected during _settings_build_values
+        _temp_lazy_sources: dict[str, Any] = {}
+        __pydantic_self__._temp_lazy_sources = _temp_lazy_sources
+
         super().__init__(
             **__pydantic_self__._settings_build_values(
                 values,
@@ -222,6 +229,117 @@ class BaseSettings(BaseModel):
                 _secrets_dir=_secrets_dir,
             )
         )
+
+        # Now that super().__init__() has completed, set the lazy sources on the instance
+        # using object.__setattr__ to bypass any Pydantic restrictions
+        object.__setattr__(__pydantic_self__, '_lazy_sources', _temp_lazy_sources)
+
+    def __getattribute__(self, name: str) -> Any:
+        """Intercept field access to support lazy loading on demand."""
+        # Get the actual value from the model
+        value = super().__getattribute__(name)
+
+        # Return private attributes and methods as-is
+        if name.startswith('_') or callable(value):
+            return value
+
+        # For model fields, try to get value from lazy sources only if not set by
+        # higher-priority sources. We detect this by checking if the value is the field's default.
+        try:
+            model_cls = type(self)
+            if name in model_cls.model_fields:
+                field_info = model_cls.model_fields[name]
+                # Only try lazy sources if the value is the default (wasn't set by higher-priority source)
+                # Check if value is the field's default value
+                is_default = False
+                if field_info.is_required():
+                    # Required fields have no default, so if value is not None, it was set
+                    is_default = value is None
+                elif field_info.default is not None:
+                    is_default = value == field_info.default
+                elif field_info.default_factory is not None:
+                    # For fields with default_factory, comparing to the factory output
+                    # would require calling the factory, so we check if value is unset
+                    is_default = value is None or value == field_info.default
+                else:
+                    is_default = value is None or value == field_info.default
+
+                if is_default:
+                    lazy_sources = object.__getattribute__(self, '_lazy_sources')
+                    for lazy_mapping in lazy_sources.values():
+                        try:
+                            return lazy_mapping[name]
+                        except KeyError:
+                            pass
+        except AttributeError:
+            pass
+
+        return value
+
+    def model_dump(
+        self,
+        *,
+        mode: str | Literal['json', 'python'] = 'python',
+        include: Any = None,
+        exclude: Any = None,
+        context: Any = None,
+        by_alias: bool | None = None,
+        exclude_unset: bool = False,
+        exclude_defaults: bool = False,
+        exclude_none: bool = False,
+        round_trip: bool = False,
+        warnings: Literal['none', 'warn', 'error'] | bool = True,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Override model_dump to include cached lazy-loaded values."""
+        # Get base dump from parent class
+        dump = super().model_dump(
+            mode=mode,
+            include=include,
+            exclude=exclude,
+            context=context,
+            by_alias=by_alias,
+            exclude_unset=exclude_unset,
+            exclude_defaults=exclude_defaults,
+            exclude_none=exclude_none,
+            round_trip=round_trip,
+            warnings=warnings,
+            **kwargs,
+        )
+
+        # Merge lazy values from _lazy_sources, triggering loads if needed
+        try:
+            lazy_sources = object.__getattribute__(self, '_lazy_sources')
+            for source_name, lazy_mapping in lazy_sources.items():
+                # Iterate through all fields in the lazy mapping and load any that are
+                # still at their default value (not set by higher-priority sources)
+                for field_name in lazy_mapping:
+                    # Check if field is still at default in dump
+                    if field_name in type(self).model_fields:
+                        field_info = type(self).model_fields[field_name]
+                        current_value = dump.get(field_name)
+
+                        # Determine if this is still a default value
+                        is_default = False
+                        if field_info.is_required():
+                            is_default = current_value is None
+                        elif field_info.default is not None:
+                            is_default = current_value == field_info.default
+                        else:
+                            is_default = current_value is None or current_value == field_info.default
+
+                        # If still at default, try to load from lazy mapping
+                        if is_default:
+                            try:
+                                dump[field_name] = lazy_mapping[field_name]
+                            except KeyError:
+                                # Field not available in this lazy source, keep default
+                                pass
+        except AttributeError:
+            # _lazy_sources not set (no lazy sources configured) - return base dump
+            pass
+
+        return dump
 
     @classmethod
     def settings_customise_sources(
@@ -436,6 +554,11 @@ class BaseSettings(BaseModel):
 
                 source_name = source.__name__ if hasattr(source, '__name__') else type(source).__name__
                 source_state = source()
+
+                # Collect lazy mappings from sources for later field access
+                if hasattr(source, '_lazy_mapping'):
+                    temp_lazy_sources = self._temp_lazy_sources
+                    temp_lazy_sources[source_name] = source._lazy_mapping
 
                 if isinstance(source, DefaultSettingsSource):
                     defaults = source_state

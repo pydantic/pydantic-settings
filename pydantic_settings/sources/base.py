@@ -20,6 +20,7 @@ from typing_inspection.introspection import is_union_origin
 
 from ..exceptions import SettingsError
 from ..utils import _lenient_issubclass
+from .lazy import LazyMapping
 from .types import EnvNoneType, ForceDecode, NoDecode, PathType, PydanticModel, _CliSubCommand
 from .utils import (
     _annotation_is_complex,
@@ -326,6 +327,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
+        lazy_load: bool | None = None,
     ) -> None:
         super().__init__(settings_cls)
         self.case_sensitive = case_sensitive if case_sensitive is not None else self.config.get('case_sensitive', False)
@@ -337,6 +339,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             env_parse_none_str if env_parse_none_str is not None else self.config.get('env_parse_none_str')
         )
         self.env_parse_enums = env_parse_enums if env_parse_enums is not None else self.config.get('env_parse_enums')
+        self.lazy_load = lazy_load if lazy_load is not None else self.config.get('lazy_load', False)
 
     def _apply_case_sensitive(self, value: str) -> str:
         return value.lower() if not self.case_sensitive else value
@@ -510,6 +513,14 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         return field_value, field_key, value_is_complex
 
     def __call__(self) -> dict[str, Any]:
+        # If lazy loading is enabled, defer field resolution to access time
+        if self.lazy_load:
+            # Store the LazyMapping on the source for later retrieval
+            self._lazy_mapping = LazyMapping(self)
+            # Return empty dict to avoid eager evaluation during initialization
+            return {}
+
+        # Otherwise, use eager field loading
         data: dict[str, Any] = {}
 
         for field_name, field in self.settings_cls.model_fields.items():
@@ -541,7 +552,6 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                     data[field_key] = self._replace_field_names_case_insensitively(field, field_value)
                 else:
                     data[field_key] = field_value
-
         return data
 
 
@@ -549,6 +559,7 @@ __all__ = [
     'ConfigFileSourceMixin',
     'DefaultSettingsSource',
     'InitSettingsSource',
+    'LazyMapping',
     'PydanticBaseEnvSettingsSource',
     'PydanticBaseSettingsSource',
     'SettingsError',
