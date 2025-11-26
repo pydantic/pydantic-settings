@@ -731,6 +731,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             cli_flag_name = 'CliExplicitFlag'
         elif _CliToggleFlag in field_info.metadata:
             cli_flag_name = 'CliToggleFlag'
+            if not isinstance(field_info.default, bool):
+                raise SettingsError(
+                    f'{cli_flag_name} argument {model.__name__}.{field_name} must have a default bool value'
+                )
         elif _CliDualFlag in field_info.metadata:
             cli_flag_name = 'CliDualFlag'
         else:
@@ -1049,8 +1053,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     del kwargs['metavar']
                     kwargs['action'] = BooleanOptionalAction
                 elif bool_flag is _CliToggleFlag:
-                    if not isinstance(field_info.default, bool):
-                        raise SettingsError('CliToggleFlag must have a default value')
                     del kwargs['metavar']
                     kwargs['action'] = 'store_false' if field_info.default else 'store_true'
 
@@ -1372,17 +1374,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 continue
 
             # Note: prepend 'no-' for boolean optional action flag if model_default value is False and flag is not a short option
-            if (
-                arg.kwargs.get('action') in (BooleanOptionalAction, 'store_false')
-                and model_default is False
-                and flag_chars == '--'
-            ):
+            if arg.kwargs.get('action') == BooleanOptionalAction and model_default is False and flag_chars == '--':
                 flag_chars += 'no-'
 
             optional_args.append(f'{flag_chars}{arg_name}')
 
             # If implicit bool flag, do not add a value
-            if arg.kwargs.get('action') != BooleanOptionalAction:
+            if arg.kwargs.get('action') not in (BooleanOptionalAction, 'store_true', 'store_false'):
                 optional_args.append(value)
 
         serialized_args: list[str] = []
