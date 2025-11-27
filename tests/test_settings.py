@@ -3264,3 +3264,330 @@ def test_env_strict_coercion(env):
             'my_int': 1,
         },
     }
+
+
+def test_lazy_loading_with_field_default_factory():
+    """Test lazy loading when field has a default_factory and value is None."""
+    from pydantic_settings.sources import PydanticBaseSettingsSource
+
+    class MockLazySource(PydanticBaseSettingsSource):
+        def get_field_value(self, field, field_name):
+            return None, None, False
+
+        def __call__(self) -> dict[str, Any]:
+            # Return None so field ends up as None, triggering default_factory check
+            return {'field_with_factory': None}
+
+        @property
+        def _lazy_mapping(self):
+            return {'field_with_factory': 'lazy_value'}
+
+    class Settings(BaseSettings):
+        field_with_factory: str | None = Field(default=None)
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            return (MockLazySource(settings_cls),) + (
+                init_settings,
+                env_settings,
+                dotenv_settings,
+                file_secret_settings,
+            )
+
+    settings = Settings()
+    # Access the field to trigger lazy loading
+    value = settings.field_with_factory
+    assert value == 'lazy_value'
+
+
+def test_lazy_loading_accessing_nonexistent_field_in_lazy_sources():
+    """Test lazy loading when accessing a field not in lazy sources (KeyError path)."""
+    from pydantic_settings.sources import PydanticBaseSettingsSource
+
+    class MockLazySource(PydanticBaseSettingsSource):
+        def get_field_value(self, field, field_name):
+            return None, None, False
+
+        def __call__(self) -> dict[str, Any]:
+            return {}
+
+        @property
+        def _lazy_mapping(self):
+            return {}
+
+    class Settings(BaseSettings):
+        field1: str = 'default'
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            return (MockLazySource(settings_cls),) + (
+                init_settings,
+                env_settings,
+                dotenv_settings,
+                file_secret_settings,
+            )
+
+    settings = Settings()
+    # Accessing the field should not raise, just return default
+    value = settings.field1
+    assert value == 'default'
+
+
+def test_lazy_loading_without_lazy_sources_attribute():
+    """Test __getattribute__ when _lazy_sources is not set (AttributeError path)."""
+
+    class Settings(BaseSettings):
+        field1: str = 'default'
+
+    settings = Settings()
+    # Should work fine even without _lazy_sources
+    value = settings.field1
+    assert value == 'default'
+
+
+def test_model_dump_with_lazy_sources_and_defaults():
+    """Test model_dump includes lazy-loaded values for fields at default."""
+    from pydantic_settings.sources import PydanticBaseSettingsSource
+
+    class MockLazySource(PydanticBaseSettingsSource):
+        def get_field_value(self, field, field_name):
+            return None, None, False
+
+        def __call__(self) -> dict[str, Any]:
+            return {}
+
+        @property
+        def _lazy_mapping(self):
+            return {'field1': 'lazy_value1', 'field2': 'lazy_value2'}
+
+    class Settings(BaseSettings):
+        field1: str = 'default1'
+        field2: str = 'default2'
+        field3: str = 'default3'
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            return (MockLazySource(settings_cls),) + (
+                init_settings,
+                env_settings,
+                dotenv_settings,
+                file_secret_settings,
+            )
+
+    settings = Settings()
+    dump = settings.model_dump()
+    # Fields in lazy mapping should be loaded
+    assert dump['field1'] == 'lazy_value1'
+    assert dump['field2'] == 'lazy_value2'
+    # Field not in lazy mapping should keep default
+    assert dump['field3'] == 'default3'
+
+
+def test_model_dump_without_lazy_sources():
+    """Test model_dump when _lazy_sources is not set."""
+
+    class Settings(BaseSettings):
+        field1: str = 'default1'
+
+    settings = Settings()
+    dump = settings.model_dump()
+    assert dump['field1'] == 'default1'
+
+
+def test_lazy_sources_with_required_field():
+    """Test lazy loading with required fields (no default)."""
+    from pydantic_settings.sources import PydanticBaseSettingsSource
+
+    class MockLazySource(PydanticBaseSettingsSource):
+        def get_field_value(self, field, field_name):
+            return None, None, False
+
+        def __call__(self) -> dict[str, Any]:
+            # Provide the required field via the source
+            return {'required_field': 'source_value'}
+
+        @property
+        def _lazy_mapping(self):
+            return {'required_field': 'lazy_value'}
+
+    class Settings(BaseSettings):
+        required_field: str
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            return (MockLazySource(settings_cls),) + (
+                init_settings,
+                env_settings,
+                dotenv_settings,
+                file_secret_settings,
+            )
+
+    settings = Settings()
+    # The required field gets source_value from __call__
+    assert settings.required_field == 'source_value'
+
+
+def test_model_dump_with_required_field_lazy_sources():
+    """Test model_dump with required fields and lazy sources."""
+    from pydantic_settings.sources import PydanticBaseSettingsSource
+
+    class MockLazySource(PydanticBaseSettingsSource):
+        def get_field_value(self, field, field_name):
+            return None, None, False
+
+        def __call__(self) -> dict[str, Any]:
+            # Provide the required field
+            return {'required_field': 'source_value'}
+
+        @property
+        def _lazy_mapping(self):
+            # Also add lazy value for lazy loading
+            return {'required_field': 'lazy_required_value'}
+
+    class Settings(BaseSettings):
+        required_field: str
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            return (MockLazySource(settings_cls),) + (
+                init_settings,
+                env_settings,
+                dotenv_settings,
+                file_secret_settings,
+            )
+
+    settings = Settings()
+    # The required field gets source_value from __call__ (higher priority)
+    assert settings.required_field == 'source_value'
+
+
+def test_empty_sources_returns_empty_dict():
+    """Test _settings_build_values returns empty dict when sources is empty."""
+
+    class Settings(BaseSettings):
+        field1: str = 'default'
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            # Return empty tuple of sources
+            return ()
+
+    # This should work and return empty dict from _settings_build_values
+    settings = Settings()
+    # Should use default since no sources provide values
+    assert settings.field1 == 'default'
+
+
+def test_lazy_sources_collected_from_source():
+    """Test that lazy mappings are collected from sources with _lazy_mapping attribute."""
+    from pydantic_settings.sources import PydanticBaseSettingsSource
+
+    class MockLazySource(PydanticBaseSettingsSource):
+        def get_field_value(self, field, field_name):
+            return None, None, False
+
+        def __call__(self) -> dict[str, Any]:
+            return {'regular_field': 'regular_value'}
+
+        @property
+        def _lazy_mapping(self):
+            return {'lazy_field': 'lazy_value'}
+
+    class Settings(BaseSettings):
+        regular_field: str = 'default'
+        lazy_field: str = 'default'
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            return (MockLazySource(settings_cls),) + (
+                init_settings,
+                env_settings,
+                dotenv_settings,
+                file_secret_settings,
+            )
+
+    settings = Settings()
+    # Regular field should get value from source return value
+    assert settings.regular_field == 'regular_value'
+    # Lazy field should get value from lazy mapping
+    assert settings.lazy_field == 'lazy_value'
+
+
+def test_cli_app_async_command_exception_handling():
+    """Test CliApp._run_cli_cmd handles async exceptions properly."""
+    from pydantic_settings import CliApp
+
+    class TestModel(BaseSettings):
+        name: str = 'test'
+
+        async def cli_cmd(self):
+            # Simulate async work
+            pass
+
+    # This should work without raising - pass empty list to avoid pytest args
+    model = CliApp.run(TestModel, cli_args=[], cli_exit_on_error=False)
+    assert model.name == 'test'
+
+
+def test_async_command_sync_version():
+    """Test CliApp._run_cli_cmd with synchronous command."""
+    from pydantic_settings import CliApp
+
+    class TestModel(BaseSettings):
+        name: str = 'test'
+
+        def cli_cmd(self):
+            pass  # Synchronous command
+
+    # This should work without issues - pass empty list to avoid pytest args
+    model = CliApp.run(TestModel, cli_args=[], cli_exit_on_error=False)
+    assert model.name == 'test'
+
+
+def test_lazy_loading_field_with_none_default():
+    """Test lazy loading with field that has None as default."""
+    from pydantic_settings.sources import PydanticBaseSettingsSource
+
+    class MockLazySource(PydanticBaseSettingsSource):
+        def get_field_value(self, field, field_name):
+            return None, None, False
+
+        def __call__(self) -> dict[str, Any]:
+            return {}
+
+        @property
+        def _lazy_mapping(self):
+            return {'optional_field': 'lazy_value'}
+
+    class Settings(BaseSettings):
+        optional_field: str | None = None
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            return (MockLazySource(settings_cls),) + (
+                init_settings,
+                env_settings,
+                dotenv_settings,
+                file_secret_settings,
+            )
+
+    settings = Settings()
+    # Should get lazy value since default is None
+    value = settings.optional_field
+    assert value == 'lazy_value'

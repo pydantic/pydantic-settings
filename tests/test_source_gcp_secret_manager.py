@@ -2,12 +2,15 @@
 Test pydantic_settings.GoogleSecretSettingsSource
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 from pydantic import Field
 from pytest_mock import MockerFixture
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 from pydantic_settings.sources import GoogleSecretManagerSettingsSource
+from pydantic_settings.sources.lazy import LazyMapping
 from pydantic_settings.sources.providers.gcp import GoogleSecretManagerMapping, import_gcp_secret_manager
 
 try:
@@ -242,3 +245,83 @@ class TestGoogleSecretManagerSettingsSource:
 
         with pytest.raises(Exception, match='Permission denied'):
             _ = secret_manager_mapping._secret_names
+
+
+@pytest.mark.skipif(not gcp_secret_manager, reason='pydantic-settings[gcp-secret-manager] is not installed')
+class TestGCPSecretManagerLazyLoading:
+    """Unit tests for lazy_load behavior in GoogleSecretManagerSettingsSource."""
+
+    def test_returns_lazy_mapping_when_lazy_load_true(self):
+        """Test GoogleSecretManagerSettingsSource stores LazyMapping when lazy_load=True."""
+
+        class TestSettings(BaseSettings):
+            field: str = 'default'
+
+        with patch(
+            'pydantic_settings.sources.providers.gcp.google_auth_default', return_value=(MagicMock(), 'test-project')
+        ):
+            with patch('pydantic_settings.sources.providers.gcp.SecretManagerServiceClient'):
+                source = GoogleSecretManagerSettingsSource(TestSettings, lazy_load=True)
+                result = source()
+                assert isinstance(result, dict)
+                assert len(result) == 0
+                assert hasattr(source, '_lazy_mapping')
+                assert isinstance(source._lazy_mapping, LazyMapping)
+
+    def test_returns_dict_when_lazy_load_false(self):
+        """Test GoogleSecretManagerSettingsSource returns dict when lazy_load=False."""
+
+        class TestSettings(BaseSettings):
+            field: str = 'default'
+
+        with patch(
+            'pydantic_settings.sources.providers.gcp.google_auth_default', return_value=(MagicMock(), 'test-project')
+        ):
+            with patch('pydantic_settings.sources.providers.gcp.SecretManagerServiceClient'):
+                source = GoogleSecretManagerSettingsSource(TestSettings, lazy_load=False)
+                result = source()
+                assert isinstance(result, dict)
+                assert not hasattr(source, '_lazy_mapping') or source._lazy_mapping is None
+
+    def test_lazy_mapping_defers_resolution(self):
+        """Test GoogleSecretManagerSettingsSource LazyMapping defers resolution."""
+
+        class TestSettings(BaseSettings):
+            field: str = 'default'
+
+        with patch(
+            'pydantic_settings.sources.providers.gcp.google_auth_default', return_value=(MagicMock(), 'test-project')
+        ):
+            with patch('pydantic_settings.sources.providers.gcp.SecretManagerServiceClient'):
+                source = GoogleSecretManagerSettingsSource(TestSettings, lazy_load=True)
+
+                with patch.object(
+                    source, '_get_resolved_field_value', wraps=source._get_resolved_field_value
+                ) as mock_resolve:
+                    source()
+                    assert mock_resolve.call_count == 0
+
+                    lazy_mapping = source._lazy_mapping
+                    try:
+                        _ = lazy_mapping['field']
+                        assert mock_resolve.call_count > 0
+                    except KeyError:
+                        assert mock_resolve.call_count > 0
+
+
+@pytest.mark.skipif(not gcp_secret_manager, reason='pydantic-settings[gcp-secret-manager] is not installed')
+def test_gcp_secrets_source_accepts_lazy_load():
+    """Test GoogleSecretManagerSettingsSource accepts lazy_load parameter."""
+
+    class TestSettings(BaseSettings):
+        field: str = 'default'
+
+    try:
+        # This will fail if google-cloud-secret-manager is not installed
+        import inspect
+
+        sig = inspect.signature(GoogleSecretManagerSettingsSource.__init__)
+        assert 'lazy_load' in sig.parameters
+    except ImportError:
+        # gcp not installed, skip
+        pytest.skip('google-cloud-secret-manager not installed')
