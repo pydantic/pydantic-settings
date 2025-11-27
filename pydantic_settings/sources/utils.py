@@ -11,6 +11,7 @@ from typing import Any, cast, get_args, get_origin
 from pydantic import BaseModel, Json, RootModel, Secret
 from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
+from pydantic.fields import FieldInfo
 from typing_inspection import typing_objects
 
 from ..exceptions import SettingsError
@@ -70,6 +71,18 @@ def _annotation_is_complex(annotation: Any, metadata: list[Any]) -> bool:
         or hasattr(origin, '__pydantic_core_schema__')
         or hasattr(origin, '__get_pydantic_core_schema__')
     )
+
+
+def _get_field_metadata(field: FieldInfo) -> list[Any]:
+    annotation = field.annotation
+    metadata = field.metadata
+    if typing_objects.is_typealiastype(annotation) or typing_objects.is_typealiastype(get_origin(annotation)):
+        annotation = annotation.__value__  # type: ignore[union-attr]
+    origin = get_origin(annotation)
+    if typing_objects.is_annotated(origin):
+        _, *meta = get_args(annotation)
+        metadata += meta
+    return metadata
 
 
 def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:
