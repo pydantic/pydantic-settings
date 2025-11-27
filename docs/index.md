@@ -2392,6 +2392,74 @@ For nested models, Secret Manager supports the `env_nested_delimiter` setting as
 
 For more details on creating and managing secrets in Google Cloud Secret Manager, see the [official Google Cloud documentation](https://cloud.google.com/secret-manager/docs).
 
+### Lazy Loading
+
+Lazy loading defers field value resolution until fields are actually accessed, rather than eagerly fetching all values during settings initialization. This is particularly useful when working with Google Cloud Secret Manager where each field access triggers an API call, avoiding unnecessary network requests for fields that may never be used.
+
+
+#### Basic Usage
+
+You can enable lazy loading for Google Cloud Secret Manager via the `lazy_load` parameter when configuring `GoogleSecretManagerSettingsSource`:
+
+```py
+import os
+
+from pydantic_settings import (
+    BaseSettings,
+    GoogleSecretManagerSettingsSource,
+    PydanticBaseSettingsSource,
+)
+
+
+class Settings(BaseSettings):
+    secret1: str = ''
+    secret2: str = ''
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        gcp_settings = GoogleSecretManagerSettingsSource(
+            settings_cls,
+            project_id=os.environ.get('GCP_PROJECT_ID', 'my-project'),
+            lazy_load=True,
+        )
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            gcp_settings,
+            file_secret_settings,
+        )
+```
+
+When initializing `Settings()` the secrets will not be fetched. When accessing a secret for the first time, for example `secret1`, an API call will be made to fetch that secret, and will then be catched. Next access to that same secret will not trigger an API call, but accessing another one will. Operations that require all secrets, like `model_dump` triggers the fetching of all secrets.
+
+#### Behavior and Caching
+
+When lazy loading is enabled:
+
+1. **Initialization**: Settings are created with minimal overhead. Sources return empty dictionaries instead of eagerly fetching all values.
+
+2. **First Access**: When you access a field for the first time (e.g., `settings.api_key`), the value is fetched from the configured source and cached in memory.
+
+3. **Subsequent Access**: Accessing the same field again returns the cached value without making another API call.
+
+4. **All Fields**: Iteration over all fields (via `model_dump()`, etc.) will trigger resolution of all fields at once.
+
+***When to use lazy loading:**
+
+* Your settings have many fields but your application only uses a subset of them
+* You want to reduce initialization time and API call costs
+* Network latency to GCP Secret Manager is significant
+
+
+
 ## Other settings source
 
 Other settings sources are available for common configuration files:
