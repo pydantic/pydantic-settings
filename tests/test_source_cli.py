@@ -41,6 +41,7 @@ from pydantic_settings import (
 )
 from pydantic_settings.sources import (
     CLI_SUPPRESS,
+    CliDualFlag,
     CliExplicitFlag,
     CliImplicitFlag,
     CliMutuallyExclusiveGroup,
@@ -48,6 +49,7 @@ from pydantic_settings.sources import (
     CliSettingsSource,
     CliSubCommand,
     CliSuppress,
+    CliToggleFlag,
     CliUnknownArgs,
     get_subcommand,
 )
@@ -1600,18 +1602,26 @@ def test_cli_annotation_exceptions(monkeypatch):
 
         CliFlagNotBool()
 
+    with pytest.raises(
+        SettingsError, match='CliToggleFlag argument CliToggleNoDefault.flag must have a default bool value'
+    ):
+
+        class CliToggleNoDefault(BaseSettings, cli_parse_args=True):
+            flag: CliToggleFlag[bool]
+
+        CliToggleNoDefault()
+
 
 @pytest.mark.parametrize('enforce_required', [True, False])
-def test_cli_bool_flags(monkeypatch, enforce_required):
-    class ExplicitSettings(BaseSettings, cli_enforce_required=enforce_required):
-        explicit_req: bool
-        explicit_opt: bool = False
-        implicit_req: CliImplicitFlag[bool]
-        implicit_opt: CliImplicitFlag[bool] = False
-
-    class ImplicitSettings(BaseSettings, cli_implicit_flags=True, cli_enforce_required=enforce_required):
+@pytest.mark.parametrize('implicit_flags_mode', [None, True, 'dual', 'toggle'])
+def test_cli_bool_flags(monkeypatch, enforce_required, implicit_flags_mode):
+    class FlagSettings(BaseSettings, cli_implicit_flags=implicit_flags_mode, cli_enforce_required=enforce_required):
         explicit_req: CliExplicitFlag[bool]
         explicit_opt: CliExplicitFlag[bool] = False
+        dual_req: CliDualFlag[bool]
+        dual_opt: CliDualFlag[bool] = False
+        toggle_def_t: CliToggleFlag[bool] = True
+        toggle_def_f: CliToggleFlag[bool] = False
         implicit_req: bool
         implicit_opt: bool = False
 
@@ -1620,38 +1630,69 @@ def test_cli_bool_flags(monkeypatch, enforce_required):
         'explicit_opt': False,
         'implicit_req': True,
         'implicit_opt': False,
+        'dual_req': True,
+        'dual_opt': False,
+        'toggle_def_t': True,
+        'toggle_def_f': False,
     }
-
-    explicit_settings = CliApp.run(ExplicitSettings, cli_args=['--explicit_req=True', '--implicit_req'])
-    assert explicit_settings.model_dump() == expected
-    serialized_args = CliApp.serialize(explicit_settings)
-    assert serialized_args == ['--explicit_req', 'True', '--implicit_req']
-    assert CliApp.run(ExplicitSettings, cli_args=serialized_args).model_dump() == expected
-
-    implicit_settings = CliApp.run(ImplicitSettings, cli_args=['--explicit_req=True', '--implicit_req'])
+    flag_args = [
+        '--explicit_req',
+        'True',
+        '--dual_req',
+    ]
+    flag_args += ['--implicit_req'] if implicit_flags_mode is not None else ['--implicit_req', 'True']
+    implicit_settings = CliApp.run(FlagSettings, cli_args=flag_args)
     assert implicit_settings.model_dump() == expected
     serialized_args = CliApp.serialize(implicit_settings)
-    assert serialized_args == ['--explicit_req', 'True', '--implicit_req']
-    assert CliApp.run(ImplicitSettings, cli_args=serialized_args).model_dump() == expected
+    assert serialized_args == flag_args
 
     expected = {
         'explicit_req': False,
         'explicit_opt': False,
         'implicit_req': False,
         'implicit_opt': False,
+        'dual_req': False,
+        'dual_opt': False,
+        'toggle_def_t': False,
+        'toggle_def_f': False,
     }
-
-    explicit_settings = CliApp.run(ExplicitSettings, cli_args=['--explicit_req=False', '--no-implicit_req'])
-    assert explicit_settings.model_dump() == expected
-    serialized_args = CliApp.serialize(explicit_settings)
-    assert serialized_args == ['--explicit_req', 'False', '--no-implicit_req']
-    assert CliApp.run(ExplicitSettings, cli_args=serialized_args).model_dump() == expected
-
-    implicit_settings = CliApp.run(ImplicitSettings, cli_args=['--explicit_req=False', '--no-implicit_req'])
+    flag_args = [
+        '--explicit_req',
+        'False',
+        '--no-dual_req',
+        '--no-toggle_def_t',
+    ]
+    flag_args += ['--no-implicit_req'] if implicit_flags_mode is not None else ['--implicit_req', 'False']
+    implicit_settings = CliApp.run(FlagSettings, cli_args=flag_args)
     assert implicit_settings.model_dump() == expected
     serialized_args = CliApp.serialize(implicit_settings)
-    assert serialized_args == ['--explicit_req', 'False', '--no-implicit_req']
-    assert CliApp.run(ImplicitSettings, cli_args=serialized_args).model_dump() == expected
+    assert serialized_args == flag_args
+
+    expected = {
+        'explicit_req': True,
+        'explicit_opt': True,
+        'implicit_req': True,
+        'implicit_opt': True,
+        'dual_req': True,
+        'dual_opt': True,
+        'toggle_def_t': True,
+        'toggle_def_f': True,
+    }
+    flag_args = [
+        '--explicit_req',
+        'True',
+        '--explicit_opt',
+        'True',
+        '--dual_req',
+        '--dual_opt',
+        '--toggle_def_f',
+    ]
+    flag_args += ['--implicit_req'] if implicit_flags_mode is not None else ['--implicit_req', 'True']
+    flag_args += ['--implicit_opt'] if implicit_flags_mode is not None else ['--implicit_opt', 'True']
+    implicit_settings = CliApp.run(FlagSettings, cli_args=flag_args)
+    assert implicit_settings.model_dump() == expected
+    serialized_args = CliApp.serialize(implicit_settings)
+    assert serialized_args == flag_args
 
 
 def test_cli_avoid_json(capsys, monkeypatch):
@@ -2706,17 +2747,30 @@ def test_cli_kebab_case_enums():
 def test_cli_kebab_case_all_with_implicit_flag():
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(cli_kebab_case='all')
-        test_bool_flag: CliImplicitFlag[bool]
+        test_bool_flag_a: CliImplicitFlag[bool]
+        test_bool_flag_b: CliToggleFlag[bool] = True
+        test_bool_flag_c: CliToggleFlag[bool] = False
+        test_bool_flag_d: CliDualFlag[bool] = False
 
     assert CliApp.run(
         Settings,
-        cli_args=['--test-bool-flag'],
-    ).model_dump() == {'test_bool_flag': True}
+        cli_args=['--test-bool-flag-a', '--test-bool-flag-c', '--test-bool-flag-d'],
+    ).model_dump() == {
+        'test_bool_flag_a': True,
+        'test_bool_flag_b': True,
+        'test_bool_flag_c': True,
+        'test_bool_flag_d': True,
+    }
 
     assert CliApp.run(
         Settings,
-        cli_args=['--no-test-bool-flag'],
-    ).model_dump() == {'test_bool_flag': False}
+        cli_args=['--no-test-bool-flag-a', '--no-test-bool-flag-b', '--no-test-bool-flag-d'],
+    ).model_dump() == {
+        'test_bool_flag_a': False,
+        'test_bool_flag_b': False,
+        'test_bool_flag_c': False,
+        'test_bool_flag_d': False,
+    }
 
 
 def test_cli_with_unbalanced_brackets_in_json_string():

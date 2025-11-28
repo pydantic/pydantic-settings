@@ -51,10 +51,12 @@ from ..types import (
     ForceDecode,
     NoDecode,
     PydanticModel,
+    _CliDualFlag,
     _CliExplicitFlag,
     _CliImplicitFlag,
     _CliPositionalArg,
     _CliSubCommand,
+    _CliToggleFlag,
     _CliUnknownArgs,
 )
 from ..utils import (
@@ -239,6 +241,8 @@ CliPositionalArg = Annotated[T, _CliPositionalArg]
 _CliBoolFlag = TypeVar('_CliBoolFlag', bound=bool)
 CliImplicitFlag = Annotated[_CliBoolFlag, _CliImplicitFlag]
 CliExplicitFlag = Annotated[_CliBoolFlag, _CliExplicitFlag]
+CliToggleFlag = Annotated[_CliBoolFlag, _CliToggleFlag]
+CliDualFlag = Annotated[_CliBoolFlag, _CliDualFlag]
 CLI_SUPPRESS = SUPPRESS
 CliSuppress = Annotated[T, CLI_SUPPRESS]
 CliUnknownArgs = Annotated[list[str], Field(default=[]), _CliUnknownArgs, NoDecode]
@@ -270,8 +274,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             Defaults to `True`.
         cli_prefix: Prefix for command line arguments added under the root parser. Defaults to "".
         cli_flag_prefix_char: The flag prefix character to use for CLI optional arguments. Defaults to '-'.
-        cli_implicit_flags: Whether `bool` fields should be implicitly converted into CLI boolean flags.
-            (e.g. --flag, --no-flag). Defaults to `False`.
+        cli_implicit_flags: Controls how `bool` fields are exposed as CLI flags.
+
+            - False (default): no implicit flags are generated; booleans must be set explicitly (e.g. --flag=true).
+            - True / 'dual': optional boolean fields generate both positive and negative forms (--flag and --no-flag).
+            - 'toggle': required boolean fields remain in 'dual' mode, while optional boolean fields generate a single
+              flag aligned with the default value (if default=False, expose --flag; if default=True, expose --no-flag).
         cli_ignore_unknown_args: Whether to ignore unknown CLI args and parse only known ones. Defaults to `False`.
         cli_kebab_case: CLI args use kebab case. Defaults to `False`.
         cli_shortcuts: Mapping of target field name to alias names. Defaults to `None`.
@@ -303,7 +311,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_exit_on_error: bool | None = None,
         cli_prefix: str | None = None,
         cli_flag_prefix_char: str | None = None,
-        cli_implicit_flags: bool | None = None,
+        cli_implicit_flags: bool | Literal['dual', 'toggle'] | None = None,
         cli_ignore_unknown_args: bool | None = None,
         cli_kebab_case: bool | Literal['all', 'no_enums'] | None = None,
         cli_shortcuts: Mapping[str, str | list[str]] | None = None,
@@ -721,6 +729,14 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             cli_flag_name = 'CliImplicitFlag'
         elif _CliExplicitFlag in field_info.metadata:
             cli_flag_name = 'CliExplicitFlag'
+        elif _CliToggleFlag in field_info.metadata:
+            cli_flag_name = 'CliToggleFlag'
+            if not isinstance(field_info.default, bool):
+                raise SettingsError(
+                    f'{cli_flag_name} argument {model.__name__}.{field_name} must have a default bool value'
+                )
+        elif _CliDualFlag in field_info.metadata:
+            cli_flag_name = 'CliDualFlag'
         else:
             return
 
@@ -1003,7 +1019,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     if isinstance(group, dict):
                         group = self._add_group(parser, **group)
                     context = parser if group is None else group
-                    arg.args = [f'{flag_prefix[: len(name)]}{name}' for name in arg_names]
+                    if arg.kwargs.get('action') == 'store_false':
+                        flag_prefix += 'no-'
+                    arg.args = [f'{flag_prefix[: 1 if len(name) == 1 else None]}{name}' for name in arg_names]
                     self._add_argument(context, *arg.args, **arg.kwargs)
                     added_args += list(arg_names)
 
@@ -1018,11 +1036,25 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _convert_bool_flag(self, kwargs: dict[str, Any], field_info: FieldInfo, model_default: Any) -> None:
         if kwargs['metavar'] == 'bool':
-            if (self.cli_implicit_flags or _CliImplicitFlag in field_info.metadata) and (
-                _CliExplicitFlag not in field_info.metadata
-            ):
-                del kwargs['metavar']
-                kwargs['action'] = BooleanOptionalAction
+            meta_bool_flags = [
+                meta for meta in field_info.metadata if issubclass(meta, _CliImplicitFlag | _CliExplicitFlag)
+            ]
+            if not meta_bool_flags and self.cli_implicit_flags:
+                meta_bool_flags = [_CliImplicitFlag]
+            if meta_bool_flags:
+                bool_flag = meta_bool_flags.pop()
+                if bool_flag is _CliImplicitFlag:
+                    bool_flag = (
+                        _CliToggleFlag
+                        if self.cli_implicit_flags == 'toggle' and isinstance(field_info.default, bool)
+                        else _CliDualFlag
+                    )
+                if bool_flag is _CliDualFlag:
+                    del kwargs['metavar']
+                    kwargs['action'] = BooleanOptionalAction
+                elif bool_flag is _CliToggleFlag:
+                    del kwargs['metavar']
+                    kwargs['action'] = 'store_false' if field_info.default else 'store_true'
 
     def _convert_positional_arg(
         self, kwargs: dict[str, Any], field_info: FieldInfo, preferred_alias: str, model_default: Any
@@ -1348,7 +1380,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             optional_args.append(f'{flag_chars}{arg_name}')
 
             # If implicit bool flag, do not add a value
-            if arg.kwargs.get('action') != BooleanOptionalAction:
+            if arg.kwargs.get('action') not in (BooleanOptionalAction, 'store_true', 'store_false'):
                 optional_args.append(value)
 
         serialized_args: list[str] = []

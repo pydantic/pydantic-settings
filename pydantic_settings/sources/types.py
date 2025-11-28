@@ -53,6 +53,14 @@ class _CliImplicitFlag:
     pass
 
 
+class _CliToggleFlag(_CliImplicitFlag):
+    pass
+
+
+class _CliDualFlag(_CliImplicitFlag):
+    pass
+
+
 class _CliExplicitFlag:
     pass
 
@@ -72,6 +80,8 @@ __all__ = [
     'PydanticModel',
     '_CliExplicitFlag',
     '_CliImplicitFlag',
+    '_CliToggleFlag',
+    '_CliDualFlag',
     '_CliPositionalArg',
     '_CliSubCommand',
     '_CliUnknownArgs',
