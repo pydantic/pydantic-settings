@@ -144,7 +144,7 @@ class _CliArg(BaseModel):
         for type_ in get_args(annotation):
             enum_names += cls.get_enum_names(type_, kebab_case)
         if annotation and _lenient_issubclass(annotation, Enum):
-            enum_names += tuple(cls.get_kebab_case(val.name, kebab_case == 'all') for val in annotation)
+            enum_names += tuple(cls.get_kebab_case(name, kebab_case == 'all') for name in annotation.__members__.keys())
         return enum_names
 
     def subcommand_alias(self, sub_model: type[BaseModel]) -> str:
@@ -1255,7 +1255,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             return self._metavar_format_choices(list(map(str, self._get_modified_args(obj))))
         elif _lenient_issubclass(obj, Enum):
             return self._metavar_format_choices(
-                [_CliArg.get_kebab_case(val.name, self.cli_kebab_case == 'all') for val in obj]
+                [_CliArg.get_kebab_case(name, self.cli_kebab_case == 'all') for name in obj.__members__.keys()]
             )
         elif isinstance(obj, _WithArgsTypes):
             return self._metavar_format_choices(
