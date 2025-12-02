@@ -2,6 +2,7 @@
 Test pydantic_settings.JsonConfigSettingsSource.
 """
 
+import importlib.resources
 import json
 from pathlib import Path
 
@@ -132,3 +133,33 @@ def test_multiple_file_json_merge(tmp_path, deep_merge):
 
     s = Settings()
     assert s.model_dump() == {'hello': 'world', 'nested': {'foo': 3, 'bar': 2 if deep_merge else 0}}
+
+
+def test_traversable_support():
+    # get Traversable object
+    tests_package_dir = importlib.resources.files('tests')
+    json_config_path = tests_package_dir / 'example_test_config.json'
+    assert json_config_path.is_file()
+
+    class Settings(BaseSettings):
+        foobar: str
+
+        model_config = SettingsConfigDict(
+            # Traversable is not added in annotation, but is supported
+            json_file=json_config_path,
+        )
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (JsonConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    # "test" value in file
+    assert s.foobar == 'test'

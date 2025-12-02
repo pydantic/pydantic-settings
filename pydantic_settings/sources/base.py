@@ -200,7 +200,13 @@ class ConfigFileSourceMixin(ABC):
             files = [files]
         vars: dict[str, Any] = {}
         for file in files:
-            file_path = Path(file).expanduser()
+            if isinstance(file, str):
+                file_path = Path(file)
+            else:
+                file_path = file
+            if isinstance(file_path, Path):
+                file_path = file_path.expanduser()
+
             if not file_path.is_file():
                 continue
 
