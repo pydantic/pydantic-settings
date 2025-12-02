@@ -58,7 +58,7 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
 
     def _read_file(self, file_path: Path) -> dict[str, Any]:
         import_toml()
-        with open(file_path, mode='rb') as toml_file:
+        with file_path.open(mode='rb') as toml_file:
             if sys.version_info < (3, 11):
                 return tomli.load(toml_file)
             return tomllib.load(toml_file)
