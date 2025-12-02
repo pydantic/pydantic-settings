@@ -135,7 +135,7 @@ def _strip_annotated(annotation: Any) -> Any:
 def _annotation_enum_val_to_name(annotation: type[Any] | None, value: Any) -> str | None:
     for type_ in (annotation, get_origin(annotation), *get_args(annotation)):
         if _lenient_issubclass(type_, Enum):
-            if value in tuple(val.value for val in type_):
+            if value in type_.__members__.values():
                 return type_(value).name
     return None
 
@@ -143,7 +143,7 @@ def _annotation_enum_val_to_name(annotation: type[Any] | None, value: Any) -> st
 def _annotation_enum_name_to_val(annotation: type[Any] | None, name: Any) -> Any:
     for type_ in (annotation, get_origin(annotation), *get_args(annotation)):
         if _lenient_issubclass(type_, Enum):
-            if name in tuple(val.name for val in type_):
+            if name in type_.__members__.keys():
                 return type_[name]
     return None
 
