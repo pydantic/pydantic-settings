@@ -1444,6 +1444,7 @@ def test_cli_enums(capsys, monkeypatch):
         dog = 0
         cat = 1
         bird = 2
+        crow = 2
 
     class Cfg(BaseSettings):
         pet: Pet = Pet.dog
@@ -1452,15 +1453,18 @@ def test_cli_enums(capsys, monkeypatch):
     cfg = CliApp.run(Cfg, cli_args=['--pet', 'cat', '--union_pet', 'dog'])
     assert cfg.model_dump() == {'pet': Pet.cat, 'union_pet': Pet.dog}
 
+    cfg = CliApp.run(Cfg, cli_args=['--pet', 'crow', '--union_pet', 'dog'])
+    assert cfg.model_dump() == {'pet': Pet.crow, 'union_pet': Pet.dog}
+
     with pytest.raises(ValidationError) as exc_info:
         CliApp.run(Cfg, cli_args=['--pet', 'rock'])
     assert exc_info.value.errors(include_url=False) == [
         {
             'type': 'enum',
             'loc': ('pet',),
-            'msg': 'Input should be 0, 1 or 2',
+            'msg': 'Input should be 0, 1, 2 or 2',
             'input': 'rock',
-            'ctx': {'expected': '0, 1 or 2'},
+            'ctx': {'expected': '0, 1, 2 or 2'},
         }
     ]
 
@@ -1469,22 +1473,23 @@ def test_cli_enums(capsys, monkeypatch):
 
         if PYTHON_3_14:
             if IS_WINDOWS:
-                text = '                            [--union_pet {{dog,cat,bird},int}]'
+                text = '                            [--union_pet {{dog,cat,bird,crow},int}]'
             else:
-                text = '                         [--union_pet {{dog,cat,bird},int}]'
+                text = '                         [--union_pet {{dog,cat,bird,crow},int}]'
         else:
-            text = '                  [--union_pet {{dog,cat,bird},int}]'
+            text = '                  [--union_pet {{dog,cat,bird,crow},int}]'
         with pytest.raises(SystemExit):
             CliApp.run(Cfg)
         assert (
             sanitize_cli_output(capsys.readouterr().out)
-            == f"""usage: example.py [-h] [--pet {{dog,cat,bird}}]
+            == f"""usage: example.py [-h] [--pet {{dog,cat,bird,crow}}]
 {text}
 
 {ARGPARSE_OPTIONS_TEXT}:
   -h, --help            show this help message and exit
-  --pet {{dog,cat,bird}}  (default: dog)
-  --union_pet {{{{dog,cat,bird}},int}}
+  --pet {{dog,cat,bird,crow}}
+                        (default: dog)
+  --union_pet {{{{dog,cat,bird,crow}},int}}
                         (default: 43)
 """
         )
