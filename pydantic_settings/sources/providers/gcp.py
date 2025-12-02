@@ -102,6 +102,7 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
         env_parse_enums: bool | None = None,
         secret_client: SecretManagerServiceClient | None = None,
         case_sensitive: bool | None = True,
+        lazy_load: bool | None = None,
     ) -> None:
         # Import Google Packages if they haven't already been imported
         if SecretManagerServiceClient is None or Credentials is None or google_auth_default is None:
@@ -131,7 +132,6 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
             self._secret_client = secret_client
         else:
             self._secret_client = SecretManagerServiceClient(credentials=self._credentials)
-
         super().__init__(
             settings_cls,
             case_sensitive=case_sensitive,
@@ -140,6 +140,8 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
             env_parse_none_str=env_parse_none_str,
             env_parse_enums=env_parse_enums,
         )
+        # Set lazy_load after initialization since GCP-specific feature
+        self.lazy_load = lazy_load if lazy_load is not None else self.config.get('lazy_load', False)
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
         return GoogleSecretManagerMapping(
