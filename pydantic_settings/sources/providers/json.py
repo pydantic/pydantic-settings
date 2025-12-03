@@ -38,7 +38,7 @@ class JsonConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         super().__init__(settings_cls, self.json_data)
 
     def _read_file(self, file_path: Path) -> dict[str, Any]:
-        with open(file_path, encoding=self.json_file_encoding) as json_file:
+        with file_path.open(encoding=self.json_file_encoding) as json_file:
             return json.load(json_file)
 
     def __repr__(self) -> str:

@@ -2,7 +2,15 @@
 Test pydantic_settings.JsonConfigSettingsSource.
 """
 
+import importlib.resources
 import json
+import sys
+
+if sys.version_info < (3, 11):
+    from importlib.abc import Traversable
+else:
+    from importlib.resources.abc import Traversable
+
 from pathlib import Path
 
 import pytest
@@ -132,3 +140,77 @@ def test_multiple_file_json_merge(tmp_path, deep_merge):
 
     s = Settings()
     assert s.model_dump() == {'hello': 'world', 'nested': {'foo': 3, 'bar': 2 if deep_merge else 0}}
+
+
+class TestTraversableSupport:
+    FILENAME = 'example_test_config.json'
+
+    @pytest.fixture(params=['importlib_resources', 'custom'])
+    def json_config_path(self, request, tmp_path):
+        tests_package_dir = importlib.resources.files('tests')
+
+        if request.param == 'importlib_resources':
+            # get Traversable object using importlib.resources
+            return tests_package_dir / self.FILENAME
+
+        # Create a custom Traversable implementation
+        class CustomTraversable(Traversable):
+            def __init__(self, path):
+                self._path = path
+
+            def __truediv__(self, child):
+                return CustomTraversable(self._path / child)
+
+            def is_file(self):
+                return self._path.is_file()
+
+            def is_dir(self):
+                return self._path.is_dir()
+
+            def iterdir(self):
+                raise NotImplementedError('iterdir not implemented for this test')
+
+            def open(self, mode='r', *args, **kwargs):
+                return self._path.open(mode, *args, **kwargs)
+
+            def read_bytes(self):
+                return self._path.read_bytes()
+
+            def read_text(self, encoding=None):
+                return self._path.read_text(encoding=encoding)
+
+            @property
+            def name(self):
+                return self._path.name
+
+            def joinpath(self, *descendants):
+                return CustomTraversable(self._path.joinpath(*descendants))
+
+        custom_traversable = CustomTraversable(tests_package_dir)
+        return custom_traversable / self.FILENAME
+
+    def test_traversable_support(self, json_config_path: Traversable):
+        assert json_config_path.is_file()
+
+        class Settings(BaseSettings):
+            foobar: str
+
+            model_config = SettingsConfigDict(
+                # Traversable is not added in annotation, but is supported
+                json_file=json_config_path,
+            )
+
+            @classmethod
+            def settings_customise_sources(
+                cls,
+                settings_cls: type[BaseSettings],
+                init_settings: PydanticBaseSettingsSource,
+                env_settings: PydanticBaseSettingsSource,
+                dotenv_settings: PydanticBaseSettingsSource,
+                file_secret_settings: PydanticBaseSettingsSource,
+            ) -> tuple[PydanticBaseSettingsSource, ...]:
+                return (JsonConfigSettingsSource(settings_cls),)
+
+        s = Settings()
+        # "test" value in file
+        assert s.foobar == 'test'
