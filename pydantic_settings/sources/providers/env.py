@@ -186,7 +186,10 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             type_has_key = self.next_field(type_, key, case_sensitive)
             if type_has_key:
                 return type_has_key
-        if is_model_class(annotation) or is_pydantic_dataclass(annotation):  # type: ignore[arg-type]
+        if _lenient_issubclass(get_origin(annotation), dict):
+            # get value type if it's a dict
+            return get_args(annotation)[-1]
+        elif is_model_class(annotation) or is_pydantic_dataclass(annotation):  # type: ignore[arg-type]
             fields = _get_model_fields(annotation)
             # `case_sensitive is None` is here to be compatible with the old behavior.
             # Has to be removed in V3.
