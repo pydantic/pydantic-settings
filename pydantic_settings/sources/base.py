@@ -3,8 +3,8 @@
 from __future__ import annotations as _annotations
 
 import json
-import os
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast, get_args
@@ -196,7 +196,7 @@ class ConfigFileSourceMixin(ABC):
     def _read_files(self, files: PathType | None, deep_merge: bool = False) -> dict[str, Any]:
         if files is None:
             return {}
-        if isinstance(files, (str, os.PathLike)):
+        if not isinstance(files, Sequence) or isinstance(files, (str, bytes)):
             files = [files]
         vars: dict[str, Any] = {}
         for file in files:
