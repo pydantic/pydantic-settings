@@ -145,7 +145,7 @@ def test_multiple_file_json_merge(tmp_path, deep_merge):
 class TestTraversableSupport:
     FILENAME = 'example_test_config.json'
 
-    @pytest.fixture(params=['importlib_resources', 'custom'])
+    @pytest.fixture(params=['importlib_resources', 'custom', 'custom_with_path'])
     def json_config_path(self, request, tmp_path):
         tests_package_dir = importlib.resources.files('tests')
 
@@ -186,8 +186,14 @@ class TestTraversableSupport:
             def joinpath(self, *descendants):
                 return CustomTraversable(self._path.joinpath(*descendants))
 
-        custom_traversable = CustomTraversable(tests_package_dir)
-        return custom_traversable / self.FILENAME
+        if request.param == 'custom':
+            custom_traversable = CustomTraversable(tests_package_dir)
+            return custom_traversable / self.FILENAME
+
+        filepath = tmp_path / self.FILENAME
+        with filepath.open('w') as f:
+            json.dump({'foobar': 'test'}, f)
+        return CustomTraversable(filepath)
 
     def test_traversable_support(self, json_config_path: Traversable):
         assert json_config_path.is_file()
