@@ -2947,6 +2947,8 @@ def test_cli_app_with_separate_parser(monkeypatch):
     cli_settings = CliSettingsSource(Cfg, root_parser=parser)
 
     parser.add_argument('-e', '--extra', dest='extra', default=0, action='count')
+    parser.add_argument('--num-list', action='append', default=[1])
+    parser.add_argument('--str-list', action='append', default=['abc'])
 
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--pet', 'dog', '-eeee'])
@@ -2954,8 +2956,13 @@ def test_cli_app_with_separate_parser(monkeypatch):
         parsed_args = parser.parse_args()
 
     assert parsed_args.extra == 4
+    assert parsed_args.num_list == [1]
+    assert parsed_args.str_list == ['abc']
     # With parsed arguments passed to CliApp.run, the parser should not need to be called again.
     assert CliApp.run(Cfg, cli_args=parsed_args, cli_settings_source=cli_settings).model_dump() == {'pet': 'dog'}
+    assert parsed_args.extra == 4
+    assert parsed_args.num_list == [1]
+    assert parsed_args.str_list == ['abc']
 
 
 def test_cli_serialize_non_default_values():
