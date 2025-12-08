@@ -2,6 +2,7 @@
 
 from __future__ import annotations as _annotations
 
+import copy
 import json
 import re
 import shlex
@@ -476,7 +477,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 args = sys.argv[1:]
             return self._load_env_vars(parsed_args=self._parse_args(self.root_parser, args))
         elif parsed_args is not None:
-            return self._load_env_vars(parsed_args=parsed_args)
+            return self._load_env_vars(parsed_args=copy.copy(parsed_args))
         else:
             return super().__call__()
 
