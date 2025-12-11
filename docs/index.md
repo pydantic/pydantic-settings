@@ -2457,6 +2457,62 @@ For nested models, Secret Manager supports the `env_nested_delimiter` setting as
 
 For more details on creating and managing secrets in Google Cloud Secret Manager, see the [official Google Cloud documentation](https://cloud.google.com/secret-manager/docs).
 
+## Keyring
+
+This integration allows you to securely load sensitive values such as passwords, API tokens, and other secrets directly from the system keyring. Instead of storing secrets in .env files or configuration files, you can fetch them at runtime using the operating system's secure credential store.
+
+The Keyring integration requires additional dependencies:
+
+```bash
+pip install "pydantic-settings[keyring]"
+```
+
+There is one mandatory parameter:
+- `keyring_service`: keyring service name
+
+Add `KeyringConfigSettingsSource` to your settings sources:
+
+```python
+from pydantic import SecretStr
+from pydantic_settings import (
+    BaseSettings,
+    KeyringConfigSettingsSource,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
+
+class Settings(BaseSettings):
+    secret_key: SecretStr
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        keyring_settings = KeyringConfigSettingsSource(
+            settings_cls,
+            keyring_service=os.environ["KEYRING_SERVICE"],
+        )
+
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+            keyring_settings,
+        )
+```
+
+To set a secret, you can use `keyring set <keyring_service> <field_name>` in your terminal:
+
+```bash
+$ keyring set myapp secret_key
+```
+
 ## Other settings source
 
 Other settings sources are available for common configuration files:
