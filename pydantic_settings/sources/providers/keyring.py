@@ -24,10 +24,12 @@ class KeyringConfigSettingsSource(EnvSettingsSource):
         self,
         settings_cls: type[BaseSettings],
         keyring_service: str,
-        case_sensitive: bool | None = True,
+        case_sensitive: bool | None = None,
         env_prefix: str | None = None,
     ):
-        self.keyring_service = keyring_service
+        self.keyring_service = (
+            keyring_service if case_sensitive else keyring_service.lower()
+        )
         super().__init__(
             settings_cls, case_sensitive=case_sensitive, env_prefix=env_prefix
         )
@@ -35,14 +37,18 @@ class KeyringConfigSettingsSource(EnvSettingsSource):
     def _load_env_vars(self) -> Mapping[str, str | None]:
         import_keyring()
 
+        prefix = self.env_prefix
+        if not self.case_sensitive:
+                prefix = self.env_prefix.lower()
         env_vars = {}
         for field in self.settings_cls.model_fields.keys():
-            credential = keyring.get_credential(
-                self.keyring_service, self.env_prefix + field
-            )
+            if not self.case_sensitive:
+                field = field.lower()
+            credential = keyring.get_credential(self.keyring_service, prefix + field)
             if credential is not None:
                 key = credential.username
-                key = key if self.case_sensitive else key.lower()
+                if not self.case_sensitive:
+                    key = key.lower()
                 env_vars[key] = credential.password
 
         return env_vars
