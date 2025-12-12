@@ -1,5 +1,6 @@
 from __future__ import annotations as _annotations
 
+import warnings
 from collections.abc import Iterator, Mapping
 from functools import cached_property
 from typing import TYPE_CHECKING
@@ -47,36 +48,69 @@ class GoogleSecretManagerMapping(Mapping[str, str | None]):
     def _gcp_project_path(self) -> str:
         return self._secret_client.common_project_path(self._project_id)
 
+    def _select_case_insensitive_secret(self, lower_name: str, candidates: list[str]) -> str:
+        if len(candidates) == 1:
+            return candidates[0]
+
+        # Sort to ensure deterministic selection (prefer lowercase / ASCII last)
+        candidates.sort()
+        winner = candidates[-1]
+        warnings.warn(
+            f"Secret collision: Found multiple secrets {candidates} normalizing to '{lower_name}'. "
+            f"Using '{winner}' for case-insensitive lookup.",
+            UserWarning,
+            stacklevel=2,
+        )
+        return winner
+
     @cached_property
-    def _secret_names(self) -> list[str]:
-        rv: list[str] = []
+    def _secret_name_map(self) -> dict[str, str]:
+        mapping: dict[str, str] = {}
+        # Group secrets by normalized name to detect collisions
+        normalized_groups: dict[str, list[str]] = {}
 
         secrets = self._secret_client.list_secrets(parent=self._gcp_project_path)
         for secret in secrets:
             name = self._secret_client.parse_secret_path(secret.name).get('secret', '')
+            mapping[name] = name
+
             if not self._case_sensitive:
-                name = name.lower()
-            rv.append(name)
-        return rv
+                lower_name = name.lower()
+                if lower_name not in normalized_groups:
+                    normalized_groups[lower_name] = []
+                normalized_groups[lower_name].append(name)
+
+        if not self._case_sensitive:
+            for lower_name, candidates in normalized_groups.items():
+                mapping[lower_name] = self._select_case_insensitive_secret(lower_name, candidates)
+
+        return mapping
+
+    @property
+    def _secret_names(self) -> list[str]:
+        return list(self._secret_name_map.keys())
 
     def _secret_version_path(self, key: str, version: str = 'latest') -> str:
         return self._secret_client.secret_version_path(self._project_id, key, version)
 
     def __getitem__(self, key: str) -> str | None:
-        if not self._case_sensitive:
-            key = key.lower()
-        if key not in self._loaded_secrets:
-            # If we know the key isn't available in secret manager, raise a key error
-            if key not in self._secret_names:
-                raise KeyError(key)
+        if key in self._loaded_secrets:
+            return self._loaded_secrets[key]
 
+        gcp_secret_name = self._secret_name_map.get(key)
+        if gcp_secret_name is None and not self._case_sensitive:
+            gcp_secret_name = self._secret_name_map.get(key.lower())
+
+        if gcp_secret_name:
             try:
                 self._loaded_secrets[key] = self._secret_client.access_secret_version(
-                    name=self._secret_version_path(key)
+                    name=self._secret_version_path(gcp_secret_name)
                 ).payload.data.decode('UTF-8')
             except Exception:
                 # If we can't access the secret, we return None
                 self._loaded_secrets[key] = None
+        else:
+            raise KeyError(key)
 
         return self._loaded_secrets[key]
 
