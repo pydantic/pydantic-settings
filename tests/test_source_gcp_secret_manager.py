@@ -208,7 +208,7 @@ class TestGoogleSecretManagerSettingsSource:
                 )
 
         with pytest.raises(ValidationError):
-            _ = Settings()
+            _ = Settings()  # type: ignore
 
     def test_pydantic_base_settings_with_default_value(self, mock_secret_client):
         class Settings(BaseSettings):
@@ -242,3 +242,118 @@ class TestGoogleSecretManagerSettingsSource:
 
         with pytest.raises(Exception, match='Permission denied'):
             _ = secret_manager_mapping._secret_names
+
+    @pytest.mark.parametrize(
+        'case_sensitive, secret_name_in_gcp, requested_key, expected_value',
+        [
+            (True, 'test-secret', 'test-secret', 'test-value'),
+            (True, 'TEST-SECRET', 'TEST-SECRET', 'test-value'),
+            (True, 'testSecret', 'testSecret', 'test-value'),
+            (True, 'TEST-SECRET', 'test-secret', None),
+            (True, 'test-secret', 'TEST_SECRET', None),
+            (False, 'test-secret', 'TEST-SECRET', 'test-value'),
+            (False, 'TEST-SECRET', 'test-secret', 'test-value'),
+            (False, 'TEST-SECRET', 'TEST-SECRET', 'test-value'),
+            (False, 'testSecret', 'testSecret', 'test-value'),
+            (False, 'testSecret', 'TESTSECRET', 'test-value'),
+        ],
+    )
+    def test_secret_manager_mapping_retrieval_cases(
+        self, mocker, case_sensitive, secret_name_in_gcp, requested_key, expected_value
+    ):
+        """
+        Tests various combinations of case sensitivity and secret naming.
+        """
+        client = mocker.Mock(spec=SecretManagerServiceClient)
+        client.common_project_path.return_value = 'projects/test-project'
+        client.secret_version_path = (
+            lambda project, secret, version: f'projects/{project}/secrets/{secret}/versions/{version}'
+        )
+        client.parse_secret_path = SecretManagerServiceClient.parse_secret_path
+
+        # Mock list_secrets to return the specific secret name
+        secret = mocker.Mock()
+        secret.name = f'projects/test-project/secrets/{secret_name_in_gcp}'
+        client.list_secrets.return_value = [secret]
+
+        secret_response = mocker.Mock()
+        secret_response.payload.data.decode.return_value = 'test-value'
+
+        def mock_access_secret_version(name: str):
+            # GCP is always case-sensitive
+            if name == f'projects/test-project/secrets/{secret_name_in_gcp}/versions/latest':
+                return secret_response
+            raise Exception(f'Secret not found or access denied: {name}')
+
+        client.access_secret_version = mock_access_secret_version
+
+        mapping = GoogleSecretManagerMapping(client, project_id='test-project', case_sensitive=case_sensitive)
+
+        if expected_value is None:
+            # Depending on implementation, it might raise KeyError or return None if we try to access it via .get() or handled access
+            # The Mapping __getitem__ implementation in pydantic-settings currently returns None if access fails
+            # OR raises KeyError if the key isn't in the list at all.
+
+            # If the key is not in _secret_names, it raises KeyError.
+            # If it IS in _secret_names but access fails, it returns None.
+
+            # For case (True, 'TEST-SECRET', 'test-secret', None):
+            # _secret_names will be ['TEST-SECRET']. 'test-secret' is not in there. KeyError expected.
+            try:
+                val = mapping[requested_key]
+                assert val == expected_value
+            except KeyError:
+                assert expected_value is None
+        else:
+            assert mapping[requested_key] == expected_value
+
+    @pytest.mark.parametrize(
+        'case_sensitive, requested_key, expected_value',
+        [
+            (True, 'TEST-SECRET', 'UPPER_VAL'),
+            (True, 'test-secret', 'lower_val'),
+            # Case insensitive collision with "Prefer Exact Match" logic:
+            (False, 'TEST-SECRET', 'UPPER_VAL'),  # Exact match exists, prefer it
+            (False, 'test-secret', 'lower_val'),  # Exact match exists, prefer it
+            (False, 'Test-Secret', 'lower_val'),  # No exact match, fallback to 'lower_val' (last loaded)
+        ],
+    )
+    def test_secret_manager_mapping_collision(self, mocker, case_sensitive, requested_key, expected_value):
+        client = mocker.Mock(spec=SecretManagerServiceClient)
+        client.common_project_path.return_value = 'projects/test-project'
+        client.secret_version_path = (
+            lambda project, secret, version: f'projects/{project}/secrets/{secret}/versions/{version}'
+        )
+        client.parse_secret_path = SecretManagerServiceClient.parse_secret_path
+
+        # Mock list_secrets with colliding names
+        secrets = []
+        for name in ['TEST-SECRET', 'test-secret']:
+            s = mocker.Mock()
+            s.name = f'projects/test-project/secrets/{name}'
+            secrets.append(s)
+        client.list_secrets.return_value = secrets
+
+        def mock_access_secret_version(name: str):
+            # name format: projects/test-project/secrets/{SECRET_ID}/versions/latest
+            if '/secrets/TEST-SECRET/' in name:
+                resp = mocker.Mock()
+                resp.payload.data.decode.return_value = 'UPPER_VAL'
+                return resp
+            elif '/secrets/test-secret/' in name:
+                resp = mocker.Mock()
+                resp.payload.data.decode.return_value = 'lower_val'
+                return resp
+            raise Exception(f'Secret not found: {name}')
+
+        client.access_secret_version = mock_access_secret_version
+
+        mapping = GoogleSecretManagerMapping(client, project_id='test-project', case_sensitive=case_sensitive)
+
+        if not case_sensitive:
+            with pytest.warns(UserWarning, match='Secret collision'):
+                _ = mapping._secret_name_map
+        else:
+            _ = mapping._secret_name_map
+
+        assert mapping[requested_key] == expected_value
