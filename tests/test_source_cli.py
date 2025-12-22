@@ -55,14 +55,6 @@ from pydantic_settings.sources import (
 )
 
 ARGPARSE_OPTIONS_TEXT = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
-PYTHON_3_14 = sys.version_info >= (3, 14)
-IS_WINDOWS = sys.platform.startswith('win')
-
-
-def sanitize_cli_output(output: str) -> str:
-    output = re.sub(r'\bpython3? ', '', output)
-    output = output.replace('python.exe -m pytest', 'example.py')  # For Windows compatibility
-    return output
 
 
 @pytest.fixture(autouse=True)
@@ -242,7 +234,7 @@ def test_cli_alias_subcommand_and_positional_args(capsys, monkeypatch):
     class SubCmd(BaseModel):
         pos_arg: CliPositionalArg[str] = Field(validation_alias='pos-arg')
 
-    class Cfg(BaseSettings):
+    class Cfg(BaseSettings, cli_prog_name='example.py'):
         sub_cmd: CliSubCommand[SubCmd] = Field(validation_alias='sub-cmd')
 
     cfg = Cfg(**{'sub-cmd': {'pos-arg': 'howdy'}})
@@ -257,7 +249,7 @@ def test_cli_alias_subcommand_and_positional_args(capsys, monkeypatch):
         with pytest.raises(SystemExit):
             CliApp.run(Cfg)
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h] {{sub-cmd}} ...
 
 {ARGPARSE_OPTIONS_TEXT}:
@@ -273,7 +265,7 @@ subcommands:
         with pytest.raises(SystemExit):
             CliApp.run(Cfg)
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py sub-cmd [-h] POS-ARG
 
 positional arguments:
@@ -463,7 +455,7 @@ def test_cli_case_insensitive_arg():
 
 
 def test_cli_help_differentiation(capsys, monkeypatch):
-    class Cfg(BaseSettings):
+    class Cfg(BaseSettings, cli_prog_name='example.py'):
         foo: str
         bar: int = 123
         boo: int = Field(default_factory=lambda: 456)
@@ -475,7 +467,7 @@ def test_cli_help_differentiation(capsys, monkeypatch):
             CliApp.run(Cfg)
 
         assert (
-            re.sub(r'0x\w+', '0xffffffff', sanitize_cli_output(capsys.readouterr().out), flags=re.MULTILINE)
+            re.sub(r'0x\w+', '0xffffffff', capsys.readouterr().out, flags=re.MULTILINE)
             == f"""usage: example.py [-h] [--foo str] [--bar int] [--boo int]
 
 {ARGPARSE_OPTIONS_TEXT}:
@@ -488,10 +480,10 @@ def test_cli_help_differentiation(capsys, monkeypatch):
 
 
 def test_cli_help_string_format(capsys, monkeypatch):
-    class Cfg(BaseSettings, cli_parse_args=True):
+    class Cfg(BaseSettings, cli_parse_args=True, cli_prog_name='example.py'):
         date_str: str = '%Y-%m-%d'
 
-    class MultilineDoc(BaseSettings, cli_parse_args=True):
+    class MultilineDoc(BaseSettings, cli_parse_args=True, cli_prog_name='example.py'):
         """
         My
         Multiline
@@ -505,7 +497,7 @@ def test_cli_help_string_format(capsys, monkeypatch):
             Cfg()
 
         assert (
-            re.sub(r'0x\w+', '0xffffffff', sanitize_cli_output(capsys.readouterr().out), flags=re.MULTILINE)
+            re.sub(r'0x\w+', '0xffffffff', capsys.readouterr().out, flags=re.MULTILINE)
             == f"""usage: example.py [-h] [--date_str str]
 
 {ARGPARSE_OPTIONS_TEXT}:
@@ -517,7 +509,7 @@ def test_cli_help_string_format(capsys, monkeypatch):
         with pytest.raises(SystemExit):
             MultilineDoc()
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h]
 
 My
@@ -533,7 +525,7 @@ Doc
             cli_settings_source = CliSettingsSource(MultilineDoc, formatter_class=argparse.HelpFormatter)
             MultilineDoc(_cli_settings_source=cli_settings_source(args=True))
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h]
 
 My Multiline Doc
@@ -558,25 +550,18 @@ def test_cli_help_union_of_models(capsys, monkeypatch):
     class Tiger(Cat):
         roar: str = 'roar'
 
-    class Car(BaseSettings, cli_parse_args=True):
+    class Car(BaseSettings, cli_parse_args=True, cli_prog_name='example.py'):
         driver: Cat | Dog | Bird = Tiger(meow='purr')
 
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
 
-        if PYTHON_3_14:
-            if IS_WINDOWS:
-                usage = '                            [--driver.bark str] [--driver.caww str]\n                            [--driver.tweet str]'
-            else:
-                usage = '                         [--driver.bark str] [--driver.caww str]\n                         [--driver.tweet str]'
-        else:
-            usage = '                  [--driver.bark str] [--driver.caww str] [--driver.tweet str]'
         with pytest.raises(SystemExit):
             Car()
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h] [--driver [JSON]] [--driver.meow str]
-{usage}
+                  [--driver.bark str] [--driver.caww str] [--driver.tweet str]
 
 {ARGPARSE_OPTIONS_TEXT}:
   -h, --help          show this help message and exit
@@ -603,7 +588,7 @@ def test_cli_help_default_or_none_model(capsys, monkeypatch):
         flag: bool
         deep: DeepSubModel = DeepSubModel(flag=True)
 
-    class Settings(BaseSettings, cli_parse_args=True):
+    class Settings(BaseSettings, cli_parse_args=True, cli_prog_name='example.py'):
         flag: bool = True
         sub_model: SubModel = SubModel(flag=False)
         opt_model: DeepSubModel | None = Field(None, description='Group Doc')
@@ -612,54 +597,23 @@ def test_cli_help_default_or_none_model(capsys, monkeypatch):
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
 
-        if PYTHON_3_14:
-            if IS_WINDOWS:
-                text = """                            [--sub_model.flag bool] [--sub_model.deep [JSON]]
-                            [--sub_model.deep.flag bool]
-                            [--sub_model.deep.deeper [{JSON,null}]]
-                            [--sub_model.deep.deeper.flag bool]
-                            [--opt_model [{JSON,null}]]
-                            [--opt_model.flag bool]
-                            [--opt_model.deeper [{JSON,null}]]
-                            [--opt_model.deeper.flag bool]
-                            [--fact_model [JSON]] [--fact_model.flag bool]
-                            [--fact_model.deep [JSON]]
-                            [--fact_model.deep.flag bool]
-                            [--fact_model.deep.deeper [{JSON,null}]]
-                            [--fact_model.deep.deeper.flag bool]
-"""
-            else:
-                text = """                         [--sub_model.flag bool] [--sub_model.deep [JSON]]
-                         [--sub_model.deep.flag bool]
-                         [--sub_model.deep.deeper [{JSON,null}]]
-                         [--sub_model.deep.deeper.flag bool]
-                         [--opt_model [{JSON,null}]] [--opt_model.flag bool]
-                         [--opt_model.deeper [{JSON,null}]]
-                         [--opt_model.deeper.flag bool] [--fact_model [JSON]]
-                         [--fact_model.flag bool] [--fact_model.deep [JSON]]
-                         [--fact_model.deep.flag bool]
-                         [--fact_model.deep.deeper [{JSON,null}]]
-                         [--fact_model.deep.deeper.flag bool]
-"""
-        else:
-            text = """                  [--sub_model.flag bool] [--sub_model.deep [JSON]]
-                  [--sub_model.deep.flag bool]
-                  [--sub_model.deep.deeper [{JSON,null}]]
-                  [--sub_model.deep.deeper.flag bool]
-                  [--opt_model [{JSON,null}]] [--opt_model.flag bool]
-                  [--opt_model.deeper [{JSON,null}]]
-                  [--opt_model.deeper.flag bool] [--fact_model [JSON]]
-                  [--fact_model.flag bool] [--fact_model.deep [JSON]]
-                  [--fact_model.deep.flag bool]
-                  [--fact_model.deep.deeper [{JSON,null}]]
-                  [--fact_model.deep.deeper.flag bool]
-"""
         with pytest.raises(SystemExit):
             Settings()
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h] [--flag bool] [--sub_model [JSON]]
-{text}
+                  [--sub_model.flag bool] [--sub_model.deep [JSON]]
+                  [--sub_model.deep.flag bool]
+                  [--sub_model.deep.deeper [{{JSON,null}}]]
+                  [--sub_model.deep.deeper.flag bool]
+                  [--opt_model [{{JSON,null}}]] [--opt_model.flag bool]
+                  [--opt_model.deeper [{{JSON,null}}]]
+                  [--opt_model.deeper.flag bool] [--fact_model [JSON]]
+                  [--fact_model.flag bool] [--fact_model.deep [JSON]]
+                  [--fact_model.deep.flag bool]
+                  [--fact_model.deep.deeper [{{JSON,null}}]]
+                  [--fact_model.deep.deeper.flag bool]
+
 {ARGPARSE_OPTIONS_TEXT}:
   -h, --help            show this help message and exit
   --flag bool           (default: True)
@@ -1111,7 +1065,7 @@ def test_cli_subcommand_union(capsys, monkeypatch):
 
         g: str
 
-    class Root1(BaseSettings):
+    class Root1(BaseSettings, cli_prog_name='example.py'):
         """Root Help"""
 
         subcommand: CliSubCommand[AlphaCmd | BetaCmd | GammaCmd] = Field(description='Field Help')
@@ -1132,7 +1086,7 @@ def test_cli_subcommand_union(capsys, monkeypatch):
         with pytest.raises(SystemExit):
             CliApp.run(Root1)
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h] {{AlphaCmd,BetaCmd,GammaCmd}} ...
 
 Root Help
@@ -1153,7 +1107,7 @@ subcommands:
         with pytest.raises(SystemExit):
             Root1(_cli_parse_args=True, _cli_use_class_docs_for_groups=True)
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h] {{AlphaCmd,BetaCmd,GammaCmd}} ...
 
 Root Help
@@ -1171,7 +1125,7 @@ subcommands:
 """
         )
 
-    class Root2(BaseSettings):
+    class Root2(BaseSettings, cli_prog_name='example.py'):
         """Root Help"""
 
         subcommand: CliSubCommand[AlphaCmd | GammaCmd] = Field(description='Field Help')
@@ -1193,7 +1147,7 @@ subcommands:
         with pytest.raises(SystemExit):
             CliApp.run(Root2, cli_args=True)
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h] {{AlphaCmd,GammaCmd,beta}} ...
 
 Root Help
@@ -1214,7 +1168,7 @@ subcommands:
         with pytest.raises(SystemExit):
             Root2(_cli_parse_args=True, _cli_use_class_docs_for_groups=True)
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h] {{AlphaCmd,GammaCmd,beta}} ...
 
 Root Help
@@ -1232,7 +1186,7 @@ subcommands:
 """
         )
 
-    class Root3(BaseSettings):
+    class Root3(BaseSettings, cli_prog_name='example.py'):
         """Root Help"""
 
         beta: CliSubCommand[BetaCmd] = Field(description='Field Beta Help')
@@ -1254,7 +1208,7 @@ subcommands:
         with pytest.raises(SystemExit):
             CliApp.run(Root3)
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h] {{beta,AlphaCmd,GammaCmd}} ...
 
 Root Help
@@ -1273,7 +1227,7 @@ subcommands:
         with pytest.raises(SystemExit):
             Root3(_cli_parse_args=True, _cli_use_class_docs_for_groups=True)
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h] {{beta,AlphaCmd,GammaCmd}} ...
 
 Root Help
@@ -1446,7 +1400,7 @@ def test_cli_enums(capsys, monkeypatch):
         bird = 2
         crow = 2
 
-    class Cfg(BaseSettings):
+    class Cfg(BaseSettings, cli_prog_name='example.py'):
         pet: Pet = Pet.dog
         union_pet: Pet | int = 43
 
@@ -1471,19 +1425,12 @@ def test_cli_enums(capsys, monkeypatch):
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--help'])
 
-        if PYTHON_3_14:
-            if IS_WINDOWS:
-                text = '                            [--union_pet {{dog,cat,bird,crow},int}]'
-            else:
-                text = '                         [--union_pet {{dog,cat,bird,crow},int}]'
-        else:
-            text = '                  [--union_pet {{dog,cat,bird,crow},int}]'
         with pytest.raises(SystemExit):
             CliApp.run(Cfg)
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h] [--pet {{dog,cat,bird,crow}}]
-{text}
+                  [--union_pet {{{{dog,cat,bird,crow}},int}}]
 
 {ARGPARSE_OPTIONS_TEXT}:
   -h, --help            show this help message and exit
@@ -1704,7 +1651,7 @@ def test_cli_avoid_json(capsys, monkeypatch):
     class SubModel(BaseModel):
         v1: int
 
-    class Settings(BaseSettings):
+    class Settings(BaseSettings, cli_prog_name='example.py'):
         sub_model: SubModel
 
         model_config = SettingsConfigDict(cli_parse_args=True)
@@ -1716,7 +1663,7 @@ def test_cli_avoid_json(capsys, monkeypatch):
             Settings(_cli_avoid_json=False)
 
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h] [--sub_model [JSON]] [--sub_model.v1 int]
 
 {ARGPARSE_OPTIONS_TEXT}:
@@ -1732,7 +1679,7 @@ sub_model options:
             Settings(_cli_avoid_json=True)
 
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h] [--sub_model.v1 int]
 
 {ARGPARSE_OPTIONS_TEXT}:
@@ -1748,7 +1695,7 @@ def test_cli_remove_empty_groups(capsys, monkeypatch):
     class SubModel(BaseModel):
         pass
 
-    class Settings(BaseSettings):
+    class Settings(BaseSettings, cli_prog_name='example.py'):
         sub_model: SubModel
 
         model_config = SettingsConfigDict(cli_parse_args=True)
@@ -1760,7 +1707,7 @@ def test_cli_remove_empty_groups(capsys, monkeypatch):
             Settings(_cli_avoid_json=False)
 
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h] [--sub_model [JSON]]
 
 {ARGPARSE_OPTIONS_TEXT}:
@@ -1775,7 +1722,7 @@ sub_model options:
             Settings(_cli_avoid_json=True)
 
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h]
 
 {ARGPARSE_OPTIONS_TEXT}:
@@ -1785,7 +1732,7 @@ sub_model options:
 
 
 def test_cli_hide_none_type(capsys, monkeypatch):
-    class Settings(BaseSettings):
+    class Settings(BaseSettings, cli_prog_name='example.py'):
         v0: str | None
 
         model_config = SettingsConfigDict(cli_parse_args=True)
@@ -1797,7 +1744,7 @@ def test_cli_hide_none_type(capsys, monkeypatch):
             Settings(_cli_hide_none_type=False)
 
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h] [--v0 {{str,null}}]
 
 {ARGPARSE_OPTIONS_TEXT}:
@@ -1810,7 +1757,7 @@ def test_cli_hide_none_type(capsys, monkeypatch):
             Settings(_cli_hide_none_type=True)
 
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h] [--v0 str]
 
 {ARGPARSE_OPTIONS_TEXT}:
@@ -1826,7 +1773,7 @@ def test_cli_use_class_docs_for_groups(capsys, monkeypatch):
 
         v1: int
 
-    class Settings(BaseSettings):
+    class Settings(BaseSettings, cli_prog_name='example.py'):
         """My application help text."""
 
         sub_model: SubModel = Field(description='The help text from the field description')
@@ -1840,7 +1787,7 @@ def test_cli_use_class_docs_for_groups(capsys, monkeypatch):
             Settings(_cli_use_class_docs_for_groups=False)
 
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h] [--sub_model [JSON]] [--sub_model.v1 int]
 
 My application help text.
@@ -1860,7 +1807,7 @@ sub_model options:
             Settings(_cli_use_class_docs_for_groups=True)
 
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h] [--sub_model [JSON]] [--sub_model.v1 int]
 
 My application help text.
@@ -1905,7 +1852,7 @@ def test_cli_enforce_required(env):
 
 
 def test_cli_exit_on_error(capsys, monkeypatch):
-    class Settings(BaseSettings, cli_parse_args=True): ...
+    class Settings(BaseSettings, cli_parse_args=True, cli_prog_name='example.py'): ...
 
     with monkeypatch.context() as m:
         m.setattr(sys, 'argv', ['example.py', '--bad-arg'])
@@ -1913,7 +1860,7 @@ def test_cli_exit_on_error(capsys, monkeypatch):
         with pytest.raises(SystemExit):
             Settings()
         assert (
-            sanitize_cli_output(capsys.readouterr().err)
+            capsys.readouterr().err
             == """usage: example.py [-h]
 example.py: error: unrecognized arguments: --bad-arg
 """
@@ -2346,7 +2293,7 @@ def test_cli_suppress(capsys, monkeypatch):
         visible_b: int
         deep_hidden_obj: CliSuppress[DeepHiddenSubModel] = Field(description='deep_hidden_obj description')
 
-    class Settings(BaseSettings, cli_parse_args=True):
+    class Settings(BaseSettings, cli_parse_args=True, cli_prog_name='example.py'):
         field_a: CliSuppress[int] = 0
         field_b: str = Field(default='hi', description=CLI_SUPPRESS)
         hidden_obj: CliSuppress[HiddenSubModel] = Field(description='hidden_obj description')
@@ -2358,22 +2305,10 @@ def test_cli_suppress(capsys, monkeypatch):
         with pytest.raises(SystemExit):
             CliApp.run(Settings)
 
-        if PYTHON_3_14:
-            if IS_WINDOWS:
-                text = """usage: example.py [-h] [--visible_obj [JSON]]
-                            [--visible_obj.visible_a int]
-                            [--visible_obj.visible_b int]"""
-            else:
-                text = """usage: example.py [-h] [--visible_obj [JSON]]
-                         [--visible_obj.visible_a int]
-                         [--visible_obj.visible_b int]"""
-
-        else:
-            text = """usage: example.py [-h] [--visible_obj [JSON]] [--visible_obj.visible_a int]
-                  [--visible_obj.visible_b int]"""
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
-            == f"""{text}
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] [--visible_obj [JSON]] [--visible_obj.visible_a int]
+                  [--visible_obj.visible_b int]
 
 {ARGPARSE_OPTIONS_TEXT}:
   -h, --help            show this help message and exit
@@ -2394,7 +2329,7 @@ def test_cli_mutually_exclusive_group(capsys, monkeypatch):
         diameter: float | None = 22
         perimeter: float | None = 23
 
-    class Settings(BaseModel):
+    class Settings(BaseModel, cli_prog_name='example.py'):
         circle_optional: Circle = Circle(radius=None, diameter=None, perimeter=24)
         circle_required: Circle
 
@@ -2424,34 +2359,20 @@ def test_cli_mutually_exclusive_group(capsys, monkeypatch):
         m.setattr(sys, 'argv', ['example.py', '--help'])
         with pytest.raises(SystemExit):
             CliApp.run(Settings)
-        if PYTHON_3_14:
-            if IS_WINDOWS:
-                usage = """usage: example.py [-h] [--circle-optional.radius float |
-                            --circle-optional.diameter float |
-                            --circle-optional.perimeter float]
-                            (--circle-required.radius float |
-                            --circle-required.diameter float |
-                            --circle-required.perimeter float)"""
-            else:
-                usage = """usage: example.py [-h] [--circle-optional.radius float |
-                         --circle-optional.diameter float |
-                         --circle-optional.perimeter float]
-                         (--circle-required.radius float |
-                         --circle-required.diameter float |
-                         --circle-required.perimeter float)"""
-        elif sys.version_info >= (3, 13):
-            usage = """usage: example.py [-h] [--circle-optional.radius float |
+        usage = (
+            """usage: example.py [-h] [--circle-optional.radius float |
                   --circle-optional.diameter float |
                   --circle-optional.perimeter float]
                   (--circle-required.radius float |
                   --circle-required.diameter float |
                   --circle-required.perimeter float)"""
-        else:
-            usage = """usage: example.py [-h]
+            if sys.version_info >= (3, 13)
+            else """usage: example.py [-h]
                   [--circle-optional.radius float | --circle-optional.diameter float | --circle-optional.perimeter float]
                   (--circle-required.radius float | --circle-required.diameter float | --circle-required.perimeter float)"""
+        )
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""{usage}
 
 {ARGPARSE_OPTIONS_TEXT}:
@@ -2604,7 +2525,7 @@ def test_cli_kebab_case(capsys, monkeypatch):
         sub_other_subcmd: CliSubCommand[DeepSubModel]
         sub_arg: str
 
-    class Root(BaseModel):
+    class Root(BaseModel, cli_prog_name='example.py'):
         root_subcmd: CliSubCommand[SubModel]
         other_subcmd: CliSubCommand[SubModel]
         root_arg: str
@@ -2648,7 +2569,7 @@ def test_cli_kebab_case(capsys, monkeypatch):
         with pytest.raises(SystemExit):
             CliApp.run(Root)
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
+            capsys.readouterr().out
             == f"""usage: example.py [-h] --root-arg str {{root-subcmd,other-subcmd}} ...
 
 {ARGPARSE_OPTIONS_TEXT}:
@@ -2662,22 +2583,13 @@ subcommands:
 """
         )
 
-        if PYTHON_3_14:
-            if IS_WINDOWS:
-                usage = """usage: example.py root-subcmd [-h] --sub-arg str
-                                        {sub-subcmd,sub-other-subcmd} ..."""
-            else:
-                usage = """usage: example.py root-subcmd [-h] --sub-arg str
-                                     {sub-subcmd,sub-other-subcmd} ..."""
-        else:
-            usage = """usage: example.py root-subcmd [-h] --sub-arg str
-                              {sub-subcmd,sub-other-subcmd} ..."""
         m.setattr(sys, 'argv', ['example.py', 'root-subcmd', '--help'])
         with pytest.raises(SystemExit):
             CliApp.run(Root)
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
-            == f"""{usage}
+            capsys.readouterr().out
+            == f"""usage: example.py root-subcmd [-h] --sub-arg str
+                              {{sub-subcmd,sub-other-subcmd}} ...
 
 {ARGPARSE_OPTIONS_TEXT}:
   -h, --help            show this help message and exit
@@ -2690,21 +2602,12 @@ subcommands:
 """
         )
 
-        if PYTHON_3_14:
-            if IS_WINDOWS:
-                usage = """usage: example.py root-subcmd sub-subcmd [-h] --deep-arg str
-                                                   DEEP-POS-ARG"""
-            else:
-                usage = """usage: example.py root-subcmd sub-subcmd [-h] --deep-arg str
-                                                DEEP-POS-ARG"""
-        else:
-            usage = """usage: example.py root-subcmd sub-subcmd [-h] --deep-arg str DEEP-POS-ARG"""
         m.setattr(sys, 'argv', ['example.py', 'root-subcmd', 'sub-subcmd', '--help'])
         with pytest.raises(SystemExit):
             CliApp.run(Root)
         assert (
-            sanitize_cli_output(capsys.readouterr().out)
-            == f"""{usage}
+            capsys.readouterr().out
+            == f"""usage: example.py root-subcmd sub-subcmd [-h] --deep-arg str DEEP-POS-ARG
 
 positional arguments:
   DEEP-POS-ARG
