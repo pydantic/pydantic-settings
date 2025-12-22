@@ -1,10 +1,12 @@
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
-from pydantic_settings import BaseSettings, EnvSettingsSource
+from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
     import keyring
+
+    from pydantic_settings import BaseSettings
 else:
     keyring = None
 
