@@ -1301,7 +1301,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 default = f'(default: {field_info.default if enum_name is None else enum_name})'
             elif field_info.default_factory is not None:
                 default = f'(default factory: {self._metavar_format(field_info.default_factory)})'
-            _help += f' {default}' if _help else default
+
+            if _CliToggleFlag in field_info.metadata:
+                if not _help:
+                    _help = '(toggle)'
+            else:
+                _help += f' {default}' if _help else default
         return _help.replace('%', '%%') if issubclass(type(self._root_parser), ArgumentParser) else _help
 
     def _is_field_suppressed(self, field_info: FieldInfo) -> bool:
