@@ -1,6 +1,7 @@
 from __future__ import annotations as _annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import AnyHttpUrl, Field
 
@@ -116,3 +117,20 @@ def test_merging_preserves_earlier_values(tmp_path: Path, env):
     assert s.b == 20  # init wins
     # nested: dotenv provides x=1; env provides y=3; deep merged => {x:1, y:3}
     assert s.nested == {'x': 1, 'y': 3}
+
+
+def test_init_kwargs_override_env_with_alias_and_extra_forbid(env):
+    # Reproduction for https://github.com/pydantic/pydantic-settings/issues/744
+    class Settings(BaseSettings):
+        env_kind: Literal['dev', 'hosted'] = Field(default='dev', alias='ENV_KIND2')
+        model_config = SettingsConfigDict(populate_by_name=True, extra='forbid')
+
+    env.set('ENV_KIND', 'dev')
+
+    # This should work: init kwargs should override env vars
+    # We saw intermittent failures due to non-deterministic set.pop(), it failed with:
+    # pydantic_core._pydantic_core.ValidationError: 1 validation error for Settings
+    # env_kind
+    #   Extra inputs are not permitted [type=extra_forbidden, input_value='dev', input_type=str]
+    s = Settings(env_kind='hosted')
+    assert s.env_kind == 'hosted'
