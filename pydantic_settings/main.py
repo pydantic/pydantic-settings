@@ -463,6 +463,9 @@ class BaseSettings(BaseModel):
     ) -> None:
         """
         Restore the init_kwarg key names to the final merged state dictionary.
+
+        This function renames keys in state to match the original init_kwargs key names,
+        preserving the merged values from the source priority order.
         """
         if init_kwargs and state:
             state_kwarg_names = set(state.keys())
@@ -478,7 +481,25 @@ class BaseSettings(BaseModel):
                 init_kwarg_name = init_kwarg_names & matchable_names
                 state_kwarg_name = state_kwarg_names & matchable_names
                 if init_kwarg_name and state_kwarg_name:
-                    state[init_kwarg_name.pop()] = state.pop(state_kwarg_name.pop())
+                    # Use deterministic selection for both keys.
+                    # Target key: the key from init_kwargs that should be used in the final state.
+                    target_key = next(iter(init_kwarg_name))
+                    # Source key: prefer the alias (first in alias_names) if present in state,
+                    # as InitSettingsSource normalizes to the preferred alias.
+                    # This ensures we get the highest-priority value for this field.
+                    source_key = None
+                    for alias in alias_names:
+                        if alias in state_kwarg_name:
+                            source_key = alias
+                            break
+                    if source_key is None:
+                        # Fall back to field_name if no alias found in state
+                        source_key = field_name if field_name in state_kwarg_name else next(iter(state_kwarg_name))
+                    # Get the value from the source key and remove all matching keys
+                    value = state.pop(source_key)
+                    for key in state_kwarg_name - {source_key}:
+                        state.pop(key, None)
+                    state[target_key] = value
 
     @staticmethod
     def _settings_warn_unused_config_keys(sources: tuple[object, ...], model_config: SettingsConfigDict) -> None:
