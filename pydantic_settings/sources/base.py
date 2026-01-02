@@ -20,7 +20,7 @@ from typing_inspection.introspection import is_union_origin
 
 from ..exceptions import SettingsError
 from ..utils import _lenient_issubclass
-from .types import EnvNoneType, ForceDecode, NoDecode, PathType, PydanticModel, _CliSubCommand
+from .types import EnvNoneType, EnvPrefixTarget, ForceDecode, NoDecode, PathType, PydanticModel, _CliSubCommand
 from .utils import (
     _annotation_is_complex,
     _get_alias_names,
@@ -330,6 +330,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         settings_cls: type[BaseSettings],
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
+        env_prefix_target: EnvPrefixTarget | None = None,
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
@@ -337,6 +338,9 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         super().__init__(settings_cls)
         self.case_sensitive = case_sensitive if case_sensitive is not None else self.config.get('case_sensitive', False)
         self.env_prefix = env_prefix if env_prefix is not None else self.config.get('env_prefix', '')
+        self.env_prefix_target = (
+            env_prefix_target if env_prefix_target is not None else self.config.get('env_prefix_target', 'variable')
+        )
         self.env_ignore_empty = (
             env_ignore_empty if env_ignore_empty is not None else self.config.get('env_ignore_empty', False)
         )
@@ -372,26 +376,34 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             v_alias = field.validation_alias
 
         if v_alias:
+            env_prefix = self.env_prefix if self.env_prefix_target in ('alias', 'all') else ''
             if isinstance(v_alias, list):  # AliasChoices, AliasPath
                 for alias in v_alias:
                     if isinstance(alias, str):  # AliasPath
-                        field_info.append((alias, self._apply_case_sensitive(alias), True if len(alias) > 1 else False))
+                        field_info.append(
+                            (alias, self._apply_case_sensitive(env_prefix + alias), True if len(alias) > 1 else False)
+                        )
                     elif isinstance(alias, list):  # AliasChoices
                         first_arg = cast(str, alias[0])  # first item of an AliasChoices must be a str
                         field_info.append(
-                            (first_arg, self._apply_case_sensitive(first_arg), True if len(alias) > 1 else False)
+                            (
+                                first_arg,
+                                self._apply_case_sensitive(env_prefix + first_arg),
+                                True if len(alias) > 1 else False,
+                            )
                         )
             else:  # string validation alias
-                field_info.append((v_alias, self._apply_case_sensitive(v_alias), False))
+                field_info.append((v_alias, self._apply_case_sensitive(env_prefix + v_alias), False))
 
         if not v_alias or self.config.get('populate_by_name', False) or self.config.get('validate_by_name', False):
             annotation = field.annotation
+            env_prefix = self.env_prefix if self.env_prefix_target in ('variable', 'all') else ''
             if typing_objects.is_typealiastype(annotation) or typing_objects.is_typealiastype(get_origin(annotation)):
                 annotation = _strip_annotated(annotation.__value__)  # type: ignore[union-attr]
             if is_union_origin(get_origin(annotation)) and _union_is_complex(annotation, field.metadata):
-                field_info.append((field_name, self._apply_case_sensitive(self.env_prefix + field_name), True))
+                field_info.append((field_name, self._apply_case_sensitive(env_prefix + field_name), True))
             else:
-                field_info.append((field_name, self._apply_case_sensitive(self.env_prefix + field_name), False))
+                field_info.append((field_name, self._apply_case_sensitive(env_prefix + field_name), False))
 
         return field_info
 

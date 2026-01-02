@@ -17,7 +17,7 @@ from typing_inspection.introspection import is_union_origin
 
 from ...utils import _lenient_issubclass
 from ..base import PydanticBaseEnvSettingsSource
-from ..types import EnvNoneType
+from ..types import EnvNoneType, EnvPrefixTarget
 from ..utils import (
     _annotation_contains_types,
     _annotation_enum_name_to_val,
@@ -40,6 +40,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         settings_cls: type[BaseSettings],
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
+        env_prefix_target: EnvPrefixTarget | None = None,
         env_nested_delimiter: str | None = None,
         env_nested_max_split: int | None = None,
         env_ignore_empty: bool | None = None,
@@ -47,7 +48,13 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         env_parse_enums: bool | None = None,
     ) -> None:
         super().__init__(
-            settings_cls, case_sensitive, env_prefix, env_ignore_empty, env_parse_none_str, env_parse_enums
+            settings_cls,
+            case_sensitive,
+            env_prefix,
+            env_prefix_target,
+            env_ignore_empty,
+            env_parse_none_str,
+            env_parse_enums,
         )
         self.env_nested_delimiter = (
             env_nested_delimiter if env_nested_delimiter is not None else self.config.get('env_nested_delimiter')

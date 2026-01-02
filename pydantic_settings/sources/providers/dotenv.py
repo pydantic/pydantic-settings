@@ -14,7 +14,7 @@ from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
 )
 from typing_inspection.introspection import is_union_origin
 
-from ..types import ENV_FILE_SENTINEL, DotenvType
+from ..types import ENV_FILE_SENTINEL, DotenvType, EnvPrefixTarget
 from ..utils import (
     _annotation_is_complex,
     _union_is_complex,
@@ -38,6 +38,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
         env_file_encoding: str | None = None,
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
+        env_prefix_target: EnvPrefixTarget | None = None,
         env_nested_delimiter: str | None = None,
         env_nested_max_split: int | None = None,
         env_ignore_empty: bool | None = None,
@@ -52,6 +53,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
             settings_cls,
             case_sensitive,
             env_prefix,
+            env_prefix_target,
             env_nested_delimiter,
             env_nested_max_split,
             env_ignore_empty,

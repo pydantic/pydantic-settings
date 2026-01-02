@@ -4,7 +4,7 @@ from __future__ import annotations as _annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from pydantic._internal._dataclasses import PydanticDataclass
@@ -31,6 +31,7 @@ class ForceDecode:
     pass
 
 
+EnvPrefixTarget = Literal['variable', 'alias', 'all']
 DotenvType = Path | str | Sequence[Path | str]
 PathType = Path | str | Sequence[Path | str]
 DEFAULT_PATH: PathType = Path('')
@@ -72,6 +73,7 @@ class _CliUnknownArgs:
 __all__ = [
     'DEFAULT_PATH',
     'ENV_FILE_SENTINEL',
+    'EnvPrefixTarget',
     'DotenvType',
     'EnvNoneType',
     'ForceDecode',

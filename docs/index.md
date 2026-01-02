@@ -185,6 +185,22 @@ class Settings(BaseSettings):
 
 1. `env_prefix` will be ignored and the value will be read from `FooAlias` environment variable.
 
+
+If you want to apply `env_prefix` to aliases as well, set `env_prefix_target='all'` or `env_prefix_target='alias'`, which applies `env_prefix` to alias fields too.
+
+
+```py
+from pydantic import Field
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix='my_prefix_', env_prefix_target='all')
+
+    foo: str = Field('xxx', alias='FooAlias')
+```
+
 ### Case-sensitivity
 
 By default, environment variable names are case-insensitive.

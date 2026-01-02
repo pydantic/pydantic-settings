@@ -32,7 +32,16 @@ from .providers.pyproject import PyprojectTomlConfigSettingsSource
 from .providers.secrets import SecretsSettingsSource
 from .providers.toml import TomlConfigSettingsSource
 from .providers.yaml import YamlConfigSettingsSource
-from .types import DEFAULT_PATH, ENV_FILE_SENTINEL, DotenvType, ForceDecode, NoDecode, PathType, PydanticModel
+from .types import (
+    DEFAULT_PATH,
+    ENV_FILE_SENTINEL,
+    DotenvType,
+    EnvPrefixTarget,
+    ForceDecode,
+    NoDecode,
+    PathType,
+    PydanticModel,
+)
 
 __all__ = [
     'CLI_SUPPRESS',
@@ -53,6 +62,7 @@ __all__ = [
     'DefaultSettingsSource',
     'DotEnvSettingsSource',
     'DotenvType',
+    'EnvPrefixTarget',
     'EnvSettingsSource',
     'ForceDecode',
     'GoogleSecretManagerSettingsSource',
