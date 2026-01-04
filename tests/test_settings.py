@@ -953,6 +953,24 @@ def test_validation_alias_with_env_prefix(env):
     assert Settings().foobar == 'bar'
 
 
+@pytest.mark.parametrize('env_prefix_target', ['all', 'alias'])
+def test_validation_alias_with_env_prefix_and_env_prefix_target(env, env_prefix_target):
+    class Settings(BaseSettings):
+        foobar: str = Field(validation_alias='foo')
+
+        model_config = SettingsConfigDict(env_prefix='p_', env_prefix_target=env_prefix_target)
+
+    env.set('foo', 'bar')
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert exc_info.value.errors(include_url=False) == [
+        {'type': 'missing', 'loc': ('foo',), 'msg': 'Field required', 'input': {}}
+    ]
+
+    env.set('p_foo', 'bar')
+    assert Settings().foobar == 'bar'
+
+
 def test_case_sensitive(monkeypatch):
     class Settings(BaseSettings):
         foo: str
@@ -3124,6 +3142,25 @@ def test_dotenv_env_prefix_env_with_alias_without_prefix(tmp_path):
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(
             env_file=p,
+            env_prefix='TEST_',
+            extra='ignore',
+        )
+
+        foo: str = Field('xxx', alias='FooAlias')
+
+    s = Settings()
+    assert s.model_dump() == {'foo': 'foo'}
+
+
+@pytest.mark.parametrize('env_prefix_target', ['all', 'alias'])
+def test_dotenv_env_prefix_env_with_alias_with_prefix(tmp_path, env_prefix_target):
+    p = tmp_path / '.env'
+    p.write_text('TEST_FooAlias=foo')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=p,
+            env_prefix_target=env_prefix_target,
             env_prefix='TEST_',
             extra='ignore',
         )
