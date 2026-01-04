@@ -168,22 +168,6 @@ There are two ways to do this:
 
 Check the [`Field` aliases documentation](fields.md#field-aliases) for more information about aliases.
 
-`env_prefix` does not apply to fields with alias. It means the environment variable name is the same
-as field alias:
-
-```py
-from pydantic import Field
-
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix='my_prefix_')
-
-    foo: str = Field('xxx', alias='FooAlias')  # (1)!
-```
-
-1. `env_prefix` will be ignored and the value will be read from `FooAlias` environment variable.
 
 To apply `env_prefix` not only to variable names but also to aliases, set `env_prefix_target='all'`.
 To apply `env_prefix` only to aliases and not to variable names, set `env_prefix_target='alias'`.
@@ -205,7 +189,7 @@ class FooBarSettings(BaseSettings):
     bar: str
 
 
-os.environ['FooAlias'] = 'TARGET_FOO_VALUE'
+os.environ['FooAlias'] = 'TARGET_FOO_VALUE'  # (1)!
 os.environ['TARGET_BAR'] = 'TARGET_BAR_VALUE'
 print(FooBarSettings().model_dump())
 #> {'foo': 'TARGET_FOO_VALUE', 'bar': 'TARGET_BAR_VALUE'}
@@ -244,11 +228,13 @@ class TargetVarSettings(FooBarSettings):
     )
 
 
-os.environ['FooAlias'] = 'TARGET_VAR_FOO_VALUE'
+os.environ['FooAlias'] = 'TARGET_VAR_FOO_VALUE'  # (1)!
 os.environ['TARGET_VAR_BAR'] = 'TARGET_VAR_BAR_VALUE'
 print(TargetVarSettings().model_dump())
 #> {'foo': 'TARGET_VAR_FOO_VALUE', 'bar': 'TARGET_VAR_BAR_VALUE'}
 ```
+
+1. `env_prefix` will be ignored and the value will be read from `FooAlias` environment variable.
 
 ### Case-sensitivity
 
