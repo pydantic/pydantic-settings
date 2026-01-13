@@ -1336,7 +1336,32 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         alias_default[alias_path_index] = value
         return alias_path_only_defaults[arg_name]
 
-    def _serialized_args(self, model: PydanticModel, _is_submodel: bool = False) -> list[str]:
+    def _coerce_value_styles(
+        self,
+        model_default: Any,
+        value: str | list[Any] | dict[str, Any],
+        list_style: Literal['json', 'argparse', 'lazy'] = 'json',
+        dict_style: Literal['json', 'env'] = 'json',
+    ) -> list[str]:
+        values = [value]
+        if isinstance(value, str):
+            if isinstance(model_default, list):
+                if list_style == 'lazy':
+                    values = [','.join(f'{v}' for v in json.loads(value))]
+                elif list_style in ['argparse', 'lazy']:
+                    values = [f'{v}' for v in json.loads(value)]
+            elif isinstance(model_default, dict):
+                if dict_style == 'env':
+                    values = [f'{k}={v}' for k, v in json.loads(value).items()]
+        return values
+
+    def _serialized_args(
+        self,
+        model: PydanticModel,
+        _is_submodel: bool = False,
+        list_style: Literal['json', 'argparse', 'lazy'] = 'json',
+        dict_style: Literal['json', 'env'] = 'json',
+    ) -> list[str]:
         alias_path_only_defaults: dict[str, Any] = {}
         optional_args: list[str | list[Any] | dict[str, Any]] = []
         positional_args: list[str | list[Any] | dict[str, Any]] = []
@@ -1378,11 +1403,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if arg.kwargs.get('action') == BooleanOptionalAction and model_default is False and flag_chars == '--':
                 flag_chars += 'no-'
 
-            optional_args.append(f'{flag_chars}{arg_name}')
+            for value in self._coerce_value_styles(model_default, value, list_style, dict_style):
+                optional_args.append(f'{flag_chars}{arg_name}')
 
-            # If implicit bool flag, do not add a value
-            if arg.kwargs.get('action') not in (BooleanOptionalAction, 'store_true', 'store_false'):
-                optional_args.append(value)
+                # If implicit bool flag, do not add a value
+                if arg.kwargs.get('action') not in (BooleanOptionalAction, 'store_true', 'store_false'):
+                    optional_args.append(value)
 
         serialized_args: list[str] = []
         serialized_args += [json.dumps(value) if not isinstance(value, str) else value for value in optional_args]
