@@ -1302,10 +1302,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             elif field_info.default_factory is not None:
                 default = f'(default factory: {self._metavar_format(field_info.default_factory)})'
 
-            if _CliToggleFlag in field_info.metadata:
-                if not _help:
-                    _help = '(toggle)'
-            else:
+            if _CliToggleFlag not in field_info.metadata:
                 _help += f' {default}' if _help else default
         return _help.replace('%', '%%') if issubclass(type(self._root_parser), ArgumentParser) else _help
 

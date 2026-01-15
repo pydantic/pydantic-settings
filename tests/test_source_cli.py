@@ -619,7 +619,7 @@ def test_cli_help_default_or_none_model(capsys, monkeypatch):
 {ARGPARSE_OPTIONS_TEXT}:
   -h, --help            show this help message and exit
   --flag bool           (default: True)
-  --no-toggle           (toggle)
+  --no-toggle
   --toggle_description  Bool Toggle
 
 sub_model options:
