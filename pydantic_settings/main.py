@@ -749,6 +749,7 @@ class CliApp:
         model: PydanticModel,
         list_style: Literal['json', 'argparse', 'lazy'] = 'json',
         dict_style: Literal['json', 'env'] = 'json',
+        positionals_first: bool = False,
     ) -> list[str]:
         """
         Serializes the CLI arguments for a Pydantic data model.
@@ -783,8 +784,10 @@ class CliApp:
         """
 
         base_settings_cls = CliApp._get_base_settings_cls(type(model))
-        return CliSettingsSource[Any](base_settings_cls)._serialized_args(
+        serialized_args = CliSettingsSource[Any](base_settings_cls)._serialized_args(
             model,
             list_style=list_style,
             dict_style=dict_style,
+            positionals_first=positionals_first,
         )
+        return CliSettingsSource._flatten_serialized_args(serialized_args, positionals_first)
