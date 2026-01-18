@@ -745,16 +745,51 @@ class CliApp:
         return CliApp._run_cli_cmd(subcommand, cli_cmd_method_name, is_required=True)
 
     @staticmethod
-    def serialize(model: PydanticModel) -> list[str]:
+    def serialize(
+        model: PydanticModel,
+        list_style: Literal['json', 'argparse', 'lazy'] = 'json',
+        dict_style: Literal['json', 'env'] = 'json',
+        positionals_first: bool = False,
+    ) -> list[str]:
         """
         Serializes the CLI arguments for a Pydantic data model.
 
         Args:
             model: The data model to serialize.
+            list_style:
+                Controls how list-valued fields are serialized on the command line.
+                - 'json' (default):
+                  Lists are encoded as a single JSON array.
+                  Example: `--tags '["a","b","c"]'`
+                - 'argparse':
+                  Each list element becomes its own repeated flag, following
+                  typical `argparse` conventions.
+                  Example: `--tags a --tags b --tags c`
+                - 'lazy':
+                  Lists are emitted as a single comma-separated string without JSON
+                  quoting or escaping.
+                  Example: `--tags a,b,c`
+            dict_style:
+                Controls how dictionary-valued fields are serialized.
+                - 'json' (default):
+                  The entire dictionary is emitted as a single JSON object.
+                  Example: `--config '{"host": "localhost", "port": 5432}'`
+                - 'env':
+                  The dictionary is flattened into multiple CLI flags using
+                  environment-variable-style assignement.
+                  Example: `--config host=localhost --config port=5432`
+            positionals_first: Controls whether positional arguments should be serialized
+                first compared to optional arguments. Defaults to `False`.
 
         Returns:
             The serialized CLI arguments for the data model.
         """
 
         base_settings_cls = CliApp._get_base_settings_cls(type(model))
-        return CliSettingsSource[Any](base_settings_cls)._serialized_args(model)
+        serialized_args = CliSettingsSource[Any](base_settings_cls)._serialized_args(
+            model,
+            list_style=list_style,
+            dict_style=dict_style,
+            positionals_first=positionals_first,
+        )
+        return CliSettingsSource._flatten_serialized_args(serialized_args, positionals_first)
