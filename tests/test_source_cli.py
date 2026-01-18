@@ -590,6 +590,8 @@ def test_cli_help_default_or_none_model(capsys, monkeypatch):
 
     class Settings(BaseSettings, cli_parse_args=True, cli_prog_name='example.py'):
         flag: bool = True
+        toggle: CliToggleFlag[bool] = True
+        toggle_description: CliToggleFlag[bool] = Field(False, description='Bool Toggle')
         sub_model: SubModel = SubModel(flag=False)
         opt_model: DeepSubModel | None = Field(None, description='Group Doc')
         fact_model: SubModel = Field(default_factory=lambda: SubModel(flag=True))
@@ -601,9 +603,9 @@ def test_cli_help_default_or_none_model(capsys, monkeypatch):
             Settings()
         assert (
             capsys.readouterr().out
-            == f"""usage: example.py [-h] [--flag bool] [--sub_model [JSON]]
-                  [--sub_model.flag bool] [--sub_model.deep [JSON]]
-                  [--sub_model.deep.flag bool]
+            == f"""usage: example.py [-h] [--flag bool] [--no-toggle] [--toggle_description]
+                  [--sub_model [JSON]] [--sub_model.flag bool]
+                  [--sub_model.deep [JSON]] [--sub_model.deep.flag bool]
                   [--sub_model.deep.deeper [{{JSON,null}}]]
                   [--sub_model.deep.deeper.flag bool]
                   [--opt_model [{{JSON,null}}]] [--opt_model.flag bool]
@@ -617,6 +619,8 @@ def test_cli_help_default_or_none_model(capsys, monkeypatch):
 {ARGPARSE_OPTIONS_TEXT}:
   -h, --help            show this help message and exit
   --flag bool           (default: True)
+  --no-toggle
+  --toggle_description  Bool Toggle
 
 sub_model options:
   --sub_model [JSON]    set sub_model from JSON string (default: {{}})
