@@ -778,6 +778,8 @@ class CliApp:
                   The dictionary is flattened into multiple CLI flags using
                   environment-variable-style assignement.
                   Example: `--config host=localhost --config port=5432`
+            positionals_first: Controls whether positional arguments should be serialized
+                first compared to optional arguments. Defaults to `False`.
 
         Returns:
             The serialized CLI arguments for the data model.

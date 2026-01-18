@@ -1387,11 +1387,23 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             arg = next(iter(self._parser_map[field_info].values()))
             if arg.subcommand_dest:
                 subcommand_args.append(arg.subcommand_alias(type(model_default)))
-                sub_args = self._serialized_args(model_default, _is_submodel=True)
+                sub_args = self._serialized_args(
+                    model_default,
+                    list_style=list_style,
+                    dict_style=dict_style,
+                    positionals_first=positionals_first,
+                    _is_submodel=True,
+                )
                 subcommand_args += self._flatten_serialized_args(sub_args, positionals_first)
                 continue
             if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
-                sub_args = self._serialized_args(model_default, _is_submodel=True)
+                sub_args = self._serialized_args(
+                    model_default,
+                    list_style=list_style,
+                    dict_style=dict_style,
+                    positionals_first=positionals_first,
+                    _is_submodel=True,
+                )
                 optional_args += sub_args['optional']
                 positional_args += sub_args['positional']
                 subcommand_args += sub_args['subcommand']
@@ -1419,7 +1431,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if arg.kwargs.get('action') == BooleanOptionalAction and model_default is False and flag_chars == '--':
                 flag_chars += 'no-'
 
-            for value in self._coerce_value_styles(model_default, value, list_style, dict_style):
+            for value in self._coerce_value_styles(model_default, value, list_style=list_style, dict_style=dict_style):
                 optional_args.append(f'{flag_chars}{arg_name}')
 
                 # If implicit bool flag, do not add a value
