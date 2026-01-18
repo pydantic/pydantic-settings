@@ -2896,6 +2896,7 @@ def test_cli_serialize_ordering():
     assert cfg.model_dump() == {'command': {'optional': 2, 'positional': 'pos_3'}, 'optional': 0, 'positional': 'pos_1'}
 
     serialized_cli_args = CliApp.serialize(cfg)
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
     assert serialized_cli_args == [
         '--optional',
         '0',
@@ -2906,7 +2907,55 @@ def test_cli_serialize_ordering():
         'pos_3',
     ]
 
+    serialized_cli_args = CliApp.serialize(cfg, positionals_first=True)
     assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+    assert serialized_cli_args == [
+        'pos_1',
+        '--optional',
+        '0',
+        'command',
+        'pos_3',
+        '--optional',
+        '2',
+    ]
+
+
+def test_cli_serialize_styles():
+    class Cfg(BaseModel):
+        my_list: list[int]
+        my_dict: dict[str, int]
+
+    cfg = Cfg(my_list=[1, 2, 3], my_dict={'a': 1, 'b': 2, 'c': 3})
+
+    serialized_cli_args = CliApp.serialize(cfg, list_style='lazy')
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+    assert serialized_cli_args == ['--my-list', '1,2,3', '--my-dict', '{"a": 1, "b": 2, "c": 3}']
+
+    serialized_cli_args = CliApp.serialize(cfg, list_style='argparse')
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+    assert serialized_cli_args == [
+        '--my-list',
+        '1',
+        '--my-list',
+        '2',
+        '--my-list',
+        '3',
+        '--my-dict',
+        '{"a": 1, "b": 2, "c": 3}',
+    ]
+
+    serialized_cli_args = CliApp.serialize(cfg, dict_style='env')
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+    assert serialized_cli_args == [
+        '--my-list',
+        '[1, 2, 3]',
+        '--my-dict',
+        'a=1',
+        '--my-dict',
+        'b=2',
+        '--my-dict',
+        'c=3',
+    ]
 
 
 def test_cli_decoding():
