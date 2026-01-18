@@ -23,6 +23,7 @@ from .sources import (
     DefaultSettingsSource,
     DotEnvSettingsSource,
     DotenvType,
+    EnvPrefixTarget,
     EnvSettingsSource,
     InitSettingsSource,
     JsonConfigSettingsSource,
@@ -44,6 +45,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     case_sensitive: bool
     nested_model_default_partial_update: bool | None
     env_prefix: str
+    env_prefix_target: EnvPrefixTarget
     env_file: DotenvType | None
     env_file_encoding: str | None
     env_ignore_empty: bool
@@ -126,6 +128,7 @@ class BaseSettings(BaseModel):
         _nested_model_default_partial_update: Whether to allow partial updates on nested model default object fields.
             Defaults to `False`.
         _env_prefix: Prefix for all environment variables. Defaults to `None`.
+        _env_prefix_target: Targets to which `_env_prefix` is applied. Default: `variable`.
         _env_file: The env file(s) to load settings values from. Defaults to `Path('')`, which
             means that the value from `model_config['env_file']` should be used. You can also pass
             `None` to indicate that environment variables should not be loaded from an env file.
@@ -170,6 +173,7 @@ class BaseSettings(BaseModel):
         _case_sensitive: bool | None = None,
         _nested_model_default_partial_update: bool | None = None,
         _env_prefix: str | None = None,
+        _env_prefix_target: EnvPrefixTarget | None = None,
         _env_file: DotenvType | None = ENV_FILE_SENTINEL,
         _env_file_encoding: str | None = None,
         _env_ignore_empty: bool | None = None,
@@ -201,6 +205,7 @@ class BaseSettings(BaseModel):
                 _case_sensitive=_case_sensitive,
                 _nested_model_default_partial_update=_nested_model_default_partial_update,
                 _env_prefix=_env_prefix,
+                _env_prefix_target=_env_prefix_target,
                 _env_file=_env_file,
                 _env_file_encoding=_env_file_encoding,
                 _env_ignore_empty=_env_ignore_empty,
@@ -257,6 +262,7 @@ class BaseSettings(BaseModel):
         _case_sensitive: bool | None = None,
         _nested_model_default_partial_update: bool | None = None,
         _env_prefix: str | None = None,
+        _env_prefix_target: EnvPrefixTarget | None = None,
         _env_file: DotenvType | None = None,
         _env_file_encoding: str | None = None,
         _env_ignore_empty: bool | None = None,
@@ -284,6 +290,9 @@ class BaseSettings(BaseModel):
         # Determine settings config values
         case_sensitive = _case_sensitive if _case_sensitive is not None else self.model_config.get('case_sensitive')
         env_prefix = _env_prefix if _env_prefix is not None else self.model_config.get('env_prefix')
+        env_prefix_target = (
+            _env_prefix_target if _env_prefix_target is not None else self.model_config.get('env_prefix_target')
+        )
         nested_model_default_partial_update = (
             _nested_model_default_partial_update
             if _nested_model_default_partial_update is not None
@@ -369,6 +378,7 @@ class BaseSettings(BaseModel):
             self.__class__,
             case_sensitive=case_sensitive,
             env_prefix=env_prefix,
+            env_prefix_target=env_prefix_target,
             env_nested_delimiter=env_nested_delimiter,
             env_nested_max_split=env_nested_max_split,
             env_ignore_empty=env_ignore_empty,
@@ -381,6 +391,7 @@ class BaseSettings(BaseModel):
             env_file_encoding=env_file_encoding,
             case_sensitive=case_sensitive,
             env_prefix=env_prefix,
+            env_prefix_target=env_prefix_target,
             env_nested_delimiter=env_nested_delimiter,
             env_nested_max_split=env_nested_max_split,
             env_ignore_empty=env_ignore_empty,
@@ -389,7 +400,11 @@ class BaseSettings(BaseModel):
         )
 
         file_secret_settings = SecretsSettingsSource(
-            self.__class__, secrets_dir=secrets_dir, case_sensitive=case_sensitive, env_prefix=env_prefix
+            self.__class__,
+            secrets_dir=secrets_dir,
+            case_sensitive=case_sensitive,
+            env_prefix=env_prefix,
+            env_prefix_target=env_prefix_target,
         )
         # Provide a hook to set built-in sources priority and add / remove sources
         sources = self.settings_customise_sources(
@@ -463,6 +478,9 @@ class BaseSettings(BaseModel):
     ) -> None:
         """
         Restore the init_kwarg key names to the final merged state dictionary.
+
+        This function renames keys in state to match the original init_kwargs key names,
+        preserving the merged values from the source priority order.
         """
         if init_kwargs and state:
             state_kwarg_names = set(state.keys())
@@ -478,7 +496,25 @@ class BaseSettings(BaseModel):
                 init_kwarg_name = init_kwarg_names & matchable_names
                 state_kwarg_name = state_kwarg_names & matchable_names
                 if init_kwarg_name and state_kwarg_name:
-                    state[init_kwarg_name.pop()] = state.pop(state_kwarg_name.pop())
+                    # Use deterministic selection for both keys.
+                    # Target key: the key from init_kwargs that should be used in the final state.
+                    target_key = next(iter(init_kwarg_name))
+                    # Source key: prefer the alias (first in alias_names) if present in state,
+                    # as InitSettingsSource normalizes to the preferred alias.
+                    # This ensures we get the highest-priority value for this field.
+                    source_key = None
+                    for alias in alias_names:
+                        if alias in state_kwarg_name:
+                            source_key = alias
+                            break
+                    if source_key is None:
+                        # Fall back to field_name if no alias found in state
+                        source_key = field_name if field_name in state_kwarg_name else next(iter(state_kwarg_name))
+                    # Get the value from the source key and remove all matching keys
+                    value = state.pop(source_key)
+                    for key in state_kwarg_name - {source_key}:
+                        state.pop(key, None)
+                    state[target_key] = value
 
     @staticmethod
     def _settings_warn_unused_config_keys(sources: tuple[object, ...], model_config: SettingsConfigDict) -> None:
@@ -517,6 +553,7 @@ class BaseSettings(BaseModel):
         validate_default=True,
         case_sensitive=False,
         env_prefix='',
+        env_prefix_target='variable',
         nested_model_default_partial_update=False,
         env_file=None,
         env_file_encoding=None,
