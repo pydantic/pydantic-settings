@@ -296,6 +296,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             Defaults to `argparse._SubParsersAction.add_parser`.
         add_subparsers_method: The root parser add subparsers (sub-commands) method.
             Defaults to `argparse.ArgumentParser.add_subparsers`.
+        format_help_method: The root parser format help method. Defaults to `argparse.ArgumentParser.format_help`.
         formatter_class: A class for customizing the root parser help text. Defaults to `argparse.RawDescriptionHelpFormatter`.
     """
 
@@ -323,6 +324,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         add_argument_group_method: Callable[..., Any] | None = ArgumentParser.add_argument_group,
         add_parser_method: Callable[..., Any] | None = _SubParsersAction.add_parser,
         add_subparsers_method: Callable[..., Any] | None = ArgumentParser.add_subparsers,
+        format_help_method: Callable[..., Any] | None = ArgumentParser.format_help,
         formatter_class: Any = RawDescriptionHelpFormatter,
     ) -> None:
         self.cli_prog_name = (
@@ -414,6 +416,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             add_argument_group_method=add_argument_group_method,
             add_parser_method=add_parser_method,
             add_subparsers_method=add_subparsers_method,
+            format_help_method=format_help_method,
             formatter_class=formatter_class,
         )
 
@@ -860,6 +863,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         add_argument_group_method: Callable[..., Any] | None = ArgumentParser.add_argument_group,
         add_parser_method: Callable[..., Any] | None = _SubParsersAction.add_parser,
         add_subparsers_method: Callable[..., Any] | None = ArgumentParser.add_subparsers,
+        format_help_method: Callable[..., Any] | None = ArgumentParser.format_help,
         formatter_class: Any = RawDescriptionHelpFormatter,
     ) -> None:
         self._cli_unknown_args: dict[str, list[str]] = {}
@@ -878,6 +882,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self._add_group = self._connect_group_method(add_argument_group_method)
         self._add_parser = self._connect_parser_method(add_parser_method, 'add_parser_method')
         self._add_subparsers = self._connect_parser_method(add_subparsers_method, 'add_subparsers_method')
+        self._format_help = self._connect_parser_method(format_help_method, 'format_help_method')
         self._formatter_class = formatter_class
         self._cli_dict_args: dict[str, type[Any] | None] = {}
         self._parser_map: defaultdict[str | FieldInfo, dict[int | None | str, _CliArg]] = defaultdict(dict)

@@ -7,7 +7,7 @@ import warnings
 from argparse import Namespace
 from collections.abc import Mapping
 from types import SimpleNamespace
-from typing import Any, ClassVar, Literal, TypeVar
+from typing import Any, ClassVar, Literal, TextIO, TypeVar
 
 from pydantic import ConfigDict
 from pydantic._internal._config import config_keys
@@ -793,3 +793,41 @@ class CliApp:
             positionals_first=positionals_first,
         )
         return CliSettingsSource._flatten_serialized_args(serialized_args, positionals_first)
+
+    @staticmethod
+    def format_help(
+        model: PydanticModel | type[T],
+        cli_settings_source: CliSettingsSource[Any] | None = None,
+    ) -> str:
+        """
+        Return a string containing a help message for a Pydantic model.
+
+        Args:
+            model: The model or model class.
+            cli_settings_source: Override the default CLI settings source with a user defined instance.
+                Defaults to `None`.
+
+        Returns:
+            The help message string for the model.
+        """
+        model_cls = model if isinstance(model, type) else type(model)
+        if cli_settings_source is None:
+            cli_settings_source = CliSettingsSource(CliApp._get_base_settings_cls(model_cls))
+        return cli_settings_source._format_help(cli_settings_source.root_parser)
+
+    @staticmethod
+    def print_help(
+        model: PydanticModel | type[T],
+        cli_settings_source: CliSettingsSource[Any] | None = None,
+        file: TextIO | None = None,
+    ) -> None:
+        """
+        Print a help message for a Pydantic model.
+
+        Args:
+            model: The model or model class.
+            cli_settings_source: Override the default CLI settings source with a user defined instance.
+                Defaults to `None`.
+            file: A text stream to which the help message is written. If `None`, the output is sent to sys.stdout.
+        """
+        print(CliApp.format_help(model, cli_settings_source=cli_settings_source), file=file)
