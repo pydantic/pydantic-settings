@@ -1320,7 +1320,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 default = f'(default: {field_info.default if enum_name is None else enum_name})'
             elif field_info.default_factory is not None:
                 default = f'(default factory: {self._metavar_format(field_info.default_factory)})'
-            _help += f' {default}' if _help else default
+
+            if _CliToggleFlag not in field_info.metadata:
+                _help += f' {default}' if _help else default
         return _help.replace('%', '%%') if issubclass(type(self._root_parser), ArgumentParser) else _help
 
     def _is_field_suppressed(self, field_info: FieldInfo) -> bool:
@@ -1355,7 +1357,44 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         alias_default[alias_path_index] = value
         return alias_path_only_defaults[arg_name]
 
-    def _serialized_args(self, model: PydanticModel, _is_submodel: bool = False) -> list[str]:
+    def _coerce_value_styles(
+        self,
+        model_default: Any,
+        value: str | list[Any] | dict[str, Any],
+        list_style: Literal['json', 'argparse', 'lazy'] = 'json',
+        dict_style: Literal['json', 'env'] = 'json',
+    ) -> list[str | list[Any] | dict[str, Any]]:
+        values = [value]
+        if isinstance(value, str):
+            if isinstance(model_default, list):
+                if list_style == 'lazy':
+                    values = [','.join(f'{v}' for v in json.loads(value))]
+                elif list_style == 'argparse':
+                    values = [f'{v}' for v in json.loads(value)]
+            elif isinstance(model_default, dict):
+                if dict_style == 'env':
+                    values = [f'{k}={v}' for k, v in json.loads(value).items()]
+        return values
+
+    @staticmethod
+    def _flatten_serialized_args(
+        serialized_args: dict[str, list[str]],
+        positionals_first: bool,
+    ) -> list[str]:
+        return (
+            serialized_args['optional'] + serialized_args['positional']
+            if not positionals_first
+            else serialized_args['positional'] + serialized_args['optional']
+        ) + serialized_args['subcommand']
+
+    def _serialized_args(
+        self,
+        model: PydanticModel,
+        list_style: Literal['json', 'argparse', 'lazy'] = 'json',
+        dict_style: Literal['json', 'env'] = 'json',
+        positionals_first: bool = False,
+        _is_submodel: bool = False,
+    ) -> dict[str, list[str]]:
         alias_path_only_defaults: dict[str, Any] = {}
         optional_args: list[str | list[Any] | dict[str, Any]] = []
         positional_args: list[str | list[Any] | dict[str, Any]] = []
@@ -1369,10 +1408,26 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             arg = next(iter(self._parser_map[field_info].values()))
             if arg.subcommand_dest:
                 subcommand_args.append(arg.subcommand_alias(type(model_default)))
-                subcommand_args += self._serialized_args(model_default, _is_submodel=True)
+                sub_args = self._serialized_args(
+                    model_default,
+                    list_style=list_style,
+                    dict_style=dict_style,
+                    positionals_first=positionals_first,
+                    _is_submodel=True,
+                )
+                subcommand_args += self._flatten_serialized_args(sub_args, positionals_first)
                 continue
             if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
-                positional_args += self._serialized_args(model_default, _is_submodel=True)
+                sub_args = self._serialized_args(
+                    model_default,
+                    list_style=list_style,
+                    dict_style=dict_style,
+                    positionals_first=positionals_first,
+                    _is_submodel=True,
+                )
+                optional_args += sub_args['optional']
+                positional_args += sub_args['positional']
+                subcommand_args += sub_args['subcommand']
                 continue
 
             matched = re.match(r'(-*)(.+)', arg.preferred_arg_name)
@@ -1397,13 +1452,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if arg.kwargs.get('action') == BooleanOptionalAction and model_default is False and flag_chars == '--':
                 flag_chars += 'no-'
 
-            optional_args.append(f'{flag_chars}{arg_name}')
+            for value in self._coerce_value_styles(model_default, value, list_style=list_style, dict_style=dict_style):
+                optional_args.append(f'{flag_chars}{arg_name}')
 
-            # If implicit bool flag, do not add a value
-            if arg.kwargs.get('action') not in (BooleanOptionalAction, 'store_true', 'store_false'):
-                optional_args.append(value)
+                # If implicit bool flag, do not add a value
+                if arg.kwargs.get('action') not in (BooleanOptionalAction, 'store_true', 'store_false'):
+                    optional_args.append(value)
 
-        serialized_args: list[str] = []
-        serialized_args += [json.dumps(value) if not isinstance(value, str) else value for value in optional_args]
-        serialized_args += [json.dumps(value) if not isinstance(value, str) else value for value in positional_args]
-        return serialized_args + subcommand_args
+        return {
+            'optional': [json.dumps(value) if not isinstance(value, str) else value for value in optional_args],
+            'positional': [json.dumps(value) if not isinstance(value, str) else value for value in positional_args],
+            'subcommand': subcommand_args,
+        }

@@ -590,6 +590,8 @@ def test_cli_help_default_or_none_model(capsys, monkeypatch):
 
     class Settings(BaseSettings, cli_parse_args=True, cli_prog_name='example.py'):
         flag: bool = True
+        toggle: CliToggleFlag[bool] = True
+        toggle_description: CliToggleFlag[bool] = Field(False, description='Bool Toggle')
         sub_model: SubModel = SubModel(flag=False)
         opt_model: DeepSubModel | None = Field(None, description='Group Doc')
         fact_model: SubModel = Field(default_factory=lambda: SubModel(flag=True))
@@ -601,9 +603,9 @@ def test_cli_help_default_or_none_model(capsys, monkeypatch):
             Settings()
         assert (
             capsys.readouterr().out
-            == f"""usage: example.py [-h] [--flag bool] [--sub_model [JSON]]
-                  [--sub_model.flag bool] [--sub_model.deep [JSON]]
-                  [--sub_model.deep.flag bool]
+            == f"""usage: example.py [-h] [--flag bool] [--no-toggle] [--toggle_description]
+                  [--sub_model [JSON]] [--sub_model.flag bool]
+                  [--sub_model.deep [JSON]] [--sub_model.deep.flag bool]
                   [--sub_model.deep.deeper [{{JSON,null}}]]
                   [--sub_model.deep.deeper.flag bool]
                   [--opt_model [{{JSON,null}}]] [--opt_model.flag bool]
@@ -617,6 +619,8 @@ def test_cli_help_default_or_none_model(capsys, monkeypatch):
 {ARGPARSE_OPTIONS_TEXT}:
   -h, --help            show this help message and exit
   --flag bool           (default: True)
+  --no-toggle
+  --toggle_description  Bool Toggle
 
 sub_model options:
   --sub_model [JSON]    set sub_model from JSON string (default: {{}})
@@ -2896,6 +2900,7 @@ def test_cli_serialize_ordering():
     assert cfg.model_dump() == {'command': {'optional': 2, 'positional': 'pos_3'}, 'optional': 0, 'positional': 'pos_1'}
 
     serialized_cli_args = CliApp.serialize(cfg)
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
     assert serialized_cli_args == [
         '--optional',
         '0',
@@ -2906,7 +2911,55 @@ def test_cli_serialize_ordering():
         'pos_3',
     ]
 
+    serialized_cli_args = CliApp.serialize(cfg, positionals_first=True)
     assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+    assert serialized_cli_args == [
+        'pos_1',
+        '--optional',
+        '0',
+        'command',
+        'pos_3',
+        '--optional',
+        '2',
+    ]
+
+
+def test_cli_serialize_styles():
+    class Cfg(BaseModel):
+        my_list: list[int]
+        my_dict: dict[str, int]
+
+    cfg = Cfg(my_list=[1, 2, 3], my_dict={'a': 1, 'b': 2, 'c': 3})
+
+    serialized_cli_args = CliApp.serialize(cfg, list_style='lazy')
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+    assert serialized_cli_args == ['--my-list', '1,2,3', '--my-dict', '{"a": 1, "b": 2, "c": 3}']
+
+    serialized_cli_args = CliApp.serialize(cfg, list_style='argparse')
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+    assert serialized_cli_args == [
+        '--my-list',
+        '1',
+        '--my-list',
+        '2',
+        '--my-list',
+        '3',
+        '--my-dict',
+        '{"a": 1, "b": 2, "c": 3}',
+    ]
+
+    serialized_cli_args = CliApp.serialize(cfg, dict_style='env')
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+    assert serialized_cli_args == [
+        '--my-list',
+        '[1, 2, 3]',
+        '--my-dict',
+        'a=1',
+        '--my-dict',
+        'b=2',
+        '--my-dict',
+        'c=3',
+    ]
 
 
 def test_cli_decoding():
