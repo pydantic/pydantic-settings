@@ -896,10 +896,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _add_default_help(self) -> None:
         if isinstance(self._root_parser, _CliInternalArgParser):
-            for field_name, field_info in _get_model_fields(self.settings_cls).items():
-                alias_names, *_ = _get_alias_names(field_name, field_info, case_sensitive=self.case_sensitive)
-                if 'help' in alias_names:
-                    return
+            if not self.cli_prefix:
+                for field_name, field_info in _get_model_fields(self.settings_cls).items():
+                    alias_names, *_ = _get_alias_names(field_name, field_info, case_sensitive=self.case_sensitive)
+                    if 'help' in alias_names:
+                        return
 
             self._add_argument(
                 self.root_parser,
