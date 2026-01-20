@@ -7,7 +7,7 @@ import warnings
 from argparse import Namespace
 from collections.abc import Mapping
 from types import SimpleNamespace
-from typing import Any, ClassVar, Literal, TextIO, TypeVar
+from typing import Any, ClassVar, Literal, TextIO, TypeVar, cast
 
 from pydantic import ConfigDict
 from pydantic._internal._config import config_keys
@@ -594,6 +594,8 @@ class CliApp:
     CLI applications.
     """
 
+    _subcommand_stack: ClassVar[dict[int, tuple[CliSettingsSource[Any], Any, str]]] = {}
+
     @staticmethod
     def _get_base_settings_cls(model_cls: type[Any]) -> type[BaseSettings]:
         if issubclass(model_cls, BaseSettings):
@@ -741,8 +743,34 @@ class CliApp:
             SettingsError: When no subcommand is found and cli_exit_on_error=`False`.
         """
 
-        subcommand = get_subcommand(model, is_required=True, cli_exit_on_error=cli_exit_on_error)
-        return CliApp._run_cli_cmd(subcommand, cli_cmd_method_name, is_required=True)
+        if CliApp._subcommand_stack:
+            cli_settings_source, parser, subcommand_dest = CliApp._subcommand_stack[id(model)]
+        else:
+            cli_settings_source = CliSettingsSource[Any](CliApp._get_base_settings_cls(type(model)))
+            parser = cli_settings_source.root_parser
+            subcommand_dest = ':subcommand'
+
+        errors: list[SettingsError | SystemExit] = []
+        subcommand = get_subcommand(
+            model, is_required=True, cli_exit_on_error=cli_exit_on_error, _suppress_errors=errors
+        )
+        if errors:
+            err = errors[0]
+            if err.__context__ is None and err.__cause__ is None and cli_settings_source._format_help is not None:
+                error_message = f'{err}\n{cli_settings_source._format_help(parser)}'
+                raise type(err)(error_message) from None
+            else:
+                raise err
+
+        subcommand_cls = cast(type[BaseModel], type(subcommand))
+        subcommand_arg = cli_settings_source._parser_map[subcommand_dest][subcommand_cls]
+        subcommand_alias = subcommand_arg.subcommand_alias(subcommand_cls)
+        subcommand_dest = f'{subcommand_dest.split(":")[0]}{subcommand_alias}.:subcommand'
+        subcommand_parser = subcommand_arg.parser
+        CliApp._subcommand_stack[id(subcommand)] = (cli_settings_source, subcommand_parser, subcommand_dest)
+        data_model = CliApp._run_cli_cmd(subcommand, cli_cmd_method_name, is_required=True)
+        del CliApp._subcommand_stack[id(subcommand)]
+        return data_model
 
     @staticmethod
     def serialize(

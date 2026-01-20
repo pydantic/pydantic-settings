@@ -92,6 +92,7 @@ class CliMutuallyExclusiveGroup(BaseModel):
 
 class _CliArg(BaseModel):
     model: Any
+    parser: Any
     field_name: str
     arg_prefix: str
     case_sensitive: bool
@@ -110,7 +111,7 @@ class _CliArg(BaseModel):
     def __init__(
         self,
         field_info: FieldInfo,
-        parser_map: defaultdict[str | FieldInfo, dict[int | None | str, _CliArg]],
+        parser_map: defaultdict[str | FieldInfo, dict[int | None | str | type[BaseModel], _CliArg]],
         **values: Any,
     ) -> None:
         super().__init__(**values)
@@ -124,6 +125,7 @@ class _CliArg(BaseModel):
             for sub_model in self.sub_models:
                 subcommand_alias = self.subcommand_alias(sub_model)
                 parser_map[self.subcommand_dest][subcommand_alias] = self.model_copy(update={'args': [], 'kwargs': {}})
+                parser_map[self.subcommand_dest][sub_model] = parser_map[self.subcommand_dest][subcommand_alias]
                 parser_map[self.field_info][subcommand_alias] = parser_map[self.subcommand_dest][subcommand_alias]
         elif self.dest not in alias_path_dests:
             parser_map[self.dest][None] = self
@@ -885,7 +887,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self._format_help = self._connect_parser_method(format_help_method, 'format_help_method')
         self._formatter_class = formatter_class
         self._cli_dict_args: dict[str, type[Any] | None] = {}
-        self._parser_map: defaultdict[str | FieldInfo, dict[int | None | str, _CliArg]] = defaultdict(dict)
+        self._parser_map: defaultdict[str | FieldInfo, dict[int | None | str | type[BaseModel], _CliArg]] = defaultdict(
+            dict
+        )
         self._add_parser_args(
             parser=self.root_parser,
             model=self.settings_cls,
@@ -922,6 +926,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         )
         for field_name, field_info in self._sort_arg_fields(model):
             arg = _CliArg(
+                parser=parser,
                 field_info=field_info,
                 parser_map=self._parser_map,
                 model=model,
@@ -967,8 +972,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                             else f'{{{subcommand_alias}}}'
                         )
 
+                    subcommand_arg.parser = self._add_parser(subparsers, *subcommand_arg.args, **subcommand_arg.kwargs)
                     self._add_parser_args(
-                        parser=self._add_parser(subparsers, *subcommand_arg.args, **subcommand_arg.kwargs),
+                        parser=subcommand_arg.parser,
                         model=sub_model,
                         added_args=[],
                         arg_prefix=f'{arg.dest}.',
