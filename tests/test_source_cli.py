@@ -2978,3 +2978,18 @@ def test_cli_decoding():
             path_b: Annotated[Path, NoDecode] = Field(validation_alias=AliasPath('paths', 1))
 
         CliApp.run(PathsMixedDecode, cli_args=['--paths', PATH_A_STR, '--paths', PATH_B_STR])
+
+
+def test_cli_custom_help(capsys, monkeypatch):
+    class Cfg(BaseSettings):
+        my_help: CliToggleFlag[bool] = Field(False, description='my help string', alias='help')
+
+        def cli_cmd(self) -> None:
+            if self.my_help:
+                print('custom help no exit')
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        CliApp.run(Cfg)
+        assert capsys.readouterr().out == 'custom help no exit\n'
