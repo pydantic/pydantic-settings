@@ -407,6 +407,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 formatter_class=formatter_class,
                 prefix_chars=self.cli_flag_prefix_char,
                 allow_abbrev=False,
+                add_help=False,
             )
             if root_parser is None
             else root_parser
@@ -890,6 +891,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self._parser_map: defaultdict[str | FieldInfo, dict[int | None | str | type[BaseModel], _CliArg]] = defaultdict(
             dict
         )
+        self._add_default_help()
         self._add_parser_args(
             parser=self.root_parser,
             model=self.settings_cls,
@@ -900,6 +902,23 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             alias_prefixes=[],
             model_default=PydanticUndefined,
         )
+
+    def _add_default_help(self) -> None:
+        if isinstance(self._root_parser, _CliInternalArgParser):
+            if not self.cli_prefix:
+                for field_name, field_info in _get_model_fields(self.settings_cls).items():
+                    alias_names, *_ = _get_alias_names(field_name, field_info, case_sensitive=self.case_sensitive)
+                    if 'help' in alias_names:
+                        return
+
+            self._add_argument(
+                self.root_parser,
+                f'{self._cli_flag_prefix[:1]}h',
+                f'{self._cli_flag_prefix[:2]}help',
+                action='help',
+                default=SUPPRESS,
+                help='show this help message and exit',
+            )
 
     def _add_parser_args(
         self,
