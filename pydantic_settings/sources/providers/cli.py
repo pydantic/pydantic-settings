@@ -37,7 +37,7 @@ from typing import (
 )
 
 import typing_extensions
-from pydantic import AliasChoices, AliasPath, BaseModel, Field, PrivateAttr
+from pydantic import AliasChoices, AliasPath, BaseModel, Field, PrivateAttr, TypeAdapter
 from pydantic._internal._repr import Representation
 from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
@@ -1399,6 +1399,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         optional_args: list[str | list[Any] | dict[str, Any]] = []
         positional_args: list[str | list[Any] | dict[str, Any]] = []
         subcommand_args: list[str] = []
+        if is_model_class(type(model)) and hasattr(model, 'model_dump'):
+            dumped_model = model.model_dump(mode='json')
+        elif is_pydantic_dataclass(type(model)):
+            dumped_model = TypeAdapter(type(model)).dump_python(model, mode='json')
+        else:
+            raise ValueError(f'unsupported type: {type(model)}')
         for field_name, field_info in _get_model_fields(type(model) if _is_submodel else self.settings_cls).items():
             model_default = getattr(model, field_name)
             if field_info.default == model_default:
@@ -1432,8 +1438,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
             matched = re.match(r'(-*)(.+)', arg.preferred_arg_name)
             flag_chars, arg_name = matched.groups() if matched else ('', '')
+            dumped_field = dumped_model[field_name]
             value: str | list[Any] | dict[str, Any] = (
-                json.dumps(model_default) if isinstance(model_default, (dict, list, set)) else str(model_default)
+                json.dumps(dumped_field) if isinstance(dumped_field, (dict, list, set)) else str(dumped_field)
             )
 
             if arg.is_alias_path_only:
@@ -1443,16 +1450,16 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 value = self._update_alias_path_only_default(arg_name, value, field_info, alias_path_only_defaults)
 
             if _CliPositionalArg in field_info.metadata:
-                for value in model_default if isinstance(model_default, list) else [model_default]:
+                for value in dumped_field if isinstance(dumped_field, list) else [dumped_field]:
                     value = json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
                     positional_args.append(value)
                 continue
 
-            # Note: prepend 'no-' for boolean optional action flag if model_default value is False and flag is not a short option
-            if arg.kwargs.get('action') == BooleanOptionalAction and model_default is False and flag_chars == '--':
+            # Note: prepend 'no-' for boolean optional action flag if dumped_field value is False and flag is not a short option
+            if arg.kwargs.get('action') == BooleanOptionalAction and dumped_field is False and flag_chars == '--':
                 flag_chars += 'no-'
 
-            for value in self._coerce_value_styles(model_default, value, list_style=list_style, dict_style=dict_style):
+            for value in self._coerce_value_styles(dumped_field, value, list_style=list_style, dict_style=dict_style):
                 optional_args.append(f'{flag_chars}{arg_name}')
 
                 # If implicit bool flag, do not add a value
