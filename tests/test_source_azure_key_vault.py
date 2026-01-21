@@ -206,7 +206,10 @@ class TestAzureKeyVaultSettingsSource:
         assert settings.my_field == expected_secret_value
         assert settings.alias_field == expected_secret_value
 
-    def test_snake_case_conversion(self, mocker: MockerFixture) -> None:
+    @pytest.mark.parametrize(
+        'env_prefix', (None, 'singlewordprefix', 'prefix-kebab-case-', 'PrefixPascalCaseprefixCamelCaseSeparator-')
+    )
+    def test_snake_case_conversion(self, mocker: MockerFixture, env_prefix: str | None) -> None:
         """Test that secret names are mapped to snake case in field names."""
 
         class NestedModel(BaseModel):
@@ -235,16 +238,21 @@ class TestAzureKeyVaultSettingsSource:
                         'https://my-resource.vault.azure.net/',
                         DefaultAzureCredential(),
                         snake_case_conversion=True,
+                        env_prefix=env_prefix,
                     ),
                 )
 
         expected_secrets = [
-            type('', (), {'name': 'my-field-from-kebab-case', 'enabled': True}),
-            type('', (), {'name': 'MyFieldFromPascalCase', 'enabled': True}),
-            type('', (), {'name': 'myFieldFromCamelCase', 'enabled': True}),
+            type(
+                '', (), {'name': f'{"" if env_prefix is None else env_prefix}my-field-from-kebab-case', 'enabled': True}
+            ),
+            type('', (), {'name': f'{"" if env_prefix is None else env_prefix}MyFieldFromPascalCase', 'enabled': True}),
+            type('', (), {'name': f'{"" if env_prefix is None else env_prefix}myFieldFromCamelCase', 'enabled': True}),
             type('', (), {'name': 'Secret-Alias', 'enabled': True}),
             type('', (), {'name': 'another-SECRET-AliaS', 'enabled': True}),
-            type('', (), {'name': 'NestedModel--NestedField', 'enabled': True}),
+            type(
+                '', (), {'name': f'{"" if env_prefix is None else env_prefix}NestedModel--NestedField', 'enabled': True}
+            ),
         ]
         expected_secret_value = 'SecretValue'
 
