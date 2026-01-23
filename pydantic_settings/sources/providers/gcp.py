@@ -3,8 +3,11 @@ from __future__ import annotations as _annotations
 import warnings
 from collections.abc import Iterator, Mapping
 from functools import cached_property
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from pydantic.fields import FieldInfo
+
+from ..types import SecretVersion
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
@@ -93,6 +96,14 @@ class GoogleSecretManagerMapping(Mapping[str, str | None]):
     def _secret_version_path(self, key: str, version: str = 'latest') -> str:
         return self._secret_client.secret_version_path(self._project_id, key, version)
 
+    def _get_secret_value(self, gcp_secret_name: str, version: str = 'latest') -> str | None:
+        try:
+            return self._secret_client.access_secret_version(
+                name=self._secret_version_path(gcp_secret_name, version)
+            ).payload.data.decode('UTF-8')
+        except Exception:
+            return None
+
     def __getitem__(self, key: str) -> str | None:
         if key in self._loaded_secrets:
             return self._loaded_secrets[key]
@@ -102,13 +113,7 @@ class GoogleSecretManagerMapping(Mapping[str, str | None]):
             gcp_secret_name = self._secret_name_map.get(key.lower())
 
         if gcp_secret_name:
-            try:
-                self._loaded_secrets[key] = self._secret_client.access_secret_version(
-                    name=self._secret_version_path(gcp_secret_name)
-                ).payload.data.decode('UTF-8')
-            except Exception:
-                # If we can't access the secret, we return None
-                self._loaded_secrets[key] = None
+            self._loaded_secrets[key] = self._get_secret_value(gcp_secret_name)
         else:
             raise KeyError(key)
 
@@ -174,6 +179,47 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
             env_parse_none_str=env_parse_none_str,
             env_parse_enums=env_parse_enums,
         )
+
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        """Override get_field_value to get the secret value from GCP Secret Manager.
+        Look for a SecretVersion metadata field to specify a particular SecretVersion.
+
+        Args:
+            field: The field to get the value for
+            field_name: The name of the field
+
+        Returns:
+            A tuple of (value, field_name, value_is_complex)
+        """
+
+        secret_version = next((m.version for m in field.metadata if isinstance(m, SecretVersion)), None)
+
+        # If a secret version is specified, try to get the secret value from GCP Secret Manager and
+        # load it into memory in the GoogleSecretManagerMapping object. This is done so that
+        # if the same secret name with different versions is requested, we can have different
+        # values for each version loaded in memory.
+        if secret_version and isinstance(self.env_vars, GoogleSecretManagerMapping):
+            for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
+                gcp_secret_name = self.env_vars._secret_name_map.get(env_name)
+                if gcp_secret_name is None and not self.case_sensitive:
+                    gcp_secret_name = self.env_vars._secret_name_map.get(env_name.lower())
+
+                if gcp_secret_name:
+                    env_val = self.env_vars._get_secret_value(gcp_secret_name, secret_version)
+                    if env_val is not None:
+                        return env_val, field_name, value_is_complex
+
+            # If a secret version is specified but not found, we should not fall back to "latest" (default behavior)
+            # as that would be incorrect. We return None to indicate the value was not found.
+            return None, field_name, False
+
+        val, key, is_complex = super().get_field_value(field, field_name)
+
+        # If populate_by_name is enabled, we need to return the field_name as the key
+        # without this being enabled, you cannot load two secrets with the same name but different versions
+        if self.settings_cls.model_config.get('populate_by_name') and val is not None:
+            return val, field_name, is_complex
+        return val, key, is_complex
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
         return GoogleSecretManagerMapping(
