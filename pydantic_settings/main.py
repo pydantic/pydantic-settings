@@ -602,7 +602,7 @@ class CliApp:
     """
 
     _subcommand_stack: ClassVar[dict[int, tuple[CliSettingsSource[Any], Any, str]]] = {}
-    _ansi_color: re.Pattern[str] = re.compile(r'\x1b\[[0-9;]*m')
+    _ansi_color: ClassVar[re.Pattern[str]] = re.compile(r'\x1b\[[0-9;]*m')
 
     @staticmethod
     def _get_base_settings_cls(model_cls: type[Any]) -> type[BaseSettings]:
@@ -761,7 +761,6 @@ class CliApp:
             SettingsError: When no subcommand is found and cli_exit_on_error=`False`.
         """
 
-        cli_settings_source = None
         if id(model) in CliApp._subcommand_stack:
             cli_settings_source, parser, subcommand_dest = CliApp._subcommand_stack[id(model)]
         else:
@@ -862,7 +861,10 @@ class CliApp:
         """
         model_cls = model if isinstance(model, type) else type(model)
         if cli_settings_source is None:
-            cli_settings_source = CliSettingsSource(CliApp._get_base_settings_cls(model_cls))
+            if not isinstance(model, type) and id(model) in CliApp._subcommand_stack:
+                cli_settings_source, *_ = CliApp._subcommand_stack[id(model)]
+            else:
+                cli_settings_source = CliSettingsSource(CliApp._get_base_settings_cls(model_cls))
         help_message = cli_settings_source._format_help(cli_settings_source.root_parser)
         return help_message if not strip_ansi_color else CliApp._ansi_color.sub('', help_message)
 

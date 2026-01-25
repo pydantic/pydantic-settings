@@ -3052,14 +3052,14 @@ def test_cli_format_help():
     class Init(BaseModel, cli_prog_name='example.py'):
         repo: Path
 
-        def run(self):
-            print(f'add: {self.repo}')
+        def cli_cmd(self) -> None:
+            print(f'repo: {self.repo}')
 
     class RootCommand(BaseSettings, cli_prog_name='example.py'):
         init: CliSubCommand[Init]
 
-        def cli_cmd(self):
-            CliApp.run_subcommand(self, cli_cmd_method_name='run')
+        def cli_cmd(self) -> None:
+            CliApp.run_subcommand(self)
 
     assert (
         CliApp.format_help(RootCommand, strip_ansi_color=True)
