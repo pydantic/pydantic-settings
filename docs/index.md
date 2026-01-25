@@ -1257,7 +1257,7 @@ options:
 """
 ```
 
-### Serializing CLI Arguments
+#### Serializing Arguments
 
 An instantiated Pydantic model can be serialized into its CLI arguments using the `CliApp.serialize` method. Serialization styles can be controlled using the `list_style`, `dict_style`, and `positionals_first` flags.
 
