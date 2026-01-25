@@ -3046,3 +3046,46 @@ def test_cli_custom_help(capsys, monkeypatch):
 
         CliApp.run(Cfg)
         assert capsys.readouterr().out == 'custom help no exit\n'
+
+
+def test_cli_format_help():
+    class Init(BaseModel, cli_prog_name='example.py'):
+        repo: Path
+
+        def run(self):
+            print(f'add: {self.repo}')
+
+    class RootCommand(BaseSettings, cli_prog_name='example.py'):
+        init: CliSubCommand[Init]
+
+        def cli_cmd(self):
+            CliApp.run_subcommand(self, cli_cmd_method_name='run')
+
+    assert (
+        CliApp.format_help(RootCommand, strip_ansi_color=True)
+        == f"""usage: example.py [-h] {{init}} ...
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help  show this help message and exit
+
+subcommands:
+  {{init}}
+    init
+"""
+    )
+
+    assert (
+        CliApp.format_help(Init, strip_ansi_color=True)
+        == f"""usage: example.py [-h] --repo Path
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help   show this help message and exit
+  --repo Path  (required)
+"""
+    )
+
+    with pytest.raises(
+        SettingsError,
+        match=re.escape(f'Error: CLI subcommand is required {{init}}\n{CliApp.format_help(RootCommand)}'),
+    ):
+        CliApp.run(RootCommand, cli_args=[], cli_exit_on_error=False)
