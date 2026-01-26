@@ -189,7 +189,7 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
             field_name: The declared name of the field
 
         Returns:
-            A tuple of (value, key, value_is_complex), where ``key`` is the identifier used
+            A tuple of (value, key, value_is_complex), where `key` is the identifier used
             to populate the model (either the field name or an alias, depending on
             configuration).
         """
@@ -198,8 +198,7 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
 
         # If a secret version is specified, try to get that specific version of the secret from
         # GCP Secret Manager via the GoogleSecretManagerMapping. This allows different versions
-        # of the same secret name to be retrieved independently; no additional caching logic is
-        # implemented here.
+        # of the same secret name to be retrieved independently and cached in the GoogleSecretManagerMapping
         if secret_version and isinstance(self.env_vars, GoogleSecretManagerMapping):
             for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
                 gcp_secret_name = self.env_vars._secret_name_map.get(env_name)
