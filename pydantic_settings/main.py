@@ -735,8 +735,10 @@ class CliApp:
         subcommand_dest = ':subcommand'
         cli_settings_source = [source for source in sources if isinstance(source, CliSettingsSource)][0]
         CliApp._subcommand_stack[id(command)] = (cli_settings_source, cli_settings_source.root_parser, subcommand_dest)
-        data_model = CliApp._run_cli_cmd(command, cli_cmd_method_name, is_required=False)
-        del CliApp._subcommand_stack[id(command)]
+        try:
+            data_model = CliApp._run_cli_cmd(command, cli_cmd_method_name, is_required=False)
+        finally:
+            del CliApp._subcommand_stack[id(command)]
         return data_model
 
     @staticmethod
@@ -788,8 +790,10 @@ class CliApp:
         subcommand_dest = f'{subcommand_dest.split(":")[0]}{subcommand_alias}.:subcommand'
         subcommand_parser = subcommand_arg.parser
         CliApp._subcommand_stack[id(subcommand)] = (cli_settings_source, subcommand_parser, subcommand_dest)
-        data_model = CliApp._run_cli_cmd(subcommand, cli_cmd_method_name, is_required=True)
-        del CliApp._subcommand_stack[id(subcommand)]
+        try:
+            data_model = CliApp._run_cli_cmd(subcommand, cli_cmd_method_name, is_required=True)
+        finally:
+            del CliApp._subcommand_stack[id(subcommand)]
         return data_model
 
     @staticmethod
@@ -855,6 +859,7 @@ class CliApp:
             model: The model or model class.
             cli_settings_source: Override the default CLI settings source with a user defined instance.
                 Defaults to `None`.
+            strip_ansi_color: Strips ANSI color codes from the help message when set to `True`.
 
         Returns:
             The help message string for the model.
@@ -883,6 +888,7 @@ class CliApp:
             cli_settings_source: Override the default CLI settings source with a user defined instance.
                 Defaults to `None`.
             file: A text stream to which the help message is written. If `None`, the output is sent to sys.stdout.
+            strip_ansi_color: Strips ANSI color codes from the help message when set to `True`.
         """
         print(
             CliApp.format_help(

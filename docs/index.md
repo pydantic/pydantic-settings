@@ -1229,31 +1229,34 @@ When executing a subcommand with an asynchronous cli_cmd, Pydantic settings auto
 The `print_help` and `format_help` methods are available for printing or formatting help.
 
 ```python
-from pydantic import Field
-
 from pydantic_settings import BaseSettings, CliApp
 
 
 class Settings(BaseSettings, cli_prog_name='example'):
-    my_arg: str = Field(description='My arg doc')
+
+    def cli_cmd(self) -> None:
+        # Will print help for the current command or subcommand instance.
+        CliApp.print_help(self)
+
+        # Will return formatted help for the current command or subcommand instance.
+        CliApp.format_help(self)
 
 
-CliApp.print_help(Settings)
+CliApp.run(Settings, cli_args=[])
 """
-usage: example [-h] [--my_arg str]
+usage: example [-h]
 
 options:
-  -h, --help    show this help message and exit
-  --my_arg str  My arg doc (required)
+  -h, --help  show this help message and exit
 """
 
+# You can also print or format help on the class itself.
 print(CliApp.format_help(Settings))
 """
-usage: example [-h] [--my_arg str]
+usage: example [-h]
 
 options:
-  -h, --help    show this help message and exit
-  --my_arg str  My arg doc (required)
+  -h, --help  show this help message and exit
 """
 ```
 
