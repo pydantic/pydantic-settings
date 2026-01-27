@@ -5,6 +5,7 @@ from .azure import AzureKeyVaultSettingsSource
 from .cli import (
     CliDualFlag,
     CliExplicitFlag,
+    CliIgnoreArg,
     CliImplicitFlag,
     CliMutuallyExclusiveGroup,
     CliPositionalArg,
@@ -30,6 +31,7 @@ __all__ = [
     'CliToggleFlag',
     'CliDualFlag',
     'CliMutuallyExclusiveGroup',
+    'CliIgnoreArg',
     'CliPositionalArg',
     'CliSettingsSource',
     'CliSubCommand',
