@@ -2,12 +2,13 @@ from __future__ import annotations as _annotations
 
 import asyncio
 import inspect
+import re
 import threading
 import warnings
 from argparse import Namespace
 from collections.abc import Mapping
 from types import SimpleNamespace
-from typing import Any, ClassVar, Literal, TypeVar
+from typing import Any, ClassVar, Literal, TextIO, TypeVar, cast
 
 from pydantic import ConfigDict
 from pydantic._internal._config import config_keys
@@ -166,6 +167,8 @@ class BaseSettings(BaseModel):
         _cli_kebab_case: CLI args use kebab case. Defaults to `False`.
         _cli_shortcuts: Mapping of target field name to alias names. Defaults to `None`.
         _secrets_dir: The secret files directory or a sequence of directories. Defaults to `None`.
+        _build_sources: Pre-initialized sources and init kwargs to use for building instantiation values.
+            Defaults to `None`.
     """
 
     def __init__(
@@ -197,11 +200,13 @@ class BaseSettings(BaseModel):
         _cli_kebab_case: bool | Literal['all', 'no_enums'] | None = None,
         _cli_shortcuts: Mapping[str, str | list[str]] | None = None,
         _secrets_dir: PathType | None = None,
+        _build_sources: tuple[tuple[PydanticBaseSettingsSource, ...], dict[str, Any]] | None = None,
         **values: Any,
     ) -> None:
-        super().__init__(
-            **__pydantic_self__._settings_build_values(
-                values,
+        sources, init_kwargs = (
+            _build_sources
+            if _build_sources is not None
+            else __pydantic_self__.__class__._settings_init_sources(
                 _case_sensitive=_case_sensitive,
                 _nested_model_default_partial_update=_nested_model_default_partial_update,
                 _env_prefix=_env_prefix,
@@ -229,8 +234,11 @@ class BaseSettings(BaseModel):
                 _cli_kebab_case=_cli_kebab_case,
                 _cli_shortcuts=_cli_shortcuts,
                 _secrets_dir=_secrets_dir,
+                **values,
             )
         )
+
+        super().__init__(**__pydantic_self__.__class__._settings_build_values(sources, init_kwargs))
 
     @classmethod
     def settings_customise_sources(
@@ -256,9 +264,9 @@ class BaseSettings(BaseModel):
         """
         return init_settings, env_settings, dotenv_settings, file_secret_settings
 
-    def _settings_build_values(
-        self,
-        init_kwargs: dict[str, Any],
+    @classmethod
+    def _settings_init_sources(
+        cls,
         _case_sensitive: bool | None = None,
         _nested_model_default_partial_update: bool | None = None,
         _env_prefix: str | None = None,
@@ -286,96 +294,89 @@ class BaseSettings(BaseModel):
         _cli_kebab_case: bool | Literal['all', 'no_enums'] | None = None,
         _cli_shortcuts: Mapping[str, str | list[str]] | None = None,
         _secrets_dir: PathType | None = None,
-    ) -> dict[str, Any]:
+        **init_kwargs: dict[str, Any],
+    ) -> tuple[tuple[PydanticBaseSettingsSource, ...], dict[str, Any]]:
         # Determine settings config values
-        case_sensitive = _case_sensitive if _case_sensitive is not None else self.model_config.get('case_sensitive')
-        env_prefix = _env_prefix if _env_prefix is not None else self.model_config.get('env_prefix')
+        case_sensitive = _case_sensitive if _case_sensitive is not None else cls.model_config.get('case_sensitive')
+        env_prefix = _env_prefix if _env_prefix is not None else cls.model_config.get('env_prefix')
         env_prefix_target = (
-            _env_prefix_target if _env_prefix_target is not None else self.model_config.get('env_prefix_target')
+            _env_prefix_target if _env_prefix_target is not None else cls.model_config.get('env_prefix_target')
         )
         nested_model_default_partial_update = (
             _nested_model_default_partial_update
             if _nested_model_default_partial_update is not None
-            else self.model_config.get('nested_model_default_partial_update')
+            else cls.model_config.get('nested_model_default_partial_update')
         )
-        env_file = _env_file if _env_file != ENV_FILE_SENTINEL else self.model_config.get('env_file')
+        env_file = _env_file if _env_file != ENV_FILE_SENTINEL else cls.model_config.get('env_file')
         env_file_encoding = (
-            _env_file_encoding if _env_file_encoding is not None else self.model_config.get('env_file_encoding')
+            _env_file_encoding if _env_file_encoding is not None else cls.model_config.get('env_file_encoding')
         )
         env_ignore_empty = (
-            _env_ignore_empty if _env_ignore_empty is not None else self.model_config.get('env_ignore_empty')
+            _env_ignore_empty if _env_ignore_empty is not None else cls.model_config.get('env_ignore_empty')
         )
         env_nested_delimiter = (
-            _env_nested_delimiter
-            if _env_nested_delimiter is not None
-            else self.model_config.get('env_nested_delimiter')
+            _env_nested_delimiter if _env_nested_delimiter is not None else cls.model_config.get('env_nested_delimiter')
         )
         env_nested_max_split = (
-            _env_nested_max_split
-            if _env_nested_max_split is not None
-            else self.model_config.get('env_nested_max_split')
+            _env_nested_max_split if _env_nested_max_split is not None else cls.model_config.get('env_nested_max_split')
         )
         env_parse_none_str = (
-            _env_parse_none_str if _env_parse_none_str is not None else self.model_config.get('env_parse_none_str')
+            _env_parse_none_str if _env_parse_none_str is not None else cls.model_config.get('env_parse_none_str')
         )
-        env_parse_enums = _env_parse_enums if _env_parse_enums is not None else self.model_config.get('env_parse_enums')
+        env_parse_enums = _env_parse_enums if _env_parse_enums is not None else cls.model_config.get('env_parse_enums')
 
-        cli_prog_name = _cli_prog_name if _cli_prog_name is not None else self.model_config.get('cli_prog_name')
-        cli_parse_args = _cli_parse_args if _cli_parse_args is not None else self.model_config.get('cli_parse_args')
+        cli_prog_name = _cli_prog_name if _cli_prog_name is not None else cls.model_config.get('cli_prog_name')
+        cli_parse_args = _cli_parse_args if _cli_parse_args is not None else cls.model_config.get('cli_parse_args')
         cli_settings_source = (
-            _cli_settings_source if _cli_settings_source is not None else self.model_config.get('cli_settings_source')
+            _cli_settings_source if _cli_settings_source is not None else cls.model_config.get('cli_settings_source')
         )
         cli_parse_none_str = (
-            _cli_parse_none_str if _cli_parse_none_str is not None else self.model_config.get('cli_parse_none_str')
+            _cli_parse_none_str if _cli_parse_none_str is not None else cls.model_config.get('cli_parse_none_str')
         )
         cli_parse_none_str = cli_parse_none_str if not env_parse_none_str else env_parse_none_str
         cli_hide_none_type = (
-            _cli_hide_none_type if _cli_hide_none_type is not None else self.model_config.get('cli_hide_none_type')
+            _cli_hide_none_type if _cli_hide_none_type is not None else cls.model_config.get('cli_hide_none_type')
         )
-        cli_avoid_json = _cli_avoid_json if _cli_avoid_json is not None else self.model_config.get('cli_avoid_json')
+        cli_avoid_json = _cli_avoid_json if _cli_avoid_json is not None else cls.model_config.get('cli_avoid_json')
         cli_enforce_required = (
-            _cli_enforce_required
-            if _cli_enforce_required is not None
-            else self.model_config.get('cli_enforce_required')
+            _cli_enforce_required if _cli_enforce_required is not None else cls.model_config.get('cli_enforce_required')
         )
         cli_use_class_docs_for_groups = (
             _cli_use_class_docs_for_groups
             if _cli_use_class_docs_for_groups is not None
-            else self.model_config.get('cli_use_class_docs_for_groups')
+            else cls.model_config.get('cli_use_class_docs_for_groups')
         )
         cli_exit_on_error = (
-            _cli_exit_on_error if _cli_exit_on_error is not None else self.model_config.get('cli_exit_on_error')
+            _cli_exit_on_error if _cli_exit_on_error is not None else cls.model_config.get('cli_exit_on_error')
         )
-        cli_prefix = _cli_prefix if _cli_prefix is not None else self.model_config.get('cli_prefix')
+        cli_prefix = _cli_prefix if _cli_prefix is not None else cls.model_config.get('cli_prefix')
         cli_flag_prefix_char = (
-            _cli_flag_prefix_char
-            if _cli_flag_prefix_char is not None
-            else self.model_config.get('cli_flag_prefix_char')
+            _cli_flag_prefix_char if _cli_flag_prefix_char is not None else cls.model_config.get('cli_flag_prefix_char')
         )
         cli_implicit_flags = (
-            _cli_implicit_flags if _cli_implicit_flags is not None else self.model_config.get('cli_implicit_flags')
+            _cli_implicit_flags if _cli_implicit_flags is not None else cls.model_config.get('cli_implicit_flags')
         )
         cli_ignore_unknown_args = (
             _cli_ignore_unknown_args
             if _cli_ignore_unknown_args is not None
-            else self.model_config.get('cli_ignore_unknown_args')
+            else cls.model_config.get('cli_ignore_unknown_args')
         )
-        cli_kebab_case = _cli_kebab_case if _cli_kebab_case is not None else self.model_config.get('cli_kebab_case')
-        cli_shortcuts = _cli_shortcuts if _cli_shortcuts is not None else self.model_config.get('cli_shortcuts')
+        cli_kebab_case = _cli_kebab_case if _cli_kebab_case is not None else cls.model_config.get('cli_kebab_case')
+        cli_shortcuts = _cli_shortcuts if _cli_shortcuts is not None else cls.model_config.get('cli_shortcuts')
 
-        secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
+        secrets_dir = _secrets_dir if _secrets_dir is not None else cls.model_config.get('secrets_dir')
 
         # Configure built-in sources
         default_settings = DefaultSettingsSource(
-            self.__class__, nested_model_default_partial_update=nested_model_default_partial_update
+            cls, nested_model_default_partial_update=nested_model_default_partial_update
         )
         init_settings = InitSettingsSource(
-            self.__class__,
+            cls,
             init_kwargs=init_kwargs,
             nested_model_default_partial_update=nested_model_default_partial_update,
         )
         env_settings = EnvSettingsSource(
-            self.__class__,
+            cls,
             case_sensitive=case_sensitive,
             env_prefix=env_prefix,
             env_prefix_target=env_prefix_target,
@@ -386,7 +387,7 @@ class BaseSettings(BaseModel):
             env_parse_enums=env_parse_enums,
         )
         dotenv_settings = DotEnvSettingsSource(
-            self.__class__,
+            cls,
             env_file=env_file,
             env_file_encoding=env_file_encoding,
             case_sensitive=case_sensitive,
@@ -400,15 +401,15 @@ class BaseSettings(BaseModel):
         )
 
         file_secret_settings = SecretsSettingsSource(
-            self.__class__,
+            cls,
             secrets_dir=secrets_dir,
             case_sensitive=case_sensitive,
             env_prefix=env_prefix,
             env_prefix_target=env_prefix_target,
         )
         # Provide a hook to set built-in sources priority and add / remove sources
-        sources = self.settings_customise_sources(
-            self.__class__,
+        sources = cls.settings_customise_sources(
+            cls,
             init_settings=init_settings,
             env_settings=env_settings,
             dotenv_settings=dotenv_settings,
@@ -420,7 +421,7 @@ class BaseSettings(BaseModel):
                 sources = (cli_settings_source,) + sources
             elif cli_parse_args is not None:
                 cli_settings = CliSettingsSource[Any](
-                    self.__class__,
+                    cls,
                     cli_prog_name=cli_prog_name,
                     cli_parse_args=cli_parse_args,
                     cli_parse_none_str=cli_parse_none_str,
@@ -442,8 +443,14 @@ class BaseSettings(BaseModel):
         elif cli_parse_args not in (None, False) and not custom_cli_sources[0].env_vars:
             custom_cli_sources[0](args=cli_parse_args)  # type: ignore
 
-        self._settings_warn_unused_config_keys(sources, self.model_config)
+        cls._settings_warn_unused_config_keys(sources, cls.model_config)
 
+        return sources, init_kwargs
+
+    @classmethod
+    def _settings_build_values(
+        cls, sources: tuple[PydanticBaseSettingsSource, ...], init_kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
         if sources:
             state: dict[str, Any] = {}
             defaults: dict[str, Any] = {}
@@ -464,7 +471,7 @@ class BaseSettings(BaseModel):
 
             # Strip any default values not explicity set before returning final state
             state = {key: val for key, val in state.items() if key not in defaults or defaults[key] != val}
-            self._settings_restore_init_kwarg_names(self.__class__, init_kwargs, state)
+            cls._settings_restore_init_kwarg_names(cls, init_kwargs, state)
 
             return state
         else:
@@ -594,6 +601,9 @@ class CliApp:
     CLI applications.
     """
 
+    _subcommand_stack: ClassVar[dict[int, tuple[CliSettingsSource[Any], Any, str]]] = {}
+    _ansi_color: ClassVar[re.Pattern[str]] = re.compile(r'\x1b\[[0-9;]*m')
+
     @staticmethod
     def _get_base_settings_cls(model_cls: type[Any]) -> type[BaseSettings]:
         if issubclass(model_cls, BaseSettings):
@@ -712,12 +722,24 @@ class CliApp:
         model_init_data['_cli_settings_source'] = cli_settings
         if not issubclass(model_cls, BaseSettings):
             base_settings_cls = CliApp._get_base_settings_cls(model_cls)
-            model = base_settings_cls(**model_init_data)
+            sources, init_kwargs = base_settings_cls._settings_init_sources(**model_init_data)
+            model = base_settings_cls(**base_settings_cls._settings_build_values(sources, init_kwargs))
             model_init_data = {}
             for field_name, field_info in base_settings_cls.model_fields.items():
                 model_init_data[_field_name_for_signature(field_name, field_info)] = getattr(model, field_name)
+            command = model_cls(**model_init_data)
+        else:
+            sources, init_kwargs = model_cls._settings_init_sources(**model_init_data)
+            command = model_cls(_build_sources=(sources, init_kwargs))
 
-        return CliApp._run_cli_cmd(model_cls(**model_init_data), cli_cmd_method_name, is_required=False)
+        subcommand_dest = ':subcommand'
+        cli_settings_source = [source for source in sources if isinstance(source, CliSettingsSource)][0]
+        CliApp._subcommand_stack[id(command)] = (cli_settings_source, cli_settings_source.root_parser, subcommand_dest)
+        try:
+            data_model = CliApp._run_cli_cmd(command, cli_cmd_method_name, is_required=False)
+        finally:
+            del CliApp._subcommand_stack[id(command)]
+        return data_model
 
     @staticmethod
     def run_subcommand(
@@ -741,8 +763,38 @@ class CliApp:
             SettingsError: When no subcommand is found and cli_exit_on_error=`False`.
         """
 
-        subcommand = get_subcommand(model, is_required=True, cli_exit_on_error=cli_exit_on_error)
-        return CliApp._run_cli_cmd(subcommand, cli_cmd_method_name, is_required=True)
+        if id(model) in CliApp._subcommand_stack:
+            cli_settings_source, parser, subcommand_dest = CliApp._subcommand_stack[id(model)]
+        else:
+            cli_settings_source = CliSettingsSource[Any](CliApp._get_base_settings_cls(type(model)))
+            parser = cli_settings_source.root_parser
+            subcommand_dest = ':subcommand'
+
+        cli_exit_on_error = cli_settings_source.cli_exit_on_error if cli_exit_on_error is None else cli_exit_on_error
+
+        errors: list[SettingsError | SystemExit] = []
+        subcommand = get_subcommand(
+            model, is_required=True, cli_exit_on_error=cli_exit_on_error, _suppress_errors=errors
+        )
+        if errors:
+            err = errors[0]
+            if err.__context__ is None and err.__cause__ is None and cli_settings_source._format_help is not None:
+                error_message = f'{err}\n{cli_settings_source._format_help(parser)}'
+                raise type(err)(error_message) from None
+            else:
+                raise err
+
+        subcommand_cls = cast(type[BaseModel], type(subcommand))
+        subcommand_arg = cli_settings_source._parser_map[subcommand_dest][subcommand_cls]
+        subcommand_alias = subcommand_arg.subcommand_alias(subcommand_cls)
+        subcommand_dest = f'{subcommand_dest.split(":")[0]}{subcommand_alias}.:subcommand'
+        subcommand_parser = subcommand_arg.parser
+        CliApp._subcommand_stack[id(subcommand)] = (cli_settings_source, subcommand_parser, subcommand_dest)
+        try:
+            data_model = CliApp._run_cli_cmd(subcommand, cli_cmd_method_name, is_required=True)
+        finally:
+            del CliApp._subcommand_stack[id(subcommand)]
+        return data_model
 
     @staticmethod
     def serialize(
@@ -793,3 +845,56 @@ class CliApp:
             positionals_first=positionals_first,
         )
         return CliSettingsSource._flatten_serialized_args(serialized_args, positionals_first)
+
+    @staticmethod
+    def format_help(
+        model: PydanticModel | type[T],
+        cli_settings_source: CliSettingsSource[Any] | None = None,
+        strip_ansi_color: bool = False,
+    ) -> str:
+        """
+        Return a string containing a help message for a Pydantic model.
+
+        Args:
+            model: The model or model class.
+            cli_settings_source: Override the default CLI settings source with a user defined instance.
+                Defaults to `None`.
+            strip_ansi_color: Strips ANSI color codes from the help message when set to `True`.
+
+        Returns:
+            The help message string for the model.
+        """
+        model_cls = model if isinstance(model, type) else type(model)
+        if cli_settings_source is None:
+            if not isinstance(model, type) and id(model) in CliApp._subcommand_stack:
+                cli_settings_source, *_ = CliApp._subcommand_stack[id(model)]
+            else:
+                cli_settings_source = CliSettingsSource(CliApp._get_base_settings_cls(model_cls))
+        help_message = cli_settings_source._format_help(cli_settings_source.root_parser)
+        return help_message if not strip_ansi_color else CliApp._ansi_color.sub('', help_message)
+
+    @staticmethod
+    def print_help(
+        model: PydanticModel | type[T],
+        cli_settings_source: CliSettingsSource[Any] | None = None,
+        file: TextIO | None = None,
+        strip_ansi_color: bool = False,
+    ) -> None:
+        """
+        Print a help message for a Pydantic model.
+
+        Args:
+            model: The model or model class.
+            cli_settings_source: Override the default CLI settings source with a user defined instance.
+                Defaults to `None`.
+            file: A text stream to which the help message is written. If `None`, the output is sent to sys.stdout.
+            strip_ansi_color: Strips ANSI color codes from the help message when set to `True`.
+        """
+        print(
+            CliApp.format_help(
+                model,
+                cli_settings_source=cli_settings_source,
+                strip_ansi_color=strip_ansi_color,
+            ),
+            file=file,
+        )
