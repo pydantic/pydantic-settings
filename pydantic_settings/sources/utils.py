@@ -105,6 +105,7 @@ def _annotation_contains_types(
     is_include_origin: bool = True,
     is_strip_annotated: bool = False,
     is_instance: bool = False,
+    collect: set[Any] | None = None,
 ) -> bool:
     """Check if a type annotation contains any of the specified types."""
     if is_strip_annotated:
@@ -112,17 +113,35 @@ def _annotation_contains_types(
     if is_include_origin is True:
         origin = get_origin(annotation)
         if origin in types:
-            return True
+            if collect is None:
+                return True
+            collect.add(annotation)
         if is_instance and any(isinstance(origin, type_) for type_ in types):
-            return True
+            if collect is None:
+                return True
+            collect.add(annotation)
     for type_ in get_args(annotation):
-        if _annotation_contains_types(
-            type_, types, is_include_origin=True, is_strip_annotated=is_strip_annotated, is_instance=is_instance
+        if (
+            _annotation_contains_types(
+                type_,
+                types,
+                is_include_origin=True,
+                is_strip_annotated=is_strip_annotated,
+                is_instance=is_instance,
+                collect=collect,
+            )
+            and collect is None
         ):
             return True
     if is_instance and any(isinstance(annotation, type_) for type_ in types):
+        if collect is None:
+            return True
+        collect.add(annotation)
+    if annotation in types:
+        if collect is not None:
+            collect.add(annotation)
         return True
-    return annotation in types
+    return False
 
 
 def _strip_annotated(annotation: Any) -> Any:
