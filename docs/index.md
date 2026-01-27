@@ -2388,7 +2388,7 @@ class AzureKeyVaultSettings(BaseSettings):
 
 ### Snake case conversion
 
-The Azure Key Vault source accepts a `snake_case_convertion` option, disabled by default, to convert Key Vault secret names by mapping them to Python's snake_case field names, without the need to use aliases.
+The Azure Key Vault source accepts a `snake_case_conversion` option, disabled by default, to convert Key Vault secret names by mapping them to Python's snake_case field names, without the need to use aliases.
 
 ```py
 import os
@@ -2429,7 +2429,7 @@ This setup will load Azure Key Vault secrets (e.g., `MySetting`, `mySetting`, `m
 
 The Azure Key Vault source accepts a `dash_to_underscore` option, disabled by default, to support Key Vault kebab-case secret names by mapping them to Python's snake_case field names. When enabled, dashes (`-`) in secret names are mapped to underscores (`_`) in field names during validation.
 
-This mapping applies only to *field names*, not to aliases.
+This mapping applies only to *field names*, not to aliases.  Consider snake case conversion if you need aliases or nested fields.
 
 ```py
 import os
