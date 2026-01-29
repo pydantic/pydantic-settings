@@ -1158,7 +1158,7 @@ For `BaseModel` and `pydantic.dataclasses.dataclass` types, `CliApp.run` will in
 * `cli_implicit_flags=True`
 * `cli_kebab_case=True`
 
-### Asynchronous CLI Commands
+#### Asynchronous Commands
 
 Pydantic settings supports running asynchronous CLI commands via `CliApp.run` and `CliApp.run_subcommand`. With this feature, you can define async def methods within your Pydantic models (including subcommands) and have them executed just like their synchronous counterparts. Specifically:
 
@@ -1224,7 +1224,43 @@ CliApp.run(Git, cli_args=['clone', 'repo', 'dir']).model_dump() == {
 
 When executing a subcommand with an asynchronous cli_cmd, Pydantic settings automatically detects whether the current thread already has an active event loop. If so, the async command is run in a fresh thread to avoid conflicts. Otherwise, it uses asyncio.run() in the current thread. This handling ensures your asynchronous subcommands "just work" without additional manual setup.
 
-### Serializing CLI Arguments
+#### Printing Help
+
+The `print_help` and `format_help` methods are available for printing or formatting help.
+
+```python
+from pydantic_settings import BaseSettings, CliApp
+
+
+class Settings(BaseSettings, cli_prog_name='example'):
+
+    def cli_cmd(self) -> None:
+        # Will print help for the current command or subcommand instance.
+        CliApp.print_help(self)
+
+        # Will return formatted help for the current command or subcommand instance.
+        CliApp.format_help(self)
+
+
+CliApp.run(Settings, cli_args=[])
+"""
+usage: example [-h]
+
+options:
+  -h, --help  show this help message and exit
+"""
+
+# You can also print or format help on the class itself.
+print(CliApp.format_help(Settings))
+"""
+usage: example [-h]
+
+options:
+  -h, --help  show this help message and exit
+"""
+```
+
+#### Serializing Arguments
 
 An instantiated Pydantic model can be serialized into its CLI arguments using the `CliApp.serialize` method. Serialization styles can be controlled using the `list_style`, `dict_style`, and `positionals_first` flags.
 
@@ -1897,6 +1933,7 @@ parser methods that can be customised, along with their argparse counterparts (t
 * `add_argument_group_method` - (`argparse.ArgumentParser.add_argument_group`)
 * `add_parser_method` - (`argparse._SubParsersAction.add_parser`)
 * `add_subparsers_method` - (`argparse.ArgumentParser.add_subparsers`)
+* `format_help_method` - (`argparse.ArgumentParser.format_help`)
 * `formatter_class` - (`argparse.RawDescriptionHelpFormatter`)
 
 For a non-argparse parser the parser methods can be set to `None` if not supported. The CLI settings will only raise an
@@ -2519,14 +2556,59 @@ The `GoogleSecretManagerSettingsSource` supports several authentication methods:
 
 For nested models, Secret Manager supports the `env_nested_delimiter` setting as long as it complies with the [naming rules](https://cloud.google.com/secret-manager/docs/creating-and-accessing-secrets#create-a-secret). In the example above, you would create secrets named `database__password` and `database__user` in Secret Manager.
 
+### Secret Versions
+
+By default, `GoogleSecretManagerSettingsSource` uses the "latest" version of secrets.
+You can specify a different version using the `SecretVersion` annotation.
+
+```py
+from typing import Annotated
+
+from pydantic import Field
+
+from pydantic_settings import (
+    BaseSettings,
+    GoogleSecretManagerSettingsSource,
+    PydanticBaseSettingsSource,
+)
+from pydantic_settings.sources.types import SecretVersion
+
+
+class Settings(BaseSettings):
+    # This will use the "latest" version
+    my_secret: str = Field(alias='my-secret')
+    # This will use version "1"
+    my_secret_v1: Annotated[str, Field(alias='my-secret'), SecretVersion('1')]
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (
+            GoogleSecretManagerSettingsSource(settings_cls, project_id='my-project'),
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+        )
+```
+
+!!! note
+    If you have multiple fields pointing to the same secret (alias) but with different versions, you MUST enable `populate_by_name=True` in `SettingsConfigDict`.
+
+
 ### Important Notes
 
 1. **Case Sensitivity**: By default, secret names are case-sensitive.
     *   If you set `case_sensitive=False`, `pydantic-settings` will attempt to resolve secrets in a case-insensitive manner. It prioritizes exact matches over case-insensitive matches. For some examples of this, imagine `case_sensitive=False` and the model attribute is named `my_secret`:
         * If Google Secret Manager has both `MY_SECRET` and `my_secret` defined - the value of `my_secret` will be returned.
         * If Google Secret Manager has `MY_SECRET`, `My_Secret`, and `my_Secret` defined - a warning will be raised and the value of `my_Secret` will be returned - as the secret names are first sorted in ASCII sort order (where lowercased letters are greater than upper case letters) and the last one is chosen (which would be `my_Secret` in this case).
-2. **Secret Naming**: Create secrets in Google Secret Manager with names that match your field names (including any prefix). According the [Secret Manager documentation](https://cloud.google.com/secret-manager/docs/creating-and-accessing-secrets#create-a-secret), a secret name can contain uppercase and lowercase letters, numerals, hyphens, and underscores. The maximum allowed length for a name is 255 characters.
-3. **Secret Versions**: The GoogleSecretManagerSettingsSource uses the "latest" version of secrets.
+2. **Secret Naming**: Create secrets in Google Secret Manager with names that match your field names (including any prefix). According to the [Secret Manager documentation](https://cloud.google.com/secret-manager/docs/creating-and-accessing-secrets#create-a-secret), a secret name can contain uppercase and lowercase letters, numerals, hyphens, and underscores. The maximum allowed length for a name is 255 characters.
 
 For more details on creating and managing secrets in Google Cloud Secret Manager, see the [official Google Cloud documentation](https://cloud.google.com/secret-manager/docs).
 

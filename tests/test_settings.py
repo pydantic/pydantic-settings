@@ -2101,6 +2101,7 @@ def test_secret_settings_source_custom_env_parse(tmp_path):
 
         model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
+        @classmethod
         def settings_customise_sources(
             cls,
             settings_cls: type[BaseSettings],
