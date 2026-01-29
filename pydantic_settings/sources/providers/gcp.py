@@ -208,7 +208,11 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
                 if gcp_secret_name:
                     env_val = self.env_vars._get_secret_value(gcp_secret_name, secret_version)
                     if env_val is not None:
-                        return env_val, field_name, value_is_complex
+                        # If populate_by_name is enabled, return field_name to allow multiple fields
+                        # with the same alias but different versions to be distinguished
+                        if self.settings_cls.model_config.get('populate_by_name'):
+                            return env_val, field_name, value_is_complex
+                        return env_val, field_key, value_is_complex
 
             # If a secret version is specified but not found, we should not fall back to "latest" (default behavior)
             # as that would be incorrect. We return None to indicate the value was not found.
