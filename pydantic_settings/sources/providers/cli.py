@@ -1155,7 +1155,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             discriminators.update(chain.from_iterable(get_args(tag) for tag in tags))
             if not is_last_discriminator:
                 return []
-            arg.kwargs['metavar'] = self._metavar_format(Literal[tuple(discriminators)])
+            arg.kwargs['metavar'] = self._metavar_format(Literal[tuple(sorted(discriminators))])
 
         return arg_names
 

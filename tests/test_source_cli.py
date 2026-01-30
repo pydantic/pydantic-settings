@@ -3089,3 +3089,53 @@ subcommands:
         match=re.escape(f'Error: CLI subcommand is required {{init}}\n{CliApp.format_help(RootCommand)}'),
     ):
         CliApp.run(RootCommand, cli_args=[], cli_exit_on_error=False)
+
+
+def test_cli_disriminator_choices():
+    class DivModel(BaseModel):
+        el_type: Literal['div'] = 'div'
+        class_name: str | None = None
+        children: list[Any] | None = None
+
+    class SpanModel(BaseModel):
+        el_type: Literal['span'] = 'span'
+        class_name: str | None = None
+        contents: str | None = None
+
+    class ButtonModel(BaseModel):
+        el_type: Literal['button'] = 'button'
+        class_name: str | None = None
+        contents: str | None = None
+
+    class InputModel(BaseModel):
+        el_type: Literal['input'] = 'input'
+        class_name: str | None = None
+        value: str | None = None
+
+    class Html(BaseSettings, cli_prog_name='example.py'):
+        contents: DivModel | SpanModel | ButtonModel | InputModel = Field(discriminator='el_type')
+
+    assert CliApp.format_help(Html, strip_ansi_color=True) == (
+        f"""usage: example.py [-h] [--contents [JSON]] [--contents.class_name {{str,null}}]
+                  [--contents.children {{list[Any],null}}]
+                  [--contents.contents {{str,null}}]
+                  [--contents.el_type {{button,div,input,span}}]
+                  [--contents.value {{str,null}}]
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+
+contents options:
+  --contents [JSON]     set contents from JSON string (default: {{}})
+  --contents.class_name {{str,null}}
+                        (default: null)
+  --contents.children {{list[Any],null}}
+                        (default: null)
+  --contents.contents {{str,null}}
+                        (default: null)
+  --contents.el_type {{button,div,input,span}}
+                        (default: input)
+  --contents.value {{str,null}}
+                        (default: null)
+"""
+    )
