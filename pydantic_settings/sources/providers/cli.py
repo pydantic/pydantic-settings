@@ -37,7 +37,6 @@ from typing import (
     overload,
 )
 
-import typing_extensions
 from pydantic import AliasChoices, AliasPath, BaseModel, Field, PrivateAttr
 from pydantic._internal._repr import Representation
 from pydantic._internal._utils import is_model_class
@@ -48,7 +47,7 @@ from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
 
 from ...exceptions import SettingsError
-from ...utils import _lenient_issubclass, _WithArgsTypes
+from ...utils import _lenient_issubclass, _typing_base, _WithArgsTypes
 from ..types import (
     ForceDecode,
     NoDecode,
@@ -1301,13 +1300,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             return '...'
         elif isinstance(obj, Representation):
             return repr(obj)
-        elif typing_objects.is_typealiastype(obj):
+        elif isinstance(obj, typing.ForwardRef) or typing_objects.is_typealiastype(obj):
             return str(obj)
 
-        origin = get_origin(obj)
-        if origin is None and not isinstance(obj, (type, typing.ForwardRef, typing_extensions.ForwardRef)):
+        if not isinstance(obj, (_typing_base, _WithArgsTypes, type)):
             obj = obj.__class__
 
+        origin = get_origin(obj)
         if is_union_origin(origin):
             return self._metavar_format_choices(list(map(self._metavar_format_recurse, self._get_modified_args(obj))))
         elif typing_objects.is_literal(origin):

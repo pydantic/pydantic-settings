@@ -1,6 +1,6 @@
 import types
 from pathlib import Path
-from typing import Any, _GenericAlias, get_origin  # type: ignore [attr-defined]
+from typing import Any, _Final, _GenericAlias, get_origin  # type: ignore [attr-defined]
 
 _PATH_TYPE_LABELS = {
     Path.is_dir: 'directory',
@@ -40,3 +40,4 @@ def _lenient_issubclass(cls: Any, class_or_tuple: Any) -> bool:  # pragma: no co
 
 
 _WithArgsTypes = (_GenericAlias, types.GenericAlias, types.UnionType)
+_typing_base: Any = _Final  # pyright: ignore[reportAttributeAccessIssue]
