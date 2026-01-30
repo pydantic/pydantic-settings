@@ -47,11 +47,13 @@ class AzureKeyVaultMapping(Mapping[str, str | None]):
         secret_client: SecretClient,
         case_sensitive: bool,
         snake_case_conversion: bool,
+        env_prefix: str | None,
     ) -> None:
         self._loaded_secrets = {}
         self._secret_client = secret_client
         self._case_sensitive = case_sensitive
         self._snake_case_conversion = snake_case_conversion
+        self._env_prefix = env_prefix if env_prefix else ''
         self._secret_map: dict[str, str] = self._load_remote()
 
     def _load_remote(self) -> dict[str, str]:
@@ -60,7 +62,13 @@ class AzureKeyVaultMapping(Mapping[str, str | None]):
         )
 
         if self._snake_case_conversion:
-            return {to_snake(name): name for name in secret_names}
+            name_map: dict[str, str] = {}
+            for name in secret_names:
+                if name.startswith(self._env_prefix):
+                    name_map[f'{self._env_prefix}{to_snake(name[len(self._env_prefix) :])}'] = name
+                else:
+                    name_map[to_snake(name)] = name
+            return name_map
 
         if self._case_sensitive:
             return {name: name for name in secret_names}
@@ -71,7 +79,11 @@ class AzureKeyVaultMapping(Mapping[str, str | None]):
         new_key = key
 
         if self._snake_case_conversion:
-            new_key = to_snake(key)
+            if key.startswith(self._env_prefix):
+                new_key = f'{self._env_prefix}{to_snake(key[len(self._env_prefix) :])}'
+            else:
+                new_key = to_snake(key)
+
         elif not self._case_sensitive:
             new_key = key.lower()
 
@@ -113,7 +125,7 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
         self._snake_case_conversion = snake_case_conversion
         super().__init__(
             settings_cls,
-            case_sensitive=False if snake_case_conversion else case_sensitive,
+            case_sensitive=True if snake_case_conversion else case_sensitive,
             env_prefix=env_prefix,
             env_nested_delimiter='__' if snake_case_conversion else '--',
             env_ignore_empty=False,
@@ -127,11 +139,13 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
             secret_client=secret_client,
             case_sensitive=self.case_sensitive,
             snake_case_conversion=self._snake_case_conversion,
+            env_prefix=self.env_prefix,
         )
 
     def _extract_field_info(self, field: FieldInfo, field_name: str) -> list[tuple[str, str, bool]]:
         if self._snake_case_conversion:
-            return list((x[0], x[0], x[2]) for x in super()._extract_field_info(field, field_name))
+            field_info = list((x[0], x[1], x[2]) for x in super()._extract_field_info(field, field_name))
+            return field_info
 
         if self._dash_to_underscore:
             return list((x[0], x[1].replace('_', '-'), x[2]) for x in super()._extract_field_info(field, field_name))
