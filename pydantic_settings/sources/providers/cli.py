@@ -37,7 +37,7 @@ from typing import (
 )
 
 import typing_extensions
-from pydantic import AliasChoices, AliasPath, BaseModel, Field, PrivateAttr
+from pydantic import AliasChoices, AliasPath, BaseModel, Field, PrivateAttr, TypeAdapter, ValidationError
 from pydantic._internal._repr import Representation
 from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
@@ -619,6 +619,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         decode_list: list[str] = []
         is_use_decode: bool | None = None
         cli_arg_map = self._parser_map.get(field_name, {})
+        try:
+            list_adapter: Any = TypeAdapter(next(iter(cli_arg_map.values())).field_info.annotation)
+            is_num_type_str = type(list_adapter.validate_python(['1'])[0]) is str
+        except (StopIteration, ValidationError):
+            is_num_type_str = None
         for index, item in enumerate(merged_list):
             cli_arg = cli_arg_map.get(index)
             is_decode = cli_arg is None or not cli_arg.is_no_decode
@@ -628,6 +633,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 raise SettingsError('Mixing Decode and NoDecode across different AliasPath fields is not allowed')
             if is_use_decode:
                 item = item.replace('\\', '\\\\')
+                try:
+                    unquoted_item = item[1:-1] if item.startswith('"') and item.endswith('"') else item
+                    float(unquoted_item)
+                    item = f'"{unquoted_item}"' if is_num_type_str else unquoted_item
+                except ValueError:
+                    pass
             elif item.startswith('"') and item.endswith('"'):
                 item = item[1:-1]
             decode_list.append(item)
