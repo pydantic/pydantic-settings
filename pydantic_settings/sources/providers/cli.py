@@ -20,6 +20,7 @@ from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from enum import Enum
 from functools import cached_property
+from itertools import chain
 from textwrap import dedent
 from types import SimpleNamespace
 from typing import (
@@ -36,7 +37,6 @@ from typing import (
     overload,
 )
 
-import typing_extensions
 from pydantic import AliasChoices, AliasPath, BaseModel, Field, PrivateAttr, TypeAdapter, ValidationError
 from pydantic._internal._repr import Representation
 from pydantic._internal._utils import is_model_class
@@ -47,7 +47,7 @@ from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
 
 from ...exceptions import SettingsError
-from ...utils import _lenient_issubclass, _WithArgsTypes
+from ...utils import _lenient_issubclass, _typing_base, _WithArgsTypes
 from ..types import (
     ForceDecode,
     NoDecode,
@@ -942,6 +942,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         alias_prefixes: list[str],
         model_default: Any,
         is_model_suppressed: bool = False,
+        discriminator_vals: dict[str, set[Any]] = {},
+        is_last_discriminator: bool = True,
     ) -> ArgumentParser:
         subparsers: Any = None
         alias_path_args: dict[str, int | None] = {}
@@ -1024,7 +1026,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 )
 
                 arg_names = self._get_arg_names(
-                    arg_prefix, subcommand_prefix, alias_prefixes, arg.alias_names, added_args
+                    arg,
+                    subcommand_prefix,
+                    alias_prefixes,
+                    added_args,
+                    discriminator_vals,
+                    is_last_discriminator,
                 )
                 if not arg_names or (arg.kwargs['dest'] in added_args):
                     continue
@@ -1121,15 +1128,16 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _get_arg_names(
         self,
-        arg_prefix: str,
+        arg: _CliArg,
         subcommand_prefix: str,
         alias_prefixes: list[str],
-        alias_names: tuple[str, ...],
         added_args: list[str],
+        discriminator_vals: dict[str, set[Any]],
+        is_last_discriminator: bool,
     ) -> list[str]:
         arg_names: list[str] = []
-        for prefix in [arg_prefix] + alias_prefixes:
-            for name in alias_names:
+        for prefix in [arg.arg_prefix] + alias_prefixes:
+            for name in arg.alias_names:
                 arg_name = _CliArg.get_kebab_case(
                     f'{prefix}{name}'
                     if subcommand_prefix == self.env_prefix
@@ -1144,6 +1152,20 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 if target in arg_names:
                     alias_list = [aliases] if isinstance(aliases, str) else aliases
                     arg_names.extend(alias for alias in alias_list if alias not in added_args)
+
+        tags: set[Any] = set()
+        discriminators = discriminator_vals.get(arg.dest)
+        if discriminators is not None:
+            _annotation_contains_types(
+                arg.field_info.annotation,
+                (Literal,),
+                is_include_origin=True,
+                collect=tags,
+            )
+            discriminators.update(chain.from_iterable(get_args(tag) for tag in tags))
+            if not is_last_discriminator:
+                return []
+            arg.kwargs['metavar'] = self._metavar_format(Literal[tuple(sorted(discriminators))])
 
         return arg_names
 
@@ -1171,7 +1193,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             # exclusive group.
             raise SettingsError('cannot have nested models in a CliMutuallyExclusiveGroup')
 
-        model_group: Any = None
         model_group_kwargs: dict[str, Any] = {}
         model_group_kwargs['title'] = f'{arg_names[0]} options'
         model_group_kwargs['description'] = field_info.description
@@ -1203,16 +1224,20 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         is_model_suppressed = self._is_field_suppressed(field_info) or is_model_suppressed
         if is_model_suppressed:
             model_group_kwargs['description'] = CLI_SUPPRESS
-        if not self.cli_avoid_json:
-            added_args.append(arg_names[0])
-            kwargs['required'] = False
-            kwargs['nargs'] = '?'
-            kwargs['const'] = '{}'
-            kwargs['help'] = (
-                CLI_SUPPRESS if is_model_suppressed else f'set {arg_names[0]} from JSON string (default: {{}})'
-            )
-            model_group = self._add_group(parser, **model_group_kwargs)
-            self._add_argument(model_group, *(f'{flag_prefix}{name}' for name in arg_names), **kwargs)
+        added_args.append(arg_names[0])
+        kwargs['required'] = False
+        kwargs['nargs'] = '?'
+        kwargs['const'] = '{}'
+        kwargs['help'] = (
+            CLI_SUPPRESS
+            if is_model_suppressed or self.cli_avoid_json
+            else f'set {arg_names[0]} from JSON string (default: {{}})'
+        )
+        model_group = self._add_group(parser, **model_group_kwargs)
+        self._add_argument(model_group, *(f'{flag_prefix}{name}' for name in arg_names), **kwargs)
+        discriminator_vals: dict[str, set[Any]] = (
+            {f'{arg_prefix}{preferred_alias}.{field_info.discriminator}': set()} if field_info.discriminator else {}
+        )
         for model in sub_models:
             self._add_parser_args(
                 parser=parser,
@@ -1220,10 +1245,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 added_args=added_args,
                 arg_prefix=f'{arg_prefix}{preferred_alias}.',
                 subcommand_prefix=subcommand_prefix,
-                group=model_group if model_group else model_group_kwargs,
+                group=model_group,
                 alias_prefixes=[f'{arg_prefix}{name}.' for name in alias_names[1:]],
                 model_default=model_default,
                 is_model_suppressed=is_model_suppressed,
+                discriminator_vals=discriminator_vals,
+                is_last_discriminator=model is sub_models[-1],
             )
 
     def _add_parser_alias_paths(
@@ -1284,13 +1311,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             return '...'
         elif isinstance(obj, Representation):
             return repr(obj)
-        elif typing_objects.is_typealiastype(obj):
+        elif isinstance(obj, typing.ForwardRef) or typing_objects.is_typealiastype(obj):
             return str(obj)
 
-        origin = get_origin(obj)
-        if origin is None and not isinstance(obj, (type, typing.ForwardRef, typing_extensions.ForwardRef)):
+        if not isinstance(obj, (_typing_base, _WithArgsTypes, type)):
             obj = obj.__class__
 
+        origin = get_origin(obj)
         if is_union_origin(origin):
             return self._metavar_format_choices(list(map(self._metavar_format_recurse, self._get_modified_args(obj))))
         elif typing_objects.is_literal(origin):
