@@ -745,15 +745,28 @@ def test_cli_list_arg(prefix, arg_spaces):
             assert cfg.model_dump() == expected
 
     args: list[str] = []
-    args = [f'--{prefix}num_list', arg_spaces('[1,2]')]
-    args += [f'--{prefix}num_list', arg_spaces('3,4')]
-    args += [f'--{prefix}num_list', '5', f'--{prefix}num_list', '6']
+    args = [f'--{prefix}str_list', arg_spaces('["1","2"]')]
+    args += [f'--{prefix}num_list', arg_spaces('["1","2"]')]
+    args += [f'--{prefix}str_list', arg_spaces('"3","4"')]
+    args += [f'--{prefix}num_list', arg_spaces('"3","4"')]
+    args += [f'--{prefix}str_list', '"5"', f'--{prefix}str_list', '"6"']
+    args += [f'--{prefix}num_list', '"5"', f'--{prefix}num_list', '"6"']
     cfg = CliApp.run(Cfg, cli_args=args)
     expected = {
         'num_list': [1, 2, 3, 4, 5, 6],
         'obj_list': None,
         'union_list': None,
-        'str_list': None,
+        'str_list': ['1', '2', '3', '4', '5', '6'],
+    }
+    check_answer(cfg, prefix, expected)
+
+    args = [arg.replace('"', '') for arg in args]
+    cfg = CliApp.run(Cfg, cli_args=args)
+    expected = {
+        'num_list': [1, 2, 3, 4, 5, 6],
+        'obj_list': None,
+        'union_list': None,
+        'str_list': ['1', '2', '3', '4', '5', '6'],
     }
     check_answer(cfg, prefix, expected)
 
