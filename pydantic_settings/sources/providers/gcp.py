@@ -30,7 +30,10 @@ def import_gcp_secret_manager() -> None:
     try:
         from google.auth import default as google_auth_default
         from google.auth.credentials import Credentials
-        from google.cloud.secretmanager import SecretManagerServiceClient
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=FutureWarning)
+            from google.cloud.secretmanager import SecretManagerServiceClient
     except ImportError as e:  # pragma: no cover
         raise ImportError(
             'GCP Secret Manager dependencies are not installed, run `pip install pydantic-settings[gcp-secret-manager]`'
@@ -149,7 +152,7 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
         # If credentials or project_id are not passed, then
         # try to get them from the default function
         if not credentials or not project_id:
-            _creds, _project_id = google_auth_default()  # type: ignore[no-untyped-call]
+            _creds, _project_id = google_auth_default()
 
         # Set the credentials and/or project id if they weren't specified
         if credentials is None:
