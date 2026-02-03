@@ -37,7 +37,6 @@ from typing import (
     overload,
 )
 
-import typing_extensions
 from pydantic import AliasChoices, AliasPath, BaseModel, Field, PrivateAttr, TypeAdapter, ValidationError
 from pydantic._internal._repr import Representation
 from pydantic._internal._utils import is_model_class
