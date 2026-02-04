@@ -56,18 +56,28 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         self.yaml_data = self._read_files(self.yaml_file_path, deep_merge=deep_merge)
 
         if self.yaml_config_section:
-            try:
-                self.yaml_data = self.yaml_data[self.yaml_config_section]
-            except KeyError:
-                raise KeyError(
-                    f'yaml_config_section key "{self.yaml_config_section}" not found in {self.yaml_file_path}'
-                )
+            self.yaml_data = self._traverse_nested_section(self.yaml_data, self.yaml_config_section)
         super().__init__(settings_cls, self.yaml_data)
 
     def _read_file(self, file_path: Path) -> dict[str, Any]:
         import_yaml()
         with file_path.open(encoding=self.yaml_file_encoding) as yaml_file:
             return yaml.safe_load(yaml_file) or {}
+
+    def _traverse_nested_section(self, data: dict[str, Any], section_path: str) -> dict[str, Any]:
+        """
+        Traverse nested YAML sections using dot-notation path.
+        """
+        keys = section_path.split('.')
+        current = data
+
+        for key in keys:
+            try:
+                current = current[key]
+            except KeyError:
+                raise KeyError(f'yaml_config_section key "{section_path}" not found in {self.yaml_file_path}')
+
+        return current
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}(yaml_file={self.yaml_file_path})'

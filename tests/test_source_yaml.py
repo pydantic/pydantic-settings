@@ -271,3 +271,106 @@ def test_invalid_yaml_config_section(tmp_path):
 
     with pytest.raises(KeyError, match='yaml_config_section key "invalid_key" not found in .+'):
         Settings()
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
+def test_yaml_config_section_nested_path(tmp_path):
+    p = tmp_path / 'config.yaml'
+    p.write_text(
+        """
+    config:
+      app:
+        settings:
+          database_url: "postgresql://localhost/db"
+          api_key: "secret123"
+      logging:
+        level: "INFO"
+    """
+    )
+
+    class Settings(BaseSettings):
+        database_url: str
+        api_key: str
+
+        model_config = SettingsConfigDict(yaml_file=p, yaml_config_section='config.app.settings')
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.database_url == 'postgresql://localhost/db'
+    assert s.api_key == 'secret123'
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
+def test_yaml_config_section_nested_path_two_levels(tmp_path):
+    p = tmp_path / 'config.yaml'
+    p.write_text(
+        """
+    app:
+      settings:
+        host: "localhost"
+        port: 8000
+    """
+    )
+
+    class Settings(BaseSettings):
+        host: str
+        port: int
+
+        model_config = SettingsConfigDict(yaml_file=p, yaml_config_section='app.settings')
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.host == 'localhost'
+    assert s.port == 8000
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
+def test_invalid_yaml_config_section_nested_path(tmp_path):
+    p = tmp_path / 'config.yaml'
+    p.write_text(
+        """
+    config:
+      app:
+        settings:
+          database_url: "postgresql://localhost/db"
+    """
+    )
+
+    class Settings(BaseSettings):
+        database_url: str
+
+        model_config = SettingsConfigDict(yaml_file=p, yaml_config_section='config.app.invalid')
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls),)
+
+    with pytest.raises(KeyError, match='yaml_config_section key "config.app.invalid" not found in .+'):
+        Settings()

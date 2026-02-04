@@ -75,8 +75,9 @@ class SettingsConfigDict(ConfigDict, total=False):
     yaml_file_encoding: str | None
     yaml_config_section: str | None
     """
-    Specifies the top-level key in a YAML file from which to load the settings.
-    If provided, the settings will be loaded from the nested section under this key.
+    Specifies the section in a YAML file from which to load the settings.
+    Supports dot-notation for nested paths (e.g., 'config.app.settings').
+    If provided, the settings will be loaded from the specified section.
     This is useful when the YAML file contains multiple configuration sections
     and you only want to load a specific subset into your settings model.
     """
