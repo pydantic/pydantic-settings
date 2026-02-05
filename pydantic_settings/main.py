@@ -750,6 +750,7 @@ class CliApp:
         list_style: Literal['json', 'argparse', 'lazy'] = 'json',
         dict_style: Literal['json', 'env'] = 'json',
         positionals_first: bool = False,
+        use_serializers: bool = False,
     ) -> list[str]:
         """
         Serializes the CLI arguments for a Pydantic data model.
@@ -780,6 +781,8 @@ class CliApp:
                   Example: `--config host=localhost --config port=5432`
             positionals_first: Controls whether positional arguments should be serialized
                 first compared to optional arguments. Defaults to `False`.
+            use_serializers: Controls whether [pydantic serializers](https://docs.pydantic.dev/latest/concepts/serialization) 
+                should be used. Defaults to `False`.
 
         Returns:
             The serialized CLI arguments for the data model.
@@ -791,5 +794,6 @@ class CliApp:
             list_style=list_style,
             dict_style=dict_style,
             positionals_first=positionals_first,
+            use_serializers=use_serializers,
         )
         return CliSettingsSource._flatten_serialized_args(serialized_args, positionals_first)

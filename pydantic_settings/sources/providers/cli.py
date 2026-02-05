@@ -1393,18 +1393,21 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         list_style: Literal['json', 'argparse', 'lazy'] = 'json',
         dict_style: Literal['json', 'env'] = 'json',
         positionals_first: bool = False,
+        use_serializers: bool = False,
         _is_submodel: bool = False,
     ) -> dict[str, list[str]]:
         alias_path_only_defaults: dict[str, Any] = {}
         optional_args: list[str | list[Any] | dict[str, Any]] = []
         positional_args: list[str | list[Any] | dict[str, Any]] = []
         subcommand_args: list[str] = []
-        if is_model_class(type(model)) and hasattr(model, 'model_dump'):
-            dumped_model = model.model_dump(mode='json')
-        elif is_pydantic_dataclass(type(model)):
-            dumped_model = TypeAdapter(type(model)).dump_python(model, mode='json')
-        else:
-            raise ValueError(f'unsupported type: {type(model)}')
+        dumped_model = {}
+        if use_serializers:
+            if is_model_class(type(model)) and hasattr(model, 'model_dump'):
+                dumped_model = model.model_dump(mode='json')
+            elif is_pydantic_dataclass(type(model)):
+                dumped_model = TypeAdapter(type(model)).dump_python(model, mode='json')
+            else:
+                raise ValueError(f'unsupported type: {type(model)}')
         for field_name, field_info in _get_model_fields(type(model) if _is_submodel else self.settings_cls).items():
             model_default = getattr(model, field_name)
             if field_info.default == model_default:
@@ -1419,6 +1422,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     list_style=list_style,
                     dict_style=dict_style,
                     positionals_first=positionals_first,
+                    use_serializers=use_serializers,
                     _is_submodel=True,
                 )
                 subcommand_args += self._flatten_serialized_args(sub_args, positionals_first)
@@ -1429,6 +1433,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     list_style=list_style,
                     dict_style=dict_style,
                     positionals_first=positionals_first,
+                    use_serializers=use_serializers,
                     _is_submodel=True,
                 )
                 optional_args += sub_args['optional']
@@ -1438,7 +1443,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
             matched = re.match(r'(-*)(.+)', arg.preferred_arg_name)
             flag_chars, arg_name = matched.groups() if matched else ('', '')
-            dumped_field = dumped_model[field_name]
+            dumped_field = dumped_model[field_name] if use_serializers else model_default
             value: str | list[Any] | dict[str, Any] = (
                 json.dumps(dumped_field) if isinstance(dumped_field, (dict, list, set)) else str(dumped_field)
             )
