@@ -1449,7 +1449,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         optional_args: list[str | list[Any] | dict[str, Any]] = []
         positional_args: list[str | list[Any] | dict[str, Any]] = []
         subcommand_args: list[str] = []
-        dumped_model = {}
+        dumped_model: dict[str, Any] = {}
         if use_serializers:
             if is_model_class(type(model)) and hasattr(model, 'model_dump'):
                 dumped_model = model.model_dump(mode='json')

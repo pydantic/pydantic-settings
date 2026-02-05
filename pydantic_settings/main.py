@@ -833,7 +833,7 @@ class CliApp:
                   Example: `--config host=localhost --config port=5432`
             positionals_first: Controls whether positional arguments should be serialized
                 first compared to optional arguments. Defaults to `False`.
-            use_serializers: Controls whether [pydantic serializers](https://docs.pydantic.dev/latest/concepts/serialization) 
+            use_serializers: Controls whether [pydantic serializers](https://docs.pydantic.dev/latest/concepts/serialization)
                 should be used. Defaults to `False`.
 
         Returns:
