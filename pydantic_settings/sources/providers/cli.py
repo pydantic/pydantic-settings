@@ -1436,6 +1436,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             else serialized_args['positional'] + serialized_args['optional']
         ) + serialized_args['subcommand']
 
+    # noqa: C901
     def _serialized_args(
         self,
         model: PydanticModel,
