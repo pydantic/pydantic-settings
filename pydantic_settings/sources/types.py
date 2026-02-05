@@ -70,6 +70,14 @@ class _CliUnknownArgs:
     pass
 
 
+class SecretVersion:
+    def __init__(self, version: str) -> None:
+        self.version = version
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}({self.version!r})'
+
+
 __all__ = [
     'DEFAULT_PATH',
     'ENV_FILE_SENTINEL',
@@ -80,6 +88,7 @@ __all__ = [
     'NoDecode',
     'PathType',
     'PydanticModel',
+    'SecretVersion',
     '_CliExplicitFlag',
     '_CliImplicitFlag',
     '_CliToggleFlag',

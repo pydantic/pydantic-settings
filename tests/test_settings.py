@@ -936,6 +936,25 @@ def test_validation_aliases_alias_choices(env):
     assert Settings().foobar == 'val3'
 
 
+def test_validation_alias_alias_choices_with_alias_path_first(env):
+    """Test that AliasPath in AliasChoices doesn't interfere with env var lookup.
+
+    Regression test for https://github.com/pydantic/pydantic-settings/issues/766
+    When AliasChoices has AliasPath as first choice, the env source should not use
+    the AliasPath's first element as the key when a string alias matches.
+    """
+
+    class Settings(BaseSettings):
+        my_field: str = Field(
+            default='default-value',
+            validation_alias=AliasChoices(AliasPath('nested', 'key'), 'MY_FIELD'),
+        )
+
+    # The env var MY_FIELD should be used, not 'nested' from the AliasPath
+    env.set('MY_FIELD', 'env-value')
+    assert Settings().my_field == 'env-value'
+
+
 def test_validation_alias_with_env_prefix(env):
     class Settings(BaseSettings):
         foobar: str = Field(validation_alias='foo')
@@ -2101,6 +2120,7 @@ def test_secret_settings_source_custom_env_parse(tmp_path):
 
         model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
+        @classmethod
         def settings_customise_sources(
             cls,
             settings_cls: type[BaseSettings],

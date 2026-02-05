@@ -35,7 +35,10 @@ if TYPE_CHECKING:
 
 
 def get_subcommand(
-    model: PydanticModel, is_required: bool = True, cli_exit_on_error: bool | None = None
+    model: PydanticModel,
+    is_required: bool = True,
+    cli_exit_on_error: bool | None = None,
+    _suppress_errors: list[SettingsError | SystemExit] | None = None,
 ) -> PydanticModel | None:
     """
     Get the subcommand from a model.
@@ -78,7 +81,10 @@ def get_subcommand(
             if subcommands
             else 'Error: CLI subcommand is required but no subcommands were found.'
         )
-        raise SystemExit(error_message) if cli_exit_on_error else SettingsError(error_message)
+        err = SystemExit(error_message) if cli_exit_on_error else SettingsError(error_message)
+        if _suppress_errors is None:
+            raise err
+        _suppress_errors.append(err)
 
     return None
 
@@ -516,7 +522,8 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             A tuple that contains the value, preferred key and a flag to determine whether value is complex.
         """
         field_value, field_key, value_is_complex = self.get_field_value(field, field_name)
-        if not (
+        # Only use preferred_key when no value was found; otherwise preserve the key that matched
+        if field_value is None and not (
             value_is_complex
             or (
                 (self.config.get('populate_by_name', False) or self.config.get('validate_by_name', False))

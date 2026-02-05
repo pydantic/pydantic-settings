@@ -745,15 +745,28 @@ def test_cli_list_arg(prefix, arg_spaces):
             assert cfg.model_dump() == expected
 
     args: list[str] = []
-    args = [f'--{prefix}num_list', arg_spaces('[1,2]')]
-    args += [f'--{prefix}num_list', arg_spaces('3,4')]
-    args += [f'--{prefix}num_list', '5', f'--{prefix}num_list', '6']
+    args = [f'--{prefix}str_list', arg_spaces('["1","2"]')]
+    args += [f'--{prefix}num_list', arg_spaces('["1","2"]')]
+    args += [f'--{prefix}str_list', arg_spaces('"3","4"')]
+    args += [f'--{prefix}num_list', arg_spaces('"3","4"')]
+    args += [f'--{prefix}str_list', '"5"', f'--{prefix}str_list', '"6"']
+    args += [f'--{prefix}num_list', '"5"', f'--{prefix}num_list', '"6"']
     cfg = CliApp.run(Cfg, cli_args=args)
     expected = {
         'num_list': [1, 2, 3, 4, 5, 6],
         'obj_list': None,
         'union_list': None,
-        'str_list': None,
+        'str_list': ['1', '2', '3', '4', '5', '6'],
+    }
+    check_answer(cfg, prefix, expected)
+
+    args = [arg.replace('"', '') for arg in args]
+    cfg = CliApp.run(Cfg, cli_args=args)
+    expected = {
+        'num_list': [1, 2, 3, 4, 5, 6],
+        'obj_list': None,
+        'union_list': None,
+        'str_list': ['1', '2', '3', '4', '5', '6'],
     }
     check_answer(cfg, prefix, expected)
 
@@ -3046,3 +3059,96 @@ def test_cli_custom_help(capsys, monkeypatch):
 
         CliApp.run(Cfg)
         assert capsys.readouterr().out == 'custom help no exit\n'
+
+
+def test_cli_format_help():
+    class Init(BaseModel, cli_prog_name='example.py'):
+        repo: Path
+
+        def cli_cmd(self) -> None:
+            print(f'repo: {self.repo}')
+
+    class RootCommand(BaseSettings, cli_prog_name='example.py'):
+        init: CliSubCommand[Init]
+
+        def cli_cmd(self) -> None:
+            CliApp.run_subcommand(self)
+
+    assert (
+        CliApp.format_help(RootCommand, strip_ansi_color=True)
+        == f"""usage: example.py [-h] {{init}} ...
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help  show this help message and exit
+
+subcommands:
+  {{init}}
+    init
+"""
+    )
+
+    assert (
+        CliApp.format_help(Init, strip_ansi_color=True)
+        == f"""usage: example.py [-h] --repo Path
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help   show this help message and exit
+  --repo Path  (required)
+"""
+    )
+
+    with pytest.raises(
+        SettingsError,
+        match=re.escape(f'Error: CLI subcommand is required {{init}}\n{CliApp.format_help(RootCommand)}'),
+    ):
+        CliApp.run(RootCommand, cli_args=[], cli_exit_on_error=False)
+
+
+def test_cli_disriminator_choices():
+    class DivModel(BaseModel):
+        el_type: Literal['div'] = 'div'
+        class_name: str | None = None
+        children: list[Any] | None = None
+
+    class SpanModel(BaseModel):
+        el_type: Literal['span'] = 'span'
+        class_name: str | None = None
+        contents: str | None = None
+
+    class ButtonModel(BaseModel):
+        el_type: Literal['button'] = 'button'
+        class_name: str | None = None
+        contents: str | None = None
+
+    class InputModel(BaseModel):
+        el_type: Literal['input'] = 'input'
+        class_name: str | None = None
+        value: str | None = None
+
+    class Html(BaseSettings, cli_prog_name='example.py'):
+        contents: DivModel | SpanModel | ButtonModel | InputModel = Field(discriminator='el_type')
+
+    assert CliApp.format_help(Html, strip_ansi_color=True) == (
+        f"""usage: example.py [-h] [--contents [JSON]] [--contents.class_name {{str,null}}]
+                  [--contents.children {{list[Any],null}}]
+                  [--contents.contents {{str,null}}]
+                  [--contents.el_type {{button,div,input,span}}]
+                  [--contents.value {{str,null}}]
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help            show this help message and exit
+
+contents options:
+  --contents [JSON]     set contents from JSON string (default: {{}})
+  --contents.class_name {{str,null}}
+                        (default: null)
+  --contents.children {{list[Any],null}}
+                        (default: null)
+  --contents.contents {{str,null}}
+                        (default: null)
+  --contents.el_type {{button,div,input,span}}
+                        (default: input)
+  --contents.value {{str,null}}
+                        (default: null)
+"""
+    )

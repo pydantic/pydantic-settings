@@ -20,6 +20,7 @@ from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from enum import Enum
 from functools import cached_property
+from itertools import chain
 from textwrap import dedent
 from types import SimpleNamespace
 from typing import (
@@ -36,8 +37,7 @@ from typing import (
     overload,
 )
 
-import typing_extensions
-from pydantic import AliasChoices, AliasPath, BaseModel, Field, PrivateAttr, TypeAdapter
+from pydantic import AliasChoices, AliasPath, BaseModel, Field, PrivateAttr, TypeAdapter, ValidationError
 from pydantic._internal._repr import Representation
 from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
@@ -47,7 +47,7 @@ from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
 
 from ...exceptions import SettingsError
-from ...utils import _lenient_issubclass, _WithArgsTypes
+from ...utils import _lenient_issubclass, _typing_base, _WithArgsTypes
 from ..types import (
     ForceDecode,
     NoDecode,
@@ -92,6 +92,7 @@ class CliMutuallyExclusiveGroup(BaseModel):
 
 class _CliArg(BaseModel):
     model: Any
+    parser: Any
     field_name: str
     arg_prefix: str
     case_sensitive: bool
@@ -110,7 +111,7 @@ class _CliArg(BaseModel):
     def __init__(
         self,
         field_info: FieldInfo,
-        parser_map: defaultdict[str | FieldInfo, dict[int | None | str, _CliArg]],
+        parser_map: defaultdict[str | FieldInfo, dict[int | None | str | type[BaseModel], _CliArg]],
         **values: Any,
     ) -> None:
         super().__init__(**values)
@@ -124,6 +125,7 @@ class _CliArg(BaseModel):
             for sub_model in self.sub_models:
                 subcommand_alias = self.subcommand_alias(sub_model)
                 parser_map[self.subcommand_dest][subcommand_alias] = self.model_copy(update={'args': [], 'kwargs': {}})
+                parser_map[self.subcommand_dest][sub_model] = parser_map[self.subcommand_dest][subcommand_alias]
                 parser_map[self.field_info][subcommand_alias] = parser_map[self.subcommand_dest][subcommand_alias]
         elif self.dest not in alias_path_dests:
             parser_map[self.dest][None] = self
@@ -296,6 +298,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             Defaults to `argparse._SubParsersAction.add_parser`.
         add_subparsers_method: The root parser add subparsers (sub-commands) method.
             Defaults to `argparse.ArgumentParser.add_subparsers`.
+        format_help_method: The root parser format help method. Defaults to `argparse.ArgumentParser.format_help`.
         formatter_class: A class for customizing the root parser help text. Defaults to `argparse.RawDescriptionHelpFormatter`.
     """
 
@@ -323,6 +326,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         add_argument_group_method: Callable[..., Any] | None = ArgumentParser.add_argument_group,
         add_parser_method: Callable[..., Any] | None = _SubParsersAction.add_parser,
         add_subparsers_method: Callable[..., Any] | None = ArgumentParser.add_subparsers,
+        format_help_method: Callable[..., Any] | None = ArgumentParser.format_help,
         formatter_class: Any = RawDescriptionHelpFormatter,
     ) -> None:
         self.cli_prog_name = (
@@ -415,6 +419,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             add_argument_group_method=add_argument_group_method,
             add_parser_method=add_parser_method,
             add_subparsers_method=add_subparsers_method,
+            format_help_method=format_help_method,
             formatter_class=formatter_class,
         )
 
@@ -614,6 +619,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         decode_list: list[str] = []
         is_use_decode: bool | None = None
         cli_arg_map = self._parser_map.get(field_name, {})
+        try:
+            list_adapter: Any = TypeAdapter(next(iter(cli_arg_map.values())).field_info.annotation)
+            is_num_type_str = type(list_adapter.validate_python(['1'])[0]) is str
+        except (StopIteration, ValidationError):
+            is_num_type_str = None
         for index, item in enumerate(merged_list):
             cli_arg = cli_arg_map.get(index)
             is_decode = cli_arg is None or not cli_arg.is_no_decode
@@ -623,6 +633,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 raise SettingsError('Mixing Decode and NoDecode across different AliasPath fields is not allowed')
             if is_use_decode:
                 item = item.replace('\\', '\\\\')
+                try:
+                    unquoted_item = item[1:-1] if item.startswith('"') and item.endswith('"') else item
+                    float(unquoted_item)
+                    item = f'"{unquoted_item}"' if is_num_type_str else unquoted_item
+                except ValueError:
+                    pass
             elif item.startswith('"') and item.endswith('"'):
                 item = item[1:-1]
             decode_list.append(item)
@@ -861,6 +877,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         add_argument_group_method: Callable[..., Any] | None = ArgumentParser.add_argument_group,
         add_parser_method: Callable[..., Any] | None = _SubParsersAction.add_parser,
         add_subparsers_method: Callable[..., Any] | None = ArgumentParser.add_subparsers,
+        format_help_method: Callable[..., Any] | None = ArgumentParser.format_help,
         formatter_class: Any = RawDescriptionHelpFormatter,
     ) -> None:
         self._cli_unknown_args: dict[str, list[str]] = {}
@@ -879,9 +896,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self._add_group = self._connect_group_method(add_argument_group_method)
         self._add_parser = self._connect_parser_method(add_parser_method, 'add_parser_method')
         self._add_subparsers = self._connect_parser_method(add_subparsers_method, 'add_subparsers_method')
+        self._format_help = self._connect_parser_method(format_help_method, 'format_help_method')
         self._formatter_class = formatter_class
         self._cli_dict_args: dict[str, type[Any] | None] = {}
-        self._parser_map: defaultdict[str | FieldInfo, dict[int | None | str, _CliArg]] = defaultdict(dict)
+        self._parser_map: defaultdict[str | FieldInfo, dict[int | None | str | type[BaseModel], _CliArg]] = defaultdict(
+            dict
+        )
         self._add_default_help()
         self._add_parser_args(
             parser=self.root_parser,
@@ -922,6 +942,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         alias_prefixes: list[str],
         model_default: Any,
         is_model_suppressed: bool = False,
+        discriminator_vals: dict[str, set[Any]] = {},
+        is_last_discriminator: bool = True,
     ) -> ArgumentParser:
         subparsers: Any = None
         alias_path_args: dict[str, int | None] = {}
@@ -936,6 +958,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         )
         for field_name, field_info in self._sort_arg_fields(model):
             arg = _CliArg(
+                parser=parser,
                 field_info=field_info,
                 parser_map=self._parser_map,
                 model=model,
@@ -981,8 +1004,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                             else f'{{{subcommand_alias}}}'
                         )
 
+                    subcommand_arg.parser = self._add_parser(subparsers, *subcommand_arg.args, **subcommand_arg.kwargs)
                     self._add_parser_args(
-                        parser=self._add_parser(subparsers, *subcommand_arg.args, **subcommand_arg.kwargs),
+                        parser=subcommand_arg.parser,
                         model=sub_model,
                         added_args=[],
                         arg_prefix=f'{arg.dest}.',
@@ -1002,7 +1026,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 )
 
                 arg_names = self._get_arg_names(
-                    arg_prefix, subcommand_prefix, alias_prefixes, arg.alias_names, added_args
+                    arg,
+                    subcommand_prefix,
+                    alias_prefixes,
+                    added_args,
+                    discriminator_vals,
+                    is_last_discriminator,
                 )
                 if not arg_names or (arg.kwargs['dest'] in added_args):
                     continue
@@ -1099,15 +1128,16 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _get_arg_names(
         self,
-        arg_prefix: str,
+        arg: _CliArg,
         subcommand_prefix: str,
         alias_prefixes: list[str],
-        alias_names: tuple[str, ...],
         added_args: list[str],
+        discriminator_vals: dict[str, set[Any]],
+        is_last_discriminator: bool,
     ) -> list[str]:
         arg_names: list[str] = []
-        for prefix in [arg_prefix] + alias_prefixes:
-            for name in alias_names:
+        for prefix in [arg.arg_prefix] + alias_prefixes:
+            for name in arg.alias_names:
                 arg_name = _CliArg.get_kebab_case(
                     f'{prefix}{name}'
                     if subcommand_prefix == self.env_prefix
@@ -1122,6 +1152,20 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 if target in arg_names:
                     alias_list = [aliases] if isinstance(aliases, str) else aliases
                     arg_names.extend(alias for alias in alias_list if alias not in added_args)
+
+        tags: set[Any] = set()
+        discriminators = discriminator_vals.get(arg.dest)
+        if discriminators is not None:
+            _annotation_contains_types(
+                arg.field_info.annotation,
+                (Literal,),
+                is_include_origin=True,
+                collect=tags,
+            )
+            discriminators.update(chain.from_iterable(get_args(tag) for tag in tags))
+            if not is_last_discriminator:
+                return []
+            arg.kwargs['metavar'] = self._metavar_format(Literal[tuple(sorted(discriminators))])
 
         return arg_names
 
@@ -1149,7 +1193,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             # exclusive group.
             raise SettingsError('cannot have nested models in a CliMutuallyExclusiveGroup')
 
-        model_group: Any = None
         model_group_kwargs: dict[str, Any] = {}
         model_group_kwargs['title'] = f'{arg_names[0]} options'
         model_group_kwargs['description'] = field_info.description
@@ -1181,16 +1224,20 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         is_model_suppressed = self._is_field_suppressed(field_info) or is_model_suppressed
         if is_model_suppressed:
             model_group_kwargs['description'] = CLI_SUPPRESS
-        if not self.cli_avoid_json:
-            added_args.append(arg_names[0])
-            kwargs['required'] = False
-            kwargs['nargs'] = '?'
-            kwargs['const'] = '{}'
-            kwargs['help'] = (
-                CLI_SUPPRESS if is_model_suppressed else f'set {arg_names[0]} from JSON string (default: {{}})'
-            )
-            model_group = self._add_group(parser, **model_group_kwargs)
-            self._add_argument(model_group, *(f'{flag_prefix}{name}' for name in arg_names), **kwargs)
+        added_args.append(arg_names[0])
+        kwargs['required'] = False
+        kwargs['nargs'] = '?'
+        kwargs['const'] = '{}'
+        kwargs['help'] = (
+            CLI_SUPPRESS
+            if is_model_suppressed or self.cli_avoid_json
+            else f'set {arg_names[0]} from JSON string (default: {{}})'
+        )
+        model_group = self._add_group(parser, **model_group_kwargs)
+        self._add_argument(model_group, *(f'{flag_prefix}{name}' for name in arg_names), **kwargs)
+        discriminator_vals: dict[str, set[Any]] = (
+            {f'{arg_prefix}{preferred_alias}.{field_info.discriminator}': set()} if field_info.discriminator else {}
+        )
         for model in sub_models:
             self._add_parser_args(
                 parser=parser,
@@ -1198,10 +1245,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 added_args=added_args,
                 arg_prefix=f'{arg_prefix}{preferred_alias}.',
                 subcommand_prefix=subcommand_prefix,
-                group=model_group if model_group else model_group_kwargs,
+                group=model_group,
                 alias_prefixes=[f'{arg_prefix}{name}.' for name in alias_names[1:]],
                 model_default=model_default,
                 is_model_suppressed=is_model_suppressed,
+                discriminator_vals=discriminator_vals,
+                is_last_discriminator=model is sub_models[-1],
             )
 
     def _add_parser_alias_paths(
@@ -1262,13 +1311,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             return '...'
         elif isinstance(obj, Representation):
             return repr(obj)
-        elif typing_objects.is_typealiastype(obj):
+        elif isinstance(obj, typing.ForwardRef) or typing_objects.is_typealiastype(obj):
             return str(obj)
 
-        origin = get_origin(obj)
-        if origin is None and not isinstance(obj, (type, typing.ForwardRef, typing_extensions.ForwardRef)):
+        if not isinstance(obj, (_typing_base, _WithArgsTypes, type)):
             obj = obj.__class__
 
+        origin = get_origin(obj)
         if is_union_origin(origin):
             return self._metavar_format_choices(list(map(self._metavar_format_recurse, self._get_modified_args(obj))))
         elif typing_objects.is_literal(origin):

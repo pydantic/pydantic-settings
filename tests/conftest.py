@@ -100,6 +100,13 @@ def docs_test_env():
     setenv.set('GENERATION_LLM_API_KEY', 'your-api-key')
     setenv.set('GENERATION_LLM_API_VERSION', '2024-03-15')
 
+    # Variables from index.md that need to be cleaned up
+    setenv.set('FooAlias', '')
+    setenv.set('BAR', '')
+    setenv.set('TARGET_BAR', '')
+    setenv.set('TARGET_ALL_FooAlias', '')
+    setenv.set('TARGET_ALIAS_FooAliase', '')
+
     yield setenv
 
     setenv.clear()
