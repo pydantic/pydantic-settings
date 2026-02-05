@@ -562,9 +562,7 @@ def test_yaml_config_section_complex_unusual_keys(tmp_path):
         normal: str
         number: int
 
-        model_config = SettingsConfigDict(
-            yaml_file=p, yaml_config_section='..leading..double.trailing...value..double'
-        )
+        model_config = SettingsConfigDict(yaml_file=p, yaml_config_section='..leading..double.trailing...value..double')
 
         @classmethod
         def settings_customise_sources(
