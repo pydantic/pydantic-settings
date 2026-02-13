@@ -99,7 +99,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
         dotenv_vars: dict[str, str | None] = {}
         for env_file in env_files:
             env_path = Path(env_file).expanduser()
-            if env_path.is_file():
+            if env_path.is_file() or env_path.is_fifo():
                 dotenv_vars.update(self._read_env_file(env_path))
 
         return dotenv_vars

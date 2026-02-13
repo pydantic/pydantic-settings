@@ -1558,6 +1558,34 @@ def test_read_dotenv_vars(tmp_path):
     }
 
 
+@pytest.mark.skipif(not hasattr(os, 'mkfifo'), reason='requires os.mkfifo (Unix)')
+def test_read_dotenv_vars_from_fifo(tmp_path):
+    """Named pipes / FIFOs (e.g. 1Password Environments) should be read as env files."""
+    import threading
+
+    env_content = 'KEY=value\nOTHER=123'
+    fifo_path = tmp_path / '.env'
+    os.mkfifo(fifo_path)
+
+    def write_to_fifo():
+        with fifo_path.open('w') as f:
+            f.write(env_content)
+
+    thread = threading.Thread(target=write_to_fifo)
+    thread.start()
+
+    try:
+        source = DotEnvSettingsSource(
+            BaseSettings(), env_file=fifo_path, env_file_encoding='utf8', case_sensitive=False
+        )
+        assert dict(source.env_vars) == {'key': 'value', 'other': '123'}
+    finally:
+        thread.join(timeout=1)
+        if thread.is_alive():
+            fifo_path.read_text()  # writer may be blocked without a read
+            thread.join(timeout=1)
+
+
 def test_read_dotenv_vars_when_env_file_is_none():
     assert (
         DotEnvSettingsSource(
