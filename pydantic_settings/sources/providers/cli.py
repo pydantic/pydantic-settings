@@ -912,6 +912,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             group=None,
             alias_prefixes=[],
             model_default=PydanticUndefined,
+            model_path=set(),
         )
 
     def _add_default_help(self) -> None:
@@ -944,7 +945,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         is_model_suppressed: bool = False,
         discriminator_vals: dict[str, set[Any]] = {},
         is_last_discriminator: bool = True,
+        model_path: set[type[BaseModel]] | None = None,
     ) -> ArgumentParser:
+        if model_path is None:
+            model_path = set()
+        model_path = model_path | {model}
         subparsers: Any = None
         alias_path_args: dict[str, int | None] = {}
         # Ignore model default if the default is a model and not a subclass of the current model.
@@ -1014,6 +1019,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         group=None,
                         alias_prefixes=[],
                         model_default=PydanticUndefined,
+                        model_path=model_path,
                     )
             else:
                 flag_prefix: str = self._cli_flag_prefix
@@ -1045,11 +1051,16 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
                 self._convert_bool_flag(arg.kwargs, field_info, model_default)
 
-                if arg.is_parser_submodel and not getattr(field_info.annotation, '__pydantic_root_model__', False):
+                non_recursive_sub_models = [m for m in arg.sub_models if m not in model_path]
+                if (
+                    arg.is_parser_submodel
+                    and not getattr(field_info.annotation, '__pydantic_root_model__', False)
+                    and non_recursive_sub_models
+                ):
                     self._add_parser_submodels(
                         parser,
                         model,
-                        arg.sub_models,
+                        non_recursive_sub_models,
                         added_args,
                         arg_prefix,
                         subcommand_prefix,
@@ -1061,6 +1072,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         arg.alias_names,
                         model_default=model_default,
                         is_model_suppressed=is_model_suppressed,
+                        model_path=model_path,
                     )
                 elif _CliUnknownArgs in field_info.metadata:
                     self._cli_unknown_args[arg.kwargs['dest']] = []
@@ -1187,6 +1199,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         alias_names: tuple[str, ...],
         model_default: Any,
         is_model_suppressed: bool,
+        model_path: set[type[BaseModel]] | None = None,
     ) -> None:
         if issubclass(model, CliMutuallyExclusiveGroup):
             # Argparse has deprecated "calling add_argument_group() or add_mutually_exclusive_group() on a
@@ -1253,6 +1266,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 is_model_suppressed=is_model_suppressed,
                 discriminator_vals=discriminator_vals,
                 is_last_discriminator=model is sub_models[-1],
+                model_path=model_path,
             )
 
     def _add_parser_alias_paths(
