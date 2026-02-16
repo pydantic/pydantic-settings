@@ -1086,7 +1086,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _convert_bool_flag(self, kwargs: dict[str, Any], field_info: FieldInfo, model_default: Any) -> None:
         if kwargs['metavar'] == 'bool':
             meta_bool_flags = [
-                meta for meta in field_info.metadata if issubclass(meta, _CliImplicitFlag | _CliExplicitFlag)
+                meta
+                for meta in field_info.metadata
+                if isinstance(meta, type) and issubclass(meta, _CliImplicitFlag | _CliExplicitFlag)
             ]
             if not meta_bool_flags and self.cli_implicit_flags:
                 meta_bool_flags = [_CliImplicitFlag]
