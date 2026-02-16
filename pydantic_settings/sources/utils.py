@@ -6,7 +6,7 @@ from collections import deque
 from collections.abc import Mapping, Sequence
 from dataclasses import is_dataclass
 from enum import Enum
-from typing import Any, cast, get_args, get_origin
+from typing import Any, TypeVar, cast, get_args, get_origin
 
 from pydantic import BaseModel, Json, RootModel, Secret
 from pydantic._internal._utils import is_model_class
@@ -40,11 +40,49 @@ def parse_env_vars(
     }
 
 
+def _substitute_typevars(tp: Any, param_map: dict[Any, Any]) -> Any:
+    """Substitute TypeVars in a type annotation with concrete types from param_map."""
+    if isinstance(tp, TypeVar) and tp in param_map:
+        return param_map[tp]
+    args = get_args(tp)
+    if not args:
+        return tp
+    new_args = tuple(_substitute_typevars(arg, param_map) for arg in args)
+    if new_args == args:
+        return tp
+    origin = get_origin(tp)
+    if origin is not None:
+        try:
+            return origin[new_args]
+        except TypeError:
+            # types.UnionType and similar are not directly subscriptable,
+            # reconstruct using | operator
+            import functools
+            import operator
+
+            return functools.reduce(operator.or_, new_args)
+    return tp
+
+
+def _resolve_type_alias(annotation: Any) -> Any:
+    """Resolve a TypeAliasType to its underlying value, substituting type params if parameterized."""
+    if typing_objects.is_typealiastype(annotation):
+        return annotation.__value__
+    origin = get_origin(annotation)
+    if typing_objects.is_typealiastype(origin):
+        type_params = getattr(origin, '__type_params__', ())
+        type_args = get_args(annotation)
+        value = origin.__value__
+        if type_params and type_args:
+            return _substitute_typevars(value, dict(zip(type_params, type_args)))
+        return value
+    return annotation
+
+
 def _annotation_is_complex(annotation: Any, metadata: list[Any]) -> bool:
     # If the model is a root model, the root annotation should be used to
     # evaluate the complexity.
-    if typing_objects.is_typealiastype(annotation) or typing_objects.is_typealiastype(get_origin(annotation)):
-        annotation = annotation.__value__
+    annotation = _resolve_type_alias(annotation)
     if annotation is not None and _lenient_issubclass(annotation, RootModel) and annotation is not RootModel:
         annotation = cast('type[RootModel[Any]]', annotation)
         root_annotation = annotation.model_fields['root'].annotation
@@ -74,10 +112,8 @@ def _annotation_is_complex(annotation: Any, metadata: list[Any]) -> bool:
 
 
 def _get_field_metadata(field: FieldInfo) -> list[Any]:
-    annotation = field.annotation
+    annotation = _resolve_type_alias(field.annotation)
     metadata = field.metadata
-    if typing_objects.is_typealiastype(annotation) or typing_objects.is_typealiastype(get_origin(annotation)):
-        annotation = annotation.__value__  # type: ignore[union-attr]
     origin = get_origin(annotation)
     if typing_objects.is_annotated(origin):
         _, *meta = get_args(annotation)
@@ -240,6 +276,7 @@ __all__ = [
     '_get_model_fields',
     '_is_function',
     '_parse_env_none_str',
+    '_resolve_type_alias',
     '_strip_annotated',
     '_union_is_complex',
     'parse_env_vars',

@@ -499,6 +499,44 @@ def test_annotated_with_type(env):
     assert s.apples == ['russet', 'granny smith']
 
 
+def test_annotated_with_parameterized_type_alias(env):
+    """https://github.com/pydantic/pydantic-settings/issues/778.
+
+    Parameterized PEP 695 type aliases should correctly substitute type params
+    when determining if a field is complex.
+    """
+    from annotated_types import Len
+
+    T = TypeVar('T')
+
+    MaxLenA = Annotated[T, Len(max_length=4)]
+    MaxLenB = TypeAliasType('MaxLenB', Annotated[T, Len(max_length=4)], type_params=(T,))
+    MaxLenC = TypeAliasType('MaxLenC', Annotated[T, Len(max_length=4), ForceDecode], type_params=(T,))
+
+    class MySettingsA(BaseSettings):
+        SIMPLE_LIST: MaxLenA[list[str]]
+
+    class MySettingsB(BaseSettings):
+        SIMPLE_LIST: MaxLenB[list[str]]
+
+    class MySettingsC(BaseSettings):
+        SIMPLE_LIST: MaxLenC[list[str]]
+
+    env.set('SIMPLE_LIST', '["a", "b", "c"]')
+    assert MySettingsA().SIMPLE_LIST == ['a', 'b', 'c']
+    assert MySettingsB().SIMPLE_LIST == ['a', 'b', 'c']
+    assert MySettingsC().SIMPLE_LIST == ['a', 'b', 'c']
+
+    # NoDecode should prevent automatic JSON decoding
+    MaxLenD = TypeAliasType('MaxLenD', Annotated[T, Len(max_length=4), NoDecode], type_params=(T,))
+
+    class MySettingsD(BaseSettings):
+        SIMPLE_LIST: MaxLenD[list[str]]
+
+    with pytest.raises(ValidationError):
+        MySettingsD()
+
+
 def test_annotated_with_type_no_decode(env):
     A = TypeAliasType('A', Annotated[list[str], NoDecode])
 
