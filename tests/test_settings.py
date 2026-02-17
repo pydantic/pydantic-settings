@@ -2855,6 +2855,49 @@ def test_env_nested_dict_value(env):
     assert s.model_dump() == {'nested': {'foo': {'a': {'b': 'bar'}}}}
 
 
+def test_env_nested_dict_simple_value_types(env):
+    """Test that nested env vars work for dict fields with simple value types (e.g. dict[str, str]).
+
+    Regression test for https://github.com/pydantic/pydantic-settings/issues/785
+    """
+
+    class Settings(BaseSettings):
+        nested_field: dict[str, str]
+
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set('nested_field__key', 'some value')
+    s = Settings()
+    assert s.model_dump() == {'nested_field': {'key': 'some value'}}
+
+
+def test_env_nested_dict_multiple_simple_keys(env):
+    """Test multiple nested env vars for dict[str, str]."""
+
+    class Settings(BaseSettings):
+        nested_field: dict[str, str]
+
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set('nested_field__key1', 'value1')
+    env.set('nested_field__key2', 'value2')
+    s = Settings()
+    assert s.model_dump() == {'nested_field': {'key1': 'value1', 'key2': 'value2'}}
+
+
+def test_env_nested_dict_complex_value_type(env):
+    """Test nested env vars for dict with complex value types like list[str]."""
+
+    class Settings(BaseSettings):
+        nested_field: dict[str, list[str]]
+
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set('nested_field__key', '["a", "b"]')
+    s = Settings()
+    assert s.model_dump() == {'nested_field': {'key': ['a', 'b']}}
+
+
 def test_nested_models_leaf_vs_deeper_env_dict_assumed(env):
     class NestedSettings(BaseModel):
         foo: str
