@@ -2545,6 +2545,33 @@ def test_cli_bool_with_non_type_metadata():
     assert s.field is True
 
 
+def test_cli_self_referential_model():
+    """https://github.com/pydantic/pydantic-settings/issues/781.
+
+    Self-referential models should not cause infinite recursion in CLI arg parser.
+    """
+    from typing import Optional
+
+    class Foo(BaseModel):
+        foo: Optional['Foo'] = None
+
+    Foo.model_rebuild()
+
+    class RecursiveSettings(BaseSettings):
+        foo: Foo
+
+        def cli_cmd(self):
+            pass
+
+    # Should not raise RecursionError
+    s = CliApp.run(RecursiveSettings, cli_args=['--foo', '{"foo": {"foo": null}}'])
+    assert s.foo.foo == Foo(foo=None)
+    assert s.foo.foo.foo is None
+
+    s = CliApp.run(RecursiveSettings, cli_args=['--foo', '{"foo": null}'])
+    assert s.foo.foo is None
+
+
 def test_cli_kebab_case(capsys, monkeypatch):
     class DeepSubModel(BaseModel):
         deep_pos_arg: CliPositionalArg[str]
