@@ -210,7 +210,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                         return f
         return None
 
-    def explode_env_vars(self, field_name: str, field: FieldInfo, env_vars: Mapping[str, str | None]) -> dict[str, Any]:
+    def explode_env_vars(self, field_name: str, field: FieldInfo, env_vars: Mapping[str, str | None]) -> dict[str, Any]:  # noqa: C901
         """
         Process env_vars and extract the values of keys containing env_nested_delimiter into nested dictionaries.
 
