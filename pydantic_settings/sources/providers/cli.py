@@ -1045,11 +1045,16 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
                 self._convert_bool_flag(arg.kwargs, field_info, model_default)
 
-                if arg.is_parser_submodel and not getattr(field_info.annotation, '__pydantic_root_model__', False):
+                non_recursive_sub_models = [m for m in arg.sub_models if m is not model]
+                if (
+                    arg.is_parser_submodel
+                    and not getattr(field_info.annotation, '__pydantic_root_model__', False)
+                    and non_recursive_sub_models
+                ):
                     self._add_parser_submodels(
                         parser,
                         model,
-                        arg.sub_models,
+                        non_recursive_sub_models,
                         added_args,
                         arg_prefix,
                         subcommand_prefix,
