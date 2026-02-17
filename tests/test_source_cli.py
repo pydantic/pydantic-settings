@@ -2532,6 +2532,19 @@ def test_cli_submodels_strip_annotated():
     assert CliApp.run(WithUnion, ['--poly.type=a']).model_dump() == {'poly': {'a': 1, 'type': 'a'}}
 
 
+def test_cli_bool_with_non_type_metadata():
+    """https://github.com/pydantic/pydantic-settings/issues/782.
+
+    Bool fields with non-type metadata (e.g. CliSuppress) should not crash issubclass.
+    """
+
+    class Settings(BaseSettings):
+        field: CliSuppress[bool] = True
+
+    s = CliApp.run(Settings, cli_args=[])
+    assert s.field is True
+
+
 def test_cli_kebab_case(capsys, monkeypatch):
     class DeepSubModel(BaseModel):
         deep_pos_arg: CliPositionalArg[str]
