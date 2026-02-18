@@ -621,7 +621,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_arg_map = self._parser_map.get(field_name, {})
         try:
             list_adapter: Any = TypeAdapter(next(iter(cli_arg_map.values())).field_info.annotation)
-            is_num_type_str = type(list_adapter.validate_python(['1'])[0]) is str
+            is_num_type_str = type(next(iter(list_adapter.validate_python(['1'])))) is str
         except (StopIteration, ValidationError):
             is_num_type_str = None
         for index, item in enumerate(merged_list):
@@ -1045,11 +1045,16 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
                 self._convert_bool_flag(arg.kwargs, field_info, model_default)
 
-                if arg.is_parser_submodel and not getattr(field_info.annotation, '__pydantic_root_model__', False):
+                non_recursive_sub_models = [m for m in arg.sub_models if m is not model]
+                if (
+                    arg.is_parser_submodel
+                    and not getattr(field_info.annotation, '__pydantic_root_model__', False)
+                    and non_recursive_sub_models
+                ):
                     self._add_parser_submodels(
                         parser,
                         model,
-                        arg.sub_models,
+                        non_recursive_sub_models,
                         added_args,
                         arg_prefix,
                         subcommand_prefix,
@@ -1086,7 +1091,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _convert_bool_flag(self, kwargs: dict[str, Any], field_info: FieldInfo, model_default: Any) -> None:
         if kwargs['metavar'] == 'bool':
             meta_bool_flags = [
-                meta for meta in field_info.metadata if issubclass(meta, _CliImplicitFlag | _CliExplicitFlag)
+                meta
+                for meta in field_info.metadata
+                if isinstance(meta, type) and issubclass(meta, _CliImplicitFlag | _CliExplicitFlag)
             ]
             if not meta_bool_flags and self.cli_implicit_flags:
                 meta_bool_flags = [_CliImplicitFlag]

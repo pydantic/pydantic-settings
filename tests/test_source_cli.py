@@ -812,6 +812,18 @@ def test_cli_list_arg(prefix, arg_spaces):
     check_answer(cfg, prefix, expected)
 
 
+def test_cli_set_arg():
+    class Cfg(BaseSettings):
+        str_set: set[str] | None = None
+        num_set: set[int] | None = None
+
+    cfg = CliApp.run(Cfg, cli_args=['--str_set', 'a,b', '--str_set', 'c'])
+    assert cfg.model_dump() == {'str_set': {'a', 'b', 'c'}, 'num_set': None}
+
+    cfg = CliApp.run(Cfg, cli_args=['--num_set', '1,2', '--num_set', '3'])
+    assert cfg.model_dump() == {'str_set': None, 'num_set': {1, 2, 3}}
+
+
 @pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
 def test_cli_list_json_value_parsing(arg_spaces):
     class Cfg(BaseSettings):
@@ -2530,6 +2542,46 @@ def test_cli_submodels_strip_annotated():
         poly: Poly
 
     assert CliApp.run(WithUnion, ['--poly.type=a']).model_dump() == {'poly': {'a': 1, 'type': 'a'}}
+
+
+def test_cli_bool_with_non_type_metadata():
+    """https://github.com/pydantic/pydantic-settings/issues/782.
+
+    Bool fields with non-type metadata (e.g. CliSuppress) should not crash issubclass.
+    """
+
+    class Settings(BaseSettings):
+        field: CliSuppress[bool] = True
+
+    s = CliApp.run(Settings, cli_args=[])
+    assert s.field is True
+
+
+def test_cli_self_referential_model():
+    """https://github.com/pydantic/pydantic-settings/issues/781.
+
+    Self-referential models should not cause infinite recursion in CLI arg parser.
+    """
+    from typing import Optional
+
+    class Foo(BaseModel):
+        foo: Optional['Foo'] = None
+
+    Foo.model_rebuild()
+
+    class RecursiveSettings(BaseSettings):
+        foo: Foo
+
+        def cli_cmd(self):
+            pass
+
+    # Should not raise RecursionError
+    s = CliApp.run(RecursiveSettings, cli_args=['--foo', '{"foo": {"foo": null}}'])
+    assert s.foo.foo == Foo(foo=None)
+    assert s.foo.foo.foo is None
+
+    s = CliApp.run(RecursiveSettings, cli_args=['--foo', '{"foo": null}'])
+    assert s.foo.foo is None
 
 
 def test_cli_kebab_case(capsys, monkeypatch):
