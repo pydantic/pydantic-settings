@@ -621,7 +621,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_arg_map = self._parser_map.get(field_name, {})
         try:
             list_adapter: Any = TypeAdapter(next(iter(cli_arg_map.values())).field_info.annotation)
-            is_num_type_str = type(list_adapter.validate_python(['1'])[0]) is str
+            is_num_type_str = type(next(iter(list_adapter.validate_python(['1'])))) is str
         except (StopIteration, ValidationError):
             is_num_type_str = None
         for index, item in enumerate(merged_list):
