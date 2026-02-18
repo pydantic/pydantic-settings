@@ -21,6 +21,7 @@ from ..types import EnvNoneType, EnvPrefixTarget
 from ..utils import (
     _annotation_contains_types,
     _annotation_enum_name_to_val,
+    _annotation_is_complex,
     _get_model_fields,
     _union_is_complex,
     parse_env_vars,
@@ -209,7 +210,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                         return f
         return None
 
-    def explode_env_vars(self, field_name: str, field: FieldInfo, env_vars: Mapping[str, str | None]) -> dict[str, Any]:
+    def explode_env_vars(self, field_name: str, field: FieldInfo, env_vars: Mapping[str, str | None]) -> dict[str, Any]:  # noqa: C901
         """
         Process env_vars and extract the values of keys containing env_nested_delimiter into nested dictionaries.
 
@@ -253,17 +254,22 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
             # check if env_val maps to a complex field and if so, parse the env_val
             if (target_field or is_dict) and env_val:
-                if target_field:
+                if isinstance(target_field, FieldInfo):
                     is_complex, allow_json_failure = self._field_is_complex(target_field)
                     if self.env_parse_enums:
                         enum_val = _annotation_enum_name_to_val(target_field.annotation, env_val)
                         env_val = env_val if enum_val is None else enum_val
+                elif target_field:
+                    # target_field is a raw type (e.g. from dict value type annotation)
+                    is_complex = _annotation_is_complex(target_field, [])
+                    allow_json_failure = True
                 else:
                     # nested field type is dict
                     is_complex, allow_json_failure = True, True
                 if is_complex:
                     try:
-                        env_val = self.decode_complex_value(last_key, target_field, env_val)  # type: ignore
+                        field_info = target_field if isinstance(target_field, FieldInfo) else None
+                        env_val = self.decode_complex_value(last_key, field_info, env_val)  # type: ignore
                     except ValueError as e:
                         if not allow_json_failure:
                             raise e
