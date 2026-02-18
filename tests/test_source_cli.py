@@ -812,6 +812,18 @@ def test_cli_list_arg(prefix, arg_spaces):
     check_answer(cfg, prefix, expected)
 
 
+def test_cli_set_arg():
+    class Cfg(BaseSettings):
+        str_set: set[str] | None = None
+        num_set: set[int] | None = None
+
+    cfg = CliApp.run(Cfg, cli_args=['--str_set', 'a,b', '--str_set', 'c'])
+    assert cfg.model_dump() == {'str_set': {'a', 'b', 'c'}, 'num_set': None}
+
+    cfg = CliApp.run(Cfg, cli_args=['--num_set', '1,2', '--num_set', '3'])
+    assert cfg.model_dump() == {'str_set': None, 'num_set': {1, 2, 3}}
+
+
 @pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
 def test_cli_list_json_value_parsing(arg_spaces):
     class Cfg(BaseSettings):
