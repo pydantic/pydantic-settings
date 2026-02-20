@@ -12,6 +12,7 @@ from pydantic import BaseModel, Json, RootModel, Secret
 from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
+from pydantic.types import Strict
 from typing_inspection import typing_objects
 
 from ..exceptions import SettingsError
@@ -133,6 +134,16 @@ def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:
 def _union_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
     """Check if a union type contains any complex types."""
     return any(_annotation_is_complex(arg, metadata) for arg in get_args(annotation))
+
+
+def _union_has_strict_types(annotation: type[Any] | None) -> bool:
+    """Check if a union type contains any strict-annotated types."""
+    for arg in get_args(annotation):
+        if typing_objects.is_annotated(get_origin(arg)):
+            _, *meta = get_args(arg)
+            if any(isinstance(m, Strict) for m in meta):
+                return True
+    return False
 
 
 def _annotation_contains_types(
@@ -278,6 +289,7 @@ __all__ = [
     '_parse_env_none_str',
     '_resolve_type_alias',
     '_strip_annotated',
+    '_union_has_strict_types',
     '_union_is_complex',
     'parse_env_vars',
 ]

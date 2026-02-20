@@ -3422,6 +3422,40 @@ def test_env_strict_coercion(env):
     }
 
 
+def test_env_strict_coercion_optional_strict_types(env):
+    from pydantic import StrictBool, StrictInt
+
+    class StrictSettings(BaseSettings, strict=True):
+        my_bool: StrictBool | None = None
+
+    env.set('MY_BOOL', 'true')
+    s = StrictSettings()
+    assert s.my_bool is True
+
+    class NonStrictSettings(BaseSettings):
+        my_bool: StrictBool | None = None
+
+    s = NonStrictSettings()
+    assert s.my_bool is True
+
+    class NestedModel(BaseModel):
+        flag: StrictBool | None = None
+
+    class NestedSettings(BaseSettings, env_nested_delimiter='__'):
+        sub: NestedModel = NestedModel()
+
+    env.set('SUB__FLAG', 'true')
+    s = NestedSettings()
+    assert s.sub.flag is True
+
+    class IntSettings(BaseSettings):
+        my_int: StrictInt | None = None
+
+    env.set('MY_INT', '42')
+    s = IntSettings()
+    assert s.my_int == 42
+
+
 def test_env_source_when_load_multi_nested_config(env):
     class EmbeddingModel(BaseModel):
         model: str = 'text-embedding-3-small'
