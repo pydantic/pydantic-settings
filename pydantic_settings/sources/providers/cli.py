@@ -1366,7 +1366,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 ifdef = 'ifdef: ' if model_default is None else ''
                 _help += f' ({ifdef}required)' if _help else f'({ifdef}required)'
         else:
-            default = f'(default: {self.cli_parse_none_str})'
+            default = ''
+            if not self.cli_hide_none_type:
+                default = f'(default: {self.cli_parse_none_str})'
             if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
                 default = f'(default: {getattr(model_default, field_name)})'
             elif model_default not in (PydanticUndefined, None) and _is_function(model_default):
