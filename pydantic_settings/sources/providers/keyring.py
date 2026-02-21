@@ -3,6 +3,10 @@ from __future__ import annotations as _annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
+from pydantic.aliases import AliasChoices, AliasPath
+
+from pydantic_settings.exceptions import SettingsError
+
 from ..utils import parse_env_vars
 from .env import EnvSettingsSource
 
@@ -32,7 +36,7 @@ class KeyringSettingsSource(EnvSettingsSource):
         self,
         settings_cls: type[BaseSettings],
         service_name: str | None = None,
-        case_sensitive: bool | None = True,
+        case_sensitive: bool | None = None,
         env_prefix: str | None = None,
         env_nested_delimiter: str | None = None,
         env_parse_none_str: str | None = None,
@@ -62,14 +66,56 @@ class KeyringSettingsSource(EnvSettingsSource):
             env_parse_enums=env_parse_enums,
         )
 
+    def _raw_env_name_from_field_key(self, field_key: str, field_name: str) -> str:
+        if field_key == field_name:
+            env_prefix = self.env_prefix if self.env_prefix_target in ('variable', 'all') else ''
+        else:
+            env_prefix = self.env_prefix if self.env_prefix_target in ('alias', 'all') else ''
+        return f'{env_prefix}{field_key}'
+
+    @staticmethod
+    def _has_complex_validation_alias(field: Any) -> bool:
+        validation_alias = field.validation_alias
+        if isinstance(validation_alias, (AliasChoices, AliasPath)):
+            aliases = validation_alias.convert_to_aliases()
+            if isinstance(aliases, list):
+                for alias in aliases:
+                    if isinstance(alias, list) and len(alias) > 1:
+                        return True
+                return False
+        return False
+
     def _load_env_vars(self) -> Mapping[str, str | None]:
         keyring_values: dict[str, str | None] = {}
+        keyring_password_cache: dict[str, str | None] = {}
+
+        def _get_password(username: str) -> str | None:
+            if username not in keyring_password_cache:
+                keyring_password_cache[username] = keyring.get_password(self._service_name, username)
+            return keyring_password_cache[username]
 
         for field_name, field in self.settings_cls.model_fields.items():
-            for _, env_name, _ in self._extract_field_info(field, field_name):
+            for field_key, env_name, _ in self._extract_field_info(field, field_name):
                 if env_name in keyring_values:
                     continue
-                keyring_values[env_name] = keyring.get_password(self._service_name, env_name)
+
+                raw_env_name = self._raw_env_name_from_field_key(field_key, field_name)
+                raw_value = _get_password(raw_env_name)
+                normalized_value = _get_password(env_name) if raw_env_name != env_name else raw_value
+
+                if raw_env_name != env_name and raw_value is not None and normalized_value is not None:
+                    # Fail fast for ambiguity: two different keyring usernames map to the same resolved settings key.
+                    if raw_value != normalized_value:
+                        raise SettingsError(
+                            f"Ambiguous keyring values for field {field_name!r}: "
+                            f"{raw_env_name!r} and {env_name!r} both exist with different values"
+                        )
+
+                field_has_complex_alias = self._has_complex_validation_alias(field)
+                if field_has_complex_alias:
+                    keyring_values[env_name] = normalized_value
+                else:
+                    keyring_values[env_name] = raw_value if raw_value is not None else normalized_value
 
         return parse_env_vars(keyring_values, self.case_sensitive, self.env_ignore_empty, self.env_parse_none_str)
 
