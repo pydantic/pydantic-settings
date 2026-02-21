@@ -19,7 +19,7 @@ def test_keyring_not_installed_raises_import_error() -> None:
     with pytest.raises(
         ImportError,
         match=r'^keyring is not installed, run `pip install pydantic-settings\[keyring\]` '
-        r'or `uv add "pydantic-settings\[keyring\]"`$'
+        r'or `uv add "pydantic-settings\[keyring\]"`$',
     ):
         Settings()
 
