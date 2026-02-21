@@ -1,7 +1,7 @@
 """Test pydantic_settings.KeyringSettingsSource."""
 
 import pytest
-from pydantic import Field, SecretStr, ValidationError
+from pydantic import AliasChoices, AliasPath, Field, SecretStr, ValidationError
 
 from pydantic_settings import BaseSettings, KeyringSettingsSource, PydanticBaseSettingsSource, SettingsConfigDict
 from pydantic_settings.exceptions import SettingsError
@@ -159,6 +159,232 @@ def test_snake_case_conversion_missing_alias(mocker) -> None:
 
     with pytest.raises(ValidationError):
         Settings()
+
+
+def test_populate_by_name_with_alias_path_when_using_alias(mocker) -> None:
+    mock_keyring = mocker.Mock()
+
+    def _get_password(service_name: str, username: str) -> str | None:
+        assert service_name == 'my_app'
+        if username == 'fruits':
+            return '["empire", "honeycrisp"]'
+        return None
+
+    mock_keyring.get_password = mocker.Mock(side_effect=_get_password)
+    mocker.patch('pydantic_settings.sources.providers.keyring.keyring', mock_keyring)
+
+    class Settings(BaseSettings):
+        apple: str = Field('default', validation_alias=AliasPath('fruits', 0))
+        model_config = SettingsConfigDict(keyring_service_name='my_app', populate_by_name=True)
+
+    s = Settings()
+    assert s.apple == 'empire'
+
+
+def test_populate_by_name_with_alias_path_when_using_name(mocker) -> None:
+    mock_keyring = mocker.Mock()
+
+    def _get_password(service_name: str, username: str) -> str | None:
+        assert service_name == 'my_app'
+        if username == 'apple':
+            return 'jonathan gold'
+        return None
+
+    mock_keyring.get_password = mocker.Mock(side_effect=_get_password)
+    mocker.patch('pydantic_settings.sources.providers.keyring.keyring', mock_keyring)
+
+    class Settings(BaseSettings):
+        apple: str = Field('default', validation_alias=AliasPath('fruits', 0))
+        model_config = SettingsConfigDict(keyring_service_name='my_app', populate_by_name=True)
+
+    s = Settings()
+    assert s.apple == 'jonathan gold'
+
+
+@pytest.mark.parametrize(
+    ('keyring_values', 'expected_value'),
+    [
+        ({'pomo': 'pomo-chosen'}, 'pomo-chosen'),
+        ({'pomme': 'pomme-chosen'}, 'pomme-chosen'),
+        ({'manzano': 'manzano-chosen'}, 'manzano-chosen'),
+        ({'pomo': 'pomo-chosen', 'pomme': 'pomme-chosen', 'manzano': 'manzano-chosen'}, 'pomo-chosen'),
+        ({'pomme': 'pomme-chosen', 'manzano': 'manzano-chosen'}, 'pomme-chosen'),
+    ],
+)
+def test_populate_by_name_with_alias_choices_when_using_alias(mocker, keyring_values: dict[str, str], expected_value: str) -> None:
+    mock_keyring = mocker.Mock()
+
+    def _get_password(service_name: str, username: str) -> str | None:
+        assert service_name == 'my_app'
+        return keyring_values.get(username)
+
+    mock_keyring.get_password = mocker.Mock(side_effect=_get_password)
+    mocker.patch('pydantic_settings.sources.providers.keyring.keyring', mock_keyring)
+
+    class Settings(BaseSettings):
+        apple: str = Field('default', validation_alias=AliasChoices('pomo', 'pomme', 'manzano'))
+        model_config = SettingsConfigDict(keyring_service_name='my_app', populate_by_name=True)
+
+    assert Settings().apple == expected_value
+
+
+def test_validation_aliases(mocker) -> None:
+    mock_keyring = mocker.Mock()
+    keyring_values = {'foobar_alias': 'xxx'}
+
+    def _get_password(service_name: str, username: str) -> str | None:
+        assert service_name == 'my_app'
+        return keyring_values.get(username)
+
+    mock_keyring.get_password = mocker.Mock(side_effect=_get_password)
+    mocker.patch('pydantic_settings.sources.providers.keyring.keyring', mock_keyring)
+
+    class Settings(BaseSettings):
+        foobar: str = Field('default value', validation_alias='foobar_alias')
+        model_config = SettingsConfigDict(keyring_service_name='my_app')
+
+    assert Settings().foobar == 'xxx'
+
+
+def test_validation_aliases_alias_path(mocker) -> None:
+    mock_keyring = mocker.Mock()
+
+    def _get_password(service_name: str, username: str) -> str | None:
+        assert service_name == 'my_app'
+        if username == 'foo':
+            return '{"bar": ["val0", "val1"]}'
+        return None
+
+    mock_keyring.get_password = mocker.Mock(side_effect=_get_password)
+    mocker.patch('pydantic_settings.sources.providers.keyring.keyring', mock_keyring)
+
+    class Settings(BaseSettings):
+        foobar: str = Field(validation_alias=AliasPath('foo', 'bar', 1))
+        model_config = SettingsConfigDict(keyring_service_name='my_app')
+
+    assert Settings().foobar == 'val1'
+
+
+def test_env_list_alias_choices_priority(mocker) -> None:
+    mock_keyring = mocker.Mock()
+
+    def _get_password(service_name: str, username: str) -> str | None:
+        assert service_name == 'my_app'
+        values = {
+            'different1': 'value 1',
+            'different2': 'value 2',
+        }
+        return values.get(username)
+
+    mock_keyring.get_password = mocker.Mock(side_effect=_get_password)
+    mocker.patch('pydantic_settings.sources.providers.keyring.keyring', mock_keyring)
+
+    class Settings(BaseSettings):
+        foobar: str = Field(validation_alias=AliasChoices('different1', 'different2'))
+        model_config = SettingsConfigDict(keyring_service_name='my_app')
+
+    assert Settings().foobar == 'value 1'
+
+
+def test_validation_aliases_alias_choices(mocker) -> None:
+    mock_keyring = mocker.Mock()
+    keyring_values = {
+        'foo': 'val1',
+        'foo1': '{"bar": ["val0", "val2"]}',
+        'bar': '["val1", "val2", "val3"]',
+    }
+
+    def _get_password(service_name: str, username: str) -> str | None:
+        assert service_name == 'my_app'
+        return keyring_values.get(username)
+
+    mock_keyring.get_password = mocker.Mock(side_effect=_get_password)
+    mocker.patch('pydantic_settings.sources.providers.keyring.keyring', mock_keyring)
+
+    class Settings(BaseSettings):
+        foobar: str = Field(validation_alias=AliasChoices('foo', AliasPath('foo1', 'bar', 1), AliasPath('bar', 2)))
+        model_config = SettingsConfigDict(keyring_service_name='my_app')
+
+    assert Settings().foobar == 'val1'
+
+    keyring_values.pop('foo')
+    assert Settings().foobar == 'val2'
+
+    keyring_values.pop('foo1')
+    assert Settings().foobar == 'val3'
+
+
+def test_validation_alias_alias_choices_with_alias_path_first(mocker) -> None:
+    mock_keyring = mocker.Mock()
+
+    def _get_password(service_name: str, username: str) -> str | None:
+        assert service_name == 'my_app'
+        if username == 'MY_FIELD':
+            return 'env-value'
+        return None
+
+    mock_keyring.get_password = mocker.Mock(side_effect=_get_password)
+    mocker.patch('pydantic_settings.sources.providers.keyring.keyring', mock_keyring)
+
+    class Settings(BaseSettings):
+        my_field: str = Field(
+            default='default-value',
+            validation_alias=AliasChoices(AliasPath('nested', 'key'), 'MY_FIELD'),
+        )
+        model_config = SettingsConfigDict(keyring_service_name='my_app')
+
+    assert Settings().my_field == 'env-value'
+
+
+def test_validation_alias_with_env_prefix(mocker) -> None:
+    mock_keyring = mocker.Mock()
+    keyring_values = {'p_foo': 'bar'}
+
+    def _get_password(service_name: str, username: str) -> str | None:
+        assert service_name == 'my_app'
+        return keyring_values.get(username)
+
+    mock_keyring.get_password = mocker.Mock(side_effect=_get_password)
+    mocker.patch('pydantic_settings.sources.providers.keyring.keyring', mock_keyring)
+
+    class Settings(BaseSettings):
+        foobar: str = Field(validation_alias='foo')
+        model_config = SettingsConfigDict(keyring_service_name='my_app', env_prefix='p_')
+
+    with pytest.raises(ValidationError):
+        Settings()
+
+    keyring_values.clear()
+    keyring_values['foo'] = 'bar'
+    assert Settings().foobar == 'bar'
+
+
+@pytest.mark.parametrize('env_prefix_target', ['all', 'alias'])
+def test_validation_alias_with_env_prefix_and_env_prefix_target(mocker, env_prefix_target: str) -> None:
+    mock_keyring = mocker.Mock()
+    keyring_values = {'foo': 'bar'}
+
+    def _get_password(service_name: str, username: str) -> str | None:
+        assert service_name == 'my_app'
+        return keyring_values.get(username)
+
+    mock_keyring.get_password = mocker.Mock(side_effect=_get_password)
+    mocker.patch('pydantic_settings.sources.providers.keyring.keyring', mock_keyring)
+
+    class Settings(BaseSettings):
+        foobar: str = Field(validation_alias='foo')
+        model_config = SettingsConfigDict(
+            keyring_service_name='my_app',
+            env_prefix='p_',
+            env_prefix_target=env_prefix_target,
+        )
+
+    with pytest.raises(ValidationError):
+        Settings()
+
+    keyring_values.clear()
+    keyring_values['p_foo'] = 'bar'
+    assert Settings().foobar == 'bar'
 
 
 def test_alias_ambiguity_raises_settings_error(mocker) -> None:
