@@ -30,8 +30,7 @@ test:
 
 .PHONY: testcov
 testcov: test
-	@echo "building coverage html"
-	@uv run coverage html
+	@uv run coverage report --fail-under 97
 
 .PHONY: all
 all: lint mypy testcov
