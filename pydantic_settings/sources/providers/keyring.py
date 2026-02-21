@@ -89,14 +89,21 @@ class KeyringSettingsSource(EnvSettingsSource):
                 raw_value = _get_password(raw_env_name)
                 normalized_value = raw_value if raw_env_name == env_name else _get_password(env_name)
 
-                if raw_env_name != env_name and raw_value is not None and normalized_value is not None and raw_value != normalized_value:
+                if (
+                    raw_env_name != env_name
+                    and raw_value is not None
+                    and normalized_value is not None
+                    and raw_value != normalized_value
+                ):
                     # Fail fast for ambiguity: two different keyring usernames map to the same resolved settings key.
                     raise SettingsError(
-                        f"Ambiguous keyring values for field {field_name!r}: "
-                        f"{raw_env_name!r} and {env_name!r} both exist with different values"
+                        f'Ambiguous keyring values for field {field_name!r}: '
+                        f'{raw_env_name!r} and {env_name!r} both exist with different values'
                     )
 
-                selected_value = normalized_value if value_is_complex else (raw_value if raw_value is not None else normalized_value)
+                selected_value = (
+                    normalized_value if value_is_complex else (raw_value if raw_value is not None else normalized_value)
+                )
                 keyring_values[env_name] = selected_value
 
         return parse_env_vars(keyring_values, self.case_sensitive, self.env_ignore_empty, self.env_parse_none_str)
