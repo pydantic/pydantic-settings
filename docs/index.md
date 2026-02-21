@@ -2273,6 +2273,81 @@ if not specified. Works in both plain and nested directory modes, like
 `'/run/secrets/prefix_model__nested'` and `'/run/secrets/prefix_model/nested'`.
 
 
+## Keyring
+
+The keyring integration allows loading settings from your system keyring backend.
+
+### Installation
+
+Install the optional dependency:
+
+```bash
+pip install "pydantic-settings[keyring]"
+```
+
+or with `uv`:
+
+```bash
+uv add "pydantic-settings[keyring]"
+```
+
+If `keyring` is not installed, `KeyringSettingsSource` raises an `ImportError` at initialization time.
+
+### Using `SettingsConfigDict`
+
+Set `keyring_service_name` in `model_config` to automatically enable a `KeyringSettingsSource`.
+
+```py
+from pydantic import Field
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    option: str = Field(default='foo')
+    list_option: str = Field(default='fizz')
+
+    model_config = SettingsConfigDict(
+        keyring_service_name='my_app',
+    )
+```
+
+### Using `settings_customise_sources`
+
+You can also manually add `KeyringSettingsSource` to control source ordering and behavior:
+
+```py
+from pydantic_settings import (
+    BaseSettings,
+    KeyringSettingsSource,
+    PydanticBaseSettingsSource,
+)
+
+
+class Settings(BaseSettings):
+    my_foo: str
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+            KeyringSettingsSource(settings_cls, service_name='my_app'),
+        )
+```
+
+The `service_name` argument is required when creating `KeyringSettingsSource` directly unless `keyring_service_name`
+is already set in `SettingsConfigDict`.
+
 ## AWS Secrets Manager
 
 You must set one parameter:
@@ -2616,6 +2691,7 @@ For more details on creating and managing secrets in Google Cloud Secret Manager
 
 Other settings sources are available for common configuration files:
 
+- `KeyringSettingsSource` using `keyring_service_name` (or explicit `service_name` in source constructor)
 - `JsonConfigSettingsSource` using `json_file` and `json_file_encoding` arguments
 - `PyprojectTomlConfigSettingsSource` using *(optional)* `pyproject_toml_depth` and *(optional)* `pyproject_toml_table_header` arguments
 - `TomlConfigSettingsSource` using `toml_file` argument
