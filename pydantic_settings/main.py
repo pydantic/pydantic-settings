@@ -28,6 +28,7 @@ from .sources import (
     EnvSettingsSource,
     InitSettingsSource,
     JsonConfigSettingsSource,
+    KeyringSettingsSource,
     PathType,
     PydanticBaseSettingsSource,
     PydanticModel,
@@ -103,6 +104,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     """
 
     toml_file: PathType | None
+    keyring_service_name: str | None
     enable_decoding: bool
 
 
@@ -366,6 +368,7 @@ class BaseSettings(BaseModel):
         cli_shortcuts = _cli_shortcuts if _cli_shortcuts is not None else cls.model_config.get('cli_shortcuts')
 
         secrets_dir = _secrets_dir if _secrets_dir is not None else cls.model_config.get('secrets_dir')
+        keyring_service_name = cls.model_config.get('keyring_service_name')
 
         # Configure built-in sources
         default_settings = DefaultSettingsSource(
@@ -408,6 +411,21 @@ class BaseSettings(BaseModel):
             env_prefix=env_prefix,
             env_prefix_target=env_prefix_target,
         )
+
+        keyring_settings = (
+            KeyringSettingsSource(
+                cls,
+                service_name=keyring_service_name,
+                case_sensitive=case_sensitive,
+                env_prefix=env_prefix,
+                env_nested_delimiter=env_nested_delimiter,
+                env_parse_none_str=env_parse_none_str,
+                env_parse_enums=env_parse_enums,
+            )
+            if keyring_service_name is not None
+            else None
+        )
+
         # Provide a hook to set built-in sources priority and add / remove sources
         sources = cls.settings_customise_sources(
             cls,
@@ -415,7 +433,10 @@ class BaseSettings(BaseModel):
             env_settings=env_settings,
             dotenv_settings=dotenv_settings,
             file_secret_settings=file_secret_settings,
-        ) + (default_settings,)
+        )
+        if keyring_settings is not None and not any(isinstance(source, KeyringSettingsSource) for source in sources):
+            sources += (keyring_settings,)
+        sources += (default_settings,)
         custom_cli_sources = [source for source in sources if isinstance(source, CliSettingsSource)]
         if not any(custom_cli_sources):
             if isinstance(cli_settings_source, CliSettingsSource):
@@ -590,6 +611,7 @@ class BaseSettings(BaseModel):
         yaml_file_encoding=None,
         yaml_config_section=None,
         toml_file=None,
+        keyring_service_name=None,
         secrets_dir=None,
         protected_namespaces=('model_validate', 'model_dump', 'settings_customise_sources'),
         enable_decoding=True,
