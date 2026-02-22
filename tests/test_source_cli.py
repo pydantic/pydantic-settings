@@ -2584,6 +2584,46 @@ def test_cli_self_referential_model():
     assert s.foo.foo is None
 
 
+def test_cli_mutually_recursive_models():
+    """https://github.com/pydantic/pydantic-settings/issues/781.
+
+    Mutually recursive models (A -> B -> A) via discriminated unions should not
+    cause infinite recursion in CLI arg parser.
+    """
+    from typing import Annotated, Literal, Union
+
+    class A(BaseModel):
+        type: Literal['a'] = 'a'
+
+    AnyBase = Annotated[Union[A, 'B', 'C'], Discriminator('type')]
+
+    class B(BaseModel):
+        type: Literal['b'] = 'b'
+        inner: 'AnyBase' = Field(default_factory=A)
+
+    class C(BaseModel):
+        type: Literal['c'] = 'c'
+        inner: 'AnyBase' = Field(default_factory=A)
+
+    AnyBase = Annotated[A | B | C, Discriminator('type')]
+
+    B.model_rebuild()
+    C.model_rebuild()
+
+    class Container(BaseSettings):
+        base: AnyBase = Field(default_factory=A)
+
+    # Should not raise RecursionError
+    s = CliApp.run(Container, cli_args=[])
+    assert s.base == A()
+
+    s = CliApp.run(Container, cli_args=['--base', '{"type": "b", "inner": {"type": "a"}}'])
+    assert s.base == B(inner=A())
+
+    s = CliApp.run(Container, cli_args=['--base', '{"type": "c", "inner": {"type": "b", "inner": {"type": "a"}}}'])
+    assert s.base == C(inner=B(inner=A()))
+
+
 def test_cli_kebab_case(capsys, monkeypatch):
     class DeepSubModel(BaseModel):
         deep_pos_arg: CliPositionalArg[str]
