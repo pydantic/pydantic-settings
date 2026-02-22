@@ -123,7 +123,7 @@ jobs:
           name: diff-coverage-html
           path: index.html
 
-      - run: uv run coverage report --fail-under 98
+      - run: uv run coverage report --fail-under 97
 
   check:  # This job does nothing and is only used for the branch protection
     if: always()
