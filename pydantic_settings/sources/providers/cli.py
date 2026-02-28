@@ -54,6 +54,7 @@ from ..types import (
     PydanticModel,
     _CliDualFlag,
     _CliExplicitFlag,
+    _CliIgnoreArg,
     _CliImplicitFlag,
     _CliPositionalArg,
     _CliSubCommand,
@@ -231,6 +232,10 @@ class _CliArg(BaseModel):
         return not self.subcommand_dest and bool(self.sub_models) and not self.is_append_action
 
     @cached_property
+    def is_ignore_arg(self) -> bool:
+        return _CliIgnoreArg in self.field_info.metadata
+
+    @cached_property
     def is_no_decode(self) -> bool:
         return self.field_info is not None and (
             NoDecode in self.field_info.metadata
@@ -248,6 +253,7 @@ CliToggleFlag = Annotated[_CliBoolFlag, _CliToggleFlag]
 CliDualFlag = Annotated[_CliBoolFlag, _CliDualFlag]
 CLI_SUPPRESS = SUPPRESS
 CliSuppress = Annotated[T, CLI_SUPPRESS]
+CliIgnoreArg = Annotated[T, _CliIgnoreArg]
 CliUnknownArgs = Annotated[list[str], Field(default=[]), _CliUnknownArgs, NoDecode]
 
 
@@ -976,6 +982,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 env_prefix_len=self.env_prefix_len,
             )
             alias_path_args.update(arg.alias_paths)
+
+            if arg.is_ignore_arg:
+                continue
 
             if arg.subcommand_dest:
                 for sub_model in arg.sub_models:

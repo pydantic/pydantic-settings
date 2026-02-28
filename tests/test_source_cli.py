@@ -43,6 +43,7 @@ from pydantic_settings.sources import (
     CLI_SUPPRESS,
     CliDualFlag,
     CliExplicitFlag,
+    CliIgnoreArg,
     CliImplicitFlag,
     CliMutuallyExclusiveGroup,
     CliPositionalArg,
@@ -1941,6 +1942,7 @@ def test_cli_flag_prefix_char():
 def test_cli_user_settings_source(parser_type, prefix):
     class Cfg(BaseSettings):
         pet: Literal['dog', 'cat', 'bird'] = 'bird'
+        num2: CliIgnoreArg[int] = -1
 
     if parser_type is pytest.Parser:
         parser = pytest.Parser(_ispytest=True)
@@ -1977,19 +1979,30 @@ def test_cli_user_settings_source(parser_type, prefix):
         add_arg = parser.add_argument
         cli_cfg_settings = CliSettingsSource(Cfg, cli_prefix=prefix, root_parser=parser)
 
+    arg_prefix = f'{prefix}.' if prefix else ''
+
     add_arg('--fruit', choices=['pear', 'kiwi', 'lime'])
     add_arg('--num-list', action='append', type=int)
     add_arg('--num', type=int)
+    add_arg(f'--{arg_prefix}num2', type=int)
 
     args = ['--fruit', 'pear', '--num', '0', '--num-list', '1', '--num-list', '2', '--num-list', '3']
     parsed_args = parse_args(args)
-    assert CliApp.run(Cfg, cli_args=parsed_args, cli_settings_source=cli_cfg_settings).model_dump() == {'pet': 'bird'}
-    assert CliApp.run(Cfg, cli_args=args, cli_settings_source=cli_cfg_settings).model_dump() == {'pet': 'bird'}
-    assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=parsed_args)).model_dump() == {'pet': 'bird'}
-    assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {'pet': 'bird'}
-    assert Cfg(_cli_settings_source=cli_cfg_settings(args=False)).model_dump() == {'pet': 'bird'}
+    assert CliApp.run(Cfg, cli_args=parsed_args, cli_settings_source=cli_cfg_settings).model_dump() == {
+        'pet': 'bird',
+        'num2': -1,
+    }
+    assert CliApp.run(Cfg, cli_args=args, cli_settings_source=cli_cfg_settings).model_dump() == {
+        'pet': 'bird',
+        'num2': -1,
+    }
+    assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=parsed_args)).model_dump() == {
+        'pet': 'bird',
+        'num2': -1,
+    }
+    assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {'pet': 'bird', 'num2': -1}
+    assert Cfg(_cli_settings_source=cli_cfg_settings(args=False)).model_dump() == {'pet': 'bird', 'num2': -1}
 
-    arg_prefix = f'{prefix}.' if prefix else ''
     args = [
         '--fruit',
         'kiwi',
@@ -2001,15 +2014,26 @@ def test_cli_user_settings_source(parser_type, prefix):
         '2',
         '--num-list',
         '3',
+        f'--{arg_prefix}num2',
+        '1',
         f'--{arg_prefix}pet',
         'dog',
     ]
     parsed_args = parse_args(args)
-    assert CliApp.run(Cfg, cli_args=parsed_args, cli_settings_source=cli_cfg_settings).model_dump() == {'pet': 'dog'}
-    assert CliApp.run(Cfg, cli_args=args, cli_settings_source=cli_cfg_settings).model_dump() == {'pet': 'dog'}
-    assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=parsed_args)).model_dump() == {'pet': 'dog'}
-    assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {'pet': 'dog'}
-    assert Cfg(_cli_settings_source=cli_cfg_settings(args=False)).model_dump() == {'pet': 'bird'}
+    assert CliApp.run(Cfg, cli_args=parsed_args, cli_settings_source=cli_cfg_settings).model_dump() == {
+        'pet': 'dog',
+        'num2': 1,
+    }
+    assert CliApp.run(Cfg, cli_args=args, cli_settings_source=cli_cfg_settings).model_dump() == {
+        'pet': 'dog',
+        'num2': 1,
+    }
+    assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=parsed_args)).model_dump() == {
+        'pet': 'dog',
+        'num2': 1,
+    }
+    assert Cfg(_cli_settings_source=cli_cfg_settings(args=args)).model_dump() == {'pet': 'dog', 'num2': 1}
+    assert Cfg(_cli_settings_source=cli_cfg_settings(args=False)).model_dump() == {'pet': 'bird', 'num2': -1}
 
     parsed_args = parse_args(
         [
@@ -2025,13 +2049,19 @@ def test_cli_user_settings_source(parser_type, prefix):
             '3',
             f'--{arg_prefix}pet',
             'cat',
+            f'--{arg_prefix}num2',
+            '2',
         ]
     )
     assert CliApp.run(Cfg, cli_args=vars(parsed_args), cli_settings_source=cli_cfg_settings).model_dump() == {
-        'pet': 'cat'
+        'pet': 'cat',
+        'num2': 2,
     }
-    assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=vars(parsed_args))).model_dump() == {'pet': 'cat'}
-    assert Cfg(_cli_settings_source=cli_cfg_settings(args=False)).model_dump() == {'pet': 'bird'}
+    assert Cfg(_cli_settings_source=cli_cfg_settings(parsed_args=vars(parsed_args))).model_dump() == {
+        'pet': 'cat',
+        'num2': 2,
+    }
+    assert Cfg(_cli_settings_source=cli_cfg_settings(args=False)).model_dump() == {'pet': 'bird', 'num2': -1}
 
 
 @pytest.mark.parametrize('prefix', ['', 'cfg'])
