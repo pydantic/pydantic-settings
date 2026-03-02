@@ -272,7 +272,7 @@ class BaseSettings(BaseModel):
         _nested_model_default_partial_update: bool | None = None,
         _env_prefix: str | None = None,
         _env_prefix_target: EnvPrefixTarget | None = None,
-        _env_file: DotenvType | None = None,
+        _env_file: DotenvType | None = ENV_FILE_SENTINEL,
         _env_file_encoding: str | None = None,
         _env_ignore_empty: bool | None = None,
         _env_nested_delimiter: str | None = None,

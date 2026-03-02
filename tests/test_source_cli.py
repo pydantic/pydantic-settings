@@ -3244,3 +3244,24 @@ contents options:
                         (default: null)
 """
     )
+
+
+def test_cli_app_run_env_file_from_model_config(tmp_path):
+    """Regression test for https://github.com/pydantic/pydantic-settings/issues/795
+
+    CliApp.run() should respect env_file set in model_config even when _env_file
+    is not explicitly passed.
+    """
+    env_file = tmp_path / '.env'
+    env_file.write_text('TEST=from dotenv\n')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_file=str(env_file), env_file_encoding='utf-8')
+
+        test: str = 'default'
+
+        def cli_cmd(self) -> None:
+            pass
+
+    result = CliApp.run(Settings, cli_args=[])
+    assert result.test == 'from dotenv'
