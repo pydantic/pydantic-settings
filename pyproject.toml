@@ -80,6 +80,7 @@ testing = [
     "pytest-pretty",
     "moto[secretsmanager]",
     "diff-cover>=9.2.0",
+    "chardet<6",
 ]
 
 [tool.pytest.ini_options]
