@@ -787,8 +787,7 @@ class CliApp:
 
         subcommand_cls = cast(type[BaseModel], type(subcommand))
         subcommand_arg = cli_settings_source._parser_map[subcommand_dest][subcommand_cls]
-        subcommand_alias = subcommand_arg.subcommand_alias(subcommand_cls)
-        subcommand_dest = f'{subcommand_dest.split(":")[0]}{subcommand_alias}.:subcommand'
+        subcommand_dest = f'{subcommand_arg.dest}.:subcommand'
         subcommand_parser = subcommand_arg.parser
         CliApp._subcommand_stack[id(subcommand)] = (cli_settings_source, subcommand_parser, subcommand_dest)
         try:
