@@ -424,8 +424,8 @@ class TestGoogleSecretManagerSettingsSource:
         ],
     )
     def test_secret_version_annotation(self, mock_secret_client, mocker, case_sensitive):
-        mock_secret_client.secret_version_path = (
-            lambda project, secret, version: f'projects/{project}/secrets/{secret}/versions/{version}'
+        mock_secret_client.secret_version_path = lambda project, secret, version: (
+            f'projects/{project}/secrets/{secret}/versions/{version}'
         )
 
         resp_latest = mocker.Mock()
