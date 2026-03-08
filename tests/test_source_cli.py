@@ -827,7 +827,6 @@ class _Threshold(float, Enum):
     high = 0.75
 
 
-@pytest.mark.xfail(reason='CLI does not coerce str to numeric Enum in Literal types', strict=True)
 @pytest.mark.parametrize(
     'field_type,default,cli_val,expected',
     [
@@ -851,6 +850,13 @@ class _Threshold(float, Enum):
             '0.75',
             _Threshold.high,
             id='float_Enum_mixin',
+        ),
+        pytest.param(
+            Literal[_MQTTVersion.v31, _MQTTVersion.v311] | None,
+            None,
+            '4',
+            _MQTTVersion.v311,
+            id='Optional_IntEnum',
         ),
     ],
 )

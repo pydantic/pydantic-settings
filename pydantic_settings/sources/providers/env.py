@@ -24,6 +24,7 @@ from ..utils import (
     _annotation_enum_name_to_val,
     _annotation_is_complex,
     _get_model_fields,
+    _literal_has_numeric_enum,
     _union_has_strict_types,
     _union_is_complex,
     parse_env_vars,
@@ -293,10 +294,14 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             The coerced value if successful, otherwise the original value.
         """
         try:
-            should_coerce = self.config.get('strict') or (
-                isinstance(field, FieldInfo)
-                and is_union_origin(get_origin(field.annotation))
-                and _union_has_strict_types(field.annotation)
+            should_coerce = (
+                self.config.get('strict')
+                or (
+                    isinstance(field, FieldInfo)
+                    and is_union_origin(get_origin(field.annotation))
+                    and _union_has_strict_types(field.annotation)
+                )
+                or (isinstance(field, FieldInfo) and _literal_has_numeric_enum(field.annotation))
             )
             if should_coerce and isinstance(value, str) and isinstance(field, FieldInfo):
                 if value == self.env_parse_none_str:
