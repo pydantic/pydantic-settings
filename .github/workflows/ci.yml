@@ -13,10 +13,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: set up uv
-      uses: astral-sh/setup-uv@v6
+      uses: astral-sh/setup-uv@v7
       with:
         python-version: '3.12'
 
@@ -46,10 +46,10 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: set up uv
-      uses: astral-sh/setup-uv@v6
+      uses: astral-sh/setup-uv@v7
       with:
         python-version: ${{ matrix.python }}
 
@@ -75,7 +75,7 @@ jobs:
         CONTEXT: ${{ runner.os }}-py${{ matrix.python }}-without-deps
 
     - name: store coverage files
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: coverage-${{ matrix.python }}-${{ runner.os }}
         path: coverage
@@ -85,18 +85,18 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # needed for diff-cover
           fetch-depth: 0
 
       - name: get coverage files
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           merge-multiple: true
           path: coverage
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
@@ -107,7 +107,7 @@ jobs:
       - run: uv run coverage html --show-contexts --title "Pydantic Settings coverage for ${{ github.sha }}"
 
       - name: Store coverage html
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-html
           path: htmlcov
@@ -118,7 +118,7 @@ jobs:
       - run: uv run diff-cover coverage.xml --html-report index.html
 
       - name: Store diff coverage html
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: diff-coverage-html
           path: index.html
@@ -150,9 +150,9 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -161,7 +161,7 @@ jobs:
 
       - name: Check version
         id: check-tag
-        uses: samuelcolvin/check-python-version@v4.1
+        uses: samuelcolvin/check-python-version@v5
         with:
           version_file_path: pydantic_settings/version.py
 
