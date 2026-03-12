@@ -3265,3 +3265,31 @@ def test_cli_app_run_env_file_from_model_config(tmp_path):
 
     result = CliApp.run(Settings, cli_args=[])
     assert result.test == 'from dotenv'
+
+
+def test_cli_app_run_subcommand_underscore_field_name():
+    class Leaf(BaseModel):
+        name: str
+
+        def cli_cmd(self) -> None:
+            self.name = f'Hello {self.name}'
+
+    class MiddleCommands(BaseModel):
+        baz: CliSubCommand[Leaf]
+
+        def cli_cmd(self) -> None:
+            CliApp.run_subcommand(self)
+
+    class RootApp(BaseModel):
+        # Underscore in the field name triggers the bug
+        foo_bar: CliSubCommand[MiddleCommands]
+
+        def cli_cmd(self) -> None:
+            CliApp.run_subcommand(self)
+
+    result = CliApp.run(RootApp, cli_args=['foo-bar', 'baz', '--name=world'])
+    assert result.model_dump() == {
+        'foo_bar': {
+            'baz': {'name': 'Hello world'},
+        },
+    }
