@@ -3,7 +3,8 @@ from __future__ import annotations as _annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AnyHttpUrl, Field
+from pydantic import AliasChoices, AliasGenerator, AnyHttpUrl, Field
+from pydantic.alias_generators import to_camel
 
 from pydantic_settings import (
     BaseSettings,
@@ -117,6 +118,51 @@ def test_merging_preserves_earlier_values(tmp_path: Path, env):
     assert s.b == 20  # init wins
     # nested: dotenv provides x=1; env provides y=3; deep merged => {x:1, y:3}
     assert s.nested == {'x': 1, 'y': 3}
+
+
+def test_env_overrides_init_with_alias_choices_and_custom_source_order(env):
+    """Regression test for https://github.com/pydantic/pydantic-settings/issues/812
+
+    When using AliasChoices with an AliasGenerator and custom source ordering
+    (env > init), env variables should take precedence over init kwargs even when
+    different alias choices match in each source.
+    """
+    to_snake_or_camel = AliasGenerator(
+        validation_alias=lambda field_name: AliasChoices(f'PREF_{field_name}', to_camel(field_name), field_name)
+    )
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(alias_generator=to_snake_or_camel, extra='ignore')
+
+        interval: int = Field(60, ge=60)
+        data_store_path: str = '/data'
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return env_settings, init_settings, dotenv_settings, file_secret_settings
+
+    # Env var using the PREF_ prefix (first alias choice) should override init
+    env.set('PREF_INTERVAL', '120')
+    s = Settings(interval=73)
+    assert s.interval == 120
+
+    # Env var using camelCase (second alias choice) should override init
+    env.set('dataStorePath', '/env-data')
+    s = Settings(data_store_path='/init-data')
+    assert s.data_store_path == '/env-data'
+
+    # Env var using field name (third alias choice) should override init
+    env.pop('dataStorePath')
+    env.set('data_store_path', '/env-data-2')
+    s = Settings(data_store_path='/init-data')
+    assert s.data_store_path == '/env-data-2'
 
 
 def test_init_kwargs_override_env_with_alias_and_extra_forbid(env):
