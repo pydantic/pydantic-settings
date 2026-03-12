@@ -520,8 +520,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             A tuple that contains the value, preferred key and a flag to determine whether value is complex.
         """
         field_value, field_key, value_is_complex = self.get_field_value(field, field_name)
-        # Only use preferred_key when no value was found; otherwise preserve the key that matched
-        if field_value is None and not (
+        if not (
             value_is_complex
             or (
                 (self.config.get('populate_by_name', False) or self.config.get('validate_by_name', False))
@@ -529,8 +528,12 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             )
         ):
             field_infos = self._extract_field_info(field, field_name)
-            preferred_key, *_ = field_infos[0]
-            return field_value, preferred_key, value_is_complex
+            preferred_key, _, preferred_is_complex = field_infos[0]
+            # Only normalize to preferred_key when it's a simple string alias.
+            # When the preferred key comes from an AliasPath (complex entry), skip normalization
+            # to avoid using the AliasPath's first element as the key (see #766).
+            if not preferred_is_complex:
+                return field_value, preferred_key, value_is_complex
         return field_value, field_key, value_is_complex
 
     def __call__(self) -> dict[str, Any]:
