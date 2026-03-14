@@ -294,16 +294,17 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             The coerced value if successful, otherwise the original value.
         """
         try:
+            is_field = isinstance(field, FieldInfo)
             should_coerce = (
                 self.config.get('strict')
                 or (
-                    isinstance(field, FieldInfo)
+                    is_field
                     and is_union_origin(get_origin(field.annotation))
                     and _union_has_strict_types(field.annotation)
                 )
-                or (isinstance(field, FieldInfo) and _literal_has_numeric_enum(field.annotation))
+                or (is_field and _literal_has_numeric_enum(field.annotation))
             )
-            if should_coerce and isinstance(value, str) and isinstance(field, FieldInfo):
+            if should_coerce and isinstance(value, str) and is_field:
                 if value == self.env_parse_none_str:
                     return value
                 if not _annotation_contains_types(field.annotation, (Json,), is_instance=True):
