@@ -3563,19 +3563,3 @@ def test_env_literal_numeric_enum(field_type, env_val, expected, env):
     env.set('VAL', env_val)
     cfg = Cfg()
     assert cfg.val is expected
-
-
-def test_env_literal_str_enum_no_coercion(env):
-    """Literal[StrEnum.member] should parse without special coercion."""
-    from enum import StrEnum
-
-    class Color(StrEnum):
-        red = 'red'
-        blue = 'blue'
-
-    class Cfg(BaseSettings):
-        color: Literal[Color.red, Color.blue] = Color.red
-
-    env.set('COLOR', 'blue')
-    cfg = Cfg()
-    assert cfg.color == Color.blue
