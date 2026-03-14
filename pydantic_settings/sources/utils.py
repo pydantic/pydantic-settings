@@ -301,6 +301,7 @@ __all__ = [
     '_get_env_var_key',
     '_get_model_fields',
     '_is_function',
+    '_literal_has_numeric_enum',
     '_parse_env_none_str',
     '_resolve_type_alias',
     '_strip_annotated',
