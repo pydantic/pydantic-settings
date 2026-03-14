@@ -858,6 +858,13 @@ class _Threshold(float, Enum):
             _MQTTVersion.v311,
             id='Optional_IntEnum',
         ),
+        pytest.param(
+            Annotated[Literal[_MQTTVersion.v31, _MQTTVersion.v311], Field(description='MQTT version')],
+            _MQTTVersion.v311,
+            '3',
+            _MQTTVersion.v31,
+            id='Annotated_IntEnum',
+        ),
     ],
 )
 def test_cli_literal_numeric_enum(field_type, default, cli_val, expected):

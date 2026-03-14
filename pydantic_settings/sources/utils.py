@@ -14,6 +14,7 @@ from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
 from pydantic.types import Strict
 from typing_inspection import typing_objects
+from typing_inspection.introspection import is_union_origin
 
 from ..exceptions import SettingsError
 from ..utils import _lenient_issubclass
@@ -218,9 +219,11 @@ def _literal_has_numeric_enum(annotation: type[Any] | None) -> bool:
     """Check if annotation is a Literal type containing numeric Enum members (IntEnum, (int, Enum), (float, Enum))."""
     if get_origin(annotation) is Literal:
         return any(isinstance(arg, (int, float)) and isinstance(arg, Enum) for arg in get_args(annotation))
+    # Handle Annotated wrapping, e.g. Annotated[Literal[IntEnum.member], Field(...)]
+    if typing_objects.is_annotated(get_origin(annotation)):
+        inner = get_args(annotation)[0]
+        return _literal_has_numeric_enum(inner)
     # Handle Union/Optional wrapping, e.g. Optional[Literal[IntEnum.member]]
-    from typing_inspection.introspection import is_union_origin
-
     if is_union_origin(get_origin(annotation)):
         return any(_literal_has_numeric_enum(arg) for arg in get_args(annotation))
     return False
