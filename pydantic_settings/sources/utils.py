@@ -14,6 +14,7 @@ from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
 from pydantic.types import Strict
 from typing_inspection import typing_objects
+from typing_inspection.introspection import is_union_origin
 
 from ..exceptions import SettingsError
 from ..utils import _lenient_issubclass
@@ -133,7 +134,22 @@ def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:
 
 def _union_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
     """Check if a union type contains any complex types."""
-    return any(_annotation_is_complex(arg, metadata) for arg in get_args(annotation))
+    for arg in get_args(annotation):
+        if _annotation_is_complex(arg, metadata):
+            return True
+        # _annotation_is_complex doesn't handle bare Union types, so when an arg
+        # is Annotated[Union[X, Y], ...], stripping Annotated yields a bare Union
+        # that _annotation_is_complex can't evaluate.  Recurse into it, but only
+        # if the Annotated metadata doesn't suppress complexity (e.g. Json).
+        inner = _strip_annotated(arg)
+        if inner is not arg:
+            _, *inner_meta = get_args(arg)
+            if any(isinstance(md, Json) for md in inner_meta):  # type: ignore[misc]
+                continue
+        if is_union_origin(get_origin(inner)):
+            if _union_is_complex(inner, metadata):
+                return True
+    return False
 
 
 def _union_has_strict_types(annotation: type[Any] | None) -> bool:
