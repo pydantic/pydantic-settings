@@ -6,7 +6,7 @@ from collections import deque
 from collections.abc import Mapping, Sequence
 from dataclasses import is_dataclass
 from enum import Enum
-from typing import Any, Literal, TypeVar, cast, get_args, get_origin
+from typing import Any, TypeVar, cast, get_args, get_origin
 
 from pydantic import BaseModel, Json, RootModel, Secret
 from pydantic._internal._utils import is_model_class
@@ -217,7 +217,7 @@ def _annotation_enum_name_to_val(annotation: type[Any] | None, name: Any) -> Any
 
 def _literal_has_numeric_enum(annotation: type[Any] | None) -> bool:
     """Check if annotation is a Literal type containing numeric Enum members (IntEnum, (int, Enum), (float, Enum))."""
-    if get_origin(annotation) is Literal:
+    if typing_objects.is_literal(get_origin(annotation)):
         return any(isinstance(arg, (int, float)) and isinstance(arg, Enum) for arg in get_args(annotation))
     # Handle Annotated wrapping, e.g. Annotated[Literal[IntEnum.member], Field(...)]
     if typing_objects.is_annotated(get_origin(annotation)):
