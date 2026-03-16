@@ -4,7 +4,7 @@ import re
 import sys
 import time
 import typing
-from enum import IntEnum
+from enum import Enum, IntEnum
 from pathlib import Path, PureWindowsPath
 from typing import Annotated, Any, Dict, Generic, List, Literal, Tuple, TypeVar, Union  # noqa: UP035
 
@@ -810,6 +810,72 @@ def test_cli_list_arg(prefix, arg_spaces):
         'str_list': ['0,0', '1,1', '2,2', '3,3', '4,4', '5,5'],
     }
     check_answer(cfg, prefix, expected)
+
+
+class _MQTTVersion(IntEnum):
+    v31 = 3
+    v311 = 4
+
+
+class _Priority(int, Enum):
+    low = 1
+    high = 3
+
+
+class _Threshold(float, Enum):
+    low = 0.25
+    high = 0.75
+
+
+@pytest.mark.parametrize(
+    'field_type,default,cli_val,expected',
+    [
+        pytest.param(
+            Literal[_MQTTVersion.v31, _MQTTVersion.v311],
+            _MQTTVersion.v311,
+            '3',
+            _MQTTVersion.v31,
+            id='IntEnum',
+        ),
+        pytest.param(
+            Literal[_Priority.low, _Priority.high],
+            _Priority.low,
+            '3',
+            _Priority.high,
+            id='int_Enum_mixin',
+        ),
+        pytest.param(
+            Literal[_Threshold.low, _Threshold.high],
+            _Threshold.low,
+            '0.75',
+            _Threshold.high,
+            id='float_Enum_mixin',
+        ),
+        pytest.param(
+            Literal[_MQTTVersion.v31, _MQTTVersion.v311] | None,
+            None,
+            '4',
+            _MQTTVersion.v311,
+            id='Optional_IntEnum',
+        ),
+        pytest.param(
+            Annotated[Literal[_MQTTVersion.v31, _MQTTVersion.v311], Field(description='MQTT version')],
+            _MQTTVersion.v311,
+            '3',
+            _MQTTVersion.v31,
+            id='Annotated_IntEnum',
+        ),
+    ],
+)
+def test_cli_literal_numeric_enum(field_type, default, cli_val, expected):
+    """Literal[numeric Enum member] should parse from CLI numeric strings."""
+
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(cli_kebab_case=True)
+        val: field_type = default  # type: ignore[valid-type]
+
+    cfg = CliApp.run(Cfg, cli_args=['--val', cli_val])
+    assert cfg.val is expected
 
 
 def test_cli_set_arg():
@@ -3290,3 +3356,31 @@ def test_cli_app_run_env_file_from_model_config(tmp_path):
 
     result = CliApp.run(Settings, cli_args=[])
     assert result.test == 'from dotenv'
+
+
+def test_cli_app_run_subcommand_underscore_field_name():
+    class Leaf(BaseModel):
+        name: str
+
+        def cli_cmd(self) -> None:
+            self.name = f'Hello {self.name}'
+
+    class MiddleCommands(BaseModel):
+        baz: CliSubCommand[Leaf]
+
+        def cli_cmd(self) -> None:
+            CliApp.run_subcommand(self)
+
+    class RootApp(BaseModel):
+        # Underscore in the field name triggers the bug
+        foo_bar: CliSubCommand[MiddleCommands]
+
+        def cli_cmd(self) -> None:
+            CliApp.run_subcommand(self)
+
+    result = CliApp.run(RootApp, cli_args=['foo-bar', 'baz', '--name=world'])
+    assert result.model_dump() == {
+        'foo_bar': {
+            'baz': {'name': 'Hello world'},
+        },
+    }

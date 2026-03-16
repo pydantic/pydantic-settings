@@ -6,7 +6,7 @@ import sys
 import uuid
 from collections.abc import Callable, Hashable
 from datetime import date, datetime, timezone
-from enum import IntEnum
+from enum import Enum, IntEnum
 from pathlib import Path
 from typing import Annotated, Any, Generic, Literal, TypeVar
 from unittest import mock
@@ -3527,3 +3527,64 @@ def test_env_source_when_load_multi_nested_config(env):
     llm_setting = LLMSettings()
     assert llm_setting.llm.embeddings['openai'].keys == ['sk-...']
     assert llm_setting.llm.embeddings['qwen'].keys == ['sk-...']
+
+
+class _MQTTVersion(IntEnum):
+    v31 = 3
+    v311 = 4
+
+
+class _Priority(int, Enum):
+    low = 1
+    high = 3
+
+
+class _Threshold(float, Enum):
+    low = 0.25
+    high = 0.75
+
+
+@pytest.mark.parametrize(
+    'field_type,env_val,expected',
+    [
+        pytest.param(
+            Literal[_MQTTVersion.v31, _MQTTVersion.v311],
+            '3',
+            _MQTTVersion.v31,
+            id='IntEnum',
+        ),
+        pytest.param(
+            Literal[_Priority.low, _Priority.high],
+            '3',
+            _Priority.high,
+            id='int_Enum_mixin',
+        ),
+        pytest.param(
+            Literal[_Threshold.low, _Threshold.high],
+            '0.75',
+            _Threshold.high,
+            id='float_Enum_mixin',
+        ),
+        pytest.param(
+            Literal[_MQTTVersion.v31, _MQTTVersion.v311] | None,
+            '4',
+            _MQTTVersion.v311,
+            id='Optional_IntEnum',
+        ),
+        pytest.param(
+            Annotated[Literal[_MQTTVersion.v31, _MQTTVersion.v311], Field(description='MQTT version')],
+            '3',
+            _MQTTVersion.v31,
+            id='Annotated_IntEnum',
+        ),
+    ],
+)
+def test_env_literal_numeric_enum(field_type, env_val, expected, env):
+    """Literal[numeric Enum member] should parse from env var numeric strings."""
+
+    class Cfg(BaseSettings):
+        val: field_type = ...  # type: ignore[valid-type]
+
+    env.set('VAL', env_val)
+    cfg = Cfg()
+    assert cfg.val is expected
