@@ -1449,6 +1449,31 @@ def test_cli_union_similar_sub_models():
     assert cfg.model_dump() == {'child': {'name': 'new name a', 'diff_a': 'new diff a'}}
 
 
+def test_cli_nested_discriminated_union():
+    """Test that nested unions like Union[Annotated[Union[A, B], Discriminator(...)], None] are handled by CLI."""
+
+    class A(BaseModel):
+        x: Literal['a'] = 'a'
+        a: int = 1
+
+    class B(BaseModel):
+        x: Literal['b'] = 'b'
+        b: str = 'hello'
+
+    AOrB = Annotated[A | B, Discriminator('x')]
+
+    class Cfg(BaseSettings):
+        a_or_b: AOrB | None = None
+
+    cfg = CliApp.run(Cfg, cli_args=['--a_or_b.x', 'b', '--a_or_b.b', 'world'])
+    assert isinstance(cfg.a_or_b, B)
+    assert cfg.a_or_b.b == 'world'
+
+    cfg = CliApp.run(Cfg, cli_args=['--a_or_b.x', 'a', '--a_or_b.a', '42'])
+    assert isinstance(cfg.a_or_b, A)
+    assert cfg.a_or_b.a == 42
+
+
 def test_cli_optional_positional_arg(env):
     class Main(BaseSettings):
         model_config = SettingsConfigDict(

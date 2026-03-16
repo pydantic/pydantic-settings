@@ -90,6 +90,16 @@ class CliMutuallyExclusiveGroup(BaseModel):
     pass
 
 
+def _collect_sub_models(type_: Any, sub_models: list[type[BaseModel]]) -> None:
+    """Recursively collect BaseModel subclasses from possibly nested union types."""
+    stripped = _strip_annotated(type_)
+    if is_model_class(stripped) or is_pydantic_dataclass(stripped):
+        sub_models.append(stripped)  # type: ignore[arg-type]
+    elif is_union_origin(get_origin(stripped)):
+        for arg in get_args(stripped):
+            _collect_sub_models(arg, sub_models)
+
+
 class _CliArg(BaseModel):
     model: Any
     parser: Any
@@ -200,8 +210,7 @@ class _CliArg(BaseModel):
                 raise SettingsError(
                     f'CliPositionalArg is not outermost annotation for {self.model.__name__}.{self.field_name}'
                 )
-            if is_model_class(_strip_annotated(type_)) or is_pydantic_dataclass(_strip_annotated(type_)):
-                sub_models.append(_strip_annotated(type_))
+            _collect_sub_models(type_, sub_models)
         return sub_models
 
     @cached_property

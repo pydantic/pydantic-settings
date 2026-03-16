@@ -2362,6 +2362,31 @@ def test_json_field_with_discriminated_union(env):
     assert s.a_or_b.x == 'a'
 
 
+def test_nested_discriminated_union(env):
+    """Test that nested unions like Union[Annotated[Union[A, B], Discriminator(...)], None] are handled correctly."""
+
+    class A(BaseModel):
+        x: Literal['a'] = 'a'
+        a: int = 1
+
+    class B(BaseModel):
+        x: Literal['b'] = 'b'
+        b: str = 'hello'
+
+    AOrB = Annotated[A | B, Discriminator('x')]
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+        a_or_b: AOrB | None = None
+
+    # Test env var for nested model field
+    env.set('a_or_b__x', 'b')
+    env.set('a_or_b__b', 'world')
+    s = Settings()
+    assert isinstance(s.a_or_b, B)
+    assert s.a_or_b.b == 'world'
+
+
 def test_nested_model_case_insensitive(env):
     class SubSubSub(BaseModel):
         VaL3: str
