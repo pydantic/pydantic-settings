@@ -2547,6 +2547,25 @@ def test_case_sensitive_from_args(monkeypatch):
     ]
 
 
+def test_init_settings_source_case_sensitive():
+    """case_sensitive=False should apply to InitSettingsSource as well as EnvSettingsSource."""
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(case_sensitive=False, extra='allow')
+        test: str = 'default'
+
+    settings = Settings(TeSt='override')
+    assert settings.model_dump() == {'test': 'override'}
+
+    # With case_sensitive=True, mismatched keys should not match
+    class StrictSettings(BaseSettings):
+        model_config = SettingsConfigDict(case_sensitive=True, extra='allow')
+        test: str = 'default'
+
+    s = StrictSettings(TeSt='override')
+    assert s.model_dump() == {'test': 'default', 'TeSt': 'override'}
+
+
 def test_env_prefix_from_args(env):
     class Settings(BaseSettings):
         apple: str

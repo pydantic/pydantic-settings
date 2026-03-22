@@ -280,9 +280,13 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         nested_model_default_partial_update: bool | None = None,
     ):
         self.init_kwargs = {}
-        init_kwarg_names = set(init_kwargs.keys())
+        case_sensitive = settings_cls.model_config.get('case_sensitive', False)
+        _apply_case = (lambda v: v) if case_sensitive else str.lower
+        init_kwarg_names = set(_apply_case(k) for k in init_kwargs.keys())
+        # Build a mapping from lowered key to original key for case-insensitive lookup
+        init_kwargs_lower = {_apply_case(k): v for k, v in init_kwargs.items()}
         for field_name, field_info in settings_cls.model_fields.items():
-            alias_names, *_ = _get_alias_names(field_name, field_info)
+            alias_names, *_ = _get_alias_names(field_name, field_info, case_sensitive=case_sensitive)
             # When populate_by_name is True, allow using the field name as an input key,
             # but normalize to the preferred alias to keep keys consistent across sources.
             matchable_names = set(alias_names)
@@ -290,23 +294,23 @@ class InitSettingsSource(PydanticBaseSettingsSource):
                 'validate_by_name', False
             )
             if include_name:
-                matchable_names.add(field_name)
+                matchable_names.add(_apply_case(field_name))
             init_kwarg_name = init_kwarg_names & matchable_names
             if init_kwarg_name:
                 preferred_alias = alias_names[0] if alias_names else field_name
                 # Choose provided key deterministically: prefer the first alias in alias_names order;
                 # fall back to field_name if allowed and provided.
                 provided_key = next((alias for alias in alias_names if alias in init_kwarg_names), None)
-                if provided_key is None and include_name and field_name in init_kwarg_names:
-                    provided_key = field_name
+                if provided_key is None and include_name and _apply_case(field_name) in init_kwarg_names:
+                    provided_key = _apply_case(field_name)
                 # provided_key should not be None here because init_kwarg_name is non-empty
                 assert provided_key is not None
                 init_kwarg_names -= init_kwarg_name
-                self.init_kwargs[preferred_alias] = init_kwargs[provided_key]
+                self.init_kwargs[preferred_alias] = init_kwargs_lower[provided_key]
         # Include any remaining init kwargs (e.g., extras) unchanged
         # Note: If populate_by_name is True and the provided key is the field name, but
         # no alias exists, we keep it as-is so it can be processed as extra if allowed.
-        self.init_kwargs.update({key: val for key, val in init_kwargs.items() if key in init_kwarg_names})
+        self.init_kwargs.update({key: val for key, val in init_kwargs.items() if _apply_case(key) in init_kwarg_names})
 
         super().__init__(settings_cls)
         self.nested_model_default_partial_update = (
