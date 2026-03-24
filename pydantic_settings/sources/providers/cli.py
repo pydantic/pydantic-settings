@@ -406,6 +406,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             env_parse_enums=True,
             env_prefix=self.cli_prefix,
             case_sensitive=case_sensitive,
+            env_nested_max_split=0,
         )
 
         root_parser = (
