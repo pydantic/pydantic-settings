@@ -413,6 +413,42 @@ def test_cli_alias_exceptions(capsys, monkeypatch):
         CliApp.run(BadCliPositionalArg)
 
 
+@pytest.mark.parametrize(
+    'config_override',
+    [
+        {'validate_by_name': True},
+        {'populate_by_name': True},
+    ],
+)
+def test_cli_populate_by_name_with_alias_choices(config_override):
+    class Cfg(BaseSettings, cli_exit_on_error=False, cli_kebab_case=True, **config_override):
+        project_id: str = Field(
+            'default',
+            validation_alias=AliasChoices('gcp_project_id', 'uno_metadata_project_id'),
+        )
+
+    # Field name works as CLI arg
+    cfg = CliApp.run(Cfg, cli_args=['--project-id', 'val1'])
+    assert cfg.project_id == 'val1'
+
+    # Aliases still work
+    cfg = CliApp.run(Cfg, cli_args=['--gcp-project-id', 'val2'])
+    assert cfg.project_id == 'val2'
+
+    cfg = CliApp.run(Cfg, cli_args=['--uno-metadata-project-id', 'val3'])
+    assert cfg.project_id == 'val3'
+
+    # Without the config, field name should not be recognized
+    class CfgNoByName(BaseSettings, cli_exit_on_error=False, cli_kebab_case=True):
+        project_id: str = Field(
+            'default',
+            validation_alias=AliasChoices('gcp_project_id', 'uno_metadata_project_id'),
+        )
+
+    with pytest.raises(SettingsError, match='error parsing CLI'):
+        CliApp.run(CfgNoByName, cli_args=['--project-id', 'val1'])
+
+
 def test_cli_case_insensitive_arg():
     class Cfg(BaseSettings, cli_exit_on_error=False):
         foo: str = Field(validation_alias=AliasChoices('F', 'Foo'))
