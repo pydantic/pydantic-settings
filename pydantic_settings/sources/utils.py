@@ -296,7 +296,7 @@ def _get_alias_names(
             if not alias_names and is_alias_path_only:
                 alias_names.append(name)
         if populate_by_name and field_name not in alias_names:
-            alias_names.insert(0, field_name)
+            alias_names.append(field_name)
             is_alias_path_only = False
     if not case_sensitive:
         alias_names = [alias_name.lower() for alias_name in alias_names]

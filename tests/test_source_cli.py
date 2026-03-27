@@ -448,6 +448,22 @@ def test_cli_populate_by_name_with_alias_choices(config_override):
     with pytest.raises(SettingsError, match='error parsing CLI'):
         CliApp.run(CfgNoByName, cli_args=['--project-id', 'val1'])
 
+    # Field name also works inside subcommand models
+    class SubModel(BaseModel):
+        project_id: str = Field(
+            'default',
+            validation_alias=AliasChoices('gcp_project_id', 'uno_metadata_project_id'),
+        )
+
+    class CfgWithSubCmd(BaseSettings, cli_kebab_case=True, **config_override):
+        sub: CliSubCommand[SubModel]
+
+    cfg = CliApp.run(CfgWithSubCmd, cli_args=['sub', '--project-id', 'sub_val1'])
+    assert cfg.sub.project_id == 'sub_val1'
+
+    cfg = CliApp.run(CfgWithSubCmd, cli_args=['sub', '--gcp-project-id', 'sub_val2'])
+    assert cfg.sub.project_id == 'sub_val2'
+
 
 def test_cli_case_insensitive_arg():
     class Cfg(BaseSettings, cli_exit_on_error=False):
