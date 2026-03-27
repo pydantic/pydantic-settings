@@ -259,6 +259,7 @@ def _get_alias_names(
     field_info: Any,
     alias_path_args: dict[str, int | None] | None = None,
     case_sensitive: bool = True,
+    populate_by_name: bool = False,
 ) -> tuple[tuple[str, ...], bool]:
     """Get alias names for a field, handling alias paths and case sensitivity."""
     from pydantic import AliasChoices, AliasPath
@@ -294,6 +295,9 @@ def _get_alias_names(
                 )
             if not alias_names and is_alias_path_only:
                 alias_names.append(name)
+        if populate_by_name and field_name not in alias_names:
+            alias_names.append(field_name)
+            is_alias_path_only = False
     if not case_sensitive:
         alias_names = [alias_name.lower() for alias_name in alias_names]
     return tuple(dict.fromkeys(alias_names)), is_alias_path_only
