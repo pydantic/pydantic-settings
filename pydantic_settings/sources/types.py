@@ -50,6 +50,10 @@ class _CliPositionalArg:
     pass
 
 
+class _CliIgnoreArg:
+    pass
+
+
 class _CliImplicitFlag:
     pass
 
@@ -93,6 +97,7 @@ __all__ = [
     '_CliImplicitFlag',
     '_CliToggleFlag',
     '_CliDualFlag',
+    '_CliIgnoreArg',
     '_CliPositionalArg',
     '_CliSubCommand',
     '_CliUnknownArgs',
