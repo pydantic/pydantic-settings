@@ -461,7 +461,7 @@ class BaseSettings(BaseModel):
                             f'{source_type.__name__} source to the settings sources via the '
                             'settings_customise_sources hook.',
                             UserWarning,
-                            stacklevel=3,
+                            stacklevel=5,
                         )
 
         warn_if_not_used(JsonConfigSettingsSource, ('json_file', 'json_file_encoding'))

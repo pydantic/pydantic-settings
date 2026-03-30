@@ -7,6 +7,7 @@ import re
 import shlex
 import sys
 import typing
+import warnings
 from argparse import (
     SUPPRESS,
     ArgumentParser,
@@ -1124,11 +1125,14 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _update_alias_path_only_default(
         cls, arg_name: str, value: Any, field_info: FieldInfo, alias_path_only_defaults: dict[str, Any]
     ) -> tuple[str, list[Any] | dict[str, Any]]:
-        alias_path: AliasPath = [
+        alias_path_candidates: list[AliasPath] = [
             alias if isinstance(alias, AliasPath) else cast(AliasPath, alias.choices[0])
             for alias in (field_info.alias, field_info.validation_alias)
             if isinstance(alias, (AliasPath, AliasChoices))
-        ][0]
+        ]
+        if not alias_path_candidates:
+            return arg_name, alias_path_only_defaults.get(arg_name, [])
+        alias_path: AliasPath = alias_path_candidates[0]
 
         alias_nested_paths: list[str] = alias_path.path[1:-1]  # type: ignore
         if '.' in arg_name:
@@ -1163,8 +1167,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     factory_default = field_info.default_factory()
                     if factory_default == model_default:
                         continue
-                except Exception:
-                    pass
+                except Exception as e:
+                    warnings.warn(
+                        f'Failed to call default_factory for field {field_name!r}: {e}',
+                        UserWarning,
+                        stacklevel=2,
+                    )
             elif field_info.default == model_default:
                 continue
             if _CliSubCommand in field_info.metadata and model_default is None:
