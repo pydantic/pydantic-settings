@@ -5,6 +5,7 @@ import sys
 import time
 import typing
 from enum import IntEnum
+from pathlib import Path, PureWindowsPath
 from typing import Annotated, Any, Dict, Generic, List, Literal, Optional, Tuple, TypeVar, Union  # noqa: UP035
 
 import pytest
@@ -18,15 +19,18 @@ from pydantic import (
     DirectoryPath,
     Discriminator,
     Field,
+    RootModel,
     Tag,
     ValidationError,
+    field_validator,
+    model_validator,
 )
 from pydantic import (
     dataclasses as pydantic_dataclasses,
 )
 from pydantic._internal._repr import Representation
 
-from pydantic_settings import BaseSettings, CliApp, PydanticBaseSettingsSource, SettingsConfigDict, SettingsError
+from pydantic_settings import BaseSettings, CliApp, ForceDecode, NoDecode, PydanticBaseSettingsSource, SettingsConfigDict, SettingsError
 from pydantic_settings.sources import (
     CLI_SUPPRESS,
     CliExplicitFlag,
@@ -297,6 +301,21 @@ def test_cli_alias_arg(capsys, monkeypatch, avoid_json):
         'alias_str': 'str',
     }
 
+    serialized_cli_args = CliApp.serialize(cfg)
+    assert serialized_cli_args == [
+        '-a',
+        'a',
+        '--path1',
+        '["", "b1"]',
+        '-b',
+        'b',
+        '--path2',
+        '{"deep": ["", "b2"]}',
+        '--str',
+        'str',
+    ]
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+
 
 @pytest.mark.parametrize('avoid_json', [True, False])
 def test_cli_alias_nested_arg(capsys, monkeypatch, avoid_json):
@@ -332,6 +351,19 @@ def test_cli_alias_nested_arg(capsys, monkeypatch, avoid_json):
             'alias_str': 'str',
         }
     }
+
+    serialized_cli_args = CliApp.serialize(cfg)
+    assert serialized_cli_args == [
+        '--nest.a',
+        'a',
+        '--nest',
+        '{"path1": ["", "b1"], "path2": {"deep": ["", "b2"]}}',
+        '--nest.b',
+        'b',
+        '--nest.str',
+        'str',
+    ]
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
 
 
 def test_cli_alias_exceptions(capsys, monkeypatch):
@@ -2525,3 +2557,273 @@ def test_cli_parse_args_from_model_config_is_respected_with_settings_customise_s
         cfg = CliApp.run(MySettings)
 
         assert cfg.model_dump() == {'foo': 'bar'}
+
+
+def test_cli_shortcuts_on_flat_object():
+    class Settings(BaseSettings):
+        option: str = Field(default='foo')
+        list_option: str = Field(default='fizz')
+
+        model_config = SettingsConfigDict(cli_shortcuts={'option': 'option2', 'list_option': ['list_option2']})
+
+    assert CliApp.run(Settings, cli_args=['--option2', 'bar', '--list_option2', 'buzz']).model_dump() == {
+        'option': 'bar',
+        'list_option': 'buzz',
+    }
+
+
+def test_cli_shortcuts_on_nested_object():
+    class TwiceNested(BaseModel):
+        option: str = Field(default='foo')
+
+    class Nested(BaseModel):
+        twice_nested_option: TwiceNested = TwiceNested()
+        option: str = Field(default='foo')
+
+    class Settings(BaseSettings):
+        nested: Nested = Nested()
+
+        model_config = SettingsConfigDict(
+            cli_shortcuts={'nested.option': 'option2', 'nested.twice_nested_option.option': 'twice_nested_option'}
+        )
+
+    assert CliApp.run(Settings, cli_args=['--option2', 'bar', '--twice_nested_option', 'baz']).model_dump() == {
+        'nested': {'option': 'bar', 'twice_nested_option': {'option': 'baz'}}
+    }
+
+
+def test_cli_shortcuts_alias_collision_applies_to_first_target_field():
+    class Nested(BaseModel):
+        option: str = Field(default='foo')
+
+    class Settings(BaseSettings):
+        nested: Nested = Nested()
+        option2: str = Field(default='foo2')
+
+        model_config = SettingsConfigDict(cli_shortcuts={'option2': 'abc', 'nested.option': 'abc'})
+
+    assert CliApp.run(Settings, cli_args=['--abc', 'bar']).model_dump() == {
+        'nested': {'option': 'bar'},
+        'option2': 'foo2',
+    }
+
+
+def test_cli_serialize_positional_args(env):
+    class Nested(BaseModel):
+        deep: CliPositionalArg[int]
+
+    class Cfg(BaseSettings):
+        top: CliPositionalArg[int]
+
+        variadic: CliPositionalArg[list[int]]
+
+        nested_0: Nested
+
+        nested_1: Nested
+
+    cfg = CliApp.run(Cfg, cli_args=['0', '1', '2', '3', '4', '5'])
+    assert cfg.model_dump() == {
+        'top': 0,
+        'variadic': [
+            1,
+            2,
+            3,
+        ],
+        'nested_0': {
+            'deep': 4,
+        },
+        'nested_1': {
+            'deep': 5,
+        },
+    }
+
+    serialized_cli_args = CliApp.serialize(cfg)
+    assert serialized_cli_args == ['0', '1', '2', '3', '4', '5']
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+
+
+def test_cli_subcommand_invalid_abbrev():
+    class Child(BaseModel):
+        bacon: str = ''
+        badger: str = ''
+
+    class MySettings(BaseSettings):
+        child: CliSubCommand[Child]
+
+    with pytest.raises(
+        SettingsError,
+        match='error parsing CLI: unrecognized arguments: --bac cli abbrev are invalid for internal parser',
+    ):
+        CliApp.run(
+            MySettings,
+            cli_args=['child', '--bac', 'cli abbrev are invalid for internal parser'],
+            cli_exit_on_error=False,
+        )
+
+
+def test_cli_serialize_positional_args():
+    class Nested(BaseModel):
+        deep: CliPositionalArg[int]
+
+    class Cfg(BaseSettings):
+        top: CliPositionalArg[int]
+
+        variadic: CliPositionalArg[list[int]]
+
+        nested_0: Nested
+
+        nested_1: Nested
+
+    cfg = CliApp.run(Cfg, cli_args=['0', '1', '2', '3', '4', '5'])
+    assert cfg.model_dump() == {
+        'top': 0,
+        'variadic': [
+            1,
+            2,
+            3,
+        ],
+        'nested_0': {
+            'deep': 4,
+        },
+        'nested_1': {
+            'deep': 5,
+        },
+    }
+
+    serialized_cli_args = CliApp.serialize(cfg)
+    assert serialized_cli_args == ['0', '1', '2', '3', '4', '5']
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+
+
+def test_cli_app_with_separate_parser(monkeypatch):
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+        pet: Literal['dog', 'cat', 'bird']
+
+    parser = argparse.ArgumentParser()
+
+    # The actual parsing of command line argument should not happen here.
+    cli_settings = CliSettingsSource(Cfg, root_parser=parser)
+
+    parser.add_argument('-e', '--extra', dest='extra', default=0, action='count')
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--pet', 'dog', '-eeee'])
+
+        parsed_args = parser.parse_args()
+
+    assert parsed_args.extra == 4
+    # With parsed arguments passed to CliApp.run, the parser should not need to be called again.
+    assert CliApp.run(Cfg, cli_args=parsed_args, cli_settings_source=cli_settings).model_dump() == {'pet': 'dog'}
+
+
+def test_cli_serialize_non_default_values():
+    class Cfg(BaseSettings):
+        default_val: int = 123
+        non_default_val: int
+
+    cfg = Cfg(non_default_val=456)
+    assert cfg.model_dump() == {'default_val': 123, 'non_default_val': 456}
+
+    serialized_cli_args = CliApp.serialize(cfg)
+    assert serialized_cli_args == ['--non_default_val', '456']
+
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+
+
+def test_cli_serialize_ordering():
+    class NestedCfg(BaseSettings):
+        positional: CliPositionalArg[str]
+        optional: int
+
+    class Cfg(BaseSettings):
+        command: CliSubCommand[NestedCfg]
+        positional: CliPositionalArg[str]
+        optional: int
+
+    cfg = Cfg(optional=0, positional='pos_1', command=NestedCfg(optional=2, positional='pos_3'))
+    assert cfg.model_dump() == {'command': {'optional': 2, 'positional': 'pos_3'}, 'optional': 0, 'positional': 'pos_1'}
+
+    serialized_cli_args = CliApp.serialize(cfg)
+    assert serialized_cli_args == [
+        '--optional',
+        '0',
+        'pos_1',
+        'command',
+        '--optional',
+        '2',
+        'pos_3',
+    ]
+
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+
+
+def test_cli_decoding():
+    PATH_A_STR = str(PureWindowsPath(Path.cwd()))
+    PATH_B_STR = str(PureWindowsPath(Path.cwd() / 'subdir'))
+
+    class PathsDecode(BaseSettings):
+        path_a: Path = Field(validation_alias=AliasPath('paths', 0))
+        path_b: Path = Field(validation_alias=AliasPath('paths', 1))
+        num_a: int = Field(validation_alias=AliasPath('nums', 0))
+        num_b: int = Field(validation_alias=AliasPath('nums', 1))
+
+    assert CliApp.run(
+        PathsDecode, cli_args=['--paths', PATH_A_STR, '--paths', PATH_B_STR, '--nums', '1', '--nums', '2']
+    ).model_dump() == {
+        'path_a': Path(PATH_A_STR),
+        'path_b': Path(PATH_B_STR),
+        'num_a': 1,
+        'num_b': 2,
+    }
+
+    class PathsListNoDecode(BaseSettings):
+        paths: Annotated[list[Path], NoDecode]
+        nums: Annotated[list[int], NoDecode]
+
+        @field_validator('paths', mode='before')
+        @classmethod
+        def decode_path_a(cls, paths: str) -> list[Path]:
+            return [Path(p) for p in paths.split(',')]
+
+        @field_validator('nums', mode='before')
+        @classmethod
+        def decode_nums(cls, nums: str) -> list[int]:
+            return [int(n) for n in nums.split(',')]
+
+    assert CliApp.run(
+        PathsListNoDecode, cli_args=['--paths', f'{PATH_A_STR},{PATH_B_STR}', '--nums', '1,2']
+    ).model_dump() == {'paths': [Path(PATH_A_STR), Path(PATH_B_STR)], 'nums': [1, 2]}
+
+    class PathsAliasNoDecode(BaseSettings):
+        path_a: Annotated[Path, NoDecode] = Field(validation_alias=AliasPath('paths', 0))
+        path_b: Annotated[Path, NoDecode] = Field(validation_alias=AliasPath('paths', 1))
+        num_a: Annotated[int, NoDecode] = Field(validation_alias=AliasPath('nums', 0))
+        num_b: Annotated[int, NoDecode] = Field(validation_alias=AliasPath('nums', 1))
+
+        @model_validator(mode='before')
+        @classmethod
+        def intercept_kwargs(cls, data: Any) -> Any:
+            data['paths'] = [Path(p) for p in data['paths'].split(',')]
+            data['nums'] = [int(n) for n in data['nums'].split(',')]
+            return data
+
+    assert CliApp.run(
+        PathsAliasNoDecode, cli_args=['--paths', f'{PATH_A_STR},{PATH_B_STR}', '--nums', '1,2']
+    ).model_dump() == {
+        'path_a': Path(PATH_A_STR),
+        'path_b': Path(PATH_B_STR),
+        'num_a': 1,
+        'num_b': 2,
+    }
+
+    with pytest.raises(
+        SettingsError,
+        match='Parsing error encountered for paths: Mixing Decode and NoDecode across different AliasPath fields is not allowed',
+    ):
+
+        class PathsMixedDecode(BaseSettings):
+            path_a: Annotated[Path, ForceDecode] = Field(validation_alias=AliasPath('paths', 0))
+            path_b: Annotated[Path, NoDecode] = Field(validation_alias=AliasPath('paths', 1))
+
+        CliApp.run(PathsMixedDecode, cli_args=['--paths', PATH_A_STR, '--paths', PATH_B_STR])

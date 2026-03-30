@@ -3,7 +3,9 @@ from __future__ import annotations as _annotations
 import asyncio
 import inspect
 import threading
+import warnings
 from argparse import Namespace
+from collections.abc import Mapping
 from types import SimpleNamespace
 from typing import Any, ClassVar, TypeVar
 
@@ -23,12 +25,17 @@ from .sources import (
     DotenvType,
     EnvSettingsSource,
     InitSettingsSource,
+    JsonConfigSettingsSource,
     PathType,
     PydanticBaseSettingsSource,
     PydanticModel,
+    PyprojectTomlConfigSettingsSource,
     SecretsSettingsSource,
+    TomlConfigSettingsSource,
+    YamlConfigSettingsSource,
     get_subcommand,
 )
+
 
 T = TypeVar('T')
 
@@ -57,6 +64,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_implicit_flags: bool | None
     cli_ignore_unknown_args: bool | None
     cli_kebab_case: bool | None
+    cli_shortcuts: Mapping[str, str | list[str]] | None
     secrets_dir: PathType | None
     json_file: PathType | None
     json_file_encoding: str | None
@@ -149,6 +157,7 @@ class BaseSettings(BaseModel):
             (e.g. --flag, --no-flag). Defaults to `False`.
         _cli_ignore_unknown_args: Whether to ignore unknown CLI args and parse only known ones. Defaults to `False`.
         _cli_kebab_case: CLI args use kebab case. Defaults to `False`.
+        _cli_shortcuts: Mapping of target field name to alias names. Defaults to `None`.
         _secrets_dir: The secret files directory or a sequence of directories. Defaults to `None`.
     """
 
@@ -178,6 +187,7 @@ class BaseSettings(BaseModel):
         _cli_implicit_flags: bool | None = None,
         _cli_ignore_unknown_args: bool | None = None,
         _cli_kebab_case: bool | None = None,
+        _cli_shortcuts: Mapping[str, str | list[str]] | None = None,
         _secrets_dir: PathType | None = None,
         **values: Any,
     ) -> None:
@@ -208,6 +218,7 @@ class BaseSettings(BaseModel):
                 _cli_implicit_flags=_cli_implicit_flags,
                 _cli_ignore_unknown_args=_cli_ignore_unknown_args,
                 _cli_kebab_case=_cli_kebab_case,
+                _cli_shortcuts=_cli_shortcuts,
                 _secrets_dir=_secrets_dir,
             )
         )
@@ -263,6 +274,7 @@ class BaseSettings(BaseModel):
         _cli_implicit_flags: bool | None = None,
         _cli_ignore_unknown_args: bool | None = None,
         _cli_kebab_case: bool | None = None,
+        _cli_shortcuts: Mapping[str, str | list[str]] | None = None,
         _secrets_dir: PathType | None = None,
     ) -> dict[str, Any]:
         # Determine settings config values
@@ -336,6 +348,7 @@ class BaseSettings(BaseModel):
             else self.model_config.get('cli_ignore_unknown_args')
         )
         cli_kebab_case = _cli_kebab_case if _cli_kebab_case is not None else self.model_config.get('cli_kebab_case')
+        cli_shortcuts = _cli_shortcuts if _cli_shortcuts is not None else self.model_config.get('cli_shortcuts')
 
         secrets_dir = _secrets_dir if _secrets_dir is not None else self.model_config.get('secrets_dir')
 
@@ -401,9 +414,11 @@ class BaseSettings(BaseModel):
                     cli_implicit_flags=cli_implicit_flags,
                     cli_ignore_unknown_args=cli_ignore_unknown_args,
                     cli_kebab_case=cli_kebab_case,
+                    cli_shortcuts=cli_shortcuts,
                     case_sensitive=case_sensitive,
                 )
                 sources = (cli_settings,) + sources
+        self._settings_warn_unused_config_keys(sources, self.model_config)
         if sources:
             state: dict[str, Any] = {}
             states: dict[str, dict[str, Any]] = {}
@@ -422,6 +437,37 @@ class BaseSettings(BaseModel):
             # no one should mean to do this, but I think returning an empty dict is marginally preferable
             # to an informative error and much better than a confusing error
             return {}
+
+    @staticmethod
+    def _settings_warn_unused_config_keys(sources: tuple[object, ...], model_config: SettingsConfigDict) -> None:
+        """
+        Warns if any values in model_config were set but the corresponding settings source has not been initialised.
+
+        The list alternative sources and their config keys can be found here:
+        https://docs.pydantic.dev/latest/concepts/pydantic_settings/#other-settings-source
+
+        Args:
+            sources: The tuple of configured sources
+            model_config: The model config to check for unused config keys
+        """
+
+        def warn_if_not_used(source_type: type[PydanticBaseSettingsSource], keys: tuple[str, ...]) -> None:
+            if not any(isinstance(source, source_type) for source in sources):
+                for key in keys:
+                    if model_config.get(key) is not None:
+                        warnings.warn(
+                            f'Config key `{key}` is set in model_config but will be ignored because no '
+                            f'{source_type.__name__} source is configured. To use this config key, add a '
+                            f'{source_type.__name__} source to the settings sources via the '
+                            'settings_customise_sources hook.',
+                            UserWarning,
+                            stacklevel=3,
+                        )
+
+        warn_if_not_used(JsonConfigSettingsSource, ('json_file', 'json_file_encoding'))
+        warn_if_not_used(PyprojectTomlConfigSettingsSource, ('pyproject_toml_depth', 'pyproject_toml_table_header'))
+        warn_if_not_used(TomlConfigSettingsSource, ('toml_file',))
+        warn_if_not_used(YamlConfigSettingsSource, ('yaml_file', 'yaml_file_encoding', 'yaml_config_section'))
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         extra='forbid',
@@ -450,6 +496,7 @@ class BaseSettings(BaseModel):
         cli_implicit_flags=False,
         cli_ignore_unknown_args=False,
         cli_kebab_case=False,
+        cli_shortcuts=None,
         json_file=None,
         json_file_encoding=None,
         yaml_file=None,
@@ -467,6 +514,25 @@ class CliApp:
     A utility class for running Pydantic `BaseSettings`, `BaseModel`, or `pydantic.dataclasses.dataclass` as
     CLI applications.
     """
+
+    @staticmethod
+    def _get_base_settings_cls(model_cls: type[Any]) -> type[BaseSettings]:
+        if issubclass(model_cls, BaseSettings):
+            return model_cls
+
+        class CliAppBaseSettings(BaseSettings, model_cls):  # type: ignore
+            __doc__ = model_cls.__doc__
+            model_config = SettingsConfigDict(
+                nested_model_default_partial_update=True,
+                case_sensitive=True,
+                cli_hide_none_type=True,
+                cli_avoid_json=True,
+                cli_enforce_required=True,
+                cli_implicit_flags=True,
+                cli_kebab_case=True,
+            )
+
+        return CliAppBaseSettings
 
     @staticmethod
     def _run_cli_cmd(model: Any, cli_cmd_method_name: str, is_required: bool) -> Any:
@@ -566,22 +632,10 @@ class CliApp:
         model_init_data['_cli_exit_on_error'] = cli_exit_on_error
         model_init_data['_cli_settings_source'] = cli_settings
         if not issubclass(model_cls, BaseSettings):
-
-            class CliAppBaseSettings(BaseSettings, model_cls):  # type: ignore
-                __doc__ = model_cls.__doc__
-                model_config = SettingsConfigDict(
-                    nested_model_default_partial_update=True,
-                    case_sensitive=True,
-                    cli_hide_none_type=True,
-                    cli_avoid_json=True,
-                    cli_enforce_required=True,
-                    cli_implicit_flags=True,
-                    cli_kebab_case=True,
-                )
-
-            model = CliAppBaseSettings(**model_init_data)
+            base_settings_cls = CliApp._get_base_settings_cls(model_cls)
+            model = base_settings_cls(**model_init_data)
             model_init_data = {}
-            for field_name, field_info in type(model).model_fields.items():
+            for field_name, field_info in base_settings_cls.model_fields.items():
                 model_init_data[_field_name_for_signature(field_name, field_info)] = getattr(model, field_name)
 
         return CliApp._run_cli_cmd(model_cls(**model_init_data), cli_cmd_method_name, is_required=False)
@@ -610,3 +664,17 @@ class CliApp:
 
         subcommand = get_subcommand(model, is_required=True, cli_exit_on_error=cli_exit_on_error)
         return CliApp._run_cli_cmd(subcommand, cli_cmd_method_name, is_required=True)
+
+    @staticmethod
+    def serialize(model: PydanticModel) -> list[str]:
+        """
+        Serializes the CLI arguments for a Pydantic data model.
+
+        Args:
+            model: The data model to serialize.
+
+        Returns:
+            The serialized CLI arguments for the data model.
+        """
+        base_settings_cls = CliApp._get_base_settings_cls(type(model))
+        return CliSettingsSource._serialized_args(model, base_settings_cls.model_config)
