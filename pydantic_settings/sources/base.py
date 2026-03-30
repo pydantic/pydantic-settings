@@ -185,6 +185,9 @@ class PydanticBaseSettingsSource(ABC):
         ):
             return value
 
+        if not isinstance(value, str):
+            return value
+
         return json.loads(value)
 
     @abstractmethod

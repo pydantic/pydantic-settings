@@ -1,0 +1,98 @@
+{
+  "_comment": "Ship Policy — AI coding guardrails. Customize for your team.",
+  "version": 1,
+
+  "boundaries": {
+    "default_action": "block",
+
+    "read_only": [
+      {"pattern": "*.lock", "reason": "Lock files must be updated by package managers, not AI"},
+      {"pattern": ".github/workflows/**", "reason": "CI/CD changes need human review"},
+      {"pattern": ".ship/ship.policy.json", "action": "warn", "reason": "Policy changes require human approval"}
+    ],
+
+    "no_access": [
+      {"pattern": ".env*"},
+      {"pattern": "**/*.pem"},
+      {"pattern": "**/*.key"},
+      {"pattern": "**/credentials*"},
+      {"pattern": "**/secrets/**"}
+    ]
+  },
+
+  "operations": {
+    "default_action": "block",
+
+    "blocked_commands": [
+      {"pattern": "git push.*--force", "reason": "Force push destroys team history"},
+      {"pattern": "git reset --hard", "reason": "Hard reset discards uncommitted work"},
+      {"pattern": "rm -rf /", "reason": "Catastrophic deletion"}
+    ],
+
+    "dependencies": {
+      "new_packages": "warn",
+      "remove_packages": "warn",
+      "update_packages": "allow"
+    },
+
+    "git": {
+      "force_push": "block",
+      "push_to_main": "block",
+      "branch_delete": "warn",
+      "amend_published": "warn"
+    }
+  },
+
+  "secrets": {
+    "enabled": true,
+    "action": "block",
+    "custom_patterns": []
+  },
+
+  "quality": {
+    "pre_commit": [],
+    "on_failure": "block",
+
+    "require_tests": {
+      "enabled": true,
+      "source_patterns": [],
+      "test_patterns": [],
+      "action": "warn"
+    }
+  },
+
+  "workflow": {
+    "phases": {
+      "plan": "required",
+      "implement": "required",
+      "review": "required",
+      "verify": "required",
+      "qa": "optional",
+      "simplify": "optional"
+    },
+
+    "thresholds": {
+      "min_coverage": 0,
+      "max_critical_issues": 0
+    },
+
+    "human_review": {
+      "require_approval_for": [
+        {"phase": "plan"}
+      ]
+    }
+  },
+
+  "audit": {
+    "enabled": true,
+    "log_dir": ".ship/audit",
+    "events": {
+      "policy_violation": true,
+      "file_modification": true,
+      "command_execution": true,
+      "session_lifecycle": true,
+      "phase_completion": true
+    },
+    "retention_days": 90
+  }
+}

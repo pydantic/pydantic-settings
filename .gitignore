@@ -28,3 +28,5 @@ _build/
 /.ghtopdep_cache/
 /worktrees/
 /.ruff_cache/
+.ship/tasks/
+.ship/audit/

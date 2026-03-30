@@ -83,6 +83,10 @@ class _CliInternalArgParser(ArgumentParser):
         super().error(message)
 
 
+class _CliInternalArgSerializer(_CliInternalArgParser):
+    pass
+
+
 class CliMutuallyExclusiveGroup(BaseModel):
     pass
 
@@ -541,7 +545,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         positional_args, subcommand_args, optional_args = [], [], []
         for field_name, field_info in _get_model_fields(model).items():
             if _CliSubCommand in field_info.metadata:
-                if not field_info.is_required():
+                if not field_info.is_required() and not self._is_serialize_args:
                     raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has a default value')
                 else:
                     alias_names, *_ = _get_alias_names(field_name, field_info)
@@ -585,6 +589,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def root_parser(self) -> T:
         """The connected root parser instance."""
         return self._root_parser
+
+    @property
+    def _is_serialize_args(self) -> bool:
+        return isinstance(self._root_parser, _CliInternalArgSerializer)
 
     def _connect_parser_method(
         self, parser_method: Callable[..., Any] | None, method_name: str, *args: Any, **kwargs: Any
@@ -1186,7 +1194,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         optional_args: list[str | list[Any] | dict[str, Any]] = []
         positional_args: list[str | list[Any] | dict[str, Any]] = []
         subcommand_args: list[str] = []
-        cli_settings = CliSettingsSource[Any](cli_serialize_cls)
+        cli_settings = CliSettingsSource[Any](cli_serialize_cls, root_parser=_CliInternalArgSerializer())
         for field_name, field_info in _get_model_fields(cli_serialize_cls).items():
             model_default = getattr(model, field_name)
             alias_names, is_alias_path_only = _get_alias_names(

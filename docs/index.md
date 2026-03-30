@@ -1,4 +1,3 @@
-
 ## Installation
 
 Installation is as simple as:
@@ -1172,7 +1171,30 @@ CliApp.run(Git, cli_args=['clone', 'repo', 'dir']).model_dump() == {
 }
 ```
 
-When executing a subcommand with an asynchronous cli_cmd, Pydantic settings automatically detects whether the current thread already has an active event loop. If so, the async command is run in a fresh thread to avoid conflicts. Otherwise, it uses asyncio.run() in the current thread. This handling ensures your asynchronous subcommands “just work” without additional manual setup.
+When executing a subcommand with an asynchronous cli_cmd, Pydantic settings automatically detects whether the current thread already has an active event loop. If so, the async command is run in a fresh thread to avoid conflicts. Otherwise, it uses asyncio.run() in the current thread. This handling ensures your asynchronous subcommands "just work" without additional manual setup.
+
+### Serializing CLI Arguments
+
+An instantiated Pydantic model can be serialized into its CLI arguments using the `CliApp.serialize` method.
+
+```py
+from pydantic import BaseModel
+
+from pydantic_settings import CliApp
+
+
+class Nested(BaseModel):
+    that: int
+
+
+class Settings(BaseModel):
+    this: str
+    nested: Nested
+
+
+print(CliApp.serialize(Settings(this='hello', nested=Nested(that=123))))
+#> ['--this', 'hello', '--nested.that', '123']
+```
 
 ### Mutually Exclusive Groups
 
@@ -1633,6 +1655,65 @@ options:
 """
 ```
 
+#### CLI Shortcuts for Arguments
+
+Add alternative CLI argument names (shortcuts) for fields using the `cli_shortcuts` option in `SettingsConfigDict`. This allows you to define additional names for CLI arguments, which can be especially useful for providing more user-friendly or shorter aliases for deeply nested or verbose field names.
+
+The `cli_shortcuts` option takes a dictionary mapping the target field name (using dot notation for nested fields) to one or more shortcut names. If multiple fields share the same shortcut, the first matching field will take precedence.
+
+**Flat Example:**
+
+```py
+from pydantic import Field
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    option: str = Field(default='foo')
+    list_option: str = Field(default='fizz')
+
+    model_config = SettingsConfigDict(
+        cli_shortcuts={'option': 'option2', 'list_option': ['list_option2']}
+    )
+
+
+# Now you can use the shortcuts on the CLI:
+# --option2 sets 'option', --list_option2 sets 'list_option'
+```
+
+**Nested Example:**
+
+```py
+from pydantic import BaseModel, Field
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class TwiceNested(BaseModel):
+    option: str = Field(default='foo')
+
+
+class Nested(BaseModel):
+    twice_nested_option: TwiceNested = TwiceNested()
+    option: str = Field(default='foo')
+
+
+class Settings(BaseSettings):
+    nested: Nested = Nested()
+    model_config = SettingsConfigDict(
+        cli_shortcuts={
+            'nested.option': 'option2',
+            'nested.twice_nested_option.option': 'twice_nested_option',
+        }
+    )
+
+
+# Now you can use --option2 to set nested.option and --twice_nested_option to set nested.twice_nested_option.option
+```
+
+If a shortcut collides (is mapped to multiple fields), it will apply to the first matching field in the model.
+
 ### Integrating with Existing Parsers
 
 A CLI settings source can be integrated with existing parsers by overriding the default CLI settings source with a user
@@ -1888,6 +1969,45 @@ class AzureKeyVaultSettings(BaseSettings):
             az_key_vault_settings,
         )
 ```
+
+### Snake case conversion
+
+The Azure Key Vault source accepts a `snake_case_convertion` option, disabled by default, to convert Key Vault secret names by mapping them to Python's snake_case field names, without the need to use aliases.
+
+```py
+import os
+
+from azure.identity import DefaultAzureCredential
+
+from pydantic_settings import (
+    AzureKeyVaultSettingsSource,
+    BaseSettings,
+    PydanticBaseSettingsSource,
+)
+
+
+class AzureKeyVaultSettings(BaseSettings):
+    my_setting: str
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        az_key_vault_settings = AzureKeyVaultSettingsSource(
+            settings_cls,
+            os.environ['AZURE_KEY_VAULT_URL'],
+            DefaultAzureCredential(),
+            snake_case_conversion=True,
+        )
+        return (az_key_vault_settings,)
+```
+
+This setup will load Azure Key Vault secrets (e.g., `MySetting`, `mySetting`, `my-secret` or `MY-SECRET`), mapping them to the snake case version (`my_setting` in this case).
 
 ### Dash to underscore mapping
 
@@ -2340,7 +2460,7 @@ print(Settings())
 #> foobar='test'
 ```
 
-#### Accesing the result of previous sources
+#### Accessing the result of previous sources
 
 Each source of settings can access the output of the previous ones.
 
