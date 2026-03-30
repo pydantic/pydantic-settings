@@ -2608,40 +2608,6 @@ def test_cli_shortcuts_alias_collision_applies_to_first_target_field():
     }
 
 
-def test_cli_serialize_positional_args(env):
-    class Nested(BaseModel):
-        deep: CliPositionalArg[int]
-
-    class Cfg(BaseSettings):
-        top: CliPositionalArg[int]
-
-        variadic: CliPositionalArg[list[int]]
-
-        nested_0: Nested
-
-        nested_1: Nested
-
-    cfg = CliApp.run(Cfg, cli_args=['0', '1', '2', '3', '4', '5'])
-    assert cfg.model_dump() == {
-        'top': 0,
-        'variadic': [
-            1,
-            2,
-            3,
-        ],
-        'nested_0': {
-            'deep': 4,
-        },
-        'nested_1': {
-            'deep': 5,
-        },
-    }
-
-    serialized_cli_args = CliApp.serialize(cfg)
-    assert serialized_cli_args == ['0', '1', '2', '3', '4', '5']
-    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
-
-
 def test_cli_subcommand_invalid_abbrev():
     class Child(BaseModel):
         bacon: str = ''

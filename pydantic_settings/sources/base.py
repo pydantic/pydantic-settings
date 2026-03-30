@@ -16,6 +16,7 @@ from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
 from pydantic._internal._utils import is_model_class
 from pydantic.fields import FieldInfo
 from typing_extensions import get_args
+from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
 
 from ..exceptions import SettingsError
@@ -25,6 +26,7 @@ from .utils import (
     _annotation_is_complex,
     _get_alias_names,
     _get_model_fields,
+    _strip_annotated,
     _union_is_complex,
 )
 
@@ -266,8 +268,9 @@ class InitSettingsSource(PydanticBaseSettingsSource):
             init_kwarg_name = init_kwarg_names & set(alias_names)
             if init_kwarg_name:
                 preferred_alias = alias_names[0]
+                preferred_set_alias = next(alias for alias in alias_names if alias in init_kwarg_name)
                 init_kwarg_names -= init_kwarg_name
-                self.init_kwargs[preferred_alias] = init_kwargs[init_kwarg_name.pop()]
+                self.init_kwargs[preferred_alias] = init_kwargs[preferred_set_alias]
         self.init_kwargs.update({key: val for key, val in init_kwargs.items() if key in init_kwarg_names})
 
         super().__init__(settings_cls)
@@ -353,7 +356,10 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                 field_info.append((v_alias, self._apply_case_sensitive(v_alias), False))
 
         if not v_alias or self.config.get('populate_by_name', False):
-            if is_union_origin(get_origin(field.annotation)) and _union_is_complex(field.annotation, field.metadata):
+            annotation = field.annotation
+            if typing_objects.is_typealiastype(annotation) or typing_objects.is_typealiastype(get_origin(annotation)):
+                annotation = _strip_annotated(annotation.__value__)  # type: ignore[union-attr]
+            if is_union_origin(get_origin(annotation)) and _union_is_complex(annotation, field.metadata):
                 field_info.append((field_name, self._apply_case_sensitive(self.env_prefix + field_name), True))
             else:
                 field_info.append((field_name, self._apply_case_sensitive(self.env_prefix + field_name), False))
@@ -416,6 +422,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                 model_fields: dict[str, FieldInfo] = annotation.model_fields
 
             # Find field in sub model by looking in fields case insensitively
+            field_key: str | None = None
             for sub_model_field_name, sub_model_field in model_fields.items():
                 aliases, _ = _get_alias_names(sub_model_field_name, sub_model_field)
                 _search = (alias for alias in aliases if alias.lower() == name.lower())

@@ -82,10 +82,6 @@ class _CliInternalArgParser(ArgumentParser):
         super().error(message)
 
 
-class _CliInternalArgSerializer(_CliInternalArgParser):
-    pass
-
-
 class CliMutuallyExclusiveGroup(BaseModel):
     pass
 
@@ -1162,7 +1158,14 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         model_field_definitions: dict[str, Any] = {}
         for field_name, field_info in _get_model_fields(type(model)).items():
             model_default = getattr(model, field_name)
-            if field_info.default == model_default:
+            if field_info.default_factory is not None:
+                try:
+                    factory_default = field_info.default_factory()
+                    if factory_default == model_default:
+                        continue
+                except Exception:
+                    pass
+            elif field_info.default == model_default:
                 continue
             if _CliSubCommand in field_info.metadata and model_default is None:
                 continue

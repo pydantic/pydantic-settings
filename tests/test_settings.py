@@ -34,7 +34,7 @@ from pydantic import (
     dataclasses as pydantic_dataclasses,
 )
 from pydantic.fields import FieldInfo
-from typing_extensions import override
+from typing_extensions import TypeAliasType, override
 
 from pydantic_settings import (
     BaseSettings,
@@ -3053,3 +3053,125 @@ def test_field_annotated_force_decode_disable_decoding(env):
 
     s = Settings()
     assert s.model_dump() == {'a': ['one', 'two']}
+
+
+def test_annotated_with_type(env):
+    """https://github.com/pydantic/pydantic-settings/issues/536.
+
+    PEP 695 type aliases need to be analyzed when determining if an annotation is complex.
+    """
+    MinLenList = TypeAliasType('MinLenList', Annotated[Union[list[str], list[int]], MinLen(2)])
+
+    class AnnotatedComplexSettings(BaseSettings):
+        apples: MinLenList
+
+    env.set('apples', '["russet", "granny smith"]')
+    s = AnnotatedComplexSettings()
+    assert s.apples == ['russet', 'granny smith']
+
+    T = TypeVar('T')
+    MinLenList = TypeAliasType('MinLenList', Annotated[Union[list[T], tuple[T]], MinLen(2)], type_params=(T,))
+
+    class AnnotatedComplexSettings(BaseSettings):
+        apples: MinLenList[str]
+
+    s = AnnotatedComplexSettings()
+    assert s.apples == ['russet', 'granny smith']
+
+
+def test_init_kwargs_alias_resolution_deterministic():
+    class Example(BaseSettings):
+        name: str
+        last_name: str = Field(validation_alias=AliasChoices('surname', 'last_name'))
+
+    result = Example(name='john', surname='doe', last_name='smith').model_dump()
+
+    assert result == {'name': 'john', 'last_name': 'doe'}
+
+
+def test_dotenv_env_prefix_env_without_prefix_ignored(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('foo=foo')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=p,
+            env_prefix='TEST_',
+            extra='ignore',
+        )
+
+        foo: str = ''
+
+    s = Settings()
+    assert s.model_dump() == {'foo': ''}
+
+
+def test_nested_model_dotenv_env_prefix_env_without_prefix_ignored(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('foo__val=1')
+
+    class Foo(BaseModel):
+        val: int = 0
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_nested_delimiter='__',
+            env_file=p,
+            env_prefix='TEST_',
+            extra='ignore',
+        )
+
+        foo: Foo = Foo()
+
+    s = Settings()
+    assert s.model_dump() == {'foo': {'val': 0}}
+
+
+def test_dotenv_env_prefix_env_with_alias_without_prefix(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('FooAlias=foo')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=p,
+            env_prefix='TEST_',
+            extra='ignore',
+        )
+
+        foo: str = Field('xxx', alias='FooAlias')
+
+    s = Settings()
+    assert s.model_dump() == {'foo': 'foo'}
+
+
+def test_warns_if_config_keys_are_set_but_source_is_missing():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            json_file='config.json',
+            pyproject_toml_depth=2,
+            toml_file='config.toml',
+            yaml_file='config.yaml',
+            yaml_config_section='myapp',
+        )
+
+    with pytest.warns() as record:
+        Settings()
+
+    assert len(record) == 5
+
+    key_class_pairs = [
+        ('json_file', 'JsonConfigSettingsSource'),
+        ('pyproject_toml_depth', 'PyprojectTomlConfigSettingsSource'),
+        ('toml_file', 'TomlConfigSettingsSource'),
+        ('yaml_file', 'YamlConfigSettingsSource'),
+        ('yaml_config_section', 'YamlConfigSettingsSource'),
+    ]
+
+    for warning, key_class_pair in zip(record, key_class_pairs):
+        assert warning.category is UserWarning
+        expected_message = (
+            f'Config key `{key_class_pair[0]}` is set in model_config but will be ignored because no '
+            f'{key_class_pair[1]} source is configured. To use this config key, add a {key_class_pair[1]} '
+            f'source to the settings sources via the settings_customise_sources hook.'
+        )
+        assert warning.message.args[0] == expected_message
