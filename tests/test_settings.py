@@ -3325,6 +3325,56 @@ def test_dotenv_env_prefix_env_with_alias_with_prefix(tmp_path, env_prefix_targe
     assert s.model_dump() == {'foo': 'foo'}
 
 
+@pytest.mark.parametrize('prefix', ['TEST_', ''])
+def test_dotenv_only_existing(tmp_path, prefix):
+    p = tmp_path / '.env'
+    p.write_text('a=foo\nb=x\nTEST_a=bar\nTEST_b=y')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=p,
+            env_prefix=prefix,
+            env_filtering='only_existing',
+            extra='forbid',
+        )
+
+        a: str = 'default'
+
+    s = Settings()
+    assert s.model_dump() == {'a': 'foo' if prefix == '' else 'bar'}
+
+
+@pytest.mark.parametrize('prefix', ['TEST_', ''])
+@pytest.mark.parametrize('case_sensitive', [True, False])
+def test_dotenv_match_prefix(tmp_path, prefix, case_sensitive):
+    p = tmp_path / '.env'
+    if case_sensitive:
+        p.write_text('A=foo\nb=x\nTEST_a=bar\ntest_b=y')
+    else:
+        p.write_text('a=foo\nb=x\nTEST_a=bar\nTEST_b=y')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=p,
+            env_prefix=prefix,
+            env_filtering='match_prefix',
+            case_sensitive=case_sensitive,
+            extra='allow',
+        )
+
+        a: str = 'default'
+
+    s = Settings()
+    if prefix:
+        assert s.model_dump() == {'a': 'bar'} if case_sensitive else {'a': 'bar', 'b': 'y'}
+    else:
+        if case_sensitive:
+            v = {'a': 'default', 'A': 'foo', 'b': 'x', 'TEST_a': 'bar', 'test_b': 'y'}
+        else:
+            v = {'a': 'foo', 'b': 'x', 'test_a': 'bar', 'test_b': 'y'}
+        assert s.model_dump() == v
+
+
 def test_parsing_secret_field(env):
     class Settings(BaseSettings):
         foo: Secret[int]

@@ -35,6 +35,7 @@ from .providers.yaml import YamlConfigSettingsSource
 from .types import (
     DEFAULT_PATH,
     ENV_FILE_SENTINEL,
+    DotenvFiltering,
     DotenvType,
     EnvPrefixTarget,
     ForceDecode,
@@ -61,6 +62,7 @@ __all__ = [
     'CliUnknownArgs',
     'DefaultSettingsSource',
     'DotEnvSettingsSource',
+    'DotenvFiltering',
     'DotenvType',
     'EnvPrefixTarget',
     'EnvSettingsSource',

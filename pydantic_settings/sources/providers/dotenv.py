@@ -14,7 +14,7 @@ from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
 )
 from typing_inspection.introspection import is_union_origin
 
-from ..types import ENV_FILE_SENTINEL, DotenvType, EnvPrefixTarget
+from ..types import ENV_FILE_SENTINEL, DotenvFiltering, DotenvType, EnvPrefixTarget
 from ..utils import (
     _annotation_is_complex,
     _union_is_complex,
@@ -36,6 +36,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
         settings_cls: type[BaseSettings],
         env_file: DotenvType | None = ENV_FILE_SENTINEL,
         env_file_encoding: str | None = None,
+        env_filtering: DotenvFiltering | None = None,
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
         env_prefix_target: EnvPrefixTarget | None = None,
@@ -48,6 +49,9 @@ class DotEnvSettingsSource(EnvSettingsSource):
         self.env_file = env_file if env_file != ENV_FILE_SENTINEL else settings_cls.model_config.get('env_file')
         self.env_file_encoding = (
             env_file_encoding if env_file_encoding is not None else settings_cls.model_config.get('env_file_encoding')
+        )
+        self.env_filtering = (
+            env_filtering if env_filtering is not None else settings_cls.model_config.get('env_filtering')
         )
         super().__init__(
             settings_cls,
@@ -106,6 +110,20 @@ class DotEnvSettingsSource(EnvSettingsSource):
 
     def __call__(self) -> dict[str, Any]:
         data: dict[str, Any] = super().__call__()
+        if self.env_filtering == 'only_existing':
+            # This case behaves like the EnvSettingsSource, only return existing fields
+            return data
+        if self.env_filtering == 'match_prefix':
+            # In this case add all env vars that match the prefix, stripping the prefix.
+            prefix = self._apply_case_sensitive(self.env_prefix)
+            for env_name, env_value in self.env_vars.items():
+                if env_name.startswith(prefix):
+                    # env_prefix should be respected and removed from the env_name
+                    normalized_env_name = env_name[len(self.env_prefix) :]
+                    if normalized_env_name not in data:
+                        data[normalized_env_name] = env_value
+            return data
+
         is_extra_allowed = self.config.get('extra') != 'forbid'
 
         # As `extra` config is allowed in dotenv settings source, We have to
