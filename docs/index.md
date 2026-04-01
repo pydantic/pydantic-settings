@@ -700,7 +700,7 @@ Pydantic settings consider `extra` config in case of dotenv file. It means if yo
 on `model_config` and your dotenv file contains an entry for a field that is not defined in settings model,
 it will raise `ValidationError` in settings construction.
 
-This behaviour can be customized by using the setting `env_filtering` that supports two additional alternative modes:
+This behaviour can be customized by using the setting `dotenv_filtering` that supports two additional alternative modes:
 - `'match_prefix'`: only the variables that match the prefix will be passed to the model. Useful when used in conjunction with `env_prefix` to "scope" a single dotenv file to a specific model.
 - `'only_existing'`: only the variables that have a corresponding field will be passed to the model. When using this option the dotenv setting source will behave like the env settings source.
 
@@ -715,7 +715,7 @@ class Settings(BaseSettings):
 
 
 !!! note
-    Pydantic settings loads all the values from dotenv file and passes it to the model, regardless of the model's `env_prefix`, unless `env_filtering` is used.
+    Pydantic settings loads all the values from dotenv file and passes it to the model, regardless of the model's `env_prefix`, unless `dotenv_filtering` is used.
     So if you provide extra values in a dotenv file, whether they start with `env_prefix` or not,
     a `ValidationError` will be raised.
 

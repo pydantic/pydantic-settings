@@ -36,7 +36,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
         settings_cls: type[BaseSettings],
         env_file: DotenvType | None = ENV_FILE_SENTINEL,
         env_file_encoding: str | None = None,
-        env_filtering: DotenvFiltering | None = None,
+        dotenv_filtering: DotenvFiltering | None = None,
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
         env_prefix_target: EnvPrefixTarget | None = None,
@@ -50,8 +50,8 @@ class DotEnvSettingsSource(EnvSettingsSource):
         self.env_file_encoding = (
             env_file_encoding if env_file_encoding is not None else settings_cls.model_config.get('env_file_encoding')
         )
-        self.env_filtering = (
-            env_filtering if env_filtering is not None else settings_cls.model_config.get('env_filtering')
+        self.dotenv_filtering = (
+            dotenv_filtering if dotenv_filtering is not None else settings_cls.model_config.get('dotenv_filtering')
         )
         super().__init__(
             settings_cls,
@@ -110,10 +110,10 @@ class DotEnvSettingsSource(EnvSettingsSource):
 
     def __call__(self) -> dict[str, Any]:  # noqa: C901
         data: dict[str, Any] = super().__call__()
-        if self.env_filtering == 'only_existing':
+        if self.dotenv_filtering == 'only_existing':
             # This case behaves like the EnvSettingsSource, only return existing fields
             return data
-        if self.env_filtering == 'match_prefix':
+        if self.dotenv_filtering == 'match_prefix':
             # In this case add all env vars that match the prefix, stripping the prefix.
             prefix = self._apply_case_sensitive(self.env_prefix)
             for env_name, env_value in self.env_vars.items():

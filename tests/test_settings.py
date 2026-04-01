@@ -3334,7 +3334,7 @@ def test_dotenv_only_existing(tmp_path, prefix):
         model_config = SettingsConfigDict(
             env_file=p,
             env_prefix=prefix,
-            env_filtering='only_existing',
+            dotenv_filtering='only_existing',
             extra='forbid',
         )
 
@@ -3357,7 +3357,7 @@ def test_dotenv_match_prefix(tmp_path, prefix, case_sensitive):
         model_config = SettingsConfigDict(
             env_file=p,
             env_prefix=prefix,
-            env_filtering='match_prefix',
+            dotenv_filtering='match_prefix',
             case_sensitive=case_sensitive,
             extra='allow',
         )
@@ -3388,7 +3388,7 @@ def test_dotenv_match_prefix_nested_delimiter(tmp_path, filtering):
         model_config = SettingsConfigDict(
             env_file=p,
             env_prefix='prefix_',
-            env_filtering=filtering,
+            dotenv_filtering=filtering,
             env_nested_delimiter='@',
             extra='allow',
         )
@@ -3414,7 +3414,7 @@ def test_dotenv_match_prefix_nested_delimiter_no_extra(tmp_path):
         model_config = SettingsConfigDict(
             env_file=p,
             env_prefix='prefix_',
-            env_filtering='match_prefix',
+            dotenv_filtering='match_prefix',
             env_nested_delimiter='__',
             extra='forbid',
         )

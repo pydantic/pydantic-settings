@@ -50,7 +50,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     env_prefix_target: EnvPrefixTarget
     env_file: DotenvType | None
     env_file_encoding: str | None
-    env_filtering: DotenvFiltering | None
+    dotenv_filtering: DotenvFiltering | None
     env_ignore_empty: bool
     env_nested_delimiter: str | None
     env_nested_max_split: int | None
