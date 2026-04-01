@@ -3376,7 +3376,7 @@ def test_dotenv_match_prefix(tmp_path, prefix, case_sensitive):
 
 
 @pytest.mark.parametrize('filtering', ['match_prefix', None])
-def test_dotenv_match_prefix_complex(tmp_path, filtering):
+def test_dotenv_match_prefix_nested_delimiter(tmp_path, filtering):
     p = tmp_path / '.env'
     p.write_text('x=foo\nprefix_a@x=bar\nprefix_a@b=y\nprefix_b=b\nprefix_c@a=1\nprefix_c@b=2')
 
@@ -3400,6 +3400,30 @@ def test_dotenv_match_prefix_complex(tmp_path, filtering):
     if not filtering:
         exp['x'] = 'foo'
     assert s.model_dump() == exp
+
+
+def test_dotenv_match_prefix_nested_delimiter_no_extra(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('x=foo\nprefix_a__x=bar\nprefix_a__b=y\nprefix_c__a=1')
+
+    class A(BaseModel):
+        x: str = 'x_default'
+        b: str = 'b_default'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=p,
+            env_prefix='prefix_',
+            env_filtering='match_prefix',
+            env_nested_delimiter='__',
+            extra='forbid',
+        )
+
+        a: A
+        c__a: int
+
+    s = Settings()
+    assert s.model_dump() == {'a': {'x': 'bar', 'b': 'y'}, 'c__a': 1}
 
 
 def test_parsing_secret_field(env):
