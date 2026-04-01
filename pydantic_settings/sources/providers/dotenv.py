@@ -108,7 +108,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
 
         return dotenv_vars
 
-    def __call__(self) -> dict[str, Any]:
+    def __call__(self) -> dict[str, Any]:  # noqa: C901
         data: dict[str, Any] = super().__call__()
         if self.env_filtering == 'only_existing':
             # This case behaves like the EnvSettingsSource, only return existing fields
@@ -119,6 +119,12 @@ class DotEnvSettingsSource(EnvSettingsSource):
             for env_name, env_value in self.env_vars.items():
                 if env_name.startswith(prefix):
                     normalized_env_name = env_name[len(self.env_prefix) :]
+                    if (
+                        self.env_nested_delimiter
+                        and self.env_nested_delimiter in normalized_env_name
+                        and normalized_env_name.partition(self.env_nested_delimiter)[0] in data
+                    ):
+                        continue
                     if normalized_env_name not in data:
                         data[normalized_env_name] = env_value
             return data

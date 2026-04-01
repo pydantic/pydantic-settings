@@ -3375,6 +3375,33 @@ def test_dotenv_match_prefix(tmp_path, prefix, case_sensitive):
         assert s.model_dump() == v
 
 
+@pytest.mark.parametrize('filtering', ['match_prefix', None])
+def test_dotenv_match_prefix_complex(tmp_path, filtering):
+    p = tmp_path / '.env'
+    p.write_text('x=foo\nprefix_a@x=bar\nprefix_a@b=y\nprefix_b=b\nprefix_c@a=1\nprefix_c@b=2')
+
+    class A(BaseModel):
+        x: str = 'x_default'
+        b: str = 'b_default'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=p,
+            env_prefix='prefix_',
+            env_filtering=filtering,
+            env_nested_delimiter='@',
+            extra='allow',
+        )
+
+        a: A
+
+    s = Settings()
+    exp = {'a': {'x': 'bar', 'b': 'y'}, 'b': 'b', 'c@a': '1', 'c@b': '2'}
+    if not filtering:
+        exp['x'] = 'foo'
+    assert s.model_dump() == exp
+
+
 def test_parsing_secret_field(env):
     class Settings(BaseSettings):
         foo: Secret[int]

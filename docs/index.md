@@ -701,7 +701,7 @@ on `model_config` and your dotenv file contains an entry for a field that is not
 it will raise `ValidationError` in settings construction.
 
 This behaviour can be customized by using the setting `env_filtering` that supports two additional alternative modes:
-- `'match_prefix'`: only the variable that match the prefix will be passed to the model. Useful when used in conjunction with `env_prefix` to "scope" a single dotenv file to a specific model.
+- `'match_prefix'`: only the variables that match the prefix will be passed to the model. Useful when used in conjunction with `env_prefix` to "scope" a single dotenv file to a specific model.
 - `'only_existing'`: only the variables that have a corresponding field will be passed to the model. When using this option the dotenv setting source will behave like the env settings source.
 
 For compatibility with pydantic 1.x BaseSettings you should use `extra=ignore`:
