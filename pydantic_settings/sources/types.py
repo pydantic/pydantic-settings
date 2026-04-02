@@ -34,6 +34,7 @@ class ForceDecode:
 EnvPrefixTarget = Literal['variable', 'alias', 'all']
 DotenvType = Path | str | Sequence[Path | str]
 PathType = Path | str | Sequence[Path | str]
+DotenvFiltering = Literal['match_prefix', 'only_existing']
 DEFAULT_PATH: PathType = Path('')
 
 # This is used as default value for `_env_file` in the `BaseSettings` class and
