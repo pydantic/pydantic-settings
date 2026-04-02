@@ -323,6 +323,10 @@ If you have multiple variables with the same structure they will be merged.
     Sub model has to inherit from `pydantic.BaseModel`, Otherwise `pydantic-settings` will initialize sub model,
     collects values for sub model fields separately, and you may get unexpected results.
 
+!!! note
+    The `env_nested_delimiter` option applies only to variables that point to declared fields.
+    If a variable points to an unknown field no conversion will take place.
+
 As an example, given the following environment variables:
 ```bash
 # your environment
