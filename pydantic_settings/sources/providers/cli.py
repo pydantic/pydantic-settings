@@ -106,6 +106,7 @@ class _CliArg(BaseModel):
     field_name: str
     arg_prefix: str
     case_sensitive: bool
+    populate_by_name: bool
     hide_none_type: bool
     kebab_case: bool | Literal['all', 'no_enums'] | None
     enable_decoding: bool | None
@@ -127,7 +128,11 @@ class _CliArg(BaseModel):
         super().__init__(**values)
         self._field_info = field_info
         self._alias_names, self._is_alias_path_only = _get_alias_names(
-            self.field_name, self.field_info, alias_path_args=self._alias_paths, case_sensitive=self.case_sensitive
+            self.field_name,
+            self.field_info,
+            alias_path_args=self._alias_paths,
+            case_sensitive=self.case_sensitive,
+            populate_by_name=self.populate_by_name,
         )
 
         alias_path_dests = {f'{self.arg_prefix}{name}': index for name, index in self._alias_paths.items()}
@@ -980,6 +985,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 field_name=field_name,
                 arg_prefix=arg_prefix,
                 case_sensitive=self.case_sensitive,
+                populate_by_name=self.config.get('populate_by_name', False)
+                or self.config.get('validate_by_name', False),
                 hide_none_type=self.cli_hide_none_type,
                 kebab_case=self.cli_kebab_case,
                 enable_decoding=self.config.get('enable_decoding'),
