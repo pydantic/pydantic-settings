@@ -13,22 +13,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
 
-    - name: set up uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        python-version: '3.12'
+      - name: set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.12'
 
-    - name: Install dependencies
-      # Installing pip is required for the pre-commit action:
-      run: |
-        uv sync --group linting --all-extras
-        uv pip install pip
+      - name: Install dependencies
+        # Installing pip is required for the pre-commit action:
+        run: |
+          uv sync --group linting --all-extras
+          uv pip install pip
 
-    - uses: pre-commit/action@v3.0.1
-      with:
-        extra_args: --all-files
+      - uses: pre-commit/action@v3.0.1
+        with:
+          extra_args: --all-files
 
   test:
     name: test py${{ matrix.python }} on ${{ matrix.os }}
@@ -46,40 +46,40 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
 
-    - name: set up uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        python-version: ${{ matrix.python }}
+      - name: set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python }}
 
-    - name: Install dependencies
-      run: |
-        uv sync --group testing --all-extras
+      - name: Install dependencies
+        run: |
+          uv sync --group testing --all-extras
 
-    - run: mkdir coverage
+      - run: mkdir coverage
 
-    - name: test
-      run: make test
-      env:
-        COVERAGE_FILE: coverage/.coverage.${{ runner.os }}-py${{ matrix.python }}
-        CONTEXT: ${{ runner.os }}-py${{ matrix.python }}
+      - name: test
+        run: make test
+        env:
+          COVERAGE_FILE: coverage/.coverage.${{ runner.os }}-py${{ matrix.python }}
+          CONTEXT: ${{ runner.os }}-py${{ matrix.python }}
 
-    - name: uninstall deps
-      run: uv pip uninstall PyYAML
+      - name: uninstall deps
+        run: uv pip uninstall PyYAML
 
-    - name: test without deps
-      run: make test
-      env:
-        COVERAGE_FILE: coverage/.coverage.${{ runner.os }}-py${{ matrix.python }}-without-deps
-        CONTEXT: ${{ runner.os }}-py${{ matrix.python }}-without-deps
+      - name: test without deps
+        run: make test
+        env:
+          COVERAGE_FILE: coverage/.coverage.${{ runner.os }}-py${{ matrix.python }}-without-deps
+          CONTEXT: ${{ runner.os }}-py${{ matrix.python }}-without-deps
 
-    - name: store coverage files
-      uses: actions/upload-artifact@v7
-      with:
-        name: coverage-${{ matrix.python }}-${{ runner.os }}
-        path: coverage
-        include-hidden-files: true
+      - name: store coverage files
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-${{ matrix.python }}-${{ runner.os }}
+          path: coverage
+          include-hidden-files: true
 
   coverage:
     runs-on: ubuntu-latest
@@ -125,7 +125,7 @@ jobs:
 
       - run: uv run coverage report --fail-under 98
 
-  check:  # This job does nothing and is only used for the branch protection
+  check: # This job does nothing and is only used for the branch protection
     if: always()
     needs: [lint, test, coverage]
     runs-on: ubuntu-latest

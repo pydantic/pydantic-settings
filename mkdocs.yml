@@ -7,20 +7,20 @@ theme:
   name: 'material'
   custom_dir: 'docs/theme'
   palette:
-  - media: "(prefers-color-scheme: light)"
-    scheme: default
-    primary: pink
-    accent: pink
-    toggle:
-      icon: material/lightbulb-outline
-      name: "Switch to dark mode"
-  - media: "(prefers-color-scheme: dark)"
-    scheme: slate
-    primary: pink
-    accent: pink
-    toggle:
-      icon: material/lightbulb
-      name: "Switch to light mode"
+    - media: '(prefers-color-scheme: light)'
+      scheme: default
+      primary: pink
+      accent: pink
+      toggle:
+        icon: material/lightbulb-outline
+        name: 'Switch to dark mode'
+    - media: '(prefers-color-scheme: dark)'
+      scheme: slate
+      primary: pink
+      accent: pink
+      toggle:
+        icon: material/lightbulb
+        name: 'Switch to light mode'
   features:
     - content.tabs.link
     - content.code.annotate
@@ -34,35 +34,35 @@ repo_url: https://github.com/pydantic/pydantic
 edit_uri: edit/main/docs/
 
 extra_css:
-- 'extra/terminal.css'
-- 'extra/tweaks.css'
+  - 'extra/terminal.css'
+  - 'extra/tweaks.css'
 
 nav:
-- index.md
+  - index.md
 
 markdown_extensions:
-- tables
-- toc:
-    permalink: true
-    title: Page contents
-- admonition
-- pymdownx.highlight
-- pymdownx.extra
-- pymdownx.emoji:
-    emoji_index: !!python/name:materialx.emoji.twemoji
-    emoji_generator: !!python/name:materialx.emoji.to_svg
-- pymdownx.tabbed:
-    alternate_style: true
+  - tables
+  - toc:
+      permalink: true
+      title: Page contents
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.extra
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - pymdownx.tabbed:
+      alternate_style: true
 
 extra:
   version:
     provider: mike
 
 plugins:
-- mike:
-    alias_type: symlink
-    canonical_version: latest
-- search
-- exclude:
-    glob:
-    - __pycache__/*
+  - mike:
+      alias_type: symlink
+      canonical_version: latest
+  - search
+  - exclude:
+      glob:
+        - __pycache__/*

@@ -9,7 +9,7 @@ updates:
     groups:
       python-packages:
         patterns:
-          - "*"
+          - '*'
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -17,4 +17,4 @@ updates:
     groups:
       github-actions:
         patterns:
-          - "*"
+          - '*'
