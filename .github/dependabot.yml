@@ -10,11 +10,15 @@ updates:
       python-packages:
         patterns:
           - '*'
+    cooldown:
+      default-days: 7
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       github-actions:
         patterns:
           - '*'
+    cooldown:
+      default-days: 7
