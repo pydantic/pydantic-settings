@@ -19,6 +19,7 @@ from pydantic import (
     DirectoryPath,
     Discriminator,
     Field,
+    GetCoreSchemaHandler,
     RootModel,
     Tag,
     ValidationError,
@@ -29,6 +30,7 @@ from pydantic import (
     dataclasses as pydantic_dataclasses,
 )
 from pydantic._internal._repr import Representation
+from pydantic_core import CoreSchema, core_schema
 
 from pydantic_settings import (
     BaseSettings,
@@ -1563,6 +1565,37 @@ def test_cli_variadic_positional_arg(env):
 
     assert CliApp.run(MainOptional, cli_args=['7', '8', '9']).model_dump() == {'values': [7, 8, 9]}
     assert CliApp.run(MainRequired, cli_args=['7', '8', '9']).model_dump() == {'values': [7, 8, 9]}
+
+
+def test_cli_variadic_positional_arg_custom_type():
+    """Test that CliPositionalArg[list[CustomType]] works with custom types that raise non-ValidationError exceptions.
+
+    Regression test for https://github.com/pydantic/pydantic-settings/issues/823
+    """
+    from string import ascii_letters
+
+    class AsciiLetters(str):
+        def __new__(cls, content: object) -> 'AsciiLetters':
+            if not all(c in ascii_letters for c in str(content)):
+                raise Exception('Non-ascii letter')
+            return super().__new__(cls, content)
+
+        @classmethod
+        def __get_pydantic_core_schema__(
+            cls,
+            source_type: Any,
+            handler: GetCoreSchemaHandler,
+        ) -> CoreSchema:
+            return core_schema.no_info_plain_validator_function(
+                cls,
+                serialization=core_schema.to_string_ser_schema(),
+            )
+
+    class App(BaseSettings):
+        args: CliPositionalArg[list[AsciiLetters]]
+
+    assert CliApp.run(App, cli_args=['a', 'b']).model_dump() == {'args': ['a', 'b']}
+    assert CliApp.run(App, cli_args=['hello']).model_dump() == {'args': ['hello']}
 
 
 def test_cli_enums(capsys, monkeypatch):

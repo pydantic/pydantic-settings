@@ -37,7 +37,7 @@ from typing import (
     overload,
 )
 
-from pydantic import AliasChoices, AliasPath, BaseModel, Field, PrivateAttr, TypeAdapter, ValidationError
+from pydantic import AliasChoices, AliasPath, BaseModel, Field, PrivateAttr, TypeAdapter
 from pydantic._internal._repr import Representation
 from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
@@ -637,7 +637,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         try:
             list_adapter: Any = TypeAdapter(next(iter(cli_arg_map.values())).field_info.annotation)
             is_num_type_str = type(next(iter(list_adapter.validate_python(['1'])))) is str
-        except (StopIteration, ValidationError):
+        except Exception:
             is_num_type_str = None
         for index, item in enumerate(merged_list):
             cli_arg = cli_arg_map.get(index)
