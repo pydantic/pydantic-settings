@@ -174,6 +174,9 @@ class BaseSettings(BaseModel):
             Defaults to `None`.
     """
 
+    # Note: when adding new parameters, make sure to use `object` instead of `Any` to avoid issues with the Mypy plugin
+    # when used with `--disallow-any-explicit`. If `Any` needs to be used as a generic parameter for variance (e.g. in `_build_sources`),
+    # make sure to update the Pydantic Mypy plugin accordingly.
     def __init__(
         __pydantic_self__,
         _case_sensitive: bool | None = None,
