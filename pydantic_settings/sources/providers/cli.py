@@ -560,7 +560,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 )
                 if not selected_accepts_unknown:
                     unknown = next(args for args in self._cli_unknown_args.values() if args)
-                    self.root_parser.error(f'unrecognized arguments: {" ".join(unknown)}')
+                    if isinstance(self.root_parser, ArgumentParser):
+                        self.root_parser.error(f'unrecognized arguments: {" ".join(unknown)}')
+                    raise SystemExit(2)
 
         parsed_args.update(self._cli_unknown_args)
 
