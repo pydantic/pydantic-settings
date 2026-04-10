@@ -2101,6 +2101,39 @@ def test_cli_ignore_unknown_args():
     }
 
 
+def test_cli_ignore_unknown_args_subcommand():
+    class SubA(BaseSettings):
+        a: CliPositionalArg[str]
+
+    class SubB(BaseSettings, cli_ignore_unknown_args=True):
+        b: CliPositionalArg[str]
+        ignored_args: CliUnknownArgs
+
+    class Cmd(BaseSettings):
+        a: CliSubCommand[SubA]
+        b: CliSubCommand[SubB]
+
+    # Subcommand B should accept unknown args
+    cmd = CliApp.run(Cmd, cli_args=['b', 'blah', '--bad'])
+    assert cmd.model_dump() == {'a': None, 'b': {'b': 'blah', 'ignored_args': ['--bad']}}
+
+    # Subcommand B with no unknown args
+    cmd = CliApp.run(Cmd, cli_args=['b', 'blah'])
+    assert cmd.model_dump() == {'a': None, 'b': {'b': 'blah', 'ignored_args': []}}
+
+    # Subcommand B with multiple unknown args
+    cmd = CliApp.run(Cmd, cli_args=['b', 'blah', '--bad', '--worse', 'val'])
+    assert cmd.model_dump() == {'a': None, 'b': {'b': 'blah', 'ignored_args': ['--bad', '--worse', 'val']}}
+
+    # Subcommand A should still reject unknown args
+    with pytest.raises(SystemExit):
+        CliApp.run(Cmd, cli_args=['a', 'blah', '--bad'])
+
+    # Subcommand A works normally without unknown args
+    cmd = CliApp.run(Cmd, cli_args=['a', 'hello'])
+    assert cmd.model_dump() == {'a': {'a': 'hello'}, 'b': None}
+
+
 def test_cli_flag_prefix_char():
     class Cfg(BaseSettings, cli_flag_prefix_char='+'):
         my_var: str = Field(validation_alias=AliasChoices('m', 'my-var'))

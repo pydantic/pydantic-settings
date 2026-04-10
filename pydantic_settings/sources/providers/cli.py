@@ -548,6 +548,20 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if not any(field_name for field_name in parsed_args.keys() if f'{last_selected_subcommand}.' in field_name):
                 parsed_args[last_selected_subcommand] = '{}'
 
+        # When using parse_known_args due to a subcommand's CliUnknownArgs, reject
+        # unknown args if the selected subcommand does not accept them.
+        if not self.cli_ignore_unknown_args and self._cli_unknown_args:
+            has_unknown = any(args for args in self._cli_unknown_args.values())
+            if has_unknown:
+                selected_accepts_unknown = any(
+                    dest.startswith(f'{sc}.') or dest == sc
+                    for sc in selected_subcommands
+                    for dest in self._cli_unknown_args
+                )
+                if not selected_accepts_unknown:
+                    unknown = next(args for args in self._cli_unknown_args.values() if args)
+                    self.root_parser.error(f'unrecognized arguments: {" ".join(unknown)}')
+
         parsed_args.update(self._cli_unknown_args)
 
         self.env_vars = parse_env_vars(
@@ -904,6 +918,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             return cast(Namespace, args)
 
         self._root_parser = root_parser
+        _is_default_parse_args = parse_args_method is None
         if parse_args_method is None:
             parse_args_method = _parse_known_args if self.cli_ignore_unknown_args else ArgumentParser.parse_args
         self._parse_args = self._connect_parser_method(parse_args_method, 'parse_args_method')
@@ -929,6 +944,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             model_default=PydanticUndefined,
             model_path=set(),
         )
+
+        # If subcommands registered CliUnknownArgs fields but root does not have
+        # cli_ignore_unknown_args=True, upgrade to parse_known_args so that argparse
+        # does not error on unknown arguments destined for a subcommand.
+        if self._cli_unknown_args and not self.cli_ignore_unknown_args and _is_default_parse_args:
+            self._parse_args = self._connect_parser_method(_parse_known_args, 'parse_args_method')
 
     def _add_default_help(self) -> None:
         if isinstance(self._root_parser, _CliInternalArgParser):
