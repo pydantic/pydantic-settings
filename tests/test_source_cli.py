@@ -2134,6 +2134,58 @@ def test_cli_ignore_unknown_args_subcommand():
     assert cmd.model_dump() == {'a': {'a': 'hello'}, 'b': None}
 
 
+def test_cli_ignore_unknown_args_nested_subcommand():
+    class SubB(BaseModel):
+        ignored_args: CliUnknownArgs
+        my_feature: bool = False
+
+    class SubA(BaseModel):
+        my_feature: bool = False
+
+    class Mid(BaseModel):
+        a: CliSubCommand[SubA]
+        b: CliSubCommand[SubB]
+
+    class Root(BaseSettings, cli_exit_on_error=False):
+        mid: CliSubCommand[Mid]
+
+    # "root mid" does not have CliUnknownArgs on path — should reject
+    with pytest.raises(SettingsError, match='error parsing CLI: unrecognized arguments: --bad'):
+        CliApp.run(Root, cli_args=['mid', '--bad'])
+
+    # "root mid b" has CliUnknownArgs on path — should accept
+    cmd = CliApp.run(Root, cli_args=['mid', 'b', '--bad'])
+    assert cmd.model_dump() == {'mid': {'a': None, 'b': {'ignored_args': ['--bad'], 'my_feature': False}}}
+
+    # "root mid a" does not have CliUnknownArgs on path — should reject
+    with pytest.raises(SettingsError, match='error parsing CLI: unrecognized arguments: --bad'):
+        CliApp.run(Root, cli_args=['mid', 'a', '--bad'])
+
+
+def test_cli_ignore_unknown_args_nested_subcommand_higher_in_hierarchy():
+    class SubB(BaseModel):
+        my_feature: bool = False
+
+    class SubA(BaseModel):
+        my_feature: bool = False
+
+    class Mid(BaseModel):
+        a: CliSubCommand[SubA]
+        b: CliSubCommand[SubB]
+        ignored_args: CliUnknownArgs
+
+    class Root(BaseSettings):
+        mid: CliSubCommand[Mid]
+
+    # "root mid" has CliUnknownArgs on path — should accept
+    cmd = CliApp.run(Root, cli_args=['mid', '--bad'])
+    assert cmd.model_dump() == {'mid': {'a': None, 'b': None, 'ignored_args': ['--bad']}}
+
+    # "root mid b" — CliUnknownArgs is higher on the path (on Mid) — should accept
+    cmd = CliApp.run(Root, cli_args=['mid', 'b', '--bad'])
+    assert cmd.model_dump() == {'mid': {'a': None, 'b': {'my_feature': False}, 'ignored_args': ['--bad']}}
+
+
 def test_cli_flag_prefix_char():
     class Cfg(BaseSettings, cli_flag_prefix_char='+'):
         my_var: str = Field(validation_alias=AliasChoices('m', 'my-var'))

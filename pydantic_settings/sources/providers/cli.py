@@ -547,6 +547,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             last_selected_subcommand = max(selected_subcommands, key=len)
             if not any(field_name for field_name in parsed_args.keys() if f'{last_selected_subcommand}.' in field_name):
                 parsed_args[last_selected_subcommand] = '{}'
+        else:
+            last_selected_subcommand = ''
 
         # When using parse_known_args due to a subcommand's CliUnknownArgs, reject
         # unknown args if the selected subcommand does not accept them.
@@ -554,9 +556,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             has_unknown = any(args for args in self._cli_unknown_args.values())
             if has_unknown:
                 selected_accepts_unknown = any(
-                    dest.startswith(f'{sc}.') or dest == sc
-                    for sc in selected_subcommands
-                    for dest in self._cli_unknown_args
+                    dest.rsplit('.', 1)[0] in last_selected_subcommand for dest in self._cli_unknown_args
                 )
                 if not selected_accepts_unknown:
                     unknown = next(args for args in self._cli_unknown_args.values() if args)
