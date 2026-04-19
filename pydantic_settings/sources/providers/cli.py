@@ -91,30 +91,36 @@ class CliMutuallyExclusiveGroup(BaseModel):
 
 
 def _get_model_description(model_cls: type[Any]) -> str | None:
-    """Get model description from __doc__ or json_schema_extra fallback.
+    """Get model description from json_schema_extra or __doc__ fallback.
 
-    When running under ``python -OO``, docstrings are stripped so ``__doc__``
-    is ``None``. In that case, fall back to the ``description`` from the
-    model's JSON schema, which may be populated via ``json_schema_extra``.
+    ``json_schema_extra.description`` takes precedence over ``__doc__`` to
+    match pydantic's own behaviour.  When neither is available (e.g. under
+    ``python -OO`` where docstrings are stripped), returns ``None``.
     """
-    if model_cls.__doc__ is not None:
-        return dedent(model_cls.__doc__)
     config: Any = {}
     if is_model_class(model_cls):
         config = model_cls.model_config
     elif is_pydantic_dataclass(model_cls):
-        config = getattr(model_cls, '__pydantic_config__', None) or {}
+        config = getattr(model_cls, '__pydantic_config__', {})
     json_schema_extra = config.get('json_schema_extra')
     if isinstance(json_schema_extra, dict):
-        return json_schema_extra.get('description')
-    if callable(json_schema_extra):
+        desc = json_schema_extra.get('description')
+        if desc is not None:
+            return desc
+    elif callable(json_schema_extra):
         try:
             if is_model_class(model_cls):
-                return model_cls.model_json_schema().get('description')
-            if is_pydantic_dataclass(model_cls):
-                return TypeAdapter(model_cls).json_schema().get('description')
+                desc = model_cls.model_json_schema().get('description')
+            elif is_pydantic_dataclass(model_cls):
+                desc = TypeAdapter(model_cls).json_schema().get('description')
+            else:
+                desc = None
+            if desc is not None:
+                return desc
         except Exception:
             pass
+    if model_cls.__doc__ is not None:
+        return dedent(model_cls.__doc__)
     return None
 
 

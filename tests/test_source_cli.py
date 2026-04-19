@@ -3495,13 +3495,13 @@ def test_get_model_description_json_schema_extra_fallback():
     assert _get_model_description(MyModel) == 'Schema description.'
 
 
-def test_get_model_description_docstring_takes_precedence():
+def test_get_model_description_schema_takes_precedence():
     class MyModel(BaseModel):
-        """Docstring wins."""
+        """Docstring description."""
 
-        model_config = ConfigDict(json_schema_extra={'description': 'Schema description.'})
+        model_config = ConfigDict(json_schema_extra={'description': 'Schema wins.'})
 
-    assert _get_model_description(MyModel) == 'Docstring wins.'
+    assert _get_model_description(MyModel) == 'Schema wins.'
 
 
 def test_get_model_description_callable_json_schema_extra():
@@ -3565,8 +3565,8 @@ JSON schema description.
         )
 
 
-def test_cli_docstring_takes_precedence_over_json_schema_extra(capsys, monkeypatch):
-    """When __doc__ is available, it should be used instead of json_schema_extra description."""
+def test_cli_json_schema_extra_takes_precedence_over_docstring(capsys, monkeypatch):
+    """Even when __doc__ is available, json_schema_extra description should be used, instead."""
 
     class Settings(BaseSettings, cli_prog_name='example.py'):
         """Docstring description."""
@@ -3587,7 +3587,7 @@ def test_cli_docstring_takes_precedence_over_json_schema_extra(capsys, monkeypat
             capsys.readouterr().out
             == f"""usage: example.py [-h] [--my_var str]
 
-Docstring description.
+JSON schema description.
 
 {ARGPARSE_OPTIONS_TEXT}:
   -h, --help    show this help message and exit
