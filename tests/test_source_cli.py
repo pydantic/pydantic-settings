@@ -3600,6 +3600,27 @@ def test_get_model_description_callable_json_schema_extra():
     assert _get_model_description(MyModel) == 'From callable.'
 
 
+def test_get_model_description_dict_without_description_falls_back_to_doc():
+    class MyModel(BaseModel):
+        """Docstring fallback."""
+
+        model_config = ConfigDict(json_schema_extra={'title': 'No description key here'})
+
+    assert _get_model_description(MyModel) == 'Docstring fallback.'
+
+
+def test_get_model_description_callable_json_schema_extra_pydantic_dataclass():
+    def add_description(schema: dict) -> None:
+        schema['description'] = 'DC callable.'
+
+    @pydantic_dataclasses.dataclass(config=ConfigDict(json_schema_extra=add_description))
+    class MyDC:
+        x: int = 1
+
+    MyDC.__doc__ = None  # type: ignore
+    assert _get_model_description(MyDC) == 'DC callable.'
+
+
 def test_get_model_description_pydantic_dataclass():
     @pydantic_dataclasses.dataclass(config=ConfigDict(json_schema_extra={'description': 'DC description.'}))
     class MyDC:

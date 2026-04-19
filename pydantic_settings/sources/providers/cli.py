@@ -109,12 +109,11 @@ def _get_model_description(model_cls: type[Any]) -> str | None:
             return desc
     elif callable(json_schema_extra):
         try:
+            desc = None
             if is_model_class(model_cls):
                 desc = model_cls.model_json_schema().get('description')
             elif is_pydantic_dataclass(model_cls):
                 desc = TypeAdapter(model_cls).json_schema().get('description')
-            else:
-                desc = None
             if desc is not None:
                 return desc
         except Exception:
