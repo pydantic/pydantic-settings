@@ -90,6 +90,39 @@ class CliMutuallyExclusiveGroup(BaseModel):
     pass
 
 
+def _get_model_description(model_cls: type[Any]) -> str | None:
+    """Get model description from json_schema_extra or __doc__ fallback.
+
+    ``json_schema_extra.description`` takes precedence over ``__doc__`` to
+    match pydantic's own behaviour.  When neither is available (e.g. under
+    ``python -OO`` where docstrings are stripped), returns ``None``.
+    """
+    config: Any = {}
+    if is_model_class(model_cls):
+        config = model_cls.model_config
+    elif is_pydantic_dataclass(model_cls):
+        config = getattr(model_cls, '__pydantic_config__', {})
+    json_schema_extra = config.get('json_schema_extra')
+    if isinstance(json_schema_extra, dict):
+        desc = json_schema_extra.get('description')
+        if desc is not None:
+            return desc
+    elif callable(json_schema_extra):
+        try:
+            desc = None
+            if is_model_class(model_cls):
+                desc = model_cls.model_json_schema().get('description')
+            elif is_pydantic_dataclass(model_cls):
+                desc = TypeAdapter(model_cls).json_schema().get('description')
+            if desc is not None:
+                return desc
+        except Exception:
+            pass
+    if model_cls.__doc__ is not None:
+        return dedent(model_cls.__doc__)
+    return None
+
+
 def _collect_sub_models(type_: Any, sub_models: list[type[BaseModel]]) -> None:
     """Recursively collect BaseModel subclasses from possibly nested union types."""
     stripped = _strip_annotated(type_)
@@ -418,7 +451,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             _CliInternalArgParser(
                 cli_exit_on_error=self.cli_exit_on_error,
                 prog=self.cli_prog_name,
-                description=None if settings_cls.__doc__ is None else dedent(settings_cls.__doc__),
+                description=_get_model_description(settings_cls),
                 formatter_class=formatter_class,
                 prefix_chars=self.cli_flag_prefix_char,
                 allow_abbrev=False,
@@ -1024,12 +1057,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     subcommand_arg.args = [subcommand_alias]
                     subcommand_arg.kwargs['allow_abbrev'] = False
                     subcommand_arg.kwargs['formatter_class'] = self._formatter_class
-                    subcommand_arg.kwargs['description'] = (
-                        None if sub_model.__doc__ is None else dedent(sub_model.__doc__)
-                    )
+                    subcommand_arg.kwargs['description'] = _get_model_description(sub_model)
                     subcommand_arg.kwargs['help'] = None if len(arg.sub_models) > 1 else field_info.description
                     if self.cli_use_class_docs_for_groups:
-                        subcommand_arg.kwargs['help'] = None if sub_model.__doc__ is None else dedent(sub_model.__doc__)
+                        subcommand_arg.kwargs['help'] = _get_model_description(sub_model)
 
                     subparsers = (
                         self._add_subparsers(
@@ -1258,7 +1289,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         if model_group_kwargs['_is_cli_mutually_exclusive_group'] and len(sub_models) > 1:
             raise SettingsError('cannot use union with CliMutuallyExclusiveGroup')
         if self.cli_use_class_docs_for_groups and len(sub_models) == 1:
-            model_group_kwargs['description'] = None if sub_models[0].__doc__ is None else dedent(sub_models[0].__doc__)
+            model_group_kwargs['description'] = _get_model_description(sub_models[0])
 
         if model_default is not PydanticUndefined:
             if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
