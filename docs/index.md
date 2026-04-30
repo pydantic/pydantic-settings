@@ -1315,6 +1315,31 @@ print(CliApp.serialize(settings, dict_style='env'))
 """
 ```
 
+To use [Pydantic field serializers](https://docs.pydantic.dev/latest/concepts/serialization/#field-serializers) during CLI serialization, pass `use_serializers=True`. This is opt-in (defaults to `False`) to preserve existing behavior.
+
+```py
+from pydantic import BaseModel, field_serializer
+
+from pydantic_settings import CliApp
+
+
+class Settings(BaseModel):
+    count: int
+
+    @field_serializer('count')
+    def double_count(self, v: int) -> int:
+        return v * 2
+
+
+settings = Settings(count=3)
+
+print(CliApp.serialize(settings))
+#> ['--count', '3']
+
+print(CliApp.serialize(settings, use_serializers=True))
+#> ['--count', '6']
+```
+
 ### Mutually Exclusive Groups
 
 CLI mutually exclusive groups can be created by inheriting from the `CliMutuallyExclusiveGroup` class.
