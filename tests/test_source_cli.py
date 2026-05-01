@@ -23,6 +23,7 @@ from pydantic import (
     RootModel,
     Tag,
     ValidationError,
+    field_serializer,
     field_validator,
     model_validator,
 )
@@ -3773,3 +3774,76 @@ Subcommand schema description.
   -x int      (default: 1)
 """
     )
+
+
+def test_cli_serialize_use_serializers_field_serializer():
+    """use_serializers=True applies field_serializer transforms."""
+
+    class Cfg(BaseModel):
+        value: int
+
+        @field_serializer('value')
+        def double_value(self, v: int) -> int:
+            return v * 2
+
+    cfg = Cfg(value=3)
+
+    # Default (False): raw Python value is used
+    assert CliApp.serialize(cfg) == ['--value', '3']
+
+    # With use_serializers=True: serializer doubles the value
+    assert CliApp.serialize(cfg, use_serializers=True) == ['--value', '6']
+
+
+def test_cli_serialize_use_serializers_default_false():
+    """use_serializers defaults to False, preserving existing behavior."""
+
+    class Cfg(BaseModel):
+        name: str
+
+        @field_serializer('name')
+        def upper_name(self, v: str) -> str:
+            return v.upper()
+
+    cfg = Cfg(name='hello')
+    assert CliApp.serialize(cfg) == ['--name', 'hello']
+    assert CliApp.serialize(cfg, use_serializers=False) == ['--name', 'hello']
+
+
+def test_cli_serialize_use_serializers_pydantic_dataclass():
+    """use_serializers=True works with pydantic dataclasses."""
+    from pydantic import dataclasses as pydantic_dataclasses
+
+    @pydantic_dataclasses.dataclass
+    class Cfg:
+        count: int
+
+        @field_serializer('count')
+        def negate(self, v: int) -> int:
+            return -v
+
+    cfg = Cfg(count=5)
+    assert CliApp.serialize(cfg, use_serializers=True) == ['--count', '-5']
+
+
+def test_cli_serialize_use_serializers_nested():
+    """use_serializers=True is propagated through nested subfields."""
+
+    class Inner(BaseModel):
+        x: int
+
+        @field_serializer('x')
+        def triple(self, v: int) -> int:
+            return v * 3
+
+    class Outer(BaseModel):
+        inner: Inner
+        y: int
+
+    cfg = Outer(inner=Inner(x=2), y=4)
+    serialized = CliApp.serialize(cfg, use_serializers=True)
+    # inner.x should be tripled; y has no serializer so unchanged
+    assert '--inner.x' in serialized
+    assert serialized[serialized.index('--inner.x') + 1] == '6'
+    y_flag = next(f for f in serialized if f.lstrip('-') == 'y')
+    assert serialized[serialized.index(y_flag) + 1] == '4'
