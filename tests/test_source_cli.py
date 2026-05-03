@@ -3773,3 +3773,67 @@ Subcommand schema description.
   -x int      (default: 1)
 """
     )
+
+
+def test_cli_nested_model_default_partial_update_fields_set():
+    """CliApp.run with nested_model_default_partial_update=True should only
+    mark CLI-provided fields as set in nested models, not all fields.
+
+    Regression test for https://github.com/pydantic/pydantic-settings/issues/851
+    """
+
+    class NestedModel(BaseModel):
+        field_a: str = 'default_a'
+        field_b: int = 42
+        field_c: float = 3.14
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            nested_model_default_partial_update=True,
+            cli_parse_args=False,
+        )
+        nested: NestedModel = NestedModel()
+
+        def cli_cmd(self):
+            pass
+
+    # Override only field_a via CLI
+    model = CliApp.run(Settings, cli_args=['--nested.field_a', 'override'])
+    assert model.nested.field_a == 'override'
+    assert model.nested.field_b == 42
+    assert model.nested.field_c == 3.14
+    # Only field_a should be in fields_set
+    assert model.nested.model_fields_set == {'field_a'}
+
+    # No CLI args at all
+    model = CliApp.run(Settings, cli_args=[])
+    assert model.nested.model_fields_set == set()
+
+    # Override two fields
+    model = CliApp.run(Settings, cli_args=['--nested.field_a', 'x', '--nested.field_b', '99'])
+    assert model.nested.model_fields_set == {'field_a', 'field_b'}
+
+
+def test_cli_nested_partial_update_exclude_unset():
+    """model_dump(exclude_unset=True) should only include CLI-provided nested fields.
+
+    Related to https://github.com/pydantic/pydantic-settings/issues/678
+    """
+
+    class Inner(BaseModel):
+        x: int = 1
+        y: int = 2
+
+    class Outer(BaseSettings):
+        model_config = SettingsConfigDict(
+            nested_model_default_partial_update=True,
+            cli_parse_args=False,
+        )
+        inner: Inner = Inner()
+
+        def cli_cmd(self):
+            pass
+
+    model = CliApp.run(Outer, cli_args=['--inner.x', '10'])
+    dumped = model.model_dump(exclude_unset=True)
+    assert dumped == {'inner': {'x': 10}}
