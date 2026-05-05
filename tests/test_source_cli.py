@@ -55,6 +55,7 @@ from pydantic_settings.sources import (
     CliUnknownArgs,
     get_subcommand,
 )
+from pydantic_settings.sources.providers.cli import _get_model_description
 
 ARGPARSE_OPTIONS_TEXT = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
 
@@ -3554,3 +3555,221 @@ def test_cli_app_run_subcommand_underscore_field_name():
             'baz': {'name': 'Hello world'},
         },
     }
+
+
+def test_get_model_description_returns_docstring():
+    class MyModel(BaseModel):
+        """My docstring."""
+
+    assert _get_model_description(MyModel) == 'My docstring.'
+
+
+def test_get_model_description_returns_none_when_no_doc_and_no_schema_extra():
+    class MyModel(BaseModel):
+        pass
+
+    assert MyModel.__doc__ is None
+    assert _get_model_description(MyModel) is None
+
+
+def test_get_model_description_json_schema_extra_fallback():
+    class MyModel(BaseModel):
+        model_config = ConfigDict(json_schema_extra={'description': 'Schema description.'})
+
+    MyModel.__doc__ = None  # type: ignore
+    assert _get_model_description(MyModel) == 'Schema description.'
+
+
+def test_get_model_description_schema_takes_precedence():
+    class MyModel(BaseModel):
+        """Docstring description."""
+
+        model_config = ConfigDict(json_schema_extra={'description': 'Schema wins.'})
+
+    assert _get_model_description(MyModel) == 'Schema wins.'
+
+
+def test_get_model_description_callable_json_schema_extra():
+    def add_description(schema: dict) -> None:
+        schema['description'] = 'From callable.'
+
+    class MyModel(BaseModel):
+        model_config = ConfigDict(json_schema_extra=add_description)
+
+    MyModel.__doc__ = None  # type: ignore
+    assert _get_model_description(MyModel) == 'From callable.'
+
+
+def test_get_model_description_dict_without_description_falls_back_to_doc():
+    class MyModel(BaseModel):
+        """Docstring fallback."""
+
+        model_config = ConfigDict(json_schema_extra={'title': 'No description key here'})
+
+    assert _get_model_description(MyModel) == 'Docstring fallback.'
+
+
+def test_get_model_description_callable_json_schema_extra_pydantic_dataclass():
+    def add_description(schema: dict) -> None:
+        schema['description'] = 'DC callable.'
+
+    @pydantic_dataclasses.dataclass(config=ConfigDict(json_schema_extra=add_description))
+    class MyDC:
+        x: int = 1
+
+    MyDC.__doc__ = None  # type: ignore
+    assert _get_model_description(MyDC) == 'DC callable.'
+
+
+def test_get_model_description_pydantic_dataclass():
+    @pydantic_dataclasses.dataclass(config=ConfigDict(json_schema_extra={'description': 'DC description.'}))
+    class MyDC:
+        x: int = 1
+
+    MyDC.__doc__ = None  # type: ignore
+    assert _get_model_description(MyDC) == 'DC description.'
+
+
+def test_get_model_description_base_settings():
+    class MySettings(BaseSettings):
+        model_config = SettingsConfigDict(json_schema_extra={'description': 'Settings description.'})
+
+    MySettings.__doc__ = None  # type: ignore
+    assert _get_model_description(MySettings) == 'Settings description.'
+
+
+def test_cli_json_schema_extra_description_fallback(capsys, monkeypatch):
+    """Root parser uses json_schema_extra description when __doc__ is None (simulating python -OO)."""
+
+    class Settings(BaseSettings, cli_prog_name='example.py'):
+        """This docstring will be removed."""
+
+        model_config = SettingsConfigDict(
+            cli_parse_args=True,
+            json_schema_extra={'description': 'JSON schema description.'},
+        )
+        my_var: str = 'default'
+
+    Settings.__doc__ = None  # type: ignore
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Settings()
+
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] [--my_var str]
+
+JSON schema description.
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help    show this help message and exit
+  --my_var str  (default: default)
+"""
+        )
+
+
+def test_cli_json_schema_extra_takes_precedence_over_docstring(capsys, monkeypatch):
+    """Even when __doc__ is available, json_schema_extra description should be used, instead."""
+
+    class Settings(BaseSettings, cli_prog_name='example.py'):
+        """Docstring description."""
+
+        model_config = SettingsConfigDict(
+            cli_parse_args=True,
+            json_schema_extra={'description': 'JSON schema description.'},
+        )
+        my_var: str = 'default'
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Settings()
+
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] [--my_var str]
+
+JSON schema description.
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help    show this help message and exit
+  --my_var str  (default: default)
+"""
+        )
+
+
+def test_cli_use_class_docs_for_groups_json_schema_extra_fallback(capsys, monkeypatch):
+    """cli_use_class_docs_for_groups falls back to json_schema_extra when __doc__ is None."""
+
+    class SubModel(BaseModel):
+        """This docstring will be removed."""
+
+        model_config = ConfigDict(json_schema_extra={'description': 'Sub model schema description.'})
+        v1: int
+
+    SubModel.__doc__ = None  # type: ignore
+
+    class Settings(BaseSettings, cli_prog_name='example.py'):
+        """My application help text."""
+
+        sub_model: SubModel = Field(description='The field description')
+        model_config = SettingsConfigDict(cli_parse_args=True)
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Settings(_cli_use_class_docs_for_groups=True)
+
+        assert (
+            capsys.readouterr().out
+            == f"""usage: example.py [-h] [--sub_model [JSON]] [--sub_model.v1 int]
+
+My application help text.
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help          show this help message and exit
+
+sub_model options:
+  Sub model schema description.
+
+  --sub_model [JSON]  set sub_model from JSON string (default: {{}})
+  --sub_model.v1 int  (required)
+"""
+        )
+
+
+def test_cli_subcommand_json_schema_extra_description_fallback(capsys):
+    """Subcommand parser uses json_schema_extra description when __doc__ is None."""
+
+    class SubCmd(BaseSettings):
+        """This docstring will be removed."""
+
+        model_config = SettingsConfigDict(json_schema_extra={'description': 'Subcommand schema description.'})
+        x: int = 1
+
+    SubCmd.__doc__ = None  # type: ignore
+
+    class Root(BaseSettings, cli_prog_name='example.py'):
+        """Root help."""
+
+        sub: CliSubCommand[SubCmd]
+
+    with pytest.raises(SystemExit):
+        CliApp.run(Root, cli_args=['sub', '--help'])
+
+    assert (
+        capsys.readouterr().out
+        == f"""usage: example.py sub [-h] [-x int]
+
+Subcommand schema description.
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help  show this help message and exit
+  -x int      (default: 1)
+"""
+    )
