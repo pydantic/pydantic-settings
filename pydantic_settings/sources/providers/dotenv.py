@@ -138,6 +138,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
                 continue
             env_used = False
             for field_name, field in self.settings_cls.model_fields.items():
+                self._warn_if_field_incomplete(field, field_name)
                 for _, field_env_name, _ in self._extract_field_info(field, field_name):
                     if env_name == field_env_name or (
                         (

@@ -796,6 +796,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         positional_variadic_arg = []
         positional_args, subcommand_args, optional_args = [], [], []
         for field_name, field_info in _get_model_fields(model).items():
+            self._warn_if_field_incomplete(field_info, field_name)
             if _CliSubCommand in field_info.metadata:
                 if not field_info.is_required():
                     raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has a default value')
@@ -957,6 +958,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         if isinstance(self._root_parser, _CliInternalArgParser):
             if not self.cli_prefix:
                 for field_name, field_info in _get_model_fields(self.settings_cls).items():
+                    self._warn_if_field_incomplete(field_info, field_name)
                     alias_names, *_ = _get_alias_names(field_name, field_info, case_sensitive=self.case_sensitive)
                     if 'help' in alias_names:
                         return
@@ -1505,6 +1507,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         positional_args: list[str | list[Any] | dict[str, Any]] = []
         subcommand_args: list[str] = []
         for field_name, field_info in _get_model_fields(type(model) if _is_submodel else self.settings_cls).items():
+            self._warn_if_field_incomplete(field_info, field_name)
             model_default = getattr(model, field_name)
             if field_info.default == model_default:
                 continue

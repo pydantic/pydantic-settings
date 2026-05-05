@@ -3689,3 +3689,36 @@ def test_env_literal_numeric_enum(field_type, env_val, expected, env):
     env.set('VAL', env_val)
     cfg = Cfg()
     assert cfg.val is expected
+
+
+def test_warn_on_incomplete_field(env, monkeypatch):
+    """Settings sources should emit a UserWarning per FieldInfo whose annotation
+    contains an unresolved forward reference (``FieldInfo._complete is False``).
+
+    Covers https://github.com/pydantic/pydantic-settings/issues/775.
+    """
+
+    class Connector(BaseModel):
+        api_key: str = ''
+        endpoint: str = ''
+
+    class Service(BaseModel):
+        connector: Connector = Connector()
+
+    class App(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='MYAPP_', env_nested_delimiter='__')
+        service: Service = Service()
+
+    field = Service.model_fields['connector']
+    if not hasattr(field, '_complete'):
+        pytest.skip('Pydantic version does not expose FieldInfo._complete')
+
+    monkeypatch.setattr(field, '_complete', False)
+    env.set('MYAPP_SERVICE__CONNECTOR__API_KEY', 'ENV_KEY')
+
+    with pytest.warns(UserWarning, match=r"Accessing incomplete field 'connector'.*model_rebuild\(\)") as record:
+        App()
+
+    messages = [str(w.message) for w in record if 'Accessing incomplete field' in str(w.message)]
+    assert messages, 'expected at least one incomplete-field UserWarning'
+    assert len(messages) == len(set(messages)), f'duplicate warnings emitted: {messages}'
