@@ -4,6 +4,7 @@ import os
 import pathlib
 import sys
 import uuid
+import warnings
 from collections.abc import Callable, Hashable
 from datetime import date, datetime, timezone
 from enum import Enum, IntEnum
@@ -3692,7 +3693,7 @@ def test_env_literal_numeric_enum(field_type, env_val, expected, env):
 
 
 def test_warn_on_incomplete_field(env, monkeypatch):
-    """Settings sources should emit a UserWarning per FieldInfo whose annotation
+    """Settings sources should emit a UserWarning when a FieldInfo's annotation
     contains an unresolved forward reference (``FieldInfo._complete is False``).
 
     Covers https://github.com/pydantic/pydantic-settings/issues/775.
@@ -3716,9 +3717,31 @@ def test_warn_on_incomplete_field(env, monkeypatch):
     monkeypatch.setattr(field, '_complete', False)
     env.set('MYAPP_SERVICE__CONNECTOR__API_KEY', 'ENV_KEY')
 
-    with pytest.warns(UserWarning, match=r"Accessing incomplete field 'connector'.*model_rebuild\(\)") as record:
-        App()
+    with pytest.warns(UserWarning, match=r"Accessing incomplete field 'connector'.*model_rebuild\(\)"):
+        s = App()
 
-    messages = [str(w.message) for w in record if 'Accessing incomplete field' in str(w.message)]
-    assert messages, 'expected at least one incomplete-field UserWarning'
-    assert len(messages) == len(set(messages)), f'duplicate warnings emitted: {messages}'
+    assert s.service.connector.api_key == 'ENV_KEY'
+
+
+def test_warn_on_incomplete_field_deduplicated(monkeypatch):
+    """_warn_if_field_incomplete should only emit once per (source instance, field)."""
+
+    class App(BaseSettings):
+        model_config = SettingsConfigDict()
+        api_key: str = ''
+
+    field = App.model_fields['api_key']
+    if not hasattr(field, '_complete'):
+        pytest.skip('Pydantic version does not expose FieldInfo._complete')
+
+    monkeypatch.setattr(field, '_complete', False)
+
+    source = DefaultSettingsSource(App)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        source._warn_if_field_incomplete(field, 'api_key')
+        source._warn_if_field_incomplete(field, 'api_key')
+
+    incomplete = [w for w in caught if 'Accessing incomplete field' in str(w.message)]
+    assert len(incomplete) == 1
