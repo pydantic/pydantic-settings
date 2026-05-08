@@ -3689,3 +3689,13 @@ def test_env_literal_numeric_enum(field_type, env_val, expected, env):
     env.set('VAL', env_val)
     cfg = Cfg()
     assert cfg.val is expected
+
+
+def test_field_named_cls():
+    """Test that a model with a field named `cls` works correctly (GH-857)."""
+
+    class Settings(BaseSettings):
+        cls: str = 'Foo'
+
+    s = Settings.model_validate({'cls': 'Foo'})
+    assert s.cls == 'Foo'

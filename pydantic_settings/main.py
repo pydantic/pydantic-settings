@@ -723,15 +723,13 @@ class CliApp:
         elif isinstance(cli_parse_args, (Namespace, SimpleNamespace, dict)):
             raise SettingsError('Error: `cli_args` must be list[str] or None when `cli_settings_source` is not used')
 
-        _settings_kwargs = {
-            '_cli_parse_args': cli_parse_args,
-            '_cli_exit_on_error': cli_exit_on_error,
-            '_cli_settings_source': cli_settings,
-        }
         if not issubclass(model_cls, BaseSettings):
             base_settings_cls = CliApp._get_base_settings_cls(model_cls)
             sources, init_kwargs = base_settings_cls._settings_init_sources(
-                _init_kwargs=model_init_data, **_settings_kwargs
+                _cli_parse_args=cli_parse_args,  # type: ignore[arg-type]
+                _cli_exit_on_error=cli_exit_on_error,
+                _cli_settings_source=cli_settings,
+                _init_kwargs=model_init_data,
             )
             model = base_settings_cls(**base_settings_cls._settings_build_values(sources, init_kwargs))
             model_init_data = {}
@@ -740,7 +738,10 @@ class CliApp:
             command = model_cls(**model_init_data)
         else:
             sources, init_kwargs = model_cls._settings_init_sources(
-                _init_kwargs=model_init_data, **_settings_kwargs
+                _cli_parse_args=cli_parse_args,  # type: ignore[arg-type]
+                _cli_exit_on_error=cli_exit_on_error,
+                _cli_settings_source=cli_settings,
+                _init_kwargs=model_init_data,
             )
             command = model_cls(_build_sources=(sources, init_kwargs))
 
