@@ -109,6 +109,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
             A tuple that contains the value (`None` if the file does not exist), key, and
                 a flag to determine whether value is complex.
         """
+        self._warn_if_field_incomplete(field, field_name)
 
         for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
             # paths reversed to match the last-wins behaviour of `env_file`

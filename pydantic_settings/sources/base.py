@@ -3,6 +3,7 @@
 from __future__ import annotations as _annotations
 
 import json
+import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import asdict, is_dataclass
@@ -99,6 +100,34 @@ class PydanticBaseSettingsSource(ABC):
         self.config = settings_cls.model_config
         self._current_state: dict[str, Any] = {}
         self._settings_sources_data: dict[str, dict[str, Any]] = {}
+        self._warned_incomplete_field_ids: set[int] = set()
+
+    def _warn_if_field_incomplete(self, field: FieldInfo, field_name: str) -> None:
+        """
+        Emit a ``UserWarning`` if ``field`` is incomplete, i.e. its annotation
+        contains an unresolved forward reference (``FieldInfo._complete`` is ``False``).
+
+        Each ``FieldInfo`` instance is only warned about once per source instance to
+        avoid duplicate warnings when the same field is accessed from multiple call
+        sites during a single settings resolution.
+        """
+        if getattr(field, '_complete', True) is not False:
+            return
+        warned = self.__dict__.setdefault('_warned_incomplete_field_ids', set())
+        field_id = id(field)
+        if field_id in warned:
+            return
+        warned.add(field_id)
+        settings_cls = getattr(self, 'settings_cls', None)
+        cls_name = settings_cls.__name__ if settings_cls is not None else type(self).__name__
+        warnings.warn(
+            f'Accessing incomplete field {field_name!r} on {cls_name!r}: its annotation '
+            'contains an unresolved forward reference, so settings sources may silently '
+            'fail to apply overrides for nested fields. Call `model_rebuild()` on the '
+            'model declaring this field after all referenced types are defined.',
+            UserWarning,
+            stacklevel=3,
+        )
 
     def _set_current_state(self, state: dict[str, Any]) -> None:
         """
@@ -248,6 +277,7 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
         )
         if self.nested_model_default_partial_update:
             for field_name, field_info in settings_cls.model_fields.items():
+                self._warn_if_field_incomplete(field_info, field_name)
                 alias_names, *_ = _get_alias_names(field_name, field_info)
                 preferred_alias = alias_names[0]
                 if is_dataclass(type(field_info.default)):
@@ -282,6 +312,7 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         self.init_kwargs = {}
         init_kwarg_names = set(init_kwargs.keys())
         for field_name, field_info in settings_cls.model_fields.items():
+            self._warn_if_field_incomplete(field_info, field_name)
             alias_names, *_ = _get_alias_names(field_name, field_info)
             # When populate_by_name is True, allow using the field name as an input key,
             # but normalize to the preferred alias to keep keys consistent across sources.
@@ -375,6 +406,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         Returns:
             list[tuple[str, str, bool]]: List of tuples, each tuple contains field_key, env_name, and value_is_complex.
         """
+        self._warn_if_field_incomplete(field, field_name)
         field_info: list[tuple[str, str, bool]] = []
         if isinstance(field.validation_alias, (AliasChoices, AliasPath)):
             v_alias: str | list[str | int] | list[list[str | int]] | None = field.validation_alias.convert_to_aliases()
@@ -540,6 +572,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         data: dict[str, Any] = {}
 
         for field_name, field in self.settings_cls.model_fields.items():
+            self._warn_if_field_incomplete(field, field_name)
             try:
                 field_value, field_key, value_is_complex = self._get_resolved_field_value(field, field_name)
             except Exception as e:
