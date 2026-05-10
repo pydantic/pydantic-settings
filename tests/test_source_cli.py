@@ -591,6 +591,140 @@ My Multiline Doc
         )
 
 
+def test_cli_show_env_vars_off_by_default():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_prog_name='example.py', env_prefix='MYAPP_')
+
+        foo: str
+
+    assert (
+        CliApp.format_help(Settings, strip_ansi_color=True)
+        == f"""usage: example.py [-h] [--foo str]
+
+{ARGPARSE_OPTIONS_TEXT}:
+  -h, --help  show this help message and exit
+  --foo str   (required)
+"""
+    )
+
+
+def test_cli_show_env_vars_with_env_prefix():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_prog_name='example.py', env_prefix='MYAPP_', cli_show_env_vars=True)
+
+        foo: str = Field(description='Foo value')
+
+    help_text = CliApp.format_help(Settings, strip_ansi_color=True)
+
+    assert 'Foo value (required) [env: MYAPP_FOO]' in help_text
+
+
+def test_cli_show_env_vars_alias_choices():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_prog_name='example.py', cli_show_env_vars=True)
+
+        token: str = Field(validation_alias=AliasChoices('TOKEN', 'LEGACY_TOKEN'))
+
+    help_text = CliApp.format_help(Settings, strip_ansi_color=True)
+
+    assert '[env: TOKEN | LEGACY_TOKEN]' in help_text
+
+
+def test_cli_show_env_vars_nested_model():
+    class Database(BaseModel):
+        url: str
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            cli_prog_name='example.py',
+            cli_show_env_vars=True,
+            env_nested_delimiter='__',
+            env_prefix='MYAPP_',
+        )
+
+        database: Database
+
+    help_text = CliApp.format_help(Settings, strip_ansi_color=True)
+
+    assert '--database [JSON]' in help_text
+    assert '[env:' in help_text
+    assert 'MYAPP_DATABASE]' in help_text
+    assert '--database.url str' in help_text
+    assert '[env: MYAPP_DATABASE__URL]' in help_text
+
+
+def test_cli_show_env_vars_alias_only_and_positional_skip():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_prog_name='example.py', cli_show_env_vars=True)
+
+        aliased: str = Field(alias='ALIASED')
+        positional: CliPositionalArg[str]
+
+    cli_settings = CliSettingsSource(Settings, cli_show_env_vars=True)
+    help_text = CliApp.format_help(Settings, cli_settings_source=cli_settings, strip_ansi_color=True)
+
+    assert '[env: ALIASED]' in help_text
+    assert '[env: ]' not in help_text
+    assert cli_settings.env_var_names == {'ALIASED': ('ALIASED',)}
+
+
+def test_cli_show_env_vars_case_sensitive_display():
+    class CaseInsensitive(BaseSettings):
+        model_config = SettingsConfigDict(
+            cli_prog_name='example.py',
+            cli_show_env_vars=True,
+            env_prefix='myapp_',
+            case_sensitive=False,
+        )
+
+        foo_bar: str
+
+    class CaseSensitive(BaseSettings):
+        model_config = SettingsConfigDict(
+            cli_prog_name='example.py',
+            cli_show_env_vars=True,
+            env_prefix='myapp_',
+            case_sensitive=True,
+        )
+
+        foo_bar: str
+
+    assert '[env: MYAPP_FOO_BAR]' in CliApp.format_help(CaseInsensitive, strip_ansi_color=True)
+    assert '[env: myapp_foo_bar]' in CliApp.format_help(CaseSensitive, strip_ansi_color=True)
+
+
+def test_cli_show_env_vars_subcommand(capsys):
+    class SubCommand(BaseModel):
+        foo: str
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            cli_prog_name='example.py',
+            cli_show_env_vars=True,
+            env_nested_delimiter='__',
+            env_prefix='MYAPP_',
+        )
+
+        sub: CliSubCommand[SubCommand]
+
+    with pytest.raises(SystemExit):
+        CliApp.run(Settings, cli_args=['sub', '--help'])
+
+    assert '[env: MYAPP_SUB__FOO]' in capsys.readouterr().out
+
+
+def test_cli_show_env_vars_cli_app_runtime_override(capsys):
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_prog_name='example.py', env_prefix='MYAPP_')
+
+        foo: str
+
+    with pytest.raises(SystemExit):
+        CliApp.run(Settings, cli_args=['--help'], cli_show_env_vars=True)
+
+    assert '[env: MYAPP_FOO]' in capsys.readouterr().out
+
+
 def test_cli_help_union_of_models(capsys, monkeypatch):
     class Cat(BaseModel):
         meow: str = 'meow'
