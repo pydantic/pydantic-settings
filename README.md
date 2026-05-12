@@ -9,4 +9,4 @@
 
 Settings management using Pydantic.
 
-See [documentation](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) for more details.
+See [documentation](https://pydantic.dev/docs/validation/latest/concepts/pydantic_settings/) for more details.
