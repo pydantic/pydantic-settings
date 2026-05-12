@@ -111,8 +111,15 @@ class GoogleSecretManagerMapping(Mapping[str, str | None]):
         if key in self._loaded_secrets:
             return self._loaded_secrets[key]
 
+        if self._case_sensitive:
+            value = self._get_secret_value(key)
+            if value is None:
+                raise KeyError(key)
+            self._loaded_secrets[key] = value
+            return value
+
         gcp_secret_name = self._secret_name_map.get(key)
-        if gcp_secret_name is None and not self._case_sensitive:
+        if gcp_secret_name is None:
             gcp_secret_name = self._secret_name_map.get(key.lower())
 
         if gcp_secret_name:
@@ -204,9 +211,12 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
         # of the same secret name to be retrieved independently and cached in the GoogleSecretManagerMapping
         if secret_version and isinstance(self.env_vars, GoogleSecretManagerMapping):
             for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
-                gcp_secret_name = self.env_vars._secret_name_map.get(env_name)
-                if gcp_secret_name is None and not self.case_sensitive:
-                    gcp_secret_name = self.env_vars._secret_name_map.get(env_name.lower())
+                if self.case_sensitive:
+                    gcp_secret_name: str | None = env_name
+                else:
+                    gcp_secret_name = self.env_vars._secret_name_map.get(env_name)
+                    if gcp_secret_name is None:
+                        gcp_secret_name = self.env_vars._secret_name_map.get(env_name.lower())
 
                 if gcp_secret_name:
                     env_val = self.env_vars._get_secret_value(gcp_secret_name, secret_version)
