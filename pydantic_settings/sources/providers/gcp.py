@@ -40,6 +40,15 @@ def import_gcp_secret_manager() -> None:
         ) from e
 
 
+def _is_not_found_error(exc: Exception) -> bool:
+    try:
+        from google.api_core.exceptions import NotFound
+
+        return isinstance(exc, NotFound)
+    except ImportError:
+        return False
+
+
 class GoogleSecretManagerMapping(Mapping[str, str | None]):
     _loaded_secrets: dict[str, str | None]
     _secret_client: SecretManagerServiceClient
@@ -107,16 +116,23 @@ class GoogleSecretManagerMapping(Mapping[str, str | None]):
         except Exception:
             return None
 
+    def _get_secret_value_or_raise(self, gcp_secret_name: str) -> str | None:
+        try:
+            return self._secret_client.access_secret_version(
+                name=self._secret_version_path(gcp_secret_name)
+            ).payload.data.decode('UTF-8')
+        except Exception as e:
+            if _is_not_found_error(e):
+                raise KeyError(gcp_secret_name) from e
+            return None
+
     def __getitem__(self, key: str) -> str | None:
         if key in self._loaded_secrets:
             return self._loaded_secrets[key]
 
         if self._case_sensitive:
-            value = self._get_secret_value(key)
-            if value is None:
-                raise KeyError(key)
-            self._loaded_secrets[key] = value
-            return value
+            self._loaded_secrets[key] = self._get_secret_value_or_raise(key)
+            return self._loaded_secrets[key]
 
         gcp_secret_name = self._secret_name_map.get(key)
         if gcp_secret_name is None:
