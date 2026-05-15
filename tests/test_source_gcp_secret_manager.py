@@ -152,6 +152,8 @@ class TestGoogleSecretManagerSettingsSource:
             credentials = mocker.Mock()
 
         source = GoogleSecretManagerSettingsSource(test_settings, credentials=credentials, project_id=project_id)
+        # Client initialization is deferred to __call__, so resolve it now to check project_id
+        source._initialize_client()
         assert source._project_id == expected_project_id
         if credentials:
             assert source._credentials == credentials
@@ -160,8 +162,37 @@ class TestGoogleSecretManagerSettingsSource:
         credentials = mocker.Mock()
         mocker.patch('pydantic_settings.sources.providers.gcp.google_auth_default', return_value=(mocker.Mock(), None))
 
+        source = GoogleSecretManagerSettingsSource(test_settings, credentials=credentials)
+        # Error is now raised at __call__ time (deferred initialization), not __init__
         with pytest.raises(AttributeError):
-            _ = GoogleSecretManagerSettingsSource(test_settings, credentials=credentials)
+            source._initialize_client()
+
+    def test_project_id_from_current_state(self, mock_secret_client_factory, mocker):
+        """project_id can be omitted and fetched from a previous source via current_state."""
+        mocker.patch('pydantic_settings.sources.providers.gcp.google_auth_default', return_value=(mocker.Mock(), None))
+        client = mock_secret_client_factory([{'name': 'api_key', 'project': 'state-project', 'value': 'secret-val'}])
+
+        class Settings(BaseSettings):
+            project_id: str
+            api_key: str = 'default'
+
+            @classmethod
+            def settings_customise_sources(
+                cls,
+                settings_cls: type[BaseSettings],
+                init_settings: PydanticBaseSettingsSource,
+                env_settings: PydanticBaseSettingsSource,
+                dotenv_settings: PydanticBaseSettingsSource,
+                file_secret_settings: PydanticBaseSettingsSource,
+            ) -> tuple[PydanticBaseSettingsSource, ...]:
+                return (
+                    init_settings,
+                    GoogleSecretManagerSettingsSource(settings_cls, secret_client=client),
+                )
+
+        settings = Settings(project_id='state-project')
+        assert settings.project_id == 'state-project'
+        assert settings.api_key == 'secret-val'
 
     def test_settings_source_load_env_vars(self, mock_secret_client, mocker, test_settings):
         credentials = mocker.Mock()
