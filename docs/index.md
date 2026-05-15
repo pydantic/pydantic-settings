@@ -1780,6 +1780,49 @@ sub_model options:
 """
 ```
 
+#### Show Environment Variables in CLI Help
+
+Enable `cli_show_env_vars` to append the resolved environment variable name for each CLI option in help text. This is
+useful for ops runbooks, configuration discovery, and 12-factor apps where the same settings can be provided either by
+CLI flags or environment variables.
+
+```py
+import sys
+
+from pydantic import Field
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        cli_parse_args=True,
+        cli_show_env_vars=True,
+        env_prefix='MYAPP_',
+    )
+
+    redis_host: str = Field(description='Redis hostname')
+
+
+try:
+    sys.argv = ['example.py', '--help']
+    Settings()
+except SystemExit as e:
+    print(e)
+    #> 0
+"""
+usage: example.py [-h] [--redis_host str]
+
+options:
+  -h, --help        show this help message and exit
+  --redis_host str  Redis hostname (required) [env: MYAPP_REDIS_HOST]
+"""
+```
+
+When a field uses `AliasChoices`, all resolved environment variable names are rendered in order, for example
+`[env: API_KEY | LEGACY_API_KEY]`. If you construct a `CliSettingsSource` directly with `cli_show_env_vars=True`, the
+same names are also available as a simple `env_var_names` mapping keyed by CLI destination.
+
 #### Change the CLI Flag Prefix Character
 
 Change The CLI flag prefix character used in CLI optional arguments by settings `cli_flag_prefix_char`.
