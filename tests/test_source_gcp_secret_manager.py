@@ -136,6 +136,29 @@ class TestGoogleSecretManagerSettingsSource:
 
         assert secret_manager_mapping['test-secret'] is None
 
+    def test_case_sensitive_getitem_skips_list_secrets(self, mock_secret_client):
+        """With case_sensitive=True, fetching a secret must not call list_secrets."""
+        mapping = GoogleSecretManagerMapping(mock_secret_client, project_id='test-project', case_sensitive=True)
+
+        assert mapping['test-secret'] == 'test-value'
+        mock_secret_client.list_secrets.assert_not_called()
+
+    def test_case_sensitive_getitem_not_found_raises_keyerror(self, mock_secret_client):
+        """With case_sensitive=True, a missing secret (NotFound) must raise KeyError."""
+        mapping = GoogleSecretManagerMapping(mock_secret_client, project_id='test-project', case_sensitive=True)
+
+        with pytest.raises(KeyError):
+            _ = mapping['nonexistent-secret']
+        mock_secret_client.list_secrets.assert_not_called()
+
+    def test_case_sensitive_getitem_permission_denied_returns_none(self, mock_secret_client, mocker):
+        """With case_sensitive=True, a PermissionDenied error must return None (not raise KeyError)."""
+        mock_secret_client.access_secret_version = mocker.Mock(side_effect=PermissionDenied('Access denied'))
+        mapping = GoogleSecretManagerMapping(mock_secret_client, project_id='test-project', case_sensitive=True)
+
+        assert mapping['test-secret'] is None
+        mock_secret_client.list_secrets.assert_not_called()
+
     def test_secret_manager_mapping_iter(self, secret_manager_mapping):
         assert list(secret_manager_mapping) == ['test-secret']
 
