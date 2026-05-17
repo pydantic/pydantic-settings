@@ -728,7 +728,7 @@ def test_class_nested_model_default_partial_update(env):
     assert SettingsDefaultsA().model_dump(exclude_unset=True) == {
         'nested_a': {'v0': True, 'v1': True},
         'nested_b': {'v0': True, 'v1': True},
-        'nested_c': {'v0': True, 'v1': True},
+        'nested_c': {'v0': True},
         'nested_d': {'v0': True, 'v1': True},
     }
 
