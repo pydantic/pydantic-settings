@@ -14,6 +14,7 @@ from argparse import (
     BooleanOptionalAction,
     Namespace,
     RawDescriptionHelpFormatter,
+    _HelpAction,
     _SubParsersAction,
 )
 from collections import defaultdict
@@ -994,14 +995,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     if 'help' in alias_names:
                         return
 
-            self._add_argument(
-                self.root_parser,
-                f'{self._cli_flag_prefix[:1]}h',
-                f'{self._cli_flag_prefix[:2]}help',
-                action='help',
-                default=SUPPRESS,
-                help='show this help message and exit',
-            )
+            if not any([_HelpAction is type(_) for _ in self._root_parser._actions]):
+                self._add_argument(
+                    self.root_parser,
+                    f'{self._cli_flag_prefix[:1]}h',
+                    f'{self._cli_flag_prefix[:2]}help',
+                    action='help',
+                    default=SUPPRESS,
+                    help='show this help message and exit',
+                )
 
     def _add_parser_args(
         self,
