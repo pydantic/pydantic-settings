@@ -993,6 +993,22 @@ def test_validation_alias_alias_choices_with_alias_path_first(env):
     assert Settings().my_field == 'env-value'
 
 
+def test_validation_alias_alias_path_short_components(env):
+    """Test that plain AliasPath with single-character components works correctly.
+
+    Regression test: _extract_field_info incorrectly used len(alias) > 1 on the
+    string component itself rather than len(v_alias) > 1 on the AliasPath list,
+    causing short AliasPath components to be treated as non-complex and leading
+    to incorrect key normalization.
+    """
+
+    class Settings(BaseSettings):
+        my_field: str = Field(default='default', validation_alias=AliasPath('a', 'b'))
+
+    env.set('a', '{"b": "found"}')
+    assert Settings().my_field == 'found'
+
+
 def test_validation_alias_with_env_prefix(env):
     class Settings(BaseSettings):
         foobar: str = Field(validation_alias='foo')

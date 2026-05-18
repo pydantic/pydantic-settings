@@ -387,7 +387,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                 for alias in v_alias:
                     if isinstance(alias, str):  # AliasPath
                         field_info.append(
-                            (alias, self._apply_case_sensitive(env_prefix + alias), True if len(alias) > 1 else False)
+                            (alias, self._apply_case_sensitive(env_prefix + alias), len(v_alias) > 1)
                         )
                     elif isinstance(alias, list):  # AliasChoices
                         first_arg = cast(str, alias[0])  # first item of an AliasChoices must be a str
