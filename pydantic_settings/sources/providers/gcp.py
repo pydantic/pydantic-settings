@@ -130,9 +130,10 @@ class GoogleSecretManagerMapping(Mapping[str, str | None]):
 
 
 class GoogleSecretManagerSettingsSource(EnvSettingsSource):
-    _credentials: Credentials
-    _secret_client: SecretManagerServiceClient
-    _project_id: str
+    _credentials: Credentials | None
+    _secret_client: SecretManagerServiceClient | None
+    _project_id: str | None
+    _provided_secret_client: SecretManagerServiceClient | None
 
     def __init__(
         self,
@@ -145,34 +146,11 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
         secret_client: SecretManagerServiceClient | None = None,
         case_sensitive: bool | None = True,
     ) -> None:
-        # Import Google Packages if they haven't already been imported
-        if SecretManagerServiceClient is None or Credentials is None or google_auth_default is None:
-            import_gcp_secret_manager()
-
-        # If credentials or project_id are not passed, then
-        # try to get them from the default function
-        if not credentials or not project_id:
-            _creds, _project_id = google_auth_default()
-
-        # Set the credentials and/or project id if they weren't specified
-        if credentials is None:
-            credentials = _creds
-
-        if project_id is None:
-            if isinstance(_project_id, str):
-                project_id = _project_id
-            else:
-                raise AttributeError(
-                    'project_id is required to be specified either as an argument or from the google.auth.default. See https://google-auth.readthedocs.io/en/master/reference/google.auth.html#google.auth.default'
-                )
-
-        self._credentials: Credentials = credentials
-        self._project_id: str = project_id
-
-        if secret_client:
-            self._secret_client = secret_client
-        else:
-            self._secret_client = SecretManagerServiceClient(credentials=self._credentials)
+        # Store init-time arguments for deferred initialization in __call__
+        self._credentials = credentials
+        self._project_id = project_id
+        self._provided_secret_client = secret_client
+        self._secret_client = None
 
         super().__init__(
             settings_cls,
@@ -182,6 +160,44 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
             env_parse_none_str=env_parse_none_str,
             env_parse_enums=env_parse_enums,
         )
+
+    def _initialize_client(self) -> None:
+        """Initialize the GCP client, resolving project_id from current_state if not provided."""
+        # Import Google Packages if they haven't already been imported
+        if SecretManagerServiceClient is None or Credentials is None or google_auth_default is None:
+            import_gcp_secret_manager()
+
+        project_id = self._project_id
+
+        # Try to get project_id from a previous source if not explicitly provided
+        if project_id is None:
+            project_id = self.current_state.get('project_id')
+
+        credentials = self._credentials
+
+        # If credentials or project_id are still missing, fall back to google.auth.default
+        if not credentials or not project_id:
+            _creds, _project_id = google_auth_default()
+
+            if credentials is None:
+                credentials = _creds
+
+            if project_id is None:
+                if _project_id is not None:
+                    project_id = _project_id
+                else:
+                    raise AttributeError(
+                        'project_id is required to be specified either as an argument, from a previous settings source, '
+                        'or from google.auth.default. See https://google-auth.readthedocs.io/en/master/reference/google.auth.html#google.auth.default'
+                    )
+
+        self._credentials = credentials
+        self._project_id = project_id
+
+        if self._provided_secret_client is not None:
+            self._secret_client = self._provided_secret_client
+        else:
+            self._secret_client = SecretManagerServiceClient(credentials=self._credentials)
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         """Override get_field_value to get the secret value from GCP Secret Manager.
@@ -230,9 +246,17 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
         return val, key, is_complex
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
+        if self._secret_client is None or self._project_id is None:
+            # Return empty mapping during __init__; real mapping is set in __call__
+            return {}
         return GoogleSecretManagerMapping(
             self._secret_client, project_id=self._project_id, case_sensitive=self.case_sensitive
         )
+
+    def __call__(self) -> dict[str, Any]:
+        self._initialize_client()
+        self.env_vars = self._load_env_vars()
+        return super().__call__()
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}(project_id={self._project_id!r}, env_nested_delimiter={self.env_nested_delimiter!r})'
