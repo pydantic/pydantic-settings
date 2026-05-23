@@ -828,7 +828,9 @@ def test_cli_run_subcommand_show_env_vars_outside_cli_stack():
         sub: CliSubCommand[SubCommand]
 
     with pytest.raises(SettingsError, match='Error: CLI subcommand is required') as exc_info:
-        CliApp.run_subcommand(Settings.model_construct(foo='foo', sub=None), cli_show_env_vars=True, cli_exit_on_error=False)
+        CliApp.run_subcommand(
+            Settings.model_construct(foo='foo', sub=None), cli_show_env_vars=True, cli_exit_on_error=False
+        )
 
     assert 'MYAPP_FOO' in str(exc_info.value)
 
