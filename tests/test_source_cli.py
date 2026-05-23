@@ -653,6 +653,81 @@ def test_cli_show_env_vars_nested_model():
     assert '[env: MYAPP_DATABASE__URL]' in help_text
 
 
+def test_cli_show_env_vars_deep_nesting():
+    class Credentials(BaseModel):
+        username: str
+
+    class Database(BaseModel):
+        credentials: Credentials
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            cli_prog_name='example.py',
+            cli_show_env_vars=True,
+            env_nested_delimiter='__',
+            env_prefix='MYAPP_',
+        )
+
+        database: Database
+
+    help_text = CliApp.format_help(Settings, strip_ansi_color=True)
+
+    assert '--database.credentials.username str' in help_text
+    assert 'MYAPP_DATABASE__CREDENTIALS__USERNAME' in help_text
+
+
+@pytest.mark.parametrize(
+    ('env_prefix_target', 'expected_alias_env', 'expected_variable_env'),
+    [
+        ('alias', 'TARGET_FOOALIAS', 'BAR'),
+        ('variable', 'FOOALIAS', 'TARGET_BAR'),
+        ('all', 'TARGET_FOOALIAS', 'TARGET_BAR'),
+    ],
+)
+def test_cli_show_env_vars_env_prefix_target(env_prefix_target, expected_alias_env, expected_variable_env):
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            cli_prog_name='example.py',
+            cli_show_env_vars=True,
+            env_prefix='TARGET_',
+            env_prefix_target=env_prefix_target,
+        )
+
+        foo: str = Field(alias='FooAlias')
+        bar: str
+
+    help_text = CliApp.format_help(Settings, strip_ansi_color=True)
+
+    assert f'[env: {expected_alias_env}]' in help_text
+    assert f'[env: {expected_variable_env}]' in help_text
+
+
+def test_cli_show_env_vars_discriminated_union():
+    class Cat(BaseModel):
+        pet_type: Literal['cat']
+        meows: int
+
+    class Dog(BaseModel):
+        pet_type: Literal['dog']
+        barks: float
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            cli_prog_name='example.py',
+            cli_show_env_vars=True,
+            env_nested_delimiter='__',
+            env_prefix='MYAPP_',
+        )
+
+        pet: Cat | Dog = Field(discriminator='pet_type')
+
+    help_text = CliApp.format_help(Settings, strip_ansi_color=True)
+
+    assert '[env: MYAPP_PET__PET_TYPE]' in help_text
+    assert '[env: MYAPP_PET__MEOWS]' in help_text
+    assert '[env: MYAPP_PET__BARKS]' in help_text
+
+
 def test_cli_show_env_vars_alias_only_and_positional_skip():
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(cli_prog_name='example.py', cli_show_env_vars=True)
@@ -711,6 +786,51 @@ def test_cli_show_env_vars_subcommand(capsys):
         CliApp.run(Settings, cli_args=['sub', '--help'])
 
     assert '[env: MYAPP_SUB__FOO]' in capsys.readouterr().out
+
+
+def test_cli_show_env_vars_without_env_nested_delimiter():
+    class Database(BaseModel):
+        url: str
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            cli_prog_name='example.py',
+            cli_show_env_vars=True,
+            env_prefix='MYAPP_',
+        )
+
+        database: Database
+
+    cli_settings = CliSettingsSource(Settings, cli_show_env_vars=True)
+    help_text = CliApp.format_help(Settings, cli_settings_source=cli_settings, strip_ansi_color=True)
+
+    assert 'MYAPP_DATABASE' in help_text
+    assert '--database.url str' in help_text
+    assert 'MYAPP_DATABASE__URL' not in help_text
+    assert cli_settings.env_var_names.get('database') == ('MYAPP_DATABASE',)
+    assert 'database.url' not in cli_settings.env_var_names
+
+
+def test_cli_run_subcommand_show_env_vars_outside_cli_stack():
+    class SubCommand(BaseModel):
+        value: str
+
+        def cli_cmd(self) -> None:
+            pass
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            cli_prog_name='example.py',
+            env_prefix='MYAPP_',
+        )
+
+        foo: str = 'foo'
+        sub: CliSubCommand[SubCommand]
+
+    with pytest.raises(SettingsError, match='Error: CLI subcommand is required') as exc_info:
+        CliApp.run_subcommand(Settings.model_construct(foo='foo', sub=None), cli_show_env_vars=True, cli_exit_on_error=False)
+
+    assert 'MYAPP_FOO' in str(exc_info.value)
 
 
 def test_cli_show_env_vars_cli_app_runtime_override(capsys):

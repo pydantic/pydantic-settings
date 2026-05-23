@@ -1500,19 +1500,16 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             return ()
 
         env_var_names: list[str] = []
-        original_env_prefix = self._env_settings_source.env_prefix
-        try:
-            for env_prefix, force_env_prefix in env_prefixes:
-                self._env_settings_source.env_prefix = env_prefix
-                normalized_env_prefix = self._env_settings_source._apply_case_sensitive(env_prefix)
-                for _, env_name, _ in self._env_settings_source._extract_field_info(field_info, field_name):
-                    if force_env_prefix and normalized_env_prefix and not env_name.startswith(normalized_env_prefix):
-                        env_name = f'{normalized_env_prefix}{env_name}'
-                    display_env_name = self._display_env_var_name(env_name)
-                    if display_env_name and display_env_name not in env_var_names:
-                        env_var_names.append(display_env_name)
-        finally:
-            self._env_settings_source.env_prefix = original_env_prefix
+        env_settings_source = copy.copy(self._env_settings_source)
+        for env_prefix, force_env_prefix in env_prefixes:
+            env_settings_source.env_prefix = env_prefix
+            normalized_env_prefix = env_settings_source._apply_case_sensitive(env_prefix)
+            for _, env_name, _ in env_settings_source._extract_field_info(field_info, field_name):
+                if force_env_prefix and normalized_env_prefix and not env_name.startswith(normalized_env_prefix):
+                    env_name = f'{normalized_env_prefix}{env_name}'
+                display_env_name = self._display_env_var_name(env_name)
+                if display_env_name and display_env_name not in env_var_names:
+                    env_var_names.append(display_env_name)
 
         return tuple(env_var_names)
 

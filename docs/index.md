@@ -1787,11 +1787,9 @@ useful for ops runbooks, configuration discovery, and 12-factor apps where the s
 CLI flags or environment variables.
 
 ```py
-import sys
-
 from pydantic import Field
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, CliApp, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -1804,12 +1802,7 @@ class Settings(BaseSettings):
     redis_host: str = Field(description='Redis hostname')
 
 
-try:
-    sys.argv = ['example.py', '--help']
-    Settings()
-except SystemExit as e:
-    print(e)
-    #> 0
+print(CliApp.format_help(Settings))
 """
 usage: example.py [-h] [--redis_host str]
 
@@ -1822,6 +1815,11 @@ options:
 When a field uses `AliasChoices`, all resolved environment variable names are rendered in order, for example
 `[env: API_KEY | LEGACY_API_KEY]`. If you construct a `CliSettingsSource` directly with `cli_show_env_vars=True`, the
 same names are also available as a simple `env_var_names` mapping keyed by CLI destination.
+
+When `CliSettingsSource` is constructed directly without passing `_env_settings_source`, a fallback
+`EnvSettingsSource(settings_cls)` is used for help text resolution. This reflects model config values, but does not
+include source-level constructor overrides (for example, custom `env_prefix` or `env_nested_delimiter`) unless you
+pass that customized source explicitly.
 
 #### Change the CLI Flag Prefix Character
 
