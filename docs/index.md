@@ -138,6 +138,43 @@ print(Settings1())
 
 Check the [validation of default values](fields.md#validate-default-values) for more information.
 
+## Strict validation
+
+`BaseSettings` loads values from settings sources (environment variables, dotenv files, secrets, CLI, and so on). Those
+values are usually strings that must be coerced into the correct Python types.
+
+To reject invalid coercions, enable strict mode on the settings class:
+
+```py
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(strict=True)
+
+    mybool: bool
+```
+
+With `strict=True`, invalid source values (for example `MYBOOL=0` for a `bool` field) raise a validation error when the
+settings object is created.
+
+You can also use Pydantic's strict types on individual fields (for example `StrictBool`, `StrictInt`) when you only
+need strictness for part of the model.
+
+### `model_validate` and `model_validate_json`
+
+Unlike a plain `BaseModel`, passing `strict=True` to `model_validate()` or `model_validate_json()` does **not** enable
+strict validation for `BaseSettings`. Settings values are prepared through the settings source pipeline during
+`__init__`, not through a one-shot model validation call.
+
+If you need strict parsing for programmatic input, prefer one of these approaches:
+
+- Instantiate the settings class normally with `strict=True` in `model_config` and provide values via supported
+  settings sources.
+- Use strict field types (for example `StrictBool`) on the fields that must not be coerced.
+- For mixed requirements (strict files but lenient CLI), use `settings_customise_sources` with dedicated settings
+  classes per source.
+
 ## Environment variable names
 
 By default, the environment variable name is the same as the field name.
