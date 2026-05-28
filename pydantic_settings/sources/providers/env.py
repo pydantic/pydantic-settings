@@ -72,7 +72,13 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         self.env_vars = self._load_env_vars()
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
-        return parse_env_vars(os.environ, self.case_sensitive, self.env_ignore_empty, self.env_parse_none_str)
+        # On Windows, os.environ is case-insensitive and normalizes keys to uppercase,
+        # so case_sensitive=True cannot be respected at the OS level.
+        # We force case_sensitive=False to ensure lookups work correctly on Windows.
+        import sys
+
+        case_sensitive = self.case_sensitive if sys.platform != 'win32' else False
+        return parse_env_vars(os.environ, case_sensitive, self.env_ignore_empty, self.env_parse_none_str)
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         """
