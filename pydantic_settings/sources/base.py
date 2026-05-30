@@ -228,6 +228,15 @@ class ConfigFileSourceMixin(ABC):
         pass
 
 
+def _has_discriminator(field_info: FieldInfo) -> bool:
+    """Check if a field uses a discriminated union (via Annotated or Field(discriminator=...))."""
+    if field_info.discriminator is not None:
+        return True
+    from pydantic import Discriminator
+
+    return any(isinstance(m, Discriminator) for m in field_info.metadata)
+
+
 class DefaultSettingsSource(PydanticBaseSettingsSource):
     """
     Source class for loading default object values.
@@ -248,6 +257,8 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
         )
         if self.nested_model_default_partial_update:
             for field_name, field_info in settings_cls.model_fields.items():
+                if _has_discriminator(field_info):
+                    continue
                 alias_names, *_ = _get_alias_names(field_name, field_info)
                 preferred_alias = alias_names[0]
                 if is_dataclass(type(field_info.default)):
