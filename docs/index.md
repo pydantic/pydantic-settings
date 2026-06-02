@@ -2575,7 +2575,7 @@ The `project_id` is resolved lazily when the source is read, in the following or
 
 This lets the project be supplied by another settings source (for example an environment variable or an init argument) instead of being hardcoded. For example, with `GoogleSecretManagerSettingsSource(settings_cls, project_id_field='gcp_project')` the source uses the `gcp_project` value resolved by an earlier source as its project.
 
-`project_id_field` matches a *model field name* (or its preferred alias when a `validation_alias` is set), not an environment variable name. If your settings model has `gcp_project: str = Field(alias='GCP_PROJECT')` and the project is provided via the `GCP_PROJECT` env var, set `project_id_field='GCP_PROJECT'` (the alias the earlier source uses as a key), not `'gcp_project'`.
+`project_id_field` must match the key that the earlier source uses in `current_state` — this is typically the field's preferred alias. For example, if your settings model has `gcp_project: str = Field(alias='GCP_PROJECT')`, use `project_id_field='GCP_PROJECT'` (the alias), not `'gcp_project'` (the Python attribute name).
 
 ### Nested Models
 

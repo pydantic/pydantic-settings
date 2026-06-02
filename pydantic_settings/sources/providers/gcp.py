@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic.fields import FieldInfo
 
+from ...exceptions import SettingsError
 from ..types import SecretVersion
 from .env import EnvSettingsSource
 
@@ -273,6 +274,9 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
         ``project_id`` argument, the ``project_id_field`` value from previous settings
         sources (``current_state``), and finally ``google.auth.default()``.
         """
+        if self._project_id is not None:
+            return
+
         project_id = self._explicit_project_id
         credentials = self._credentials
 
@@ -314,7 +318,11 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
             return {}
 
         self._resolve_gcp_project()
-        assert self._project_id is not None and self._secret_client is not None
+        if self._project_id is None or self._secret_client is None:
+            raise SettingsError(
+                'GoogleSecretManagerSettingsSource: could not determine GCP project_id or initialize the Secret Manager client. '
+                'Pass project_id explicitly or ensure it is available via application default credentials or a previous settings source.'
+            )
         return GoogleSecretManagerMapping(
             self._secret_client, project_id=self._project_id, case_sensitive=self.case_sensitive
         )
