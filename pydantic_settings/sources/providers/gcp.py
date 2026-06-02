@@ -177,11 +177,11 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
                 resolved lazily (see below).
             project_id_field: The key, populated by a previous (higher priority)
                 settings source, to use as the ``project_id`` when one is not passed
-                explicitly. This is the model field name — or its preferred alias when
-                a ``validation_alias`` is set — under which the project ID is exposed by
-                the previous source, NOT an environment variable name. For example with
-                ``some_field: str = Field(alias='GCP_PROJECT')`` set ``project_id_field``
-                to ``'GCP_PROJECT'``. Defaults to ``'project_id'``.
+                explicitly. This must match the key used in ``current_state`` by the
+                previous source (typically the field name or its preferred alias).
+                For example, with ``some_field: str = Field(alias='GCP_PROJECT')``,
+                previous env sources will expose the value under ``'GCP_PROJECT'``.
+                Defaults to ``'project_id'``.
 
         The ``project_id`` is resolved lazily in :meth:`__call__` rather than at
         construction time so that it can be sourced from settings resolved by previous
