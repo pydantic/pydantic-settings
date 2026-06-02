@@ -9,10 +9,10 @@ from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
+    from types_boto3_secretsmanager.client import SecretsManagerClient
 
 
 boto3_client = None
-SecretsManagerClient = None
 
 
 def import_aws_secrets_manager() -> None:
@@ -21,7 +21,6 @@ def import_aws_secrets_manager() -> None:
 
     try:
         from boto3 import client as boto3_client
-        from types_boto3_secretsmanager.client import SecretsManagerClient
     except ImportError as e:  # pragma: no cover
         raise ImportError(
             'AWS Secrets Manager dependencies are not installed, run `pip install pydantic-settings[aws-secrets-manager]`'
