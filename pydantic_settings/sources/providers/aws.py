@@ -1,6 +1,4 @@
-from __future__ import (
-    annotations as _annotations,
-)  # important for BaseSettings import to work
+from __future__ import annotations as _annotations  # important for BaseSettings import to work
 
 import json
 from collections.abc import Mapping
@@ -10,30 +8,29 @@ from ..utils import parse_env_vars
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
-    from pydantic_settings.main import BaseSettings
     from types_boto3_secretsmanager.client import SecretsManagerClient
+
+    from pydantic_settings.main import BaseSettings
 
 
 boto3_client = None
-SecretsManagerClient = None
 
 
 def import_aws_secrets_manager() -> None:
     global boto3_client
-    global SecretsManagerClient
 
     try:
         from boto3 import client as boto3_client
-        from types_boto3_secretsmanager.client import SecretsManagerClient
+        from types_boto3_secretsmanager.client import SecretsManagerClient  # noqa: F401
     except ImportError as e:  # pragma: no cover
         raise ImportError(
-            "AWS Secrets Manager dependencies are not installed, run `pip install pydantic-settings[aws-secrets-manager]`"
+            'AWS Secrets Manager dependencies are not installed, run `pip install pydantic-settings[aws-secrets-manager]`'
         ) from e
 
 
 class AWSSecretsManagerSettingsSource(EnvSettingsSource):
     _secret_id: str
-    _secretsmanager_client: SecretsManagerClient  # type: ignore
+    _secretsmanager_client: SecretsManagerClient  # type: ignore[has-type]
 
     def __init__(
         self,
@@ -43,15 +40,13 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
         endpoint_url: str | None = None,
         case_sensitive: bool | None = True,
         env_prefix: str | None = None,
-        env_nested_delimiter: str | None = "--",
+        env_nested_delimiter: str | None = '--',
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
         version_id: str | None = None,
     ) -> None:
         import_aws_secrets_manager()
-        self._secretsmanager_client = boto3_client(
-            "secretsmanager", region_name=region_name, endpoint_url=endpoint_url
-        )  # type: ignore
+        self._secretsmanager_client = boto3_client('secretsmanager', region_name=region_name, endpoint_url=endpoint_url)  # type: ignore
         self._secret_id = secret_id
         self._version_id = version_id
         super().__init__(
@@ -65,15 +60,15 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
         )
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
-        request = {"SecretId": self._secret_id}
+        request = {'SecretId': self._secret_id}
 
         if self._version_id:
-            request["VersionId"] = self._version_id
+            request['VersionId'] = self._version_id
 
         response = self._secretsmanager_client.get_secret_value(**request)  # type: ignore
 
         return parse_env_vars(
-            json.loads(response["SecretString"]),
+            json.loads(response['SecretString']),
             self.case_sensitive,
             self.env_ignore_empty,
             self.env_parse_none_str,
@@ -81,11 +76,11 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}(secret_id={self._secret_id!r}, "
-            f"env_nested_delimiter={self.env_nested_delimiter!r})"
+            f'{self.__class__.__name__}(secret_id={self._secret_id!r}, '
+            f'env_nested_delimiter={self.env_nested_delimiter!r})'
         )
 
 
 __all__ = [
-    "AWSSecretsManagerSettingsSource",
+    'AWSSecretsManagerSettingsSource',
 ]
