@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 
 boto3_client = None
+SecretsManagerClient = None
 
 
 def import_aws_secrets_manager() -> None:
@@ -23,6 +24,7 @@ def import_aws_secrets_manager() -> None:
 
     try:
         from boto3 import client as boto3_client
+        from types_boto3_secretsmanager.client import SecretsManagerClient
     except ImportError as e:  # pragma: no cover
         raise ImportError(
             "AWS Secrets Manager dependencies are not installed, run `pip install pydantic-settings[aws-secrets-manager]`"
@@ -31,7 +33,7 @@ def import_aws_secrets_manager() -> None:
 
 class AWSSecretsManagerSettingsSource(EnvSettingsSource):
     _secret_id: str
-    _secretsmanager_client: SecretsManagerClient
+    _secretsmanager_client: SecretsManagerClient  # type: ignore
 
     def __init__(
         self,
@@ -68,7 +70,7 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
         if self._version_id:
             request["VersionId"] = self._version_id
 
-        response = self._secretsmanager_client.get_secret_value(**request)
+        response = self._secretsmanager_client.get_secret_value(**request)  # type: ignore
 
         return parse_env_vars(
             json.loads(response["SecretString"]),
