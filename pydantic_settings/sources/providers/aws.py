@@ -29,7 +29,7 @@ def import_aws_secrets_manager() -> None:
 
 class AWSSecretsManagerSettingsSource(EnvSettingsSource):
     _secret_id: str
-    _secretsmanager_client: SecretsManagerClient  # type: ignore
+    _secretsmanager_client: SecretsManagerClient
 
     def __init__(
         self,
@@ -64,7 +64,7 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
         if self._version_id:
             request['VersionId'] = self._version_id
 
-        response = self._secretsmanager_client.get_secret_value(**request)  # type: ignore
+        response = self._secretsmanager_client.get_secret_value(**request)
 
         return parse_env_vars(
             json.loads(response['SecretString']),
