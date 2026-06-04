@@ -23,7 +23,7 @@ except ImportError:
 
 def test_repr() -> None:
     source = TomlConfigSettingsSource(BaseSettings, Path('config.toml'))
-    assert repr(source) == 'TomlConfigSettingsSource(toml_file=config.toml)'
+    assert repr(source) == 'TomlConfigSettingsSource(toml_file=config.toml, toml_table_header=())'
 
 
 @pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
@@ -158,3 +158,61 @@ def test_multiple_file_toml_merge(tmp_path, deep_merge):
 
     s = Settings()
     assert s.model_dump() == {'hello': 'world', 'nested': {'foo': 3, 'bar': 2 if deep_merge else 0}}
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+def test_table_header(tmp_path):
+    p = tmp_path / 'test.toml'
+    p.write_text(
+        """
+    [app]
+    hello = "world"
+    """
+    )
+
+    class Settings(BaseSettings):
+        hello: str
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls, toml_file=p, toml_table_header=('app',)),)
+
+    s = Settings()
+    assert s.model_dump() == {'hello': 'world'}
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+def test_table_header_from_model_config(tmp_path):
+    p = tmp_path / 'test.toml'
+    p.write_text(
+        """
+    [app]
+    hello = "world"
+    """
+    )
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(toml_file=p, toml_table_header=('app',))
+
+        hello: str
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.model_dump() == {'hello': 'world'}

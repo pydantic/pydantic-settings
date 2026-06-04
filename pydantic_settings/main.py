@@ -105,6 +105,14 @@ class SettingsConfigDict(ConfigDict, total=False):
     """
 
     toml_file: PathType | None
+
+    toml_table_header: tuple[str, ...]
+    """
+    Header of the TOML table in a TOML file to use when filling variables.
+    Similar to `pyproject_toml_table_header`, but for generic TOML file handling.
+
+    Default is to use the root table, i.e. no table header.
+    """
     enable_decoding: bool
 
 
