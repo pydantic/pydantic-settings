@@ -176,6 +176,8 @@ class TestGoogleSecretManagerSettingsSource:
             credentials = mocker.Mock()
 
         source = GoogleSecretManagerSettingsSource(test_settings, credentials=credentials, project_id=project_id)
+        # project_id (and credentials) are resolved lazily, not at construction time.
+        source._resolve_gcp_project()
         assert source._project_id == expected_project_id
         if credentials:
             assert source._credentials == credentials
@@ -184,8 +186,11 @@ class TestGoogleSecretManagerSettingsSource:
         credentials = mocker.Mock()
         mocker.patch('pydantic_settings.sources.providers.gcp.google_auth_default', return_value=(mocker.Mock(), None))
 
+        # this used to raise an AttributeError if project_id was missing at instantiation time
+        # now project_id is resolved lazily, so the error surfaces when the source resolves it.
+        source = GoogleSecretManagerSettingsSource(test_settings, credentials=credentials)
         with pytest.raises(AttributeError):
-            _ = GoogleSecretManagerSettingsSource(test_settings, credentials=credentials)
+            source._resolve_gcp_project()
 
     def test_settings_source_load_env_vars(self, mock_secret_client, mocker, test_settings):
         credentials = mocker.Mock()
@@ -201,6 +206,79 @@ class TestGoogleSecretManagerSettingsSource:
         source = GoogleSecretManagerSettingsSource(test_settings, project_id='test-project')
         assert 'test-project' in repr(source)
         assert 'GoogleSecretManagerSettingsSource' in repr(source)
+
+    def test_settings_source_project_id_from_previous_source(self, mocker, test_settings):
+        source = GoogleSecretManagerSettingsSource(test_settings)
+        source._set_current_state({'project_id': 'project-from-previous-source'})
+
+        source._resolve_gcp_project()
+
+        # A value resolved by a previous source takes precedence over google.auth.default.
+        assert source._project_id == 'project-from-previous-source'
+
+    def test_settings_source_explicit_project_id_overrides_previous_source(self, mocker, test_settings):
+        source = GoogleSecretManagerSettingsSource(test_settings, project_id='explicit-project')
+        source._set_current_state({'project_id': 'project-from-previous-source'})
+
+        source._resolve_gcp_project()
+
+        # The explicit project_id argument takes precedence over a previous source.
+        assert source._project_id == 'explicit-project'
+
+    def test_settings_source_custom_project_id_field(self, mocker, test_settings):
+        source = GoogleSecretManagerSettingsSource(test_settings, project_id_field='gcp_project')
+        source._set_current_state({'gcp_project': 'project-from-custom-field'})
+
+        source._resolve_gcp_project()
+
+        assert source._project_id == 'project-from-custom-field'
+
+    def test_pydantic_base_settings_project_id_from_env_source(self, mock_secret_client_factory, monkeypatch, mocker):
+        """End-to-end: an earlier env_settings source provides project_id and the GCP source picks it up."""
+        # Register the test secret under the project name we expect the source to resolve to,
+        # so a successful access proves the env-supplied project was used.
+        secret_client = mock_secret_client_factory(
+            [{'project': 'project-from-env', 'name': 'test-secret', 'value': 'test-value'}]
+        )
+        # Patch google_auth_default to a *different* project so we can distinguish
+        # env-resolved from auth-default-resolved. Also assert it isn't called at all
+        # since the user supplied a secret_client and an env-resolved project_id.
+        auth_default = mocker.patch(
+            'pydantic_settings.sources.providers.gcp.google_auth_default',
+            return_value=(mocker.Mock(), 'project-from-auth-default'),
+        )
+        monkeypatch.setenv('GCP_PROJECT', 'project-from-env')
+
+        gcp_sources: list[GoogleSecretManagerSettingsSource] = []
+
+        class Settings(BaseSettings):
+            gcp_project: str = Field(alias='GCP_PROJECT')
+            test_secret: str = Field(..., alias='test-secret')
+
+            @classmethod
+            def settings_customise_sources(
+                cls,
+                settings_cls: type[BaseSettings],
+                init_settings: PydanticBaseSettingsSource,
+                env_settings: PydanticBaseSettingsSource,
+                dotenv_settings: PydanticBaseSettingsSource,
+                file_secret_settings: PydanticBaseSettingsSource,
+            ) -> tuple[PydanticBaseSettingsSource, ...]:
+                gcp = GoogleSecretManagerSettingsSource(
+                    settings_cls, secret_client=secret_client, project_id_field='GCP_PROJECT'
+                )
+                gcp_sources.append(gcp)
+                return (init_settings, env_settings, dotenv_settings, file_secret_settings, gcp)
+
+        settings = Settings()  # type: ignore
+        assert settings.gcp_project == 'project-from-env'
+        assert settings.test_secret == 'test-value'
+        # Prove the GCP source resolved the project from the previous (env) source,
+        # not from google.auth.default.
+        assert gcp_sources[0]._project_id == 'project-from-env'
+        # Also prove the optimisation: when secret_client is supplied and project_id
+        # is resolvable from a previous source, google.auth.default is not called.
+        auth_default.assert_not_called()
 
     def test_pydantic_base_settings(self, mock_secret_client, monkeypatch, mocker):
         monkeypatch.setenv('ANOTHER_SECRET', 'yep_this_one')
