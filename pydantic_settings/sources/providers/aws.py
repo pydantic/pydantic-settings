@@ -8,20 +8,19 @@ from ..utils import parse_env_vars
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
+    from types_boto3_secretsmanager.client import SecretsManagerClient
+
     from pydantic_settings.main import BaseSettings
 
 
 boto3_client = None
-SecretsManagerClient = None
 
 
 def import_aws_secrets_manager() -> None:
     global boto3_client
-    global SecretsManagerClient
 
     try:
         from boto3 import client as boto3_client
-        from types_boto3_secretsmanager.client import SecretsManagerClient
     except ImportError as e:  # pragma: no cover
         raise ImportError(
             'AWS Secrets Manager dependencies are not installed, run `pip install pydantic-settings[aws-secrets-manager]`'
@@ -30,7 +29,7 @@ def import_aws_secrets_manager() -> None:
 
 class AWSSecretsManagerSettingsSource(EnvSettingsSource):
     _secret_id: str
-    _secretsmanager_client: SecretsManagerClient  # type: ignore
+    _secretsmanager_client: SecretsManagerClient
 
     def __init__(
         self,
@@ -65,7 +64,7 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
         if self._version_id:
             request['VersionId'] = self._version_id
 
-        response = self._secretsmanager_client.get_secret_value(**request)  # type: ignore
+        response = self._secretsmanager_client.get_secret_value(**request)
 
         return parse_env_vars(
             json.loads(response['SecretString']),

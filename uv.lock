@@ -1407,7 +1407,6 @@ dependencies = [
 [package.optional-dependencies]
 aws-secrets-manager = [
     { name = "boto3" },
-    { name = "types-boto3", extra = ["secretsmanager"] },
 ]
 azure-key-vault = [
     { name = "azure-identity" },
@@ -1454,7 +1453,6 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=0.21.0" },
     { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6.0.1" },
     { name = "tomli", marker = "extra == 'toml'", specifier = ">=2.0.1" },
-    { name = "types-boto3", extras = ["secretsmanager"], marker = "extra == 'aws-secrets-manager'" },
     { name = "typing-inspection", specifier = ">=0.4.0" },
 ]
 provides-extras = ["aws-secrets-manager", "azure-key-vault", "gcp-secret-manager", "toml", "yaml"]
