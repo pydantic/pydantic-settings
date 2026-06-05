@@ -59,7 +59,9 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         )
         self.toml_data = self._read_files(self.toml_file_path, deep_merge=deep_merge)
         for key in self.toml_table_header:
-            self.toml_data = self.toml_data.get(key, {})
+            if key not in self.toml_data:
+                raise KeyError(f'toml_table_header key "{key}" not found in {self.toml_file_path}')
+            self.toml_data = self.toml_data[key]
 
         super().__init__(settings_cls, self.toml_data)
 
