@@ -565,7 +565,7 @@ class BaseSettings(BaseModel):
 
         warn_if_not_used(JsonConfigSettingsSource, ('json_file', 'json_file_encoding'))
         warn_if_not_used(PyprojectTomlConfigSettingsSource, ('pyproject_toml_depth', 'pyproject_toml_table_header'))
-        warn_if_not_used(TomlConfigSettingsSource, ('toml_file',))
+        warn_if_not_used(TomlConfigSettingsSource, ('toml_file', 'toml_table_header'))
         warn_if_not_used(YamlConfigSettingsSource, ('yaml_file', 'yaml_file_encoding', 'yaml_config_section'))
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
