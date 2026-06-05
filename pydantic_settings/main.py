@@ -475,8 +475,8 @@ class BaseSettings(BaseModel):
                 states[source_name] = source_state
                 state = deep_update(source_state, state)
 
-            # Strip any default values not explicity set before returning final state
-            state = {key: val for key, val in state.items() if key not in defaults or defaults[key] != val}
+            # Strip any default values not explicitly set before returning final state
+            state = _deep_strip_defaults(state, defaults, cls)
             cls._settings_restore_init_kwarg_names(cls, init_kwargs, state)
 
             return state
@@ -599,6 +599,45 @@ class BaseSettings(BaseModel):
         protected_namespaces=('model_validate', 'model_dump', 'settings_customise_sources'),
         enable_decoding=True,
     )
+
+
+def _deep_strip_defaults(
+    state: dict[str, Any], defaults: dict[str, Any], model_cls: type[Any] | None = None
+) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, val in state.items():
+        if key not in defaults:
+            result[key] = val
+        elif isinstance(val, dict) and isinstance(defaults[key], dict) and _is_base_model_field(model_cls, key):
+            nested_cls = model_cls.model_fields[key].annotation  # type: ignore[union-attr]
+            nested_defaults = defaults[key]
+            stripped: dict[str, Any] = {}
+            has_diff = False
+            for k, v in val.items():
+                if k not in nested_defaults or v != nested_defaults[k]:
+                    stripped[k] = v
+                    has_diff = True
+                elif not _matches_field_default(nested_cls, k, v):
+                    stripped[k] = v
+            if has_diff:
+                result[key] = stripped
+        elif val != defaults[key]:
+            result[key] = val
+    return result
+
+
+def _is_base_model_field(model_cls: type[Any] | None, field_name: str) -> bool:
+    if model_cls is None or not hasattr(model_cls, 'model_fields'):
+        return False
+    fi = model_cls.model_fields.get(field_name)
+    return fi is not None and isinstance(fi.annotation, type) and issubclass(fi.annotation, BaseModel)
+
+
+def _matches_field_default(model_cls: type[BaseModel], field_name: str, value: Any) -> bool:
+    fi = model_cls.model_fields.get(field_name)
+    if fi is None or fi.is_required() or fi.default_factory is not None:
+        return False
+    return fi.default == value
 
 
 class CliApp:
