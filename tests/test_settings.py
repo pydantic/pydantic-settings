@@ -18,6 +18,7 @@ from pydantic import (
     AliasGenerator,
     AliasPath,
     BaseModel,
+    ConfigDict,
     Discriminator,
     Field,
     HttpUrl,
@@ -828,6 +829,49 @@ def test_alias_nested_model_default_partial_update():
         'v0': 'ok',
         'sub_model': {'v1': 'cli', 'v2': b'hello', 'v3': 33},
     }
+
+
+def test_nested_model_default_partial_update_with_discriminated_union():
+    """Test that nested_model_default_partial_update skips discriminated union fields.
+
+    When a field uses a discriminated union, the default model's fields should not bleed
+    into the incoming value when the discriminator selects a different type.
+    See: https://github.com/pydantic/pydantic-settings/issues/871
+    """
+
+    class SubModel1(BaseModel):
+        discriminator: Literal['submodel1'] = 'submodel1'
+        submodel1_field: str = 'foo'
+
+    class SubModel2(BaseModel):
+        model_config = ConfigDict(extra='forbid')
+        discriminator: Literal['submodel2'] = 'submodel2'
+
+    # Test with Annotated[..., Discriminator(...)]
+    class SettingsAnnotated(BaseSettings):
+        model_config = SettingsConfigDict(nested_model_default_partial_update=True)
+        root_field: Annotated[SubModel1 | SubModel2, Discriminator('discriminator')] = SubModel1()
+
+    result = SettingsAnnotated.model_validate_json('{"root_field": {"discriminator": "submodel2"}}')
+    assert result.root_field == SubModel2()
+
+    # Test with Field(discriminator=...)
+    class SettingsField(BaseSettings):
+        model_config = SettingsConfigDict(nested_model_default_partial_update=True)
+        root_field: SubModel1 | SubModel2 = Field(default=SubModel1(), discriminator='discriminator')
+
+    result = SettingsField.model_validate_json('{"root_field": {"discriminator": "submodel2"}}')
+    assert result.root_field == SubModel2()
+
+    # Test that selecting the same type as the default still works
+    result = SettingsAnnotated.model_validate_json(
+        '{"root_field": {"discriminator": "submodel1", "submodel1_field": "bar"}}'
+    )
+    assert result.root_field == SubModel1(submodel1_field='bar')
+
+    # Test that the default is used when no value is provided
+    result = SettingsAnnotated.model_validate_json('{}')
+    assert result.root_field == SubModel1()
 
 
 def test_env_str(env):
