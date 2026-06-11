@@ -3180,6 +3180,51 @@ except ValidationError as exc_info:
 ```
 
 
+## Async usage
+
+Pydantic Settings sources perform blocking I/O (reading `.env` files, TOML files, secrets from disk). In an async application this blocks the event loop for the duration of the settings load, which can cause measurable latency under concurrency.
+
+The recommended pattern is to offload settings instantiation to a worker thread using [`asyncio.to_thread`](https://docs.python.org/3/library/asyncio-task.html#asyncio.to_thread) (Python 3.9+) or `loop.run_in_executor`:
+
+```py
+import asyncio
+from contextvars import ContextVar
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    app_name: str = 'myapp'
+    debug: bool = False
+
+_settings_var: ContextVar[Settings | None] = ContextVar('_settings_var', default=None)
+
+async def get_settings(*, force_reload: bool = False) -> Settings:
+    """Return cached settings, loading in a worker thread on first call."""
+    settings = _settings_var.get()
+    if settings is None or force_reload:
+        settings = await asyncio.to_thread(Settings)
+        _settings_var.set(settings)
+    return settings
+```
+
+`asyncio.to_thread` runs the `Settings()` constructor in a thread-pool worker, keeping the event loop free. The result is cached in a [`ContextVar`](https://docs.python.org/3/library/contextvars.html) so subsequent calls within the same async context return immediately without re-reading from disk.
+
+!!! note
+    `ContextVar` cache is per-context (per-task). If you want a single process-wide cache, use a plain module-level variable instead and guard it with an [`asyncio.Lock`](https://docs.python.org/3/library/asyncio-sync.html#asyncio.Lock) to avoid redundant parallel loads on startup.
+
+For Python 3.8 or when you need an explicit executor:
+
+```py
+import asyncio
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    app_name: str = 'myapp'
+
+async def load_settings() -> Settings:
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, Settings)
+```
+
 ## In-place reloading
 
 In case you want to reload in-place an existing setting, you can do it by using its `__init__` method :
