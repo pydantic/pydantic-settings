@@ -246,3 +246,27 @@ def test_missing_table_header(tmp_path):
 
     with pytest.raises(KeyError, match='toml_table_header key "missing" not found in .*'):
         Settings()
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+def test_table_header_missing_toml_file(tmp_path):
+    """If a table header is configured, and the toml file is missing, no error should be raised."""
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(toml_file=None, toml_table_header=('app',))
+
+        hello: str = 'world'
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.model_dump() == {'hello': 'world'}
