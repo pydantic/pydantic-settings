@@ -58,10 +58,11 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
             toml_table_header if toml_table_header else settings_cls.model_config.get('toml_table_header', ())
         )
         self.toml_data = self._read_files(self.toml_file_path, deep_merge=deep_merge)
-        for key in self.toml_table_header:
-            if key not in self.toml_data:
-                raise KeyError(f'toml_table_header key "{key}" not found in {self.toml_file_path}')
-            self.toml_data = self.toml_data[key]
+        if self.toml_file_path is not None:
+            for key in self.toml_table_header:
+                if key not in self.toml_data:
+                    raise KeyError(f'toml_table_header key "{key}" not found in {self.toml_file_path}')
+                self.toml_data = self.toml_data[key]
 
         super().__init__(settings_cls, self.toml_data)
 
