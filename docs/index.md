@@ -3189,13 +3189,17 @@ The recommended pattern is to offload settings instantiation to a worker thread 
 ```py
 import asyncio
 from contextvars import ContextVar
+
 from pydantic_settings import BaseSettings
 
+
 class Settings(BaseSettings):
-    app_name: str = 'myapp'
+    app_name: str = "myapp"
     debug: bool = False
 
-_settings_var: ContextVar[Settings | None] = ContextVar('_settings_var', default=None)
+
+_settings_var: ContextVar[Settings | None] = ContextVar("_settings_var", default=None)
+
 
 async def get_settings(*, force_reload: bool = False) -> Settings:
     """Return cached settings, loading in a worker thread on first call."""
@@ -3215,10 +3219,13 @@ For Python 3.8 or when you need an explicit executor:
 
 ```py
 import asyncio
+
 from pydantic_settings import BaseSettings
 
+
 class Settings(BaseSettings):
-    app_name: str = 'myapp'
+    app_name: str = "myapp"
+
 
 async def load_settings() -> Settings:
     loop = asyncio.get_running_loop()
