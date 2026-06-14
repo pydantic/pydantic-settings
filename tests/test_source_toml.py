@@ -83,6 +83,28 @@ def test_toml_no_file():
 
 
 @pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+def test_toml_file_missing(tmp_path):
+    p = tmp_path / 'does-not-exist.toml'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(toml_file=p)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.model_dump() == {}
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
 def test_multiple_file_toml(tmp_path):
     p1 = tmp_path / '.env.toml1'
     p2 = tmp_path / '.env.toml2'
@@ -161,7 +183,7 @@ def test_multiple_file_toml_merge(tmp_path, deep_merge):
 
 
 @pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
-def test_table_header(tmp_path):
+def test_toml_table_header(tmp_path):
     p = tmp_path / 'test.toml'
     p.write_text(
         """
@@ -189,7 +211,7 @@ def test_table_header(tmp_path):
 
 
 @pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
-def test_table_header_from_model_config(tmp_path):
+def test_toml_table_header_from_model_config(tmp_path):
     p = tmp_path / 'test.toml'
     p.write_text(
         """
@@ -219,17 +241,18 @@ def test_table_header_from_model_config(tmp_path):
 
 
 @pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
-def test_missing_table_header(tmp_path):
+def test_toml_table_header_no_header(tmp_path):
+    """If a toml file is read, but the configured table header is missing from the result, raise an error"""
     p = tmp_path / 'test.toml'
     p.write_text(
         """
-    [app]
+    [other]
     hello = "world"
     """
     )
 
     class Settings(BaseSettings):
-        model_config = SettingsConfigDict(toml_file=p, toml_table_header=('missing',))
+        model_config = SettingsConfigDict(toml_file=p, toml_table_header=('app',))
 
         hello: str
 
@@ -244,16 +267,131 @@ def test_missing_table_header(tmp_path):
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (TomlConfigSettingsSource(settings_cls),)
 
-    with pytest.raises(KeyError, match='toml_table_header key "missing" not found in .*'):
+    with pytest.raises(KeyError, match='toml_table_header key "app" not found in .*'):
         Settings()
 
 
 @pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
-def test_table_header_missing_toml_file():
-    """If a table header is configured, and the toml file is missing, no error should be raised."""
+def test_toml_table_header_no_file():
+    """If a table header is configured, but the toml file is unset, no error should be raised."""
 
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(toml_file=None, toml_table_header=('app',))
+
+        hello: str = 'world'
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.model_dump() == {'hello': 'world'}
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+def test_toml_table_header_file_missing(tmp_path):
+    """If a table header is configured, but the configured toml file is missing, no error should be raised."""
+    p = tmp_path / 'does-not-exist.toml'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(toml_file=p, toml_table_header=('app',))
+
+        hello: str = 'world'
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.model_dump() == {'hello': 'world'}
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+def test_toml_table_header_file_multiple(tmp_path):
+    """If multiple files are configured and at least one is available, the table header extraction should work"""
+    p1 = tmp_path / 'test.toml'
+    p1.write_text(
+        """
+    [app]
+    hello = "world"
+    """
+    )
+    p2 = tmp_path / 'does-not-exist.toml'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(toml_file=[p1, p2], toml_table_header=('app',))
+
+        hello: str
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.model_dump() == {'hello': 'world'}
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+def test_toml_table_header_file_multiple_no_header(tmp_path):
+    """When multiple files are configured and at least one is available, if the configured table header is missing from the result, an error should be raised"""
+    p1 = tmp_path / 'test.toml'
+    p1.write_text(
+        """
+    [other]
+    hello = "world"
+    """
+    )
+    p2 = tmp_path / 'does-not-exist.toml'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(toml_file=[p1, p2], toml_table_header=('app',))
+
+        hello: str
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls),)
+
+    with pytest.raises(KeyError, match='toml_table_header key "app" not found in .*'):
+        Settings()
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+def test_toml_table_header_file_multiple_no_files(tmp_path):
+    """When multiple files are configured but none are available, if the configured table header is missing from the result, no error should be raised"""
+    p1 = tmp_path / 'does-not-exist.toml'
+    p2 = tmp_path / 'also-does-not-exist.toml'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(toml_file=[p1, p2], toml_table_header=('app',))
 
         hello: str = 'world'
 
