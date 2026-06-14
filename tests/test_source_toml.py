@@ -249,7 +249,7 @@ def test_missing_table_header(tmp_path):
 
 
 @pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
-def test_table_header_missing_toml_file(tmp_path):
+def test_table_header_missing_toml_file():
     """If a table header is configured, and the toml file is missing, no error should be raised."""
 
     class Settings(BaseSettings):
