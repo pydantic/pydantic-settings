@@ -3,6 +3,7 @@
 from __future__ import annotations as _annotations
 
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -58,7 +59,8 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
             toml_table_header if toml_table_header else settings_cls.model_config.get('toml_table_header', ())
         )
         self.toml_data = self._read_files(self.toml_file_path, deep_merge=deep_merge)
-        if self.toml_file_path is not None:
+
+        if self._any_file_exists(self.toml_file_path):
             for key in self.toml_table_header:
                 if key not in self.toml_data:
                     raise KeyError(f'toml_table_header key "{key}" not found in {self.toml_file_path}')
@@ -72,6 +74,15 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
             if sys.version_info < (3, 11):
                 return tomli.load(toml_file)
             return tomllib.load(toml_file)
+
+    @staticmethod
+    def _any_file_exists(paths: PathType | None) -> bool:
+        """Check if any of the given file paths exist."""
+        if paths is None:
+            return False
+        if not isinstance(paths, Sequence):
+            paths = [paths]
+        return any(Path(path).exists() for path in paths)
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}(toml_file={self.toml_file_path}, toml_table_header={self.toml_table_header})'
