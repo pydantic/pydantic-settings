@@ -1,5 +1,7 @@
 from enum import Enum
 from os import sep
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from pydantic import BaseModel
@@ -193,6 +195,165 @@ def test_symlink_subdir(env, tmp_files):
         'app_key': 'secret1',
         'db': {'user': 'user', 'passwd': 'secret2'},
     }
+
+
+def test_symlink_dir_escaping_secrets_dir_is_ignored(env, tmp_path):
+    """Regression test for GHSA-4xgf-cpjx-pc3j.
+
+    A directory entry inside ``secrets_dir`` that is a symbolic link to a directory
+    *outside* of ``secrets_dir`` must not be followed: its files must not leak into
+    settings values.
+    """
+    env.set('DB__USER', 'user')
+
+    secrets_dir = tmp_path / 'secrets'
+    secrets_dir.mkdir()
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    outside.joinpath('passwd').write_text('leaked-secret')
+
+    # secrets/db -> ../outside (escapes secrets_dir)
+    secrets_dir.joinpath('db').symlink_to(outside)
+
+    class Settings(AppSettings):
+        model_config = SettingsConfigDict(
+            secrets_dir=secrets_dir,
+            env_nested_delimiter='__',
+            secrets_nested_subdir=True,
+        )
+
+    # the out-of-tree file is not read; passwd keeps its default
+    assert Settings().model_dump() == {
+        'app_key': None,
+        'db': {'user': 'user', 'passwd': None},
+    }
+
+
+def test_symlink_file_escaping_secrets_dir_is_ignored(env, tmp_path):
+    """Regression test for GHSA-4xgf-cpjx-pc3j (file-level symlink variant)."""
+    env.set('DB__USER', 'user')
+
+    secrets_dir = tmp_path / 'secrets'
+    (secrets_dir / 'db').mkdir(parents=True)
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    outside.joinpath('passwd').write_text('leaked-secret')
+
+    # secrets/db/passwd -> ../../outside/passwd (escapes secrets_dir)
+    secrets_dir.joinpath('db', 'passwd').symlink_to(outside / 'passwd')
+
+    class Settings(AppSettings):
+        model_config = SettingsConfigDict(
+            secrets_dir=secrets_dir,
+            env_nested_delimiter='__',
+            secrets_nested_subdir=True,
+        )
+
+    assert Settings().model_dump() == {
+        'app_key': None,
+        'db': {'user': 'user', 'passwd': None},
+    }
+
+
+def test_symlink_escape_does_not_bypass_max_size(env, tmp_path):
+    """Regression test for GHSA-4xgf-cpjx-pc3j (size-limit bypass).
+
+    The ``secrets_dir_max_size`` accounting must see the same files as the loader.
+    An out-of-tree file reached through a symlink previously counted as 0 bytes in
+    the size check (``Path.glob``) while still being read by the loader
+    (``glob.iglob(recursive=True)``). After the fix it is excluded from both, so the
+    large out-of-tree file neither trips the size cap nor leaks into settings.
+    """
+    env.set('DB__USER', 'user')
+
+    secrets_dir = tmp_path / 'secrets'
+    secrets_dir.mkdir()
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    # 512 bytes, well above the 100 byte cap below
+    outside.joinpath('passwd').write_text('S' * 512)
+    secrets_dir.joinpath('db').symlink_to(outside)
+
+    class Settings(AppSettings):
+        model_config = SettingsConfigDict(
+            secrets_dir=secrets_dir,
+            env_nested_delimiter='__',
+            secrets_nested_subdir=True,
+            secrets_dir_max_size=100,
+        )
+
+    # No SettingsError, and the out-of-tree payload is not loaded.
+    assert Settings().model_dump() == {
+        'app_key': None,
+        'db': {'user': 'user', 'passwd': None},
+    }
+
+
+def test_cyclic_symlink_does_not_inflate_size(env, tmp_path):
+    """Regression test for GHSA-4xgf-cpjx-pc3j (resource-consumption / CWE-400).
+
+    A cyclic (or repeated) symlink inside ``secrets_dir`` must not cause the
+    directory walk to loop. Otherwise a single small file gets visited many times,
+    inflating the ``secrets_dir_max_size`` accounting (and the number of loaded
+    secrets). Each real directory must be traversed at most once.
+    """
+    env.set('DB__USER', 'user')
+
+    secrets_dir = tmp_path / 'secrets'
+    (secrets_dir / 'db').mkdir(parents=True)
+    secrets_dir.joinpath('db', 'passwd').write_text('secret2')
+    # secrets/db/loop -> secrets (cycle): a naive recursive glob would revisit
+    # passwd dozens of times.
+    secrets_dir.joinpath('db', 'loop').symlink_to(secrets_dir)
+
+    class Settings(AppSettings):
+        model_config = SettingsConfigDict(
+            secrets_dir=secrets_dir,
+            env_nested_delimiter='__',
+            secrets_nested_subdir=True,
+            # passwd is 7 bytes; with the cycle un-guarded the walk would count it
+            # many times and exceed this cap.
+            secrets_dir_max_size=50,
+        )
+
+    # The walk terminates, counts passwd once, and loads it exactly once.
+    assert Settings().model_dump() == {
+        'app_key': None,
+        'db': {'user': 'user', 'passwd': 'secret2'},
+    }
+
+
+def test_symlinked_dir_escaping_secrets_dir_is_not_walked(tmp_path):
+    """A symlinked directory pointing outside ``secrets_dir`` must not be traversed.
+
+    Even though out-of-tree files are filtered out, descending into the external
+    tree wastes I/O and contradicts the intent of not following symlinks outside
+    ``secrets_dir`` (potential DoS via a large external tree). The walk must not
+    ``iterdir`` anything outside of ``secrets_dir``.
+    """
+    secrets_dir = tmp_path / 'secrets'
+    secrets_dir.mkdir()
+    secrets_dir.joinpath('legit').write_text('ok')
+
+    external = tmp_path / 'external'
+    (external / 'deep').mkdir(parents=True)
+    external.joinpath('deep', 'passwd').write_text('leaked')
+    secrets_dir.joinpath('link').symlink_to(external)
+
+    resolved_secrets = secrets_dir.resolve()
+    walked: list[Path] = []
+    original_iterdir = Path.iterdir
+
+    def tracking_iterdir(self):
+        walked.append(self.resolve())
+        return original_iterdir(self)
+
+    with patch.object(Path, 'iterdir', tracking_iterdir):
+        files = list(NestedSecretsSettingsSource._iter_secret_files(resolved_secrets))
+
+    # only the in-tree file is yielded, and nothing outside secrets_dir is walked
+    assert [f.name for f in files] == ['legit']
+    assert all(d == resolved_secrets or resolved_secrets in d.parents for d in walked), walked
 
 
 @pytest.mark.parametrize(
