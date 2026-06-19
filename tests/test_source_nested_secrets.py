@@ -287,6 +287,40 @@ def test_symlink_escape_does_not_bypass_max_size(env, tmp_path):
     }
 
 
+def test_cyclic_symlink_does_not_inflate_size(env, tmp_path):
+    """Regression test for GHSA-4xgf-cpjx-pc3j (resource-consumption / CWE-400).
+
+    A cyclic (or repeated) symlink inside ``secrets_dir`` must not cause the
+    directory walk to loop. Otherwise a single small file gets visited many times,
+    inflating the ``secrets_dir_max_size`` accounting (and the number of loaded
+    secrets). Each real directory must be traversed at most once.
+    """
+    env.set('DB__USER', 'user')
+
+    secrets_dir = tmp_path / 'secrets'
+    (secrets_dir / 'db').mkdir(parents=True)
+    secrets_dir.joinpath('db', 'passwd').write_text('secret2')
+    # secrets/db/loop -> secrets (cycle): a naive recursive glob would revisit
+    # passwd dozens of times.
+    secrets_dir.joinpath('db', 'loop').symlink_to(secrets_dir)
+
+    class Settings(AppSettings):
+        model_config = SettingsConfigDict(
+            secrets_dir=secrets_dir,
+            env_nested_delimiter='__',
+            secrets_nested_subdir=True,
+            # passwd is 7 bytes; with the cycle un-guarded the walk would count it
+            # many times and exceed this cap.
+            secrets_dir_max_size=50,
+        )
+
+    # The walk terminates, counts passwd once, and loads it exactly once.
+    assert Settings().model_dump() == {
+        'app_key': None,
+        'db': {'user': 'user', 'passwd': 'secret2'},
+    }
+
+
 @pytest.mark.parametrize(
     'conf,secrets,dirs,expected',
     (
