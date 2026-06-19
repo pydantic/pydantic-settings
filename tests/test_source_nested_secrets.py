@@ -195,6 +195,98 @@ def test_symlink_subdir(env, tmp_files):
     }
 
 
+def test_symlink_dir_escaping_secrets_dir_is_ignored(env, tmp_path):
+    """Regression test for GHSA-4xgf-cpjx-pc3j.
+
+    A directory entry inside ``secrets_dir`` that is a symbolic link to a directory
+    *outside* of ``secrets_dir`` must not be followed: its files must not leak into
+    settings values.
+    """
+    env.set('DB__USER', 'user')
+
+    secrets_dir = tmp_path / 'secrets'
+    secrets_dir.mkdir()
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    outside.joinpath('passwd').write_text('leaked-secret')
+
+    # secrets/db -> ../outside (escapes secrets_dir)
+    secrets_dir.joinpath('db').symlink_to(outside)
+
+    class Settings(AppSettings):
+        model_config = SettingsConfigDict(
+            secrets_dir=secrets_dir,
+            env_nested_delimiter='__',
+            secrets_nested_subdir=True,
+        )
+
+    # the out-of-tree file is not read; passwd keeps its default
+    assert Settings().model_dump() == {
+        'app_key': None,
+        'db': {'user': 'user', 'passwd': None},
+    }
+
+
+def test_symlink_file_escaping_secrets_dir_is_ignored(env, tmp_path):
+    """Regression test for GHSA-4xgf-cpjx-pc3j (file-level symlink variant)."""
+    env.set('DB__USER', 'user')
+
+    secrets_dir = tmp_path / 'secrets'
+    (secrets_dir / 'db').mkdir(parents=True)
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    outside.joinpath('passwd').write_text('leaked-secret')
+
+    # secrets/db/passwd -> ../../outside/passwd (escapes secrets_dir)
+    secrets_dir.joinpath('db', 'passwd').symlink_to(outside / 'passwd')
+
+    class Settings(AppSettings):
+        model_config = SettingsConfigDict(
+            secrets_dir=secrets_dir,
+            env_nested_delimiter='__',
+            secrets_nested_subdir=True,
+        )
+
+    assert Settings().model_dump() == {
+        'app_key': None,
+        'db': {'user': 'user', 'passwd': None},
+    }
+
+
+def test_symlink_escape_does_not_bypass_max_size(env, tmp_path):
+    """Regression test for GHSA-4xgf-cpjx-pc3j (size-limit bypass).
+
+    The ``secrets_dir_max_size`` accounting must see the same files as the loader.
+    An out-of-tree file reached through a symlink previously counted as 0 bytes in
+    the size check (``Path.glob``) while still being read by the loader
+    (``glob.iglob(recursive=True)``). After the fix it is excluded from both, so the
+    large out-of-tree file neither trips the size cap nor leaks into settings.
+    """
+    env.set('DB__USER', 'user')
+
+    secrets_dir = tmp_path / 'secrets'
+    secrets_dir.mkdir()
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    # 512 bytes, well above the 100 byte cap below
+    outside.joinpath('passwd').write_text('S' * 512)
+    secrets_dir.joinpath('db').symlink_to(outside)
+
+    class Settings(AppSettings):
+        model_config = SettingsConfigDict(
+            secrets_dir=secrets_dir,
+            env_nested_delimiter='__',
+            secrets_nested_subdir=True,
+            secrets_dir_max_size=100,
+        )
+
+    # No SettingsError, and the out-of-tree payload is not loaded.
+    assert Settings().model_dump() == {
+        'app_key': None,
+        'db': {'user': 'user', 'passwd': None},
+    }
+
+
 @pytest.mark.parametrize(
     'conf,secrets,dirs,expected',
     (

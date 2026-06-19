@@ -1,5 +1,6 @@
 import os
 import warnings
+from collections.abc import Iterator
 from functools import reduce
 from glob import iglob
 from pathlib import Path
@@ -146,16 +147,34 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
         else:
             if not path.is_dir():
                 raise SettingsError(f'secrets_dir must reference a directory, not a {path_type_label(path)}')
-            secrets_dir_size = sum(f.stat().st_size for f in path.glob('**/*') if f.is_file())
+            secrets_dir_size = sum(f.stat().st_size for f in self._iter_secret_files(path))
             if secrets_dir_size > self.secrets_dir_max_size:
                 raise SettingsError(f'secrets_dir size is above {self.secrets_dir_max_size} bytes')
 
     @staticmethod
-    def load_secrets(path: Path) -> dict[str, str]:
+    def _iter_secret_files(path: Path) -> Iterator[Path]:
+        """Yield the secret files contained in ``path``.
+
+        ``path`` is expected to already be resolved. Each candidate is resolved and
+        only yielded if its real location stays within ``path``; entries that resolve
+        outside of it (e.g. through a symbolic link) are skipped so that they neither
+        contribute to the ``secrets_dir_max_size`` accounting nor get loaded. This
+        keeps the size check and the loader consistent and prevents reading files
+        outside the configured ``secrets_dir``.
+        """
+        for candidate in map(Path, iglob(f'{path}/**/*', recursive=True)):
+            resolved = candidate.resolve()
+            if not resolved.is_file():
+                continue
+            if resolved == path or path not in resolved.parents:
+                # The file resolves outside of secrets_dir (symlink escape); skip it.
+                continue
+            yield candidate
+
+    @classmethod
+    def load_secrets(cls, path: Path) -> dict[str, str]:
         return {
-            str(p.relative_to(path)): p.read_text().strip()
-            for p in map(Path, iglob(f'{path}/**/*', recursive=True))
-            if p.is_file()
+            str(p.relative_to(path)): p.read_text().strip() for p in cls._iter_secret_files(path)
         }
 
     def __repr__(self) -> str:
