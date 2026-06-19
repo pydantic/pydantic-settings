@@ -1,5 +1,7 @@
 from enum import Enum
 from os import sep
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from pydantic import BaseModel
@@ -319,6 +321,39 @@ def test_cyclic_symlink_does_not_inflate_size(env, tmp_path):
         'app_key': None,
         'db': {'user': 'user', 'passwd': 'secret2'},
     }
+
+
+def test_symlinked_dir_escaping_secrets_dir_is_not_walked(tmp_path):
+    """A symlinked directory pointing outside ``secrets_dir`` must not be traversed.
+
+    Even though out-of-tree files are filtered out, descending into the external
+    tree wastes I/O and contradicts the intent of not following symlinks outside
+    ``secrets_dir`` (potential DoS via a large external tree). The walk must not
+    ``iterdir`` anything outside of ``secrets_dir``.
+    """
+    secrets_dir = tmp_path / 'secrets'
+    secrets_dir.mkdir()
+    secrets_dir.joinpath('legit').write_text('ok')
+
+    external = tmp_path / 'external'
+    (external / 'deep').mkdir(parents=True)
+    external.joinpath('deep', 'passwd').write_text('leaked')
+    secrets_dir.joinpath('link').symlink_to(external)
+
+    resolved_secrets = secrets_dir.resolve()
+    walked: list[Path] = []
+    original_iterdir = Path.iterdir
+
+    def tracking_iterdir(self):
+        walked.append(self.resolve())
+        return original_iterdir(self)
+
+    with patch.object(Path, 'iterdir', tracking_iterdir):
+        files = list(NestedSecretsSettingsSource._iter_secret_files(resolved_secrets))
+
+    # only the in-tree file is yielded, and nothing outside secrets_dir is walked
+    assert [f.name for f in files] == ['legit']
+    assert all(d == resolved_secrets or resolved_secrets in d.parents for d in walked), walked
 
 
 @pytest.mark.parametrize(

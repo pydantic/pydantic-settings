@@ -184,10 +184,16 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
             for entry in entries:
                 resolved = entry.resolve()
                 if resolved.is_dir():
-                    yield from walk(entry)
+                    # Only descend into directories that stay within secrets_dir.
+                    # A symlinked directory pointing outside of ``path`` is not
+                    # followed at all, so we never walk (potentially large) external
+                    # trees and never read files from outside secrets_dir.
+                    if resolved == path or path in resolved.parents:
+                        yield from walk(entry)
                 elif resolved.is_file() and path in resolved.parents:
-                    # Skip files whose real location escapes secrets_dir (e.g. a
-                    # symlink pointing outside of ``path``).
+                    # Defense in depth: a file whose real location escapes
+                    # secrets_dir (e.g. a symlink pointing outside of ``path``) is
+                    # skipped from both the size accounting and the load.
                     yield entry
 
         yield from walk(path)
