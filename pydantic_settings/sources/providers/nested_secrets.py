@@ -166,7 +166,7 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
             resolved = candidate.resolve()
             if not resolved.is_file():
                 continue
-            if resolved == path or path not in resolved.parents:
+            if path not in resolved.parents:
                 # The file resolves outside of secrets_dir (symlink escape); skip it.
                 continue
             yield candidate
