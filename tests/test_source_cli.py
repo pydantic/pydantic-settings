@@ -21,6 +21,7 @@ from pydantic import (
     Field,
     GetCoreSchemaHandler,
     RootModel,
+    SecretStr,
     Tag,
     ValidationError,
     field_validator,
@@ -617,6 +618,77 @@ def test_cli_show_env_vars_with_env_prefix():
     help_text = CliApp.format_help(Settings, strip_ansi_color=True)
 
     assert 'Foo value (required) [env: MYAPP_FOO]' in help_text
+
+
+def test_cli_show_env_vars_mutually_exclusive_group():
+    class Choice(CliMutuallyExclusiveGroup):
+        api_token: str | None = None
+        api_key: str | None = None
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            cli_prog_name='example.py',
+            cli_show_env_vars=True,
+            env_nested_delimiter='__',
+            env_prefix='MYAPP_',
+        )
+
+        choice: Choice
+
+    cli_settings = CliSettingsSource(Settings, cli_show_env_vars=True)
+    help_text = CliApp.format_help(Settings, cli_settings_source=cli_settings, strip_ansi_color=True)
+
+    assert 'choice options (mutually exclusive):' in help_text
+    assert 'set choice from JSON string (default: {}) [env:' in help_text
+    assert 'MYAPP_CHOICE]' in help_text
+    assert '(default: null) [env: MYAPP_CHOICE__API_TOKEN]' in help_text
+    assert '(default: null) [env: MYAPP_CHOICE__API_KEY]' in help_text
+    assert cli_settings.env_var_names == {
+        'choice': ('MYAPP_CHOICE',),
+        'choice.api_token': ('MYAPP_CHOICE__API_TOKEN',),
+        'choice.api_key': ('MYAPP_CHOICE__API_KEY',),
+    }
+
+
+def test_cli_show_env_vars_secret_str():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_prog_name='example.py', env_prefix='MYAPP_', cli_show_env_vars=True)
+
+        password: SecretStr
+
+    help_text = CliApp.format_help(Settings, strip_ansi_color=True)
+
+    assert '--password SecretStr' in help_text
+    assert '(required) [env: MYAPP_PASSWORD]' in help_text
+
+
+def test_cli_show_env_vars_optional_field():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_prog_name='example.py', env_prefix='MYAPP_', cli_show_env_vars=True)
+
+        optional_token: str | None = None
+
+    help_text = CliApp.format_help(Settings, strip_ansi_color=True)
+
+    assert '--optional_token {str,null}' in help_text
+    assert '(default: null) [env: MYAPP_OPTIONAL_TOKEN]' in help_text
+
+
+def test_cli_show_env_vars_kebab_case():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            cli_prog_name='example.py',
+            cli_show_env_vars=True,
+            cli_kebab_case=True,
+            env_prefix='MYAPP_',
+        )
+
+        api_token: str
+
+    help_text = CliApp.format_help(Settings, strip_ansi_color=True)
+
+    assert '--api-token str' in help_text
+    assert '(required) [env: MYAPP_API_TOKEN]' in help_text
 
 
 def test_cli_show_env_vars_alias_choices():
