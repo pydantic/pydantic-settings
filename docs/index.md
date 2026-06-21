@@ -2607,6 +2607,18 @@ The `GoogleSecretManagerSettingsSource` supports several authentication methods:
 
 2. **Explicit credentials** - You can also provide `credentials` directly. e.g. `sa_credentials = google.oauth2.service_account.Credentials.from_service_account_file('path/to/service-account.json')` and then `GoogleSecretManagerSettingsSource(credentials=sa_credentials)`
 
+### Project ID resolution
+
+The `project_id` is resolved lazily when the source is read, in the following order of precedence:
+
+1. the explicit `project_id` argument if it was passed
+2. the value resolved by a previous (higher priority) settings source - by default the `project_id` field, configurable via the `project_id_field` argument
+3. [`google.auth.default()`](https://google-auth.readthedocs.io/en/master/reference/google.auth.html#google.auth.default)
+
+This lets the project be supplied by another settings source (for example an environment variable or an init argument) instead of being hardcoded. For example, with `GoogleSecretManagerSettingsSource(settings_cls, project_id_field='gcp_project')` the source uses the `gcp_project` value resolved by an earlier source as its project.
+
+`project_id_field` must match the key that the earlier source uses in `current_state` — this is typically the field's preferred alias. For example, if your settings model has `gcp_project: str = Field(alias='GCP_PROJECT')`, use `project_id_field='GCP_PROJECT'` (the alias), not `'gcp_project'` (the Python attribute name).
+
 ### Nested Models
 
 For nested models, Secret Manager supports the `env_nested_delimiter` setting as long as it complies with the [naming rules](https://cloud.google.com/secret-manager/docs/creating-and-accessing-secrets#create-a-secret). In the example above, you would create secrets named `database__password` and `database__user` in Secret Manager.
@@ -2673,7 +2685,7 @@ Other settings sources are available for common configuration files:
 
 - `JsonConfigSettingsSource` using `json_file` and `json_file_encoding` arguments
 - `PyprojectTomlConfigSettingsSource` using *(optional)* `pyproject_toml_depth` and *(optional)* `pyproject_toml_table_header` arguments
-- `TomlConfigSettingsSource` using `toml_file` argument
+- `TomlConfigSettingsSource` using `toml_file` argument and *(optional)* `toml_table_header` argument
 - `YamlConfigSettingsSource` using `yaml_file` and yaml_file_encoding arguments
 
 To use them, you can use the same mechanism described [here](#customise-settings-sources).
@@ -2846,6 +2858,43 @@ hello = "world"
 [nested]
 foo = 3
 bar = 2
+```
+
+If you want to load from a specific table in the file, you can provide `toml_table_header` as a tuple of header parts. For example, `toml_table_header=('my-table',)` will load variables from the `[my-table]` table.
+
+```python
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    TomlConfigSettingsSource,
+)
+
+
+class Settings(BaseSettings):
+    field: str
+
+    model_config = SettingsConfigDict(
+        toml_file='config.toml', toml_table_header=('my-table',)
+    )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (TomlConfigSettingsSource(settings_cls),)
+```
+
+This will allow you to read the following TOML file:
+```toml
+# config.toml
+[my-table]
+field = "value from my-table"
 ```
 
 ### pyproject.toml

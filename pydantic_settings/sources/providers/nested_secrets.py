@@ -1,7 +1,7 @@
 import os
 import warnings
+from collections.abc import Iterator
 from functools import reduce
-from glob import iglob
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
@@ -146,17 +146,61 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
         else:
             if not path.is_dir():
                 raise SettingsError(f'secrets_dir must reference a directory, not a {path_type_label(path)}')
-            secrets_dir_size = sum(f.stat().st_size for f in path.glob('**/*') if f.is_file())
+            secrets_dir_size = sum(f.stat().st_size for f in self._iter_secret_files(path))
             if secrets_dir_size > self.secrets_dir_max_size:
                 raise SettingsError(f'secrets_dir size is above {self.secrets_dir_max_size} bytes')
 
     @staticmethod
-    def load_secrets(path: Path) -> dict[str, str]:
-        return {
-            str(p.relative_to(path)): p.read_text().strip()
-            for p in map(Path, iglob(f'{path}/**/*', recursive=True))
-            if p.is_file()
-        }
+    def _iter_secret_files(path: Path) -> Iterator[Path]:
+        """Yield the secret files contained in ``path``.
+
+        ``path`` is expected to already be resolved. The directory tree is walked
+        explicitly so that symbolic links are handled safely:
+
+        * a file is only yielded if its real location stays within ``path``; entries
+          that resolve outside of it (e.g. through a symbolic link) are skipped, so
+          they neither contribute to the ``secrets_dir_max_size`` accounting nor get
+          loaded;
+        * each real directory is visited at most once, so cyclic or repeated
+          symlinks cannot make the walk loop and inflate the size accounting or the
+          number of loaded secrets.
+
+        Because the size check and the loader share this iterator, they always see
+        the same set of files.
+        """
+        seen_dirs: set[Path] = set()
+
+        def walk(directory: Path) -> Iterator[Path]:
+            # Guard against symlink loops / a directory reachable through multiple
+            # links being traversed more than once.
+            resolved_dir = directory.resolve()
+            if resolved_dir in seen_dirs:
+                return
+            seen_dirs.add(resolved_dir)
+            try:
+                entries = sorted(directory.iterdir())
+            except OSError:
+                return
+            for entry in entries:
+                resolved = entry.resolve()
+                if resolved.is_dir():
+                    # Only descend into directories that stay within secrets_dir.
+                    # A symlinked directory pointing outside of ``path`` is not
+                    # followed at all, so we never walk (potentially large) external
+                    # trees and never read files from outside secrets_dir.
+                    if resolved == path or path in resolved.parents:
+                        yield from walk(entry)
+                elif resolved.is_file() and path in resolved.parents:
+                    # Defense in depth: a file whose real location escapes
+                    # secrets_dir (e.g. a symlink pointing outside of ``path``) is
+                    # skipped from both the size accounting and the load.
+                    yield entry
+
+        yield from walk(path)
+
+    @classmethod
+    def load_secrets(cls, path: Path) -> dict[str, str]:
+        return {str(p.relative_to(path)): p.read_text().strip() for p in cls._iter_secret_files(path)}
 
     def __repr__(self) -> str:
         return f'NestedSecretsSettingsSource(secrets_dir={self.secrets_dir!r})'
