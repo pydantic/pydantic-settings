@@ -34,6 +34,15 @@ if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
 
 
+def _environ_is_case_insensitive() -> bool:
+    """Whether ``os.environ`` is the OS-backed, case-insensitive mapping (i.e. on Windows).
+
+    When ``os.environ`` has been replaced (e.g. patched to a plain ``dict`` in tests), the
+    requested case sensitivity is honored as-is.
+    """
+    return os.name == 'nt' and isinstance(os.environ, os._Environ)
+
+
 class EnvSettingsSource(PydanticBaseEnvSettingsSource):
     """
     Source class for loading settings values from environment variables.
@@ -72,6 +81,13 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         self.env_vars = self._load_env_vars()
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
+        # On Windows, ``os.environ`` is case-insensitive: variable names are normalized to
+        # upper-case and looked up regardless of case. Matching environment variables
+        # case-sensitively is therefore impossible, so we fall back to case-insensitive
+        # matching to avoid spurious "field required" errors (see #295). ``.env`` files do
+        # preserve case and are handled by ``DotEnvSettingsSource``, which overrides this method.
+        if self.case_sensitive and _environ_is_case_insensitive():
+            self.case_sensitive = False
         return parse_env_vars(os.environ, self.case_sensitive, self.env_ignore_empty, self.env_parse_none_str)
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
