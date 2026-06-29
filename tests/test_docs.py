@@ -56,7 +56,7 @@ def print_callback(print_statement: str) -> str:
 
 @pytest.mark.filterwarnings('ignore:(parse_obj_as|schema_json_of|schema_of) is deprecated.*:DeprecationWarning')
 @pytest.mark.skipif(bool(skip_reason), reason=skip_reason or 'not skipping')
-@pytest.mark.parametrize('example', find_examples(str(DOCS_ROOT), skip=sys.platform == 'win32'), ids=str)
+@pytest.mark.parametrize('example', list(find_examples(str(DOCS_ROOT), skip=sys.platform == 'win32')), ids=str)
 def test_docs_examples(  # noqa C901
     example: CodeExample, eval_example: EvalExample, tmp_path: Path, mocker, docs_test_env
 ):
