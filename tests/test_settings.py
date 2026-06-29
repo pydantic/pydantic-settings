@@ -1106,6 +1106,23 @@ def test_case_sensitive_no_nested_delimiter(monkeypatch, env_nested_delimiter):
     ]
 
 
+@pytest.mark.skipif(os.name != 'nt', reason='os.environ is only case-insensitive on Windows')
+def test_case_sensitive_windows_env_fallback(env):
+    # On Windows, os.environ is case-insensitive (variable names are normalized to
+    # upper-case), so case_sensitive=True must not break matching of environment
+    # variables (see https://github.com/pydantic/pydantic-settings/issues/295).
+    class RedisSettings(BaseModel):
+        host: str
+        port: int
+
+    class Settings(BaseSettings, case_sensitive=True):
+        redis: RedisSettings
+
+    env.set('redis', '{"host": "localhost", "port": 6379}')
+    assert 'REDIS' in os.environ  # Windows upper-cases env var names
+    assert Settings().model_dump() == {'redis': {'host': 'localhost', 'port': 6379}}
+
+
 def test_nested_dataclass(env):
     @pydantic_dataclasses.dataclass
     class DeepNestedDataclass:
@@ -2802,7 +2819,9 @@ def test_custom_env_source_default_values_from_config():
 
     c = CustomEnvSettingsSource(Settings)
     assert c.env_prefix == 'prefix_'
-    assert c.case_sensitive is True
+    # os.environ is case-insensitive on Windows, so EnvSettingsSource falls back to
+    # case-insensitive matching there regardless of the configured value (see #295).
+    assert c.case_sensitive is (os.name != 'nt')
 
 
 def test_model_config_through_class_kwargs(env):

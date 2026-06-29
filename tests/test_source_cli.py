@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import os
 import re
 import sys
 import time
@@ -837,7 +838,10 @@ def test_cli_show_env_vars_case_sensitive_display():
         foo_bar: str
 
     assert '[env: MYAPP_FOO_BAR]' in CliApp.format_help(CaseInsensitive, strip_ansi_color=True)
-    assert '[env: myapp_foo_bar]' in CliApp.format_help(CaseSensitive, strip_ansi_color=True)
+    # On Windows, os.environ is case-insensitive, so case_sensitive has no effect for
+    # environment variables and the canonical (upper-cased) name is displayed (see #295).
+    expected_case_sensitive_env = 'MYAPP_FOO_BAR' if os.name == 'nt' else 'myapp_foo_bar'
+    assert f'[env: {expected_case_sensitive_env}]' in CliApp.format_help(CaseSensitive, strip_ansi_color=True)
 
 
 def test_cli_show_env_vars_subcommand(capsys):
