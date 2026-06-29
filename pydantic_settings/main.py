@@ -63,6 +63,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_avoid_json: bool
     cli_enforce_required: bool
     cli_use_class_docs_for_groups: bool
+    cli_show_env_vars: bool
     cli_exit_on_error: bool
     cli_prefix: str
     cli_flag_prefix_char: str
@@ -164,6 +165,7 @@ class BaseSettings(BaseModel):
         _cli_enforce_required: Enforce required fields at the CLI. Defaults to `False`.
         _cli_use_class_docs_for_groups: Use class docstrings in CLI group help text instead of field descriptions.
             Defaults to `False`.
+        _cli_show_env_vars: Show resolved environment variable names in CLI help text. Defaults to `False`.
         _cli_exit_on_error: Determines whether or not the internal parser exits with error info when an error occurs.
             Defaults to `True`.
         _cli_prefix: The root parser command line arguments prefix. Defaults to "".
@@ -206,6 +208,7 @@ class BaseSettings(BaseModel):
         _cli_avoid_json: bool | None = None,
         _cli_enforce_required: bool | None = None,
         _cli_use_class_docs_for_groups: bool | None = None,
+        _cli_show_env_vars: bool | None = None,
         _cli_exit_on_error: bool | None = None,
         _cli_prefix: str | None = None,
         _cli_flag_prefix_char: str | None = None,
@@ -240,6 +243,7 @@ class BaseSettings(BaseModel):
                 _cli_avoid_json=_cli_avoid_json,
                 _cli_enforce_required=_cli_enforce_required,
                 _cli_use_class_docs_for_groups=_cli_use_class_docs_for_groups,
+                _cli_show_env_vars=_cli_show_env_vars,
                 _cli_exit_on_error=_cli_exit_on_error,
                 _cli_prefix=_cli_prefix,
                 _cli_flag_prefix_char=_cli_flag_prefix_char,
@@ -300,6 +304,7 @@ class BaseSettings(BaseModel):
         _cli_avoid_json: bool | None = None,
         _cli_enforce_required: bool | None = None,
         _cli_use_class_docs_for_groups: bool | None = None,
+        _cli_show_env_vars: bool | None = None,
         _cli_exit_on_error: bool | None = None,
         _cli_prefix: str | None = None,
         _cli_flag_prefix_char: str | None = None,
@@ -359,6 +364,9 @@ class BaseSettings(BaseModel):
             _cli_use_class_docs_for_groups
             if _cli_use_class_docs_for_groups is not None
             else cls.model_config.get('cli_use_class_docs_for_groups')
+        )
+        cli_show_env_vars = (
+            _cli_show_env_vars if _cli_show_env_vars is not None else cls.model_config.get('cli_show_env_vars')
         )
         cli_exit_on_error = (
             _cli_exit_on_error if _cli_exit_on_error is not None else cls.model_config.get('cli_exit_on_error')
@@ -443,6 +451,7 @@ class BaseSettings(BaseModel):
                     cli_avoid_json=cli_avoid_json,
                     cli_enforce_required=cli_enforce_required,
                     cli_use_class_docs_for_groups=cli_use_class_docs_for_groups,
+                    cli_show_env_vars=cli_show_env_vars,
                     cli_exit_on_error=cli_exit_on_error,
                     cli_prefix=cli_prefix,
                     cli_flag_prefix_char=cli_flag_prefix_char,
@@ -451,6 +460,7 @@ class BaseSettings(BaseModel):
                     cli_kebab_case=cli_kebab_case,
                     cli_shortcuts=cli_shortcuts,
                     case_sensitive=case_sensitive,
+                    _env_settings_source=env_settings,
                 )
                 sources = (cli_settings,) + sources
         # We ensure that if command line arguments haven't been parsed yet, we do so.
@@ -590,6 +600,7 @@ class BaseSettings(BaseModel):
         cli_avoid_json=False,
         cli_enforce_required=False,
         cli_use_class_docs_for_groups=False,
+        cli_show_env_vars=False,
         cli_exit_on_error=True,
         cli_prefix='',
         cli_flag_prefix_char='-',
@@ -689,6 +700,7 @@ class CliApp:
         cli_args: list[str] | Namespace | SimpleNamespace | dict[str, Any] | None = None,
         cli_settings_source: CliSettingsSource[Any] | None = None,
         cli_exit_on_error: bool | None = None,
+        cli_show_env_vars: bool | None = None,
         cli_cmd_method_name: str = 'cli_cmd',
         **model_init_data: Any,
     ) -> T:
@@ -705,6 +717,7 @@ class CliApp:
             cli_exit_on_error: Determines whether this function exits on error. If model is subclass of
                 `BaseSettings`, defaults to BaseSettings `cli_exit_on_error` value. Otherwise, defaults to
                 `True`.
+            cli_show_env_vars: Show resolved environment variable names in CLI help text. Defaults to `False`.
             cli_cmd_method_name: The CLI command method name to run. Defaults to "cli_cmd".
             model_init_data: The model init data.
 
@@ -736,6 +749,7 @@ class CliApp:
             sources, init_kwargs = base_settings_cls._settings_init_sources(
                 _cli_parse_args=cli_parse_args,  # type: ignore[arg-type]
                 _cli_exit_on_error=cli_exit_on_error,
+                _cli_show_env_vars=cli_show_env_vars,
                 _cli_settings_source=cli_settings,
                 _init_kwargs=model_init_data,
             )
@@ -748,6 +762,7 @@ class CliApp:
             sources, init_kwargs = model_cls._settings_init_sources(
                 _cli_parse_args=cli_parse_args,  # type: ignore[arg-type]
                 _cli_exit_on_error=cli_exit_on_error,
+                _cli_show_env_vars=cli_show_env_vars,
                 _cli_settings_source=cli_settings,
                 _init_kwargs=model_init_data,
             )
@@ -764,7 +779,10 @@ class CliApp:
 
     @staticmethod
     def run_subcommand(
-        model: PydanticModel, cli_exit_on_error: bool | None = None, cli_cmd_method_name: str = 'cli_cmd'
+        model: PydanticModel,
+        cli_exit_on_error: bool | None = None,
+        cli_show_env_vars: bool | None = None,
+        cli_cmd_method_name: str = 'cli_cmd',
     ) -> PydanticModel:
         """
         Runs the model subcommand. Running a model subcommand requires the `cli_cmd` method to be defined in
@@ -774,6 +792,7 @@ class CliApp:
             model: The model to run the subcommand from.
             cli_exit_on_error: Determines whether this function exits with error if no subcommand is found.
                 Defaults to model_config `cli_exit_on_error` value if set. Otherwise, defaults to `True`.
+            cli_show_env_vars: Show resolved environment variable names in CLI help text. Defaults to `False`.
             cli_cmd_method_name: The CLI command method name to run. Defaults to "cli_cmd".
 
         Returns:
@@ -787,7 +806,10 @@ class CliApp:
         if id(model) in CliApp._subcommand_stack:
             cli_settings_source, parser, subcommand_dest = CliApp._subcommand_stack[id(model)]
         else:
-            cli_settings_source = CliSettingsSource[Any](CliApp._get_base_settings_cls(type(model)))
+            cli_settings_source = CliSettingsSource[Any](
+                CliApp._get_base_settings_cls(type(model)),
+                cli_show_env_vars=cli_show_env_vars,
+            )
             parser = cli_settings_source.root_parser
             subcommand_dest = ':subcommand'
 
