@@ -440,10 +440,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self.cli_shortcuts = (
             cli_shortcuts if cli_shortcuts is not None else settings_cls.model_config.get('cli_shortcuts', None)
         )
+        self._env_settings_source: EnvSettingsSource | None = None
         if self.cli_show_env_vars:
             self._env_settings_source = _env_settings_source or EnvSettingsSource(settings_cls)
-        else:
-            self._env_settings_source = None
         self._env_var_names: dict[str, tuple[str, ...]] = {}
 
         case_sensitive = case_sensitive if case_sensitive is not None else True
