@@ -728,6 +728,12 @@ class Settings(BaseSettings):
     So if you provide extra values in a dotenv file, whether they start with `env_prefix` or not,
     a `ValidationError` will be raised.
 
+    There is one exception: when an `env_prefix` is set, an unprefixed dotenv entry whose name matches a field name
+    (e.g. `debug` for a `debug` field, while the prefix is `app_`) is silently skipped rather than treated as an
+    extra value. It neither populates the field — only the prefixed name `app_debug` does that — nor raises a
+    `ValidationError`. Note also that the `ValidationError` above is only raised under the default `extra='forbid'`;
+    with `extra='ignore'` the extra values are dropped instead.
+
 ## Command Line Support
 
 Pydantic settings provides integrated CLI support, making it easy to quickly define CLI applications using Pydantic
