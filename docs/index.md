@@ -728,11 +728,12 @@ class Settings(BaseSettings):
     So if you provide extra values in a dotenv file, whether they start with `env_prefix` or not,
     a `ValidationError` will be raised.
 
-    There is one exception: when an `env_prefix` is set, an unprefixed dotenv entry whose name matches a field name
-    (e.g. `debug` for a `debug` field, while the prefix is `app_`) is silently skipped rather than treated as an
-    extra value. It neither populates the field — only the prefixed name `app_debug` does that — nor raises a
-    `ValidationError`. Note also that the `ValidationError` above is only raised under the default `extra='forbid'`;
-    with `extra='ignore'` the extra values are dropped instead.
+    There is one exception to this. When `env_prefix` is set, an *unprefixed* dotenv entry whose name matches a
+    field name is silently skipped rather than treated as an extra value. For example, with `env_prefix='app_'`
+    and a `debug` field, a `debug=...` line in the dotenv file neither populates `debug` (only `app_debug` does
+    that) nor raises a `ValidationError` — it is simply ignored. This asymmetry can be surprising, because a
+    *non-matching* unprefixed entry such as `foo=...` **would** raise a `ValidationError` under the default
+    `extra='forbid'`.
 
 ## Command Line Support
 
