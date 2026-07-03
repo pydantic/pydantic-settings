@@ -10,7 +10,7 @@ from typing import (
     get_origin,
 )
 
-from pydantic import Json, TypeAdapter, ValidationError
+from pydantic import AliasChoices, AliasPath, Json, TypeAdapter, ValidationError
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
@@ -157,6 +157,36 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             # simplest case, field is not complex, we only need to add the value if it was found
             return self._coerce_env_val_strict(field, value)
 
+    def _matches_alias_path_head(self, field: FieldInfo | Any | None, key: str) -> bool:
+        """
+        Whether ``key`` matches the first element of a multi-part ``AliasPath`` on ``field``.
+
+        When a nested field is aliased via e.g. ``AliasPath('path', 0)``, the env value found
+        under ``path`` is a container that must be JSON-decoded before pydantic can navigate
+        into it (see #670). This mirrors the complexity that ``_extract_field_info`` already
+        reports for top-level ``AliasPath`` fields.
+
+        Args:
+            field: The field (or raw type) matched for ``key``.
+            key: The (case-normalized) env name segment matched for the field.
+
+        Returns:
+            Whether ``key`` is the head of a multi-element ``AliasPath``.
+        """
+        if not isinstance(field, FieldInfo):
+            return False
+        v_alias = field.validation_alias
+        paths: list[tuple[str | int, ...]] = []
+        if isinstance(v_alias, AliasPath):
+            paths.append(tuple(v_alias.path))
+        elif isinstance(v_alias, AliasChoices):
+            paths.extend(tuple(choice.path) for choice in v_alias.choices if isinstance(choice, AliasPath))
+        for path in paths:
+            head = path[0]
+            if len(path) > 1 and isinstance(head, str) and self._apply_case_sensitive(head) == key:
+                return True
+        return False
+
     def _field_is_complex(self, field: FieldInfo) -> tuple[bool, bool]:
         """
         Find out if a field is complex, and if so whether JSON errors should be ignored
@@ -275,6 +305,10 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             if (target_field or is_dict) and env_val:
                 if isinstance(target_field, FieldInfo):
                     is_complex, allow_json_failure = self._field_is_complex(target_field)
+                    if not is_complex and self._matches_alias_path_head(target_field, last_key):
+                        # The env value sits under an AliasPath head (e.g. AliasPath('path', 0));
+                        # decode it so pydantic can navigate into the container (see #670).
+                        is_complex, allow_json_failure = True, True
                     if self.env_parse_enums:
                         enum_val = _annotation_enum_name_to_val(target_field.annotation, env_val)
                         env_val = env_val if enum_val is None else enum_val
