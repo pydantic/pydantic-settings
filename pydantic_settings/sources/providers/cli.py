@@ -61,6 +61,7 @@ from ..types import (
     _CliUnknownArgs,
 )
 from ..utils import (
+    InitState,
     _annotation_contains_types,
     _annotation_enum_val_to_name,
     _get_alias_names,
@@ -378,6 +379,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         format_help_method: Callable[..., Any] | None = ArgumentParser.format_help,
         formatter_class: Any = RawDescriptionHelpFormatter,
         _env_settings_source: EnvSettingsSource | None = None,
+        _init_state: InitState | None = None,
     ) -> None:
         self.cli_prog_name = (
             cli_prog_name if cli_prog_name is not None else settings_cls.model_config.get('cli_prog_name', sys.argv[0])
@@ -457,6 +459,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             env_prefix=self.cli_prefix,
             case_sensitive=case_sensitive,
             env_nested_max_split=0,
+            _init_state=_init_state,
         )
 
         root_parser = (

@@ -4,7 +4,7 @@ import json
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
-from ..utils import parse_env_vars
+from ..utils import InitState, parse_env_vars
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
@@ -43,6 +43,7 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
         version_id: str | None = None,
+        _init_state: InitState | None = None,
     ) -> None:
         import_aws_secrets_manager()
         self._secretsmanager_client = boto3_client('secretsmanager', region_name=region_name, endpoint_url=endpoint_url)  # type: ignore
@@ -56,6 +57,7 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
             env_ignore_empty=False,
             env_parse_none_str=env_parse_none_str,
             env_parse_enums=env_parse_enums,
+            _init_state=_init_state,
         )
 
     def _load_env_vars(self) -> Mapping[str, str | None]:

@@ -16,6 +16,7 @@ from typing_inspection.introspection import is_union_origin
 
 from ..types import ENV_FILE_SENTINEL, DotenvFiltering, DotenvType, EnvPrefixTarget
 from ..utils import (
+    InitState,
     _annotation_is_complex,
     _union_is_complex,
     parse_env_vars,
@@ -45,6 +46,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
+        _init_state: InitState | None = None,
     ) -> None:
         self.env_file = env_file if env_file != ENV_FILE_SENTINEL else settings_cls.model_config.get('env_file')
         self.env_file_encoding = (
@@ -63,6 +65,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
             env_ignore_empty,
             env_parse_none_str,
             env_parse_enums,
+            _init_state,
         )
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
@@ -141,10 +144,10 @@ class DotEnvSettingsSource(EnvSettingsSource):
                 for _, field_env_name, _ in self._extract_field_info(field, field_name):
                     if env_name == field_env_name or (
                         (
-                            _annotation_is_complex(field.annotation, field.metadata)
+                            _annotation_is_complex(field.annotation, field.metadata, self._init_state)
                             or (
                                 is_union_origin(get_origin(field.annotation))
-                                and _union_is_complex(field.annotation, field.metadata)
+                                and _union_is_complex(field.annotation, field.metadata, self._init_state)
                             )
                         )
                         and env_name.startswith(field_env_name)

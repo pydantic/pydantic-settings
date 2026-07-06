@@ -11,6 +11,7 @@ from typing import (
 
 from ..base import ConfigFileSourceMixin, InitSettingsSource
 from ..types import DEFAULT_PATH, PathType
+from ..utils import InitState
 
 if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
@@ -27,6 +28,7 @@ class JsonConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         json_file: PathType | None = DEFAULT_PATH,
         json_file_encoding: str | None = None,
         deep_merge: bool = False,
+        _init_state: InitState | None = None,
     ):
         self.json_file_path = json_file if json_file != DEFAULT_PATH else settings_cls.model_config.get('json_file')
         self.json_file_encoding = (
@@ -35,7 +37,7 @@ class JsonConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
             else settings_cls.model_config.get('json_file_encoding')
         )
         self.json_data = self._read_files(self.json_file_path, deep_merge=deep_merge)
-        super().__init__(settings_cls, self.json_data)
+        super().__init__(settings_cls, self.json_data, _init_state=_init_state)
 
     def _read_file(self, file_path: Path) -> dict[str, Any]:
         with file_path.open(encoding=self.json_file_encoding) as json_file:

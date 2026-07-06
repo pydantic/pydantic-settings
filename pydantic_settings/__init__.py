@@ -1,4 +1,4 @@
-from .exceptions import SettingsError
+from .exceptions import IncompleteFieldDefinitionWarning, SettingsError
 from .main import BaseSettings, CliApp, SettingsConfigDict
 from .sources import (
     CLI_SUPPRESS,
@@ -51,6 +51,7 @@ __all__ = (
     'EnvSettingsSource',
     'ForceDecode',
     'GoogleSecretManagerSettingsSource',
+    'IncompleteFieldDefinitionWarning',
     'InitSettingsSource',
     'JsonConfigSettingsSource',
     'NestedSecretsSettingsSource',
