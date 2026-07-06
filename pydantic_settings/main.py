@@ -180,8 +180,8 @@ class BaseSettings(BaseModel):
         _cli_kebab_case: CLI args use kebab case. Defaults to `False`.
         _cli_shortcuts: Mapping of target field name to alias names. Defaults to `None`.
         _secrets_dir: The secret files directory or a sequence of directories. Defaults to `None`.
-        _build_sources: Pre-initialized sources, init kwargs and init state to use for building instantiation
-            values. Defaults to `None`.
+        _build_sources: Pre-initialized sources and init kwargs to use for building instantiation values.
+            Defaults to `None`.
     """
 
     # Note: when adding new parameters, make sure to use `object` instead of `Any` to avoid issues with the Mypy plugin
@@ -217,10 +217,10 @@ class BaseSettings(BaseModel):
         _cli_kebab_case: bool | Literal['all', 'no_enums'] | None = None,
         _cli_shortcuts: Mapping[str, str | list[str]] | None = None,
         _secrets_dir: PathType | None = None,
-        _build_sources: tuple[tuple[PydanticBaseSettingsSource, ...], dict[str, Any], InitState] | None = None,
+        _build_sources: tuple[tuple[PydanticBaseSettingsSource, ...], dict[str, Any]] | None = None,
         **values: Any,
     ) -> None:
-        sources, init_kwargs, init_state = (
+        sources, init_kwargs = (
             _build_sources
             if _build_sources is not None
             else __pydantic_self__.__class__._settings_init_sources(
@@ -256,7 +256,7 @@ class BaseSettings(BaseModel):
             )
         )
 
-        super().__init__(**__pydantic_self__.__class__._settings_build_values(sources, init_kwargs, init_state))
+        super().__init__(**__pydantic_self__.__class__._settings_build_values(sources, init_kwargs))
 
     @classmethod
     def settings_customise_sources(
@@ -314,7 +314,7 @@ class BaseSettings(BaseModel):
         _cli_shortcuts: Mapping[str, str | list[str]] | None = None,
         _secrets_dir: PathType | None = None,
         _init_kwargs: dict[str, Any] | None = None,
-    ) -> tuple[tuple[PydanticBaseSettingsSource, ...], dict[str, Any], InitState]:
+    ) -> tuple[tuple[PydanticBaseSettingsSource, ...], dict[str, Any]]:
         # Determine settings config values
         case_sensitive = _case_sensitive if _case_sensitive is not None else cls.model_config.get('case_sensitive')
         env_prefix = _env_prefix if _env_prefix is not None else cls.model_config.get('env_prefix')
@@ -476,14 +476,11 @@ class BaseSettings(BaseModel):
 
         cls._settings_warn_unused_config_keys(sources, cls.model_config)
 
-        return sources, _init_kwargs if _init_kwargs is not None else {}, init_state
+        return sources, _init_kwargs if _init_kwargs is not None else {}
 
     @classmethod
     def _settings_build_values(
-        cls,
-        sources: tuple[PydanticBaseSettingsSource, ...],
-        init_kwargs: dict[str, Any],
-        init_state: InitState,
+        cls, sources: tuple[PydanticBaseSettingsSource, ...], init_kwargs: dict[str, Any]
     ) -> dict[str, Any]:
         if sources:
             state: dict[str, Any] = {}
@@ -505,6 +502,10 @@ class BaseSettings(BaseModel):
 
             # Strip any default values not explicity set before returning final state
             state = {key: val for key, val in state.items() if key not in defaults or defaults[key] != val}
+            # The last source is the `DefaultSettingsSource` instance created in `_settings_init_sources()`,
+            # holding the init state shared by all built-in sources:
+            last_source = sources[-1]
+            init_state = last_source._init_state if isinstance(last_source, PydanticBaseSettingsSource) else InitState()
             cls._settings_restore_init_kwarg_names(cls, init_kwargs, state, init_state)
 
             return state
@@ -760,27 +761,27 @@ class CliApp:
 
         if not issubclass(model_cls, BaseSettings):
             base_settings_cls = CliApp._get_base_settings_cls(model_cls)
-            sources, init_kwargs, init_state = base_settings_cls._settings_init_sources(
+            sources, init_kwargs = base_settings_cls._settings_init_sources(
                 _cli_parse_args=cli_parse_args,  # type: ignore[arg-type]
                 _cli_exit_on_error=cli_exit_on_error,
                 _cli_show_env_vars=cli_show_env_vars,
                 _cli_settings_source=cli_settings,
                 _init_kwargs=model_init_data,
             )
-            model = base_settings_cls(**base_settings_cls._settings_build_values(sources, init_kwargs, init_state))
+            model = base_settings_cls(**base_settings_cls._settings_build_values(sources, init_kwargs))
             model_init_data = {}
             for field_name, field_info in base_settings_cls.model_fields.items():
                 model_init_data[_field_name_for_signature(field_name, field_info)] = getattr(model, field_name)
             command = model_cls(**model_init_data)
         else:
-            sources, init_kwargs, init_state = model_cls._settings_init_sources(
+            sources, init_kwargs = model_cls._settings_init_sources(
                 _cli_parse_args=cli_parse_args,  # type: ignore[arg-type]
                 _cli_exit_on_error=cli_exit_on_error,
                 _cli_show_env_vars=cli_show_env_vars,
                 _cli_settings_source=cli_settings,
                 _init_kwargs=model_init_data,
             )
-            command = model_cls(_build_sources=(sources, init_kwargs, init_state))
+            command = model_cls(_build_sources=(sources, init_kwargs))
 
         subcommand_dest = ':subcommand'
         cli_settings_source = [source for source in sources if isinstance(source, CliSettingsSource)][0]
