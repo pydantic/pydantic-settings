@@ -1018,6 +1018,50 @@ def test_validation_aliases_alias_choices(env):
     assert Settings().foobar == 'val3'
 
 
+def test_validation_aliases_alias_path_in_nested_model(env):
+    """Regression test for https://github.com/pydantic/pydantic-settings/issues/670
+
+    An ``AliasPath`` used on a field of a nested model should have its env value
+    JSON-decoded so the path can navigate into the resulting container.
+    """
+
+    class Nested(BaseModel):
+        alias_path: str = Field(validation_alias=AliasPath('path', 0))
+        deep: str = Field(validation_alias=AliasPath('foo', 'bar', 1))
+        alias: str = Field(validation_alias='no_path')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+        nest: Nested
+
+    env.set('NEST__PATH', '["hello"]')
+    env.set('NEST__FOO', '{"bar": ["v0", "v1"]}')
+    env.set('NEST__NO_PATH', 'world')
+
+    settings = Settings()
+    assert settings.nest.alias_path == 'hello'
+    assert settings.nest.deep == 'v1'
+    assert settings.nest.alias == 'world'
+
+
+def test_validation_aliases_alias_choices_in_nested_model(env):
+    """A nested-model ``AliasChoices`` containing an ``AliasPath`` should still
+    prefer a plain string alias when present, and decode the ``AliasPath`` value otherwise."""
+
+    class Nested(BaseModel):
+        choice: str = Field(validation_alias=AliasChoices('plain', AliasPath('cc', 0)))
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+        nest: Nested
+
+    env.set('NEST__CC', '["fromcc"]')
+    assert Settings().nest.choice == 'fromcc'
+
+    env.set('NEST__PLAIN', 'fromplain')
+    assert Settings().nest.choice == 'fromplain'
+
+
 def test_validation_alias_alias_choices_with_alias_path_first(env):
     """Test that AliasPath in AliasChoices doesn't interfere with env var lookup.
 
