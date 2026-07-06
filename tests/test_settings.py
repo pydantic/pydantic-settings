@@ -1167,6 +1167,51 @@ def test_case_sensitive_windows_env_fallback(env):
     assert Settings().model_dump() == {'redis': {'host': 'localhost', 'port': 6379}}
 
 
+def test_init_source_case_insensitive():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(case_sensitive=False, extra='allow')
+        test: str = 'default'
+
+    # A differently-cased init kwarg populates the field (see #562).
+    assert Settings(TeSt='override').model_dump() == {'test': 'override'}
+
+
+def test_init_source_case_insensitive_with_alias():
+    class Settings(BaseSettings):
+        foo: str = Field(..., alias='FOO')
+        model_config = SettingsConfigDict(case_sensitive=False, extra='allow')
+
+    settings = Settings(Foo='foo_value', extra_field='extra_value')
+    assert settings.foo == 'foo_value'
+    assert settings.__pydantic_extra__ == {'extra_field': 'extra_value'}
+
+
+def test_init_source_case_sensitive():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(case_sensitive=True, extra='allow')
+        test: str = 'default'
+
+    # With case_sensitive=True, a differently-cased key stays an extra.
+    assert Settings(TeSt='override').model_dump() == {'test': 'default', 'TeSt': 'override'}
+
+
+def test_config_file_source_case_insensitive(tmp_path):
+    from pydantic_settings import JsonConfigSettingsSource
+
+    p = tmp_path / '.env.json'
+    p.write_text('{"API_KEY": "secret"}')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(case_sensitive=False, json_file=p)
+        api_key: str = 'none'
+
+        @classmethod
+        def settings_customise_sources(cls, settings_cls, **_kwargs):
+            return (JsonConfigSettingsSource(settings_cls),)
+
+    assert Settings().model_dump() == {'api_key': 'secret'}
+
+
 def test_nested_dataclass(env):
     @pydantic_dataclasses.dataclass
     class DeepNestedDataclass:
