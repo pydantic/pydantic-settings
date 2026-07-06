@@ -305,6 +305,15 @@ except ValidationError as e:
     This only applies to environment variables. Values loaded from dotenv (`.env`) files preserve
     case, so `case_sensitive=True` is still respected for those, including on Windows.
 
+!!! note
+    The `case_sensitive` setting only affects sources that resolve values by name, such as environment
+    variables, dotenv files, CLI arguments, and secret files. It has **no effect** on values passed at
+    initialization (`Settings(FieLd=...)`) or loaded from config files via `JsonConfigSettingsSource`,
+    `TomlConfigSettingsSource`, and `YamlConfigSettingsSource`. Those values are matched to fields
+    case-sensitively (respecting field names and aliases as-is), just like data passed directly to a
+    pydantic model, so a key such as `FieLd` will not populate a `field` attribute even when
+    `case_sensitive=False`.
+
 ## Parsing environment variable values
 
 By default environment variables are parsed verbatim, including if the value is empty. You can choose to
