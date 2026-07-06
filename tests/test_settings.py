@@ -44,6 +44,7 @@ from pydantic_settings import (
     EnvSettingsSource,
     ForceDecode,
     InitSettingsSource,
+    JsonConfigSettingsSource,
     NoDecode,
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
@@ -1176,6 +1177,16 @@ def test_init_source_case_insensitive():
     assert Settings(TeSt='override').model_dump() == {'test': 'override'}
 
 
+def test_init_source_case_insensitive_collision():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(case_sensitive=False, extra='allow')
+        test: str = 'default'
+
+    # Multiple keys that differ only by case all resolve to the field; none leak
+    # through as an extra. The first provided key wins the value.
+    assert Settings(TeSt='a', TEST='b').model_dump() == {'test': 'a'}
+
+
 def test_init_source_case_insensitive_with_alias():
     class Settings(BaseSettings):
         foo: str = Field(..., alias='FOO')
@@ -1196,8 +1207,6 @@ def test_init_source_case_sensitive():
 
 
 def test_config_file_source_case_insensitive(tmp_path):
-    from pydantic_settings import JsonConfigSettingsSource
-
     p = tmp_path / '.env.json'
     p.write_text('{"API_KEY": "secret"}')
 

@@ -301,9 +301,13 @@ class InitSettingsSource(PydanticBaseSettingsSource):
 
         self.init_kwargs = {}
         init_kwarg_names = set(init_kwargs.keys())
-        # Map each provided key by its normalized form so it can be matched against
-        # field aliases without losing the original key used to look up the value.
-        normalized_provided = {normalize(key): key for key in init_kwargs}
+        # Map each normalized name to all provided keys sharing it, so field aliases can
+        # be matched without losing the original key used to look up the value. A 1-to-many
+        # mapping is required because case_sensitive=False can collapse distinct keys
+        # (e.g. ``TeSt`` and ``TEST``) onto the same normalized name.
+        normalized_provided: dict[str, list[str]] = {}
+        for key in init_kwargs:
+            normalized_provided.setdefault(normalize(key), []).append(key)
         for field_name, field_info in settings_cls.model_fields.items():
             # Canonical (case-preserving) alias names determine the output key, so the value
             # still matches pydantic's validation aliases, which are always case-sensitive.
@@ -321,9 +325,11 @@ class InitSettingsSource(PydanticBaseSettingsSource):
             # (aliases first, then the field name). Only keys not yet consumed by an
             # earlier field are considered.
             matched_keys = [
-                normalized_provided[name]
+                original
                 for name in matchable_names
-                if name in normalized_provided and normalized_provided[name] in init_kwarg_names
+                if name in normalized_provided
+                for original in normalized_provided[name]
+                if original in init_kwarg_names
             ]
             if matched_keys:
                 preferred_alias = canonical_alias_names[0] if canonical_alias_names else field_name
