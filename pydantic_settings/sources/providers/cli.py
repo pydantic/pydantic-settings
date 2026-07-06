@@ -843,7 +843,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             raise SettingsError(f'{cli_flag_name} argument {model.__name__}.{field_name} is not of type bool')
 
     def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, FieldInfo]]:
-        positional_variadic_arg = []
+        positional_variadic_arg: list[tuple[str, FieldInfo]] = []
         positional_args, subcommand_args, optional_args = [], [], []
         for field_name, field_info in _get_model_fields(model).items():
             if _CliSubCommand in field_info.metadata:

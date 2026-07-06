@@ -244,7 +244,7 @@ def _literal_has_numeric_enum(annotation: type[Any] | None) -> bool:
     return False
 
 
-def _get_model_fields(model_cls: type[Any]) -> dict[str, Any]:
+def _get_model_fields(model_cls: type[Any]) -> dict[str, FieldInfo]:
     """Get fields from a pydantic model or dataclass."""
 
     if is_pydantic_dataclass(model_cls) and hasattr(model_cls, '__pydantic_fields__'):
@@ -256,7 +256,7 @@ def _get_model_fields(model_cls: type[Any]) -> dict[str, Any]:
 
 def _get_alias_names(
     field_name: str,
-    field_info: Any,
+    field_info: FieldInfo,
     alias_path_args: dict[str, int | None] | None = None,
     case_sensitive: bool = True,
     populate_by_name: bool = False,
