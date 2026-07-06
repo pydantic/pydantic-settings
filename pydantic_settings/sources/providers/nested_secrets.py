@@ -116,7 +116,7 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
             env_ignore_empty=False,  # match SecretsSettingsSource behaviour
             env_parse_enums=True,  # we can pass everything here, it will still behave as "True"
             env_parse_none_str=None,  # match SecretsSettingsSource behaviour
-            _init_state=_init_state or getattr(file_secret_settings, '_init_state', None),
+            _init_state=_init_state if _init_state is not None else getattr(file_secret_settings, '_init_state', None),
         )
         self.env_parse_none_str = None  # update manually because of None
 

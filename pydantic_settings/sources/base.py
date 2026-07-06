@@ -99,7 +99,7 @@ class PydanticBaseSettingsSource(ABC):
     """
 
     def __init__(self, settings_cls: type[BaseSettings], _init_state: InitState | None = None):
-        self._init_state: InitState = _init_state or {}
+        self._init_state: InitState = {} if _init_state is None else _init_state
         self.settings_cls = settings_cls
         self.config = settings_cls.model_config
         self._current_state: dict[str, Any] = {}
