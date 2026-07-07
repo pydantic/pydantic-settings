@@ -290,30 +290,53 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         init_kwargs: dict[str, Any],
         nested_model_default_partial_update: bool | None = None,
     ):
+        case_sensitive = settings_cls.model_config.get('case_sensitive', False)
+        include_name = settings_cls.model_config.get('populate_by_name', False) or settings_cls.model_config.get(
+            'validate_by_name', False
+        )
+
+        def normalize(name: str) -> str:
+            # When case_sensitive is False, matching is done on lower-cased names.
+            return name if case_sensitive else name.lower()
+
         self.init_kwargs = {}
         init_kwarg_names = set(init_kwargs.keys())
+        # Map each normalized name to all provided keys sharing it, so field aliases can
+        # be matched without losing the original key used to look up the value. A 1-to-many
+        # mapping is required because case_sensitive=False can collapse distinct keys
+        # (e.g. ``TeSt`` and ``TEST``) onto the same normalized name.
+        normalized_provided: dict[str, list[str]] = {}
+        for key in init_kwargs:
+            normalized_provided.setdefault(normalize(key), []).append(key)
         for field_name, field_info in settings_cls.model_fields.items():
-            alias_names, *_ = _get_alias_names(field_name, field_info)
+            # Canonical (case-preserving) alias names determine the output key, so the value
+            # still matches pydantic's validation aliases, which are always case-sensitive.
+            canonical_alias_names, *_ = _get_alias_names(field_name, field_info)
+            # Match alias names respect case_sensitive when matching against provided keys.
+            match_alias_names, *_ = _get_alias_names(field_name, field_info, case_sensitive=case_sensitive)
             # When populate_by_name is True, allow using the field name as an input key,
             # but normalize to the preferred alias to keep keys consistent across sources.
-            matchable_names = set(alias_names)
-            include_name = settings_cls.model_config.get('populate_by_name', False) or settings_cls.model_config.get(
-                'validate_by_name', False
-            )
+            matchable_names = list(match_alias_names)
             if include_name:
-                matchable_names.add(field_name)
-            init_kwarg_name = init_kwarg_names & matchable_names
-            if init_kwarg_name:
-                preferred_alias = alias_names[0] if alias_names else field_name
-                # Choose provided key deterministically: prefer the first alias in alias_names order;
-                # fall back to field_name if allowed and provided.
-                provided_key = next((alias for alias in alias_names if alias in init_kwarg_names), None)
-                if provided_key is None and include_name and field_name in init_kwarg_names:
-                    provided_key = field_name
-                # provided_key should not be None here because init_kwarg_name is non-empty
-                assert provided_key is not None
-                init_kwarg_names -= init_kwarg_name
-                self.init_kwargs[preferred_alias] = init_kwargs[provided_key]
+                name = normalize(field_name)
+                if name not in matchable_names:
+                    matchable_names.append(name)
+            # All provided keys matching this field, in matchable_names preference order
+            # (aliases first, then the field name). Only keys not yet consumed by an
+            # earlier field are considered.
+            matched_keys = [
+                original
+                for name in matchable_names
+                if name in normalized_provided
+                for original in normalized_provided[name]
+                if original in init_kwarg_names
+            ]
+            if matched_keys:
+                preferred_alias = canonical_alias_names[0] if canonical_alias_names else field_name
+                # Prefer the first match in preference order; drop the remaining matches
+                # so they are not re-added as extras.
+                init_kwarg_names.difference_update(matched_keys)
+                self.init_kwargs[preferred_alias] = init_kwargs[matched_keys[0]]
         # Include any remaining init kwargs (e.g., extras) unchanged
         # Note: If populate_by_name is True and the provided key is the field name, but
         # no alias exists, we keep it as-is so it can be processed as extra if allowed.
