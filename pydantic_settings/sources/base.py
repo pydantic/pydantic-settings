@@ -19,7 +19,15 @@ from typing_inspection.introspection import is_union_origin
 
 from ..exceptions import SettingsError
 from ..utils import _lenient_issubclass
-from .types import EnvNoneType, EnvPrefixTarget, ForceDecode, NoDecode, PathType, PydanticModel, _CliSubCommand
+from .types import (
+    ConfigFileSourceType,
+    EnvNoneType,
+    EnvPrefixTarget,
+    ForceDecode,
+    NoDecode,
+    PydanticModel,
+    _CliSubCommand,
+)
 from .utils import (
     _annotation_is_complex,
     _get_alias_names,
@@ -32,6 +40,8 @@ from .utils import (
 
 if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
+
+    from .types import Traversable
 
 
 def get_subcommand(
@@ -199,17 +209,14 @@ class PydanticBaseSettingsSource(ABC):
 
 
 class ConfigFileSourceMixin(ABC):
-    def _read_files(self, files: PathType | None, deep_merge: bool = False) -> dict[str, Any]:
+    def _read_files(self, files: ConfigFileSourceType | None, deep_merge: bool = False) -> dict[str, Any]:
         if files is None:
             return {}
         if not isinstance(files, Sequence) or isinstance(files, str):
             files = [files]
         vars: dict[str, Any] = {}
         for file in files:
-            if isinstance(file, str):
-                file_path = Path(file)
-            else:
-                file_path = file
+            file_path: Path | Traversable = Path(file) if isinstance(file, str) else file
             if isinstance(file_path, Path):
                 file_path = file_path.expanduser()
 
@@ -224,7 +231,7 @@ class ConfigFileSourceMixin(ABC):
         return vars
 
     @abstractmethod
-    def _read_file(self, path: Path) -> dict[str, Any]:
+    def _read_file(self, path: Path | Traversable) -> dict[str, Any]:
         pass
 
 

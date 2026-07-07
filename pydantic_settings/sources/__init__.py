@@ -35,6 +35,7 @@ from .providers.yaml import YamlConfigSettingsSource
 from .types import (
     DEFAULT_PATH,
     ENV_FILE_SENTINEL,
+    ConfigFileSourceType,
     DotenvFiltering,
     DotenvType,
     EnvPrefixTarget,
@@ -60,6 +61,7 @@ __all__ = [
     'CliSubCommand',
     'CliSuppress',
     'CliUnknownArgs',
+    'ConfigFileSourceType',
     'DefaultSettingsSource',
     'DotEnvSettingsSource',
     'DotenvFiltering',

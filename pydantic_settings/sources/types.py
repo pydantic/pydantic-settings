@@ -2,9 +2,15 @@
 
 from __future__ import annotations as _annotations
 
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
+
+if sys.version_info >= (3, 11):
+    from importlib.resources.abc import Traversable as Traversable
+else:
+    from importlib.abc import Traversable as Traversable
 
 if TYPE_CHECKING:
     from pydantic._internal._dataclasses import PydanticDataclass
@@ -34,6 +40,11 @@ class ForceDecode:
 EnvPrefixTarget = Literal['variable', 'alias', 'all']
 DotenvType = Path | str | Sequence[Path | str]
 PathType = Path | str | Sequence[Path | str]
+# Config file sources (json/toml/yaml) additionally accept packaged resources exposed as a
+# `Traversable` (e.g. `importlib.resources.files(...).joinpath(...)`), including non-filesystem
+# ones such as a file inside a zip/wheel.
+# See https://github.com/pydantic/pydantic-settings/issues/299
+ConfigFileSourceType = Path | str | Traversable | Sequence[Path | str | Traversable]
 DotenvFiltering = Literal['match_prefix', 'only_existing']
 DEFAULT_PATH: PathType = Path('')
 
@@ -80,6 +91,7 @@ class SecretVersion:
 
 
 __all__ = [
+    'ConfigFileSourceType',
     'DEFAULT_PATH',
     'ENV_FILE_SENTINEL',
     'EnvPrefixTarget',

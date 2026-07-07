@@ -21,6 +21,7 @@ from .exceptions import SettingsError
 from .sources import (
     ENV_FILE_SENTINEL,
     CliSettingsSource,
+    ConfigFileSourceType,
     DefaultSettingsSource,
     DotenvFiltering,
     DotEnvSettingsSource,
@@ -72,9 +73,9 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_kebab_case: bool | Literal['all', 'no_enums'] | None
     cli_shortcuts: Mapping[str, str | list[str]] | None
     secrets_dir: PathType | None
-    json_file: PathType | None
+    json_file: ConfigFileSourceType | None
     json_file_encoding: str | None
-    yaml_file: PathType | None
+    yaml_file: ConfigFileSourceType | None
     yaml_file_encoding: str | None
     yaml_config_section: str | None
     """
@@ -105,7 +106,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     To use the root table, exclude this config setting or provide an empty tuple.
     """
 
-    toml_file: PathType | None
+    toml_file: ConfigFileSourceType | None
 
     toml_table_header: tuple[str, ...]
     """

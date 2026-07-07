@@ -202,7 +202,7 @@ class TestTraversableSupport:
             foobar: str
 
             model_config = SettingsConfigDict(
-                # Traversable is not added in annotation, but is supported
+                # `Traversable` is part of the `json_file` type annotation and supported at runtime.
                 json_file=json_config_path,
             )
 

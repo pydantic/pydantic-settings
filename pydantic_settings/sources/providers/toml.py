@@ -11,10 +11,12 @@ from typing import (
 )
 
 from ..base import ConfigFileSourceMixin, InitSettingsSource
-from ..types import DEFAULT_PATH, PathType
+from ..types import DEFAULT_PATH, ConfigFileSourceType
 
 if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
+
+    from ..types import Traversable
 
     if sys.version_info >= (3, 11):
         import tomllib
@@ -50,7 +52,7 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
     def __init__(
         self,
         settings_cls: type[BaseSettings],
-        toml_file: PathType | None = DEFAULT_PATH,
+        toml_file: ConfigFileSourceType | None = DEFAULT_PATH,
         toml_table_header: tuple[str, ...] = (),
         deep_merge: bool = False,
     ):
@@ -68,7 +70,7 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
 
         super().__init__(settings_cls, self.toml_data)
 
-    def _read_file(self, file_path: Path) -> dict[str, Any]:
+    def _read_file(self, file_path: Path | Traversable) -> dict[str, Any]:
         import_toml()
         with file_path.open(mode='rb') as toml_file:
             if sys.version_info < (3, 11):
@@ -76,13 +78,21 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
             return tomllib.load(toml_file)
 
     @staticmethod
-    def _any_file_exists(paths: PathType | None) -> bool:
+    def _any_file_exists(paths: ConfigFileSourceType | None) -> bool:
         """Check if any of the given file paths exist."""
         if paths is None:
             return False
-        if not isinstance(paths, Sequence):
+        if isinstance(paths, str) or not isinstance(paths, Sequence):
             paths = [paths]
-        return any(Path(path).exists() for path in paths)
+
+        def _exists(path: Path | str | Traversable) -> bool:
+            if isinstance(path, (str, Path)):
+                return Path(path).exists()
+            # Non-`Path` `Traversable` (e.g. a resource inside a zip/wheel) is not
+            # `os.PathLike`, so it can't be wrapped in `Path`; query it directly.
+            return path.is_file()
+
+        return any(_exists(path) for path in paths)
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}(toml_file={self.toml_file_path}, toml_table_header={self.toml_table_header})'

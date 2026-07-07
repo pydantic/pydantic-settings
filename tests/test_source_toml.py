@@ -2,7 +2,10 @@
 Test pydantic_settings.TomlConfigSettingsSource.
 """
 
+import importlib
 import sys
+import zipfile
+from importlib.resources import files
 from pathlib import Path
 
 import pytest
@@ -408,3 +411,75 @@ def test_toml_table_header_file_multiple_no_files(tmp_path):
 
     s = Settings()
     assert s.model_dump() == {'hello': 'world'}
+
+
+@pytest.fixture
+def zip_traversable(tmp_path):
+    """Factory returning a genuine non-Path ``Traversable`` pointing at a resource inside a zip/wheel."""
+    created: list[str] = []
+
+    def _make(pkg_name: str, filename: str, content: str):
+        zip_path = tmp_path / f'{pkg_name}.zip'
+        with zipfile.ZipFile(zip_path, 'w') as zf:
+            zf.writestr(f'{pkg_name}/__init__.py', '')
+            zf.writestr(f'{pkg_name}/{filename}', content)
+        sys.path.insert(0, str(zip_path))
+        importlib.invalidate_caches()
+        created.append(pkg_name)
+        trav = files(pkg_name).joinpath(filename)
+        # Sanity check: a zip-packaged resource is not a filesystem ``Path``.
+        assert not isinstance(trav, Path)
+        return trav
+
+    yield _make
+
+    for pkg_name in created:
+        sys.modules.pop(pkg_name, None)
+        zip_str = str(tmp_path / f'{pkg_name}.zip')
+        if zip_str in sys.path:
+            sys.path.remove(zip_str)
+    importlib.invalidate_caches()
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+def test_toml_file_traversable(zip_traversable):
+    """A packaged resource passed as a non-Path ``Traversable`` (e.g. from inside a zip/wheel) should load. See #299."""
+    trav = zip_traversable('toml_trav_pkg', 'defaults.toml', 'foobar = "Hello"\n')
+
+    class Settings(BaseSettings):
+        foobar: str
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls, toml_file=trav),)
+
+    assert Settings().model_dump() == {'foobar': 'Hello'}
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+def test_toml_table_header_traversable(zip_traversable):
+    """``toml_table_header`` relies on ``_any_file_exists``, which must handle a non-Path ``Traversable``. See #299."""
+    trav = zip_traversable('toml_trav_header_pkg', 'defaults.toml', '[app]\nfoobar = "Hello"\n')
+
+    class Settings(BaseSettings):
+        foobar: str
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls, toml_file=trav, toml_table_header=('app',)),)
+
+    assert Settings().model_dump() == {'foobar': 'Hello'}

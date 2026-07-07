@@ -2,19 +2,22 @@
 
 from __future__ import annotations as _annotations
 
-from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
 )
 
 from ..base import ConfigFileSourceMixin, InitSettingsSource
-from ..types import DEFAULT_PATH, PathType
+from ..types import DEFAULT_PATH, ConfigFileSourceType
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import yaml
 
     from pydantic_settings.main import BaseSettings
+
+    from ..types import Traversable
 else:
     yaml = None
 
@@ -37,7 +40,7 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
     def __init__(
         self,
         settings_cls: type[BaseSettings],
-        yaml_file: PathType | None = DEFAULT_PATH,
+        yaml_file: ConfigFileSourceType | None = DEFAULT_PATH,
         yaml_file_encoding: str | None = None,
         yaml_config_section: str | None = None,
         deep_merge: bool = False,
@@ -61,7 +64,7 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
             )
         super().__init__(settings_cls, self.yaml_data)
 
-    def _read_file(self, file_path: Path) -> dict[str, Any]:
+    def _read_file(self, file_path: Path | Traversable) -> dict[str, Any]:
         import_yaml()
         with file_path.open(encoding=self.yaml_file_encoding) as yaml_file:
             return yaml.safe_load(yaml_file) or {}
