@@ -9,6 +9,7 @@ from pydantic.fields import FieldInfo
 
 from ...exceptions import SettingsError
 from ..types import SecretVersion
+from ..utils import InitState
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
@@ -170,6 +171,7 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
         secret_client: SecretManagerServiceClient | None = None,
         case_sensitive: bool | None = True,
         project_id_field: str = 'project_id',
+        _init_state: InitState | None = None,
     ) -> None:
         """Settings source that reads secrets from Google Cloud Secret Manager.
 
@@ -214,6 +216,7 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
             env_ignore_empty=False,
             env_parse_none_str=env_parse_none_str,
             env_parse_enums=env_parse_enums,
+            _init_state=_init_state,
         )
         # __init__ is past; subsequent _load_env_vars() calls may now resolve the project.
         self._env_vars_loaded = True

@@ -38,7 +38,7 @@ from .sources import (
     YamlConfigSettingsSource,
     get_subcommand,
 )
-from .sources.utils import _get_alias_names
+from .sources.utils import InitState, _get_alias_names, _warn_if_field_info_incomplete
 
 T = TypeVar('T')
 
@@ -388,14 +388,17 @@ class BaseSettings(BaseModel):
 
         secrets_dir = _secrets_dir if _secrets_dir is not None else cls.model_config.get('secrets_dir')
 
-        # Configure built-in sources
+        # Configure built-in sources, sharing the same init state so that incomplete
+        # fields are only warned about once per settings resolution.
+        init_state: InitState = {'field_info_ids': set()}
         default_settings = DefaultSettingsSource(
-            cls, nested_model_default_partial_update=nested_model_default_partial_update
+            cls, nested_model_default_partial_update=nested_model_default_partial_update, _init_state=init_state
         )
         init_settings = InitSettingsSource(
             cls,
             init_kwargs=_init_kwargs if _init_kwargs is not None else {},
             nested_model_default_partial_update=nested_model_default_partial_update,
+            _init_state=default_settings._init_state,
         )
         env_settings = EnvSettingsSource(
             cls,
@@ -407,6 +410,7 @@ class BaseSettings(BaseModel):
             env_ignore_empty=env_ignore_empty,
             env_parse_none_str=env_parse_none_str,
             env_parse_enums=env_parse_enums,
+            _init_state=init_settings._init_state,
         )
         dotenv_settings = DotEnvSettingsSource(
             cls,
@@ -420,6 +424,7 @@ class BaseSettings(BaseModel):
             env_ignore_empty=env_ignore_empty,
             env_parse_none_str=env_parse_none_str,
             env_parse_enums=env_parse_enums,
+            _init_state=env_settings._init_state,
         )
 
         file_secret_settings = SecretsSettingsSource(
@@ -428,6 +433,7 @@ class BaseSettings(BaseModel):
             case_sensitive=case_sensitive,
             env_prefix=env_prefix,
             env_prefix_target=env_prefix_target,
+            _init_state=dotenv_settings._init_state,
         )
         # Provide a hook to set built-in sources priority and add / remove sources
         sources = cls.settings_customise_sources(
@@ -444,6 +450,7 @@ class BaseSettings(BaseModel):
             elif cli_parse_args is not None:
                 cli_settings = CliSettingsSource[Any](
                     cls,
+                    _init_state=file_secret_settings._init_state,
                     cli_prog_name=cli_prog_name,
                     cli_parse_args=cli_parse_args,
                     cli_parse_none_str=cli_parse_none_str,
@@ -495,7 +502,11 @@ class BaseSettings(BaseModel):
 
             # Strip any default values not explicity set before returning final state
             state = {key: val for key, val in state.items() if key not in defaults or defaults[key] != val}
-            cls._settings_restore_init_kwarg_names(cls, init_kwargs, state)
+            # The last source is the `DefaultSettingsSource` instance created in `_settings_init_sources()`,
+            # holding the init state shared by all built-in sources:
+            last_source = sources[-1]
+            init_state = last_source._init_state if isinstance(last_source, PydanticBaseSettingsSource) else InitState()
+            cls._settings_restore_init_kwarg_names(cls, init_kwargs, state, init_state)
 
             return state
         else:
@@ -505,7 +516,10 @@ class BaseSettings(BaseModel):
 
     @staticmethod
     def _settings_restore_init_kwarg_names(
-        settings_cls: type[BaseSettings], init_kwargs: dict[str, Any], state: dict[str, Any]
+        settings_cls: type[BaseSettings],
+        init_kwargs: dict[str, Any],
+        state: dict[str, Any],
+        init_state: InitState,
     ) -> None:
         """
         Restore the init_kwarg key names to the final merged state dictionary.
@@ -517,6 +531,7 @@ class BaseSettings(BaseModel):
             state_kwarg_names = set(state.keys())
             init_kwarg_names = set(init_kwargs.keys())
             for field_name, field_info in settings_cls.model_fields.items():
+                _warn_if_field_info_incomplete(field_info, field_name, init_state)
                 alias_names, *_ = _get_alias_names(field_name, field_info)
                 matchable_names = set(alias_names)
                 include_name = settings_cls.model_config.get(

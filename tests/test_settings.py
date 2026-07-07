@@ -24,6 +24,7 @@ from pydantic import (
     HttpUrl,
     Json,
     PostgresDsn,
+    PydanticUserError,
     RootModel,
     Secret,
     SecretStr,
@@ -43,6 +44,7 @@ from pydantic_settings import (
     DotEnvSettingsSource,
     EnvSettingsSource,
     ForceDecode,
+    IncompleteFieldDefinitionWarning,
     InitSettingsSource,
     JsonConfigSettingsSource,
     NoDecode,
@@ -3860,3 +3862,78 @@ def test_field_named_cls():
 
     s = Settings.model_validate({'cls': 'Foo'})
     assert s.cls == 'Foo'
+
+
+def test_warn_on_incomplete_field_info():
+    """Settings sources should emit a single `IncompleteFieldDefinitionWarning` per incomplete
+    `FieldInfo` (i.e. with an annotation containing unresolved forward references) per settings resolution.
+    """
+
+    class App(BaseSettings):
+        service: 'Service | None' = None  # noqa: F821
+
+    assert not App.model_fields['service']._complete
+
+    with pytest.warns(IncompleteFieldDefinitionWarning) as caught:
+        with pytest.raises(PydanticUserError, match='`App` is not fully defined'):
+            App()
+
+    incomplete_warnings = [str(w.message) for w in caught if w.category is IncompleteFieldDefinitionWarning]
+    # The shared init state deduplicates warnings across all sources within a single resolution:
+    assert len(incomplete_warnings) == 1
+    assert incomplete_warnings[0].startswith("Field 'service' ")
+
+
+def test_warn_on_incomplete_field_info_nested_model(env):
+    """The incomplete field warning is also emitted for fields of nested models, reached
+    when resolving nested environment variables.
+
+    In this scenario (the forward reference is resolvable when the settings class builds
+    its schema, but the nested model's `model_fields` was never rebuilt), instantiation
+    succeeds while nested env overrides for the incomplete field are silently ignored.
+    The warning is the only signal that something is wrong.
+    """
+
+    class ServiceConfig(BaseModel):
+        connector: 'ConnectorConfig'
+
+    class ConnectorConfig(BaseModel):
+        apiKey: str = 'orig-key'
+        endpoint: str = 'orig-endpoint'
+
+    class AppSettings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='app_', env_nested_delimiter='_', case_sensitive=False)
+        service: ServiceConfig
+
+    assert not ServiceConfig.model_fields['connector']._complete
+
+    env.set('APP_SERVICE_CONNECTOR_apiKey', 'ENV_KEY')
+    env.set('APP_SERVICE_CONNECTOR_endpoint', 'ENV_ENDPOINT')
+
+    with pytest.warns(IncompleteFieldDefinitionWarning) as caught:
+        s = AppSettings()
+
+    incomplete_warnings = [str(w.message) for w in caught if w.category is IncompleteFieldDefinitionWarning]
+    assert len(incomplete_warnings) == 1
+    assert incomplete_warnings[0].startswith("Field 'connector' ")
+
+    # The `apiKey` override is silently ignored because of the incomplete field:
+    assert s.service.connector.apiKey == 'orig-key'
+    assert s.service.connector.endpoint == 'ENV_ENDPOINT'
+
+
+def test_warn_on_incomplete_field_info_standalone_source():
+    """A source instantiated on its own still warns (and deduplicates) using its own init state."""
+
+    class App(BaseSettings):
+        service: 'Service | None' = None  # noqa: F821
+
+    source = EnvSettingsSource(App)
+
+    with pytest.warns(IncompleteFieldDefinitionWarning) as caught:
+        source()
+        source()
+
+    incomplete_warnings = [str(w.message) for w in caught if w.category is IncompleteFieldDefinitionWarning]
+    assert len(incomplete_warnings) == 1
+    assert incomplete_warnings[0].startswith("Field 'service' ")

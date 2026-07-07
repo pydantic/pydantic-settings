@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from pydantic.alias_generators import to_snake
 from pydantic.fields import FieldInfo
 
+from ..utils import InitState
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
@@ -117,6 +118,7 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
         env_prefix: str | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
+        _init_state: InitState | None = None,
     ) -> None:
         import_azure_key_vault()
         self._url = url
@@ -131,6 +133,7 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
             env_ignore_empty=False,
             env_parse_none_str=env_parse_none_str,
             env_parse_enums=env_parse_enums,
+            _init_state=_init_state,
         )
 
     def _load_env_vars(self) -> Mapping[str, str | None]:

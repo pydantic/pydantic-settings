@@ -2,11 +2,12 @@
 
 from __future__ import annotations as _annotations
 
+import warnings
 from collections import deque
 from collections.abc import Mapping, Sequence
 from dataclasses import is_dataclass
 from enum import Enum
-from typing import Any, TypeVar, cast, get_args, get_origin
+from typing import Any, TypedDict, TypeVar, cast, get_args, get_origin
 
 from pydantic import BaseModel, Json, RootModel, Secret
 from pydantic._internal._utils import is_model_class
@@ -16,9 +17,40 @@ from pydantic.types import Strict
 from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
 
-from ..exceptions import SettingsError
+from ..exceptions import IncompleteFieldDefinitionWarning, SettingsError
 from ..utils import _lenient_issubclass
 from .types import EnvNoneType
+
+
+class InitState(TypedDict, total=False):
+    """State shared between settings sources during a single settings resolution."""
+
+    field_info_ids: set[int]
+    """The `id()`s of the incomplete `FieldInfo` instances that were already warned about."""
+
+
+def _warn_if_field_info_incomplete(field_info: FieldInfo, field_name: str, init_state: InitState) -> None:
+    """Warn if the field is incomplete, i.e. its annotation contains unresolved forward references.
+
+    An incomplete `FieldInfo` instance is unsafe to inspect — any of its attributes (annotation,
+    aliases, metadata, default) may rely on the unresolved annotation, so settings sources may
+    silently fail to resolve the field's value. Each instance is only warned about once per
+    `init_state`, so that a field accessed by multiple sources during a single settings
+    resolution doesn't emit duplicate warnings.
+    """
+    if getattr(field_info, '_complete', True):
+        return
+    warned_ids = init_state.setdefault('field_info_ids', set())
+    if id(field_info) in warned_ids:
+        return
+    warned_ids.add(id(field_info))
+    warnings.warn(
+        f'Field {field_name!r} has an incomplete definition: its annotation contains an unresolved '
+        'forward reference, so settings sources may fail to correctly resolve its value. '
+        'Call `model_rebuild()` on the model where the field is defined, once all the referenced '
+        'types are defined.',
+        IncompleteFieldDefinitionWarning,
+    )
 
 
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
@@ -81,13 +113,16 @@ def _resolve_type_alias(annotation: Any) -> Any:
     return annotation
 
 
-def _annotation_is_complex(annotation: Any, metadata: list[Any]) -> bool:
+def _annotation_is_complex(annotation: Any, metadata: list[Any], init_state: InitState | None = None) -> bool:
     # If the model is a root model, the root annotation should be used to
     # evaluate the complexity.
     annotation = _resolve_type_alias(annotation)
     if annotation is not None and _lenient_issubclass(annotation, RootModel) and annotation is not RootModel:
         annotation = cast('type[RootModel[Any]]', annotation)
-        root_annotation = annotation.model_fields['root'].annotation
+        root_field = annotation.model_fields['root']
+        if init_state is not None:
+            _warn_if_field_info_incomplete(root_field, f'{annotation.__name__}.root', init_state)
+        root_annotation = root_field.annotation
         if root_annotation is not None:  # pragma: no branch
             annotation = root_annotation
 
@@ -100,7 +135,7 @@ def _annotation_is_complex(annotation: Any, metadata: list[Any]) -> bool:
     if typing_objects.is_annotated(origin):
         # Return result of recursive call on inner type.
         inner, *meta = get_args(annotation)
-        return _annotation_is_complex(inner, meta)
+        return _annotation_is_complex(inner, meta, init_state)
 
     if origin is Secret:
         return False
@@ -132,10 +167,10 @@ def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:
     ) or is_dataclass(annotation)
 
 
-def _union_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool:
+def _union_is_complex(annotation: type[Any] | None, metadata: list[Any], init_state: InitState | None = None) -> bool:
     """Check if a union type contains any complex types."""
     for arg in get_args(annotation):
-        if _annotation_is_complex(arg, metadata):
+        if _annotation_is_complex(arg, metadata, init_state):
             return True
         # _annotation_is_complex doesn't handle bare Union types, so when an arg
         # is Annotated[Union[X, Y], ...], stripping Annotated yields a bare Union
@@ -147,7 +182,7 @@ def _union_is_complex(annotation: type[Any] | None, metadata: list[Any]) -> bool
             if any(isinstance(md, Json) for md in inner_meta):  # type: ignore[misc]
                 continue
         if is_union_origin(get_origin(inner)):
-            if _union_is_complex(inner, metadata):
+            if _union_is_complex(inner, metadata, init_state):
                 return True
     return False
 
@@ -244,7 +279,7 @@ def _literal_has_numeric_enum(annotation: type[Any] | None) -> bool:
     return False
 
 
-def _get_model_fields(model_cls: type[Any]) -> dict[str, Any]:
+def _get_model_fields(model_cls: type[Any]) -> dict[str, FieldInfo]:
     """Get fields from a pydantic model or dataclass."""
 
     if is_pydantic_dataclass(model_cls) and hasattr(model_cls, '__pydantic_fields__'):
@@ -256,7 +291,7 @@ def _get_model_fields(model_cls: type[Any]) -> dict[str, Any]:
 
 def _get_alias_names(
     field_name: str,
-    field_info: Any,
+    field_info: FieldInfo,
     alias_path_args: dict[str, int | None] | None = None,
     case_sensitive: bool = True,
     populate_by_name: bool = False,
@@ -311,6 +346,7 @@ def _is_function(obj: Any) -> bool:
 
 
 __all__ = [
+    'InitState',
     '_annotation_contains_types',
     '_annotation_enum_name_to_val',
     '_annotation_enum_val_to_name',
@@ -326,5 +362,6 @@ __all__ = [
     '_strip_annotated',
     '_union_has_strict_types',
     '_union_is_complex',
+    '_warn_if_field_info_incomplete',
     'parse_env_vars',
 ]
