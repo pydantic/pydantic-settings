@@ -441,7 +441,7 @@ def zip_traversable(tmp_path):
     importlib.invalidate_caches()
 
 
-@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+@pytest.mark.skipif(sys.version_info < (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
 def test_toml_file_traversable(zip_traversable):
     """A packaged resource passed as a non-Path ``Traversable`` (e.g. from inside a zip/wheel) should load. See #299."""
     trav = zip_traversable('toml_trav_pkg', 'defaults.toml', 'foobar = "Hello"\n')
@@ -463,7 +463,7 @@ def test_toml_file_traversable(zip_traversable):
     assert Settings().model_dump() == {'foobar': 'Hello'}
 
 
-@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+@pytest.mark.skipif(sys.version_info < (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
 def test_toml_table_header_traversable(zip_traversable):
     """``toml_table_header`` relies on ``_any_file_exists``, which must handle a non-Path ``Traversable``. See #299."""
     trav = zip_traversable('toml_trav_header_pkg', 'defaults.toml', '[app]\nfoobar = "Hello"\n')
