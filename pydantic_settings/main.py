@@ -2,6 +2,8 @@ from __future__ import annotations as _annotations
 
 import asyncio
 import inspect
+import logging
+import os
 import re
 import threading
 import warnings
@@ -42,6 +44,15 @@ from .sources import (
 from .sources.utils import InitState, _get_alias_names, _warn_if_field_info_incomplete
 
 T = TypeVar('T')
+
+logger = logging.getLogger('pydantic_settings')
+
+_DEBUG_ENV_VAR = 'PYDANTIC_SETTINGS_DEBUG'
+
+
+def _settings_debug_enabled() -> bool:
+    """Whether settings source debugging is enabled via the `PYDANTIC_SETTINGS_DEBUG` env var."""
+    return os.environ.get(_DEBUG_ENV_VAR, '').strip().lower() in ('1', 'true', 'yes', 'on')
 
 
 class SettingsConfigDict(ConfigDict, total=False):
@@ -487,6 +498,9 @@ class BaseSettings(BaseModel):
             state: dict[str, Any] = {}
             defaults: dict[str, Any] = {}
             states: dict[str, dict[str, Any]] = {}
+            debug = _settings_debug_enabled()
+            # Records the first (highest priority) source that provided each top-level key.
+            key_origin: dict[str, str] = {}
             for source in sources:
                 if isinstance(source, PydanticBaseSettingsSource):
                     source._set_current_state(state)
@@ -498,11 +512,18 @@ class BaseSettings(BaseModel):
                 if isinstance(source, DefaultSettingsSource):
                     defaults = source_state
 
+                if debug:
+                    for key in source_state:
+                        key_origin.setdefault(key, source_name)
+
                 states[source_name] = source_state
                 state = deep_update(source_state, state)
 
             # Strip any default values not explicitly set before returning final state
             state = {key: val for key, val in state.items() if key not in defaults or defaults[key] != val}
+
+            if debug:
+                cls._settings_log_debug(states, state, key_origin)
             # The last source is the `DefaultSettingsSource` instance created in `_settings_init_sources()`,
             # holding the init state shared by all built-in sources:
             last_source = sources[-1]
@@ -514,6 +535,32 @@ class BaseSettings(BaseModel):
             # no one should mean to do this, but I think returning an empty dict is marginally preferable
             # to an informative error and much better than a confusing error
             return {}
+
+    @classmethod
+    def _settings_log_debug(
+        cls,
+        states: dict[str, dict[str, Any]],
+        final_state: dict[str, Any],
+        key_origin: dict[str, str],
+    ) -> None:
+        """Log the value contributed by each settings source in priority order.
+
+        Enabled by setting the ``PYDANTIC_SETTINGS_DEBUG`` environment variable to a truthy value.
+        This is emitted at ``DEBUG`` level on the ``pydantic_settings`` logger.
+
+        Warning: the output may contain sensitive values loaded from the environment, dotenv
+        files, or secret files. Only enable it in a trusted debugging context.
+        """
+        lines = [f'Resolving settings for {cls.__name__!r} (sources in priority order, highest first):']
+        for name, source_state in states.items():
+            lines.append(f'  {name}: {source_state!r}')
+        lines.append('Final values (winning source in parentheses):')
+        if final_state:
+            for key, value in final_state.items():
+                lines.append(f'  {key} = {value!r}  ({key_origin.get(key, "?")})')
+        else:
+            lines.append('  <no values resolved>')
+        logger.debug('\n'.join(lines))
 
     @staticmethod
     def _settings_restore_init_kwarg_names(

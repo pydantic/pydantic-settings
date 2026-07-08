@@ -1,5 +1,6 @@
 import dataclasses
 import json
+import logging
 import os
 import pathlib
 import sys
@@ -3937,3 +3938,49 @@ def test_warn_on_incomplete_field_info_standalone_source():
     incomplete_warnings = [str(w.message) for w in caught if w.category is IncompleteFieldDefinitionWarning]
     assert len(incomplete_warnings) == 1
     assert incomplete_warnings[0].startswith("Field 'service' ")
+
+
+def test_debug_sources_disabled_by_default(env, caplog):
+    class Settings(BaseSettings, env_prefix='myapp_'):
+        name: str = 'default'
+        port: int = 8080
+
+    env.set('myapp_name', 'from_env')
+    with caplog.at_level(logging.DEBUG, logger='pydantic_settings'):
+        Settings(port=9000)
+
+    assert caplog.records == []
+
+
+@pytest.mark.parametrize('flag', ['1', 'true', 'True', 'yes', 'on'])
+def test_debug_sources_enabled(env, caplog, flag):
+    class Settings(BaseSettings, env_prefix='myapp_'):
+        name: str = 'default'
+        port: int = 8080
+
+    env.set('PYDANTIC_SETTINGS_DEBUG', flag)
+    env.set('myapp_name', 'from_env')
+    with caplog.at_level(logging.DEBUG, logger='pydantic_settings'):
+        Settings(port=9000)
+
+    assert len(caplog.records) == 1
+    message = caplog.records[0].getMessage()
+    # Each source is reported in priority order.
+    assert 'InitSettingsSource' in message
+    assert 'EnvSettingsSource' in message
+    assert 'DefaultSettingsSource' in message
+    assert message.index('InitSettingsSource') < message.index('EnvSettingsSource')
+    # The winning source is annotated for each final value.
+    assert 'port = 9000  (InitSettingsSource)' in message
+    assert "name = 'from_env'  (EnvSettingsSource)" in message
+
+
+def test_debug_sources_falsy_env_value(env, caplog):
+    class Settings(BaseSettings):
+        port: int = 8080
+
+    env.set('PYDANTIC_SETTINGS_DEBUG', 'false')
+    with caplog.at_level(logging.DEBUG, logger='pydantic_settings'):
+        Settings(port=9000)
+
+    assert caplog.records == []
