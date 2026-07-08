@@ -611,3 +611,45 @@ def test_yaml_config_section_non_dict_intermediate(tmp_path):
 
     with pytest.raises(TypeError, match='yaml_config_section path.*cannot be traversed.*not a dictionary'):
         Settings()
+
+
+@pytest.mark.skipif(yaml is None, reason='PyYAML is not installed')
+def test_yaml_file_traversable(tmp_path):
+    """A packaged resource passed as a non-Path ``Traversable`` (e.g. from inside a zip/wheel) should load. See #299."""
+    import importlib
+    import sys
+    import zipfile
+    from importlib.resources import files
+
+    zip_path = tmp_path / 'yaml_trav_pkg.zip'
+    with zipfile.ZipFile(zip_path, 'w') as zf:
+        zf.writestr('yaml_trav_pkg/__init__.py', '')
+        zf.writestr('yaml_trav_pkg/defaults.yaml', 'foobar: "Hello"\n')
+
+    sys.path.insert(0, str(zip_path))
+    importlib.invalidate_caches()
+    try:
+        trav = files('yaml_trav_pkg').joinpath('defaults.yaml')
+        # Sanity check: a zip-packaged resource is not a filesystem ``Path``.
+        assert not isinstance(trav, Path)
+
+        class Settings(BaseSettings):
+            foobar: str
+
+            @classmethod
+            def settings_customise_sources(
+                cls,
+                settings_cls: type[BaseSettings],
+                init_settings: PydanticBaseSettingsSource,
+                env_settings: PydanticBaseSettingsSource,
+                dotenv_settings: PydanticBaseSettingsSource,
+                file_secret_settings: PydanticBaseSettingsSource,
+            ) -> tuple[PydanticBaseSettingsSource, ...]:
+                return (YamlConfigSettingsSource(settings_cls, yaml_file=trav),)
+
+        assert Settings().model_dump() == {'foobar': 'Hello'}
+    finally:
+        sys.modules.pop('yaml_trav_pkg', None)
+        if str(zip_path) in sys.path:
+            sys.path.remove(str(zip_path))
+        importlib.invalidate_caches()

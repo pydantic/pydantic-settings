@@ -2810,6 +2810,12 @@ The files are merged shallowly in increasing order of priority. To enable deep m
 !!! warning
     The `deep_merge` option is **not available** through the `SettingsConfigDict`.
 
+!!! note
+    In addition to `str` and `pathlib.Path`, the `json_file`, `toml_file`, and `yaml_file` options also accept a
+    [`Traversable`][importlib.resources.abc.Traversable], such as the result of `importlib.resources.files(...).joinpath(...)`.
+    This makes it possible to load a configuration file that is packaged inside your distribution, including cases where the
+    resource does not live on the filesystem (e.g. inside a zip/wheel).
+
 ```py
 from pydantic import BaseModel
 
