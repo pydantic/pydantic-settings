@@ -7,6 +7,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
+from ..utils import InitState
 from .toml import TomlConfigSettingsSource
 
 if TYPE_CHECKING:
@@ -22,6 +23,7 @@ class PyprojectTomlConfigSettingsSource(TomlConfigSettingsSource):
         self,
         settings_cls: type[BaseSettings],
         toml_file: Path | None = None,
+        _init_state: InitState | None = None,
     ) -> None:
         self.toml_file_path = self._pick_pyproject_toml_file(
             toml_file, settings_cls.model_config.get('pyproject_toml_depth', 0)
@@ -32,7 +34,7 @@ class PyprojectTomlConfigSettingsSource(TomlConfigSettingsSource):
         self.toml_data = self._read_files(self.toml_file_path)
         for key in self.toml_table_header:
             self.toml_data = self.toml_data.get(key, {})
-        super(TomlConfigSettingsSource, self).__init__(settings_cls, self.toml_data)
+        super(TomlConfigSettingsSource, self).__init__(settings_cls, self.toml_data, _init_state=_init_state)
 
     @staticmethod
     def _pick_pyproject_toml_file(provided: Path | None, depth: int) -> Path:

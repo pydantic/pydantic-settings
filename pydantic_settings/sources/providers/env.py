@@ -20,6 +20,7 @@ from ...utils import _lenient_issubclass
 from ..base import PydanticBaseEnvSettingsSource
 from ..types import EnvNoneType, EnvPrefixTarget
 from ..utils import (
+    InitState,
     _annotation_contains_types,
     _annotation_enum_name_to_val,
     _annotation_is_complex,
@@ -59,6 +60,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
+        _init_state: InitState | None = None,
     ) -> None:
         super().__init__(
             settings_cls,
@@ -68,6 +70,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             env_ignore_empty,
             env_parse_none_str,
             env_parse_enums,
+            _init_state,
         )
         self.env_nested_delimiter = (
             env_nested_delimiter if env_nested_delimiter is not None else self.config.get('env_nested_delimiter')
@@ -193,7 +196,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         """
         if self.field_is_complex(field):
             allow_parse_failure = False
-        elif is_union_origin(get_origin(field.annotation)) and _union_is_complex(field.annotation, field.metadata):
+        elif is_union_origin(get_origin(field.annotation)) and _union_is_complex(
+            field.annotation, field.metadata, self._init_state
+        ):
             allow_parse_failure = True
         else:
             return False, False
@@ -314,7 +319,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                         env_val = env_val if enum_val is None else enum_val
                 elif target_field:
                     # target_field is a raw type (e.g. from dict value type annotation)
-                    is_complex = _annotation_is_complex(target_field, [])
+                    is_complex = _annotation_is_complex(target_field, [], self._init_state)
                     allow_json_failure = True
                 else:
                     # nested field type is dict

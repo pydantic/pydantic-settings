@@ -12,6 +12,7 @@ from typing import (
 
 from ..base import ConfigFileSourceMixin, InitSettingsSource
 from ..types import DEFAULT_PATH, ConfigFileSourceType
+from ..utils import InitState
 
 if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
@@ -55,6 +56,7 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         toml_file: ConfigFileSourceType | None = DEFAULT_PATH,
         toml_table_header: tuple[str, ...] = (),
         deep_merge: bool = False,
+        _init_state: InitState | None = None,
     ):
         self.toml_file_path = toml_file if toml_file != DEFAULT_PATH else settings_cls.model_config.get('toml_file')
         self.toml_table_header = (
@@ -68,7 +70,7 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
                     raise KeyError(f'toml_table_header key "{key}" not found in {self.toml_file_path}')
                 self.toml_data = self.toml_data[key]
 
-        super().__init__(settings_cls, self.toml_data)
+        super().__init__(settings_cls, self.toml_data, _init_state=_init_state)
 
     def _read_file(self, file_path: Path | Traversable) -> dict[str, Any]:
         import_toml()

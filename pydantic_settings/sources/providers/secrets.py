@@ -17,6 +17,7 @@ from pydantic_settings.utils import path_type_label
 from ...exceptions import SettingsError
 from ..base import PydanticBaseEnvSettingsSource
 from ..types import EnvPrefixTarget, PathType
+from ..utils import InitState
 
 if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
@@ -37,6 +38,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
+        _init_state: InitState | None = None,
     ) -> None:
         super().__init__(
             settings_cls,
@@ -46,6 +48,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
             env_ignore_empty,
             env_parse_none_str,
             env_parse_enums,
+            _init_state,
         )
         self.secrets_dir = secrets_dir if secrets_dir is not None else self.config.get('secrets_dir')
 

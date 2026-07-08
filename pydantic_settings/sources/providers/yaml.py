@@ -9,6 +9,7 @@ from typing import (
 
 from ..base import ConfigFileSourceMixin, InitSettingsSource
 from ..types import DEFAULT_PATH, ConfigFileSourceType
+from ..utils import InitState
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -44,6 +45,7 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         yaml_file_encoding: str | None = None,
         yaml_config_section: str | None = None,
         deep_merge: bool = False,
+        _init_state: InitState | None = None,
     ):
         self.yaml_file_path = yaml_file if yaml_file != DEFAULT_PATH else settings_cls.model_config.get('yaml_file')
         self.yaml_file_encoding = (
@@ -62,7 +64,7 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
             self.yaml_data = self._traverse_nested_section(
                 self.yaml_data, self.yaml_config_section, self.yaml_config_section
             )
-        super().__init__(settings_cls, self.yaml_data)
+        super().__init__(settings_cls, self.yaml_data, _init_state=_init_state)
 
     def _read_file(self, file_path: Path | Traversable) -> dict[str, Any]:
         import_yaml()
