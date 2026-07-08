@@ -1671,7 +1671,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             )
 
             if arg.is_alias_path_only:
-                # For alias path only, we wont know the complete value until we've finished parsing the entire class. In
+                # For alias path only, we won't know the complete value until we've finished parsing the entire class. In
                 # this case, insert value as a non-string reference pointing to the relevant alias_path_only_defaults
                 # entry and convert into completed string value later.
                 value = self._update_alias_path_only_default(arg_name, value, field_info, alias_path_only_defaults)

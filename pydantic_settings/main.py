@@ -501,7 +501,7 @@ class BaseSettings(BaseModel):
                 states[source_name] = source_state
                 state = deep_update(source_state, state)
 
-            # Strip any default values not explicity set before returning final state
+            # Strip any default values not explicitly set before returning final state
             state = {key: val for key, val in state.items() if key not in defaults or defaults[key] != val}
             # The last source is the `DefaultSettingsSource` instance created in `_settings_init_sources()`,
             # holding the init state shared by all built-in sources:
@@ -886,7 +886,7 @@ class CliApp:
                   Example: `--config '{"host": "localhost", "port": 5432}'`
                 - 'env':
                   The dictionary is flattened into multiple CLI flags using
-                  environment-variable-style assignement.
+                  environment-variable-style assignment.
                   Example: `--config host=localhost --config port=5432`
             positionals_first: Controls whether positional arguments should be serialized
                 first compared to optional arguments. Defaults to `False`.
