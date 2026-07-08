@@ -578,7 +578,7 @@ print(Settings().model_dump())
 ## Nested model default partial updates
 
 By default, Pydantic settings does not allow partial updates to nested model default objects. This behavior can be
-overriden by setting the `nested_model_default_partial_update` flag to `True`, which will allow partial updates on
+overridden by setting the `nested_model_default_partial_update` flag to `True`, which will allow partial updates on
 nested model default object fields.
 
 ```py
@@ -1605,7 +1605,7 @@ except SettingsError as e:
 
 #### Enforce Required Arguments at CLI
 
-Pydantic settings is designed to pull values in from various sources when instantating a model. This means a field that
+Pydantic settings is designed to pull values in from various sources when instantiating a model. This means a field that
 is required is not strictly required from any single source (e.g. the CLI). Instead, all that matters is that one of the
 sources provides the required value.
 
@@ -2591,10 +2591,10 @@ To use Google Cloud Secret Manager, you need to:
            gcp_settings = GoogleSecretManagerSettingsSource(
                settings_cls,
                # If not provided, will use google.auth.default()
-               # to get credentials from the environemnt
+               # to get credentials from the environment
                # credentials=your_credentials,
                # If not provided, will use google.auth.default()
-               # to get project_id from the environemnt
+               # to get project_id from the environment
                project_id='your-gcp-project-id',
            )
 
@@ -3193,7 +3193,7 @@ class MyCustomSource(PydanticBaseSettingsSource):
         current_state = self.current_state
         current_state.get('some_setting')
 
-        # Retrive settings from all sources individually
+        # Retrieve settings from all sources individually
         # self.settings_sources_data["SettingsSourceName"]: dict[str, Any]
         settings_sources_data = self.settings_sources_data
         settings_sources_data['SomeSettingsSource'].get('some_setting')
