@@ -240,6 +240,17 @@ class ConfigFileSourceMixin(ABC):
         pass
 
 
+def _unwrap_optional_annotation(annotation: Any) -> Any:
+    """Return the inner type of an ``Optional[T]`` annotation, otherwise the annotation unchanged."""
+    if is_union_origin(get_origin(annotation)):
+        args = get_args(annotation)
+        if len(args) == 2 and type(None) in args:
+            for arg in args:
+                if arg is not type(None):
+                    return arg
+    return annotation
+
+
 def _has_discriminator(field_info: FieldInfo) -> bool:
     """Check if a field uses a discriminated union (via Annotated or Field(discriminator=...))."""
     if field_info.discriminator is not None:
@@ -503,16 +514,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         for name, value in field_values.items():
             sub_model_field: FieldInfo | None = None
 
-            annotation = field.annotation
-
-            # If field is Optional, we need to find the actual type
-            if is_union_origin(get_origin(field.annotation)):
-                args = get_args(annotation)
-                if len(args) == 2 and type(None) in args:
-                    for arg in args:
-                        if arg is not None:
-                            annotation = arg
-                            break
+            annotation = _unwrap_optional_annotation(field.annotation)
 
             # This is here to make mypy happy
             # Item "None" of "Optional[Type[Any]]" has no attribute "model_fields"
@@ -537,7 +539,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
             if (
                 sub_model_field is not None
-                and _lenient_issubclass(sub_model_field.annotation, BaseModel)
+                and _lenient_issubclass(_unwrap_optional_annotation(sub_model_field.annotation), BaseModel)
                 and isinstance(value, dict)
             ):
                 values[field_key] = self._replace_field_names_case_insensitively(sub_model_field, value)
