@@ -3240,6 +3240,42 @@ except ValidationError as exc_info:
 ```
 
 
+## Async environments
+
+Settings are loaded synchronously. When you use sources that read from disk, such as dotenv, secrets, JSON, TOML, or
+YAML files, creating a settings object in an async application can block the event loop while those files are read.
+If you need to load or reload settings from an async context, run the settings construction in a worker thread:
+
+```py
+import asyncio
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+Path('.env').write_text('api_key=secret\n', encoding='utf-8')
+
+
+class Settings(BaseSettings):
+    api_key: str
+
+    model_config = SettingsConfigDict(env_file='.env')
+
+
+async def load_settings() -> Settings:
+    return await asyncio.to_thread(Settings)
+
+
+settings = asyncio.run(load_settings())
+print(settings.api_key)
+#> secret
+```
+
+The same pattern can be used for reloading. For example, if you keep a mutable settings instance, call
+`await asyncio.to_thread(settings.__init__)` instead of calling `settings.__init__()` directly from the event loop.
+If you cache settings in your application, protect the reload path with your normal application-level locking so only
+one coroutine refreshes the cached object at a time.
+
+
 ## In-place reloading
 
 In case you want to reload in-place an existing setting, you can do it by using its `__init__` method :
