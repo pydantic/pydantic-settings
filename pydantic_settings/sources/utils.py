@@ -258,10 +258,14 @@ def _annotation_enum_val_to_name(annotation: type[Any] | None, value: Any) -> st
 
 
 def _annotation_enum_name_to_val(annotation: type[Any] | None, name: Any) -> Any:
-    for type_ in (annotation, get_origin(annotation), *get_args(annotation)):
+    for type_ in (annotation, get_origin(annotation)):
         if _lenient_issubclass(type_, Enum):
             if name in type_.__members__.keys():
                 return type_[name]
+    for arg in get_args(annotation):
+        enum_val = _annotation_enum_name_to_val(arg, name)
+        if enum_val is not None:
+            return enum_val
     return None
 
 

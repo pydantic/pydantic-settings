@@ -2822,6 +2822,15 @@ def test_env_parse_enums(env):
     assert s.nested.fruit == FruitsEnum.lime
 
 
+def test_env_parse_enums_with_nested_annotated(env):
+    class Settings(BaseSettings):
+        fruit: Annotated[FruitsEnum, Field(description='fruit')] | None = None
+
+    env.set('FRUIT', 'kiwi')
+
+    assert Settings(_env_parse_enums=True).fruit == FruitsEnum.kiwi
+
+
 def test_env_parse_none_str(env):
     env.set('x', 'null')
     env.set('y', 'y_override')
