@@ -3328,6 +3328,70 @@ def test_dotenv_extra_allow_similar_fields(tmp_path):
     assert s.model_dump() == {'POSTGRES_USER': 'postgres', 'postgres_name': 'name', 'postgres_user_2': 'postgres2'}
 
 
+def test_dotenv_extra_allow_similar_complex_fields(tmp_path):
+    """A complex field must not claim extras that merely share its name prefix.
+
+    `dbx_token` is not `db` and, without a nested delimiter, cannot belong to `db`
+    at all -- it must be kept as an extra instead of being silently dropped.
+    """
+    p = tmp_path / '.env'
+    p.write_text('dbx_token=secret\n')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_file=p, extra='allow')
+
+        db: dict = {}
+
+    s = Settings()
+    assert s.db == {}
+    assert s.model_dump() == {'db': {}, 'dbx_token': 'secret'}
+
+
+def test_dotenv_extra_allow_complex_field_nested_delimiter_boundary(tmp_path):
+    """Only vars at the nested delimiter boundary belong to a complex field.
+
+    With `env_nested_delimiter='__'`, `db__host` is consumed into `db`, while
+    `db_host` and `dbx_token` are not part of `db` and must survive as extras.
+    """
+    p = tmp_path / '.env'
+    p.write_text('db__host=localhost\ndb_host=oops\ndbx_token=secret\n')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_file=p, extra='allow', env_nested_delimiter='__')
+
+        db: dict = {}
+
+    s = Settings()
+    assert s.db == {'host': 'localhost'}
+    assert s.model_dump() == {'db': {'host': 'localhost'}, 'db_host': 'oops', 'dbx_token': 'secret'}
+
+
+def test_dotenv_extra_forbid_similar_complex_fields(tmp_path):
+    """With extra='forbid', a var sharing a complex field's name prefix must raise.
+
+    Previously `dbx_token` was wrongly treated as consumed by `db`, so the
+    forbidden extra was silently ignored instead of failing validation.
+    """
+    p = tmp_path / '.env'
+    p.write_text('dbx_token=secret\n')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_file=p, extra='forbid')
+
+        db: dict = {}
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert exc_info.value.errors(include_url=False) == [
+        {
+            'type': 'extra_forbidden',
+            'loc': ('dbx_token',),
+            'msg': 'Extra inputs are not permitted',
+            'input': 'secret',
+        }
+    ]
+
+
 def test_annotation_is_complex_root_model_check():
     """Test for https://github.com/pydantic/pydantic-settings/issues/390"""
 

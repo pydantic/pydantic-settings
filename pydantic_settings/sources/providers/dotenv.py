@@ -150,7 +150,13 @@ class DotEnvSettingsSource(EnvSettingsSource):
                                 and _union_is_complex(field.annotation, field.metadata, self._init_state)
                             )
                         )
-                        and env_name.startswith(field_env_name)
+                        # A var only belongs to a complex field when it sits at the nested
+                        # delimiter boundary (`db<delim>...`, matching what explode_env_vars
+                        # consumes). A bare name-prefix match (e.g. `dbx_token` vs field `db`)
+                        # must not claim the var, otherwise it is silently dropped instead of
+                        # being kept as an extra.
+                        and bool(self.env_nested_delimiter)
+                        and env_name.startswith(f'{field_env_name}{self.env_nested_delimiter}')
                     ):
                         env_used = True
                         break
