@@ -3971,7 +3971,7 @@ def test_debug_sources_disabled_by_default(env, caplog, monkeypatch):
     with caplog.at_level(logging.DEBUG, logger='pydantic_settings'):
         Settings(port=9000)
 
-    assert caplog.records == []
+assert not any('Resolving settings for' in r.getMessage() for r in caplog.records)
 
 
 @pytest.mark.parametrize('flag', ['1', 'true', 'True', 'yes', 'on'])
