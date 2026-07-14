@@ -3191,6 +3191,25 @@ def test_case_insensitive_nested_optional(env):
     assert s.model_dump() == {'nested': {'BaR': 123, 'FOO': 'string'}}
 
 
+def test_case_insensitive_deeply_nested_optional(env):
+    """Optional nested models must still be resolved case-insensitively (#903)."""
+
+    class NestedModel(BaseModel):
+        Name: str
+
+    class ConfigModel(BaseModel):
+        nested: NestedModel | None = None
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', case_sensitive=False)
+
+        config: ConfigModel
+
+    env.set('config__nested__name', 'value')
+    s = Settings()
+    assert s.model_dump() == {'config': {'nested': {'Name': 'value'}}}
+
+
 def test_case_insensitive_nested_alias(env):
     """Ensure case-insensitive environment lookup works with nested aliases."""
 
