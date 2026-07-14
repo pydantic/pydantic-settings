@@ -3068,8 +3068,8 @@ Resolving settings for 'Settings' (sources in priority order, highest first):
   DefaultSettingsSource: {}
 ```
 
-Since the sources are listed from highest to lowest priority, the effective value of any field is the
-one from the first (topmost) source whose dictionary contains it.
+Sources are listed from highest to lowest priority and merged using a deep update: higher-priority sources override lower-priority ones.
+For nested structures, lower-priority sources may still contribute missing sub-keys even when the top-level key is present in a higher-priority source.
 
 !!! warning
     The debug output includes the values loaded from every source, which may contain secrets loaded
