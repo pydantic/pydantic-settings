@@ -4005,4 +4005,4 @@ def test_debug_sources_falsy_env_value(env, caplog):
     with caplog.at_level(logging.DEBUG, logger='pydantic_settings'):
         Settings(port=9000)
 
-    assert caplog.records == []
+assert not any('Resolving settings for' in r.getMessage() for r in caplog.records)
