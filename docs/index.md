@@ -3049,8 +3049,8 @@ the selected value is determined as follows (in descending order of priority):
 
 When several sources are enabled, it can be hard to tell which source a given value came from — and
 why. Setting the `PYDANTIC_SETTINGS_DEBUG` environment variable to a truthy value (`1`, `true`, `yes`,
-or `on`) makes pydantic-settings log, at `DEBUG` level, the dictionary contributed by every source in
-priority order along with the winning source for each resolved value:
+or `on`) makes pydantic-settings log, at `DEBUG` level, the dictionary collected by every source in
+priority order (highest first):
 
 ```bash
 PYDANTIC_SETTINGS_DEBUG=1 python your_app.py
@@ -3066,10 +3066,10 @@ Resolving settings for 'Settings' (sources in priority order, highest first):
   DotEnvSettingsSource: {}
   SecretsSettingsSource: {}
   DefaultSettingsSource: {}
-Final values (winning source in parentheses):
-  name = 'from_env'  (EnvSettingsSource)
-  port = 9000  (InitSettingsSource)
 ```
+
+Since the sources are listed from highest to lowest priority, the effective value of any field is the
+one from the first (topmost) source whose dictionary contains it.
 
 !!! warning
     The debug output includes the values loaded from every source, which may contain secrets loaded

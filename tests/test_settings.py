@@ -3965,14 +3965,14 @@ def test_debug_sources_enabled(env, caplog, flag):
 
     assert len(caplog.records) == 1
     message = caplog.records[0].getMessage()
-    # Each source is reported in priority order.
-    assert 'InitSettingsSource' in message
-    assert 'EnvSettingsSource' in message
-    assert 'DefaultSettingsSource' in message
-    assert message.index('InitSettingsSource') < message.index('EnvSettingsSource')
-    # The winning source is annotated for each final value.
-    assert 'port = 9000  (InitSettingsSource)' in message
-    assert "name = 'from_env'  (EnvSettingsSource)" in message
+    # Each source reports the data it collected, in priority order (highest first).
+    assert (
+        message.index('InitSettingsSource')
+        < message.index('EnvSettingsSource')
+        < message.index('DefaultSettingsSource')
+    )
+    assert "InitSettingsSource: {'port': 9000}" in message
+    assert "EnvSettingsSource: {'name': 'from_env'}" in message
 
 
 def test_debug_sources_falsy_env_value(env, caplog):
