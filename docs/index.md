@@ -3338,8 +3338,43 @@ print(settings.api_key)
 #> secret
 
 env_path.unlink(missing_ok=True)
+```
 
-The same pattern applies to [in-place reloading](#in-place-reloading). If you keep a mutable settings instance, call
-`await asyncio.to_thread(settings.__init__)` instead of calling `settings.__init__()` directly on the event loop.
-When you cache settings, guard the reload path with your usual application-level locking so that only one coroutine
-refreshes the cached object at a time.
+To reload a cached settings object, prefer constructing a fresh instance in a worker thread and swapping the cached
+reference, rather than mutating a shared instance in place:
+
+```py
+import asyncio
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+env_path = Path('example.env')
+env_path.write_text('api_key=secret\n', encoding='utf-8')
+
+
+class Settings(BaseSettings):
+    api_key: str
+
+    model_config = SettingsConfigDict(env_file=env_path)
+
+
+cached_settings = Settings()
+
+
+async def reload_settings() -> None:
+    global cached_settings
+    cached_settings = await asyncio.to_thread(Settings)
+
+
+asyncio.run(reload_settings())
+print(cached_settings.api_key)
+#> secret
+
+env_path.unlink(missing_ok=True)
+```
+
+Rebinding the reference is atomic, so concurrent readers always observe a fully-initialized object. By contrast,
+[in-place reloading](#in-place-reloading) (`settings.__init__()`) mutates the object while it runs, so a coroutine that
+reads the settings during a reload may see partially-updated state; if you rely on it, guard both the reload and every
+read with application-level locking.
