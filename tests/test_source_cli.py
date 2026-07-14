@@ -2726,6 +2726,19 @@ def test_cli_user_settings_source_exceptions():
         CliSettingsSource(CfgWithSubCommand, add_subparsers_method=None)
 
 
+def test_cli_enum_default_through_nested_annotation(capsys, monkeypatch):
+    class Cfg(BaseSettings, cli_parse_args=True, cli_prog_name='example.py'):
+        fruit: Annotated[FruitsEnum, Field(description='fruit')] | None = FruitsEnum.kiwi
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['example.py', '--help'])
+
+        with pytest.raises(SystemExit):
+            Cfg()
+
+        assert '(default: kiwi)' in capsys.readouterr().out
+
+
 @pytest.mark.parametrize(
     'value,expected',
     [

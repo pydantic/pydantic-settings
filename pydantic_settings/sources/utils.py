@@ -250,18 +250,28 @@ def _strip_annotated(annotation: Any) -> Any:
 
 
 def _annotation_enum_val_to_name(annotation: type[Any] | None, value: Any) -> str | None:
-    for type_ in (annotation, get_origin(annotation), *get_args(annotation)):
+    for type_ in (annotation, get_origin(annotation)):
         if _lenient_issubclass(type_, Enum):
-            if value in type_.__members__.values():
-                return type_(value).name
+            enum_type = cast('type[Enum]', type_)
+            if value in enum_type.__members__.values():
+                return enum_type(value).name
+    for arg in get_args(annotation):
+        enum_name = _annotation_enum_val_to_name(arg, value)
+        if enum_name is not None:
+            return enum_name
     return None
 
 
 def _annotation_enum_name_to_val(annotation: type[Any] | None, name: Any) -> Any:
-    for type_ in (annotation, get_origin(annotation), *get_args(annotation)):
+    for type_ in (annotation, get_origin(annotation)):
         if _lenient_issubclass(type_, Enum):
-            if name in type_.__members__.keys():
-                return type_[name]
+            enum_type = cast('type[Enum]', type_)
+            if name in enum_type.__members__.keys():
+                return enum_type[name]
+    for arg in get_args(annotation):
+        enum_val = _annotation_enum_name_to_val(arg, name)
+        if enum_val is not None:
+            return enum_val
     return None
 
 
