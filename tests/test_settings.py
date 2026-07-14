@@ -3971,7 +3971,7 @@ def test_debug_sources_disabled_by_default(env, caplog, monkeypatch):
     with caplog.at_level(logging.DEBUG, logger='pydantic_settings'):
         Settings(port=9000)
 
-assert not any('Resolving settings for' in r.getMessage() for r in caplog.records)
+    assert not any('Resolving settings for' in r.getMessage() for r in caplog.records)
 
 
 @pytest.mark.parametrize('flag', ['1', 'true', 'True', 'yes', 'on'])
@@ -3985,9 +3985,9 @@ def test_debug_sources_enabled(env, caplog, flag):
     with caplog.at_level(logging.DEBUG, logger='pydantic_settings'):
         Settings(port=9000)
 
-messages = [r.getMessage() for r in caplog.records if 'Resolving settings for' in r.getMessage()]
-assert len(messages) == 1
-message = messages[0]
+    messages = [r.getMessage() for r in caplog.records if 'Resolving settings for' in r.getMessage()]
+    assert len(messages) == 1
+    message = messages[0]
     # Each source reports the data it collected, in priority order (highest first).
     assert (
         message.index('InitSettingsSource')
@@ -4006,4 +4006,4 @@ def test_debug_sources_falsy_env_value(env, caplog):
     with caplog.at_level(logging.DEBUG, logger='pydantic_settings'):
         Settings(port=9000)
 
-assert not any('Resolving settings for' in r.getMessage() for r in caplog.records)
+    assert not any('Resolving settings for' in r.getMessage() for r in caplog.records)
