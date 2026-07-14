@@ -3319,13 +3319,14 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-Path('.env').write_text('api_key=secret\n', encoding='utf-8')
+env_path = Path('example.env')
+env_path.write_text('api_key=secret\n', encoding='utf-8')
 
 
 class Settings(BaseSettings):
     api_key: str
 
-    model_config = SettingsConfigDict(env_file='.env')
+    model_config = SettingsConfigDict(env_file=env_path)
 
 
 async def load_settings() -> Settings:
@@ -3335,7 +3336,8 @@ async def load_settings() -> Settings:
 settings = asyncio.run(load_settings())
 print(settings.api_key)
 #> secret
-```
+
+env_path.unlink(missing_ok=True)
 
 The same pattern applies to [in-place reloading](#in-place-reloading). If you keep a mutable settings instance, call
 `await asyncio.to_thread(settings.__init__)` instead of calling `settings.__init__()` directly on the event loop.
