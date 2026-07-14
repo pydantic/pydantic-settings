@@ -3959,7 +3959,10 @@ def test_warn_on_incomplete_field_info_standalone_source():
     assert incomplete_warnings[0].startswith("Field 'service' ")
 
 
-def test_debug_sources_disabled_by_default(env, caplog):
+def test_debug_sources_disabled_by_default(env, caplog, monkeypatch):
+    # Ensure the env var is unset regardless of the outer environment.
+    monkeypatch.delenv('PYDANTIC_SETTINGS_DEBUG', raising=False)
+
     class Settings(BaseSettings, env_prefix='myapp_'):
         name: str = 'default'
         port: int = 8080

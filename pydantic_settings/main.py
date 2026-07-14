@@ -515,7 +515,7 @@ class BaseSettings(BaseModel):
             # Strip any default values not explicitly set before returning final state
             state = {key: val for key, val in state.items() if key not in defaults or defaults[key] != val}
 
-            if _settings_debug_enabled():
+            if _settings_debug_enabled() and logger.isEnabledFor(logging.DEBUG):
                 cls._settings_log_debug(states)
             # The last source is the `DefaultSettingsSource` instance created in `_settings_init_sources()`,
             # holding the init state shared by all built-in sources:
