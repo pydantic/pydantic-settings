@@ -3305,3 +3305,76 @@ mutable_settings.__init__()
 print(mutable_settings.foo)
 #> foo
 ```
+
+
+## Async environments
+
+Settings are loaded synchronously. When you use sources that read from disk, such as dotenv, secrets, JSON, TOML, or
+YAML files, constructing a settings object in an async application can block the event loop while those files are read.
+To load or reload settings from an async context, run the construction in a worker thread:
+
+```py
+import asyncio
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+env_path = Path('example.env')
+env_path.write_text('api_key=secret\n', encoding='utf-8')
+
+
+class Settings(BaseSettings):
+    api_key: str
+
+    model_config = SettingsConfigDict(env_file=env_path)
+
+
+async def load_settings() -> Settings:
+    return await asyncio.to_thread(Settings)
+
+
+settings = asyncio.run(load_settings())
+print(settings.api_key)
+#> secret
+
+env_path.unlink(missing_ok=True)
+```
+
+To reload a cached settings object, prefer constructing a fresh instance in a worker thread and swapping the cached
+reference, rather than mutating a shared instance in place:
+
+```py
+import asyncio
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+env_path = Path('example.env')
+env_path.write_text('api_key=secret\n', encoding='utf-8')
+
+
+class Settings(BaseSettings):
+    api_key: str
+
+    model_config = SettingsConfigDict(env_file=env_path)
+
+
+cached_settings = Settings()
+
+
+async def reload_settings() -> None:
+    global cached_settings
+    cached_settings = await asyncio.to_thread(Settings)
+
+
+asyncio.run(reload_settings())
+print(cached_settings.api_key)
+#> secret
+
+env_path.unlink(missing_ok=True)
+```
+
+Rebinding the reference is atomic, so concurrent readers always observe a fully-initialized object. By contrast,
+[in-place reloading](#in-place-reloading) (`settings.__init__()`) mutates the object while it runs, so a coroutine that
+reads the settings during a reload may see partially-updated state; if you rely on it, guard both the reload and every
+read with application-level locking.
