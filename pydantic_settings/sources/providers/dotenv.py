@@ -155,7 +155,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
                         # consumes). A bare name-prefix match (e.g. `dbx_token` vs field `db`)
                         # must not claim the var, otherwise it is silently dropped instead of
                         # being kept as an extra.
-                        and bool(self.env_nested_delimiter)
+                        and self.env_nested_delimiter
                         and env_name.startswith(f'{field_env_name}{self.env_nested_delimiter}')
                     ):
                         env_used = True

@@ -3392,6 +3392,33 @@ def test_dotenv_extra_forbid_similar_complex_fields(tmp_path):
     ]
 
 
+def test_dotenv_extra_forbid_similar_union_complex_fields(tmp_path):
+    """Same guard applies to the union-complex branch of the field matching.
+
+    `db: dict | None` reaches the matching logic via the union-complex path
+    rather than `_annotation_is_complex`, so exercise it explicitly: `dbx_token`
+    must not be claimed by `db` and must raise under extra='forbid'.
+    """
+    p = tmp_path / '.env'
+    p.write_text('dbx_token=secret\n')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_file=p, extra='forbid')
+
+        db: dict | None = None
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert exc_info.value.errors(include_url=False) == [
+        {
+            'type': 'extra_forbidden',
+            'loc': ('dbx_token',),
+            'msg': 'Extra inputs are not permitted',
+            'input': 'secret',
+        }
+    ]
+
+
 def test_annotation_is_complex_root_model_check():
     """Test for https://github.com/pydantic/pydantic-settings/issues/390"""
 
