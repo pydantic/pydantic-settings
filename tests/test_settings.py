@@ -1,5 +1,6 @@
 import dataclasses
 import json
+import logging
 import os
 import pathlib
 import sys
@@ -2822,6 +2823,15 @@ def test_env_parse_enums(env):
     assert s.nested.fruit == FruitsEnum.lime
 
 
+def test_env_parse_enums_with_nested_annotated(env):
+    class Settings(BaseSettings):
+        fruit: Annotated[FruitsEnum, Field(description='fruit')] | None = None
+
+    env.set('FRUIT', 'kiwi')
+
+    assert Settings(_env_parse_enums=True).fruit == FruitsEnum.kiwi
+
+
 def test_env_parse_none_str(env):
     env.set('x', 'null')
     env.set('y', 'y_override')
@@ -4047,3 +4057,53 @@ def test_warn_on_incomplete_field_info_standalone_source():
     incomplete_warnings = [str(w.message) for w in caught if w.category is IncompleteFieldDefinitionWarning]
     assert len(incomplete_warnings) == 1
     assert incomplete_warnings[0].startswith("Field 'service' ")
+
+
+def test_debug_sources_disabled_by_default(env, caplog, monkeypatch):
+    # Ensure the env var is unset regardless of the outer environment.
+    monkeypatch.delenv('PYDANTIC_SETTINGS_DEBUG', raising=False)
+
+    class Settings(BaseSettings, env_prefix='myapp_'):
+        name: str = 'default'
+        port: int = 8080
+
+    env.set('myapp_name', 'from_env')
+    with caplog.at_level(logging.DEBUG, logger='pydantic_settings'):
+        Settings(port=9000)
+
+    assert not any('Resolving settings for' in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize('flag', ['1', 'true', 'True', 'yes', 'on'])
+def test_debug_sources_enabled(env, caplog, flag):
+    class Settings(BaseSettings, env_prefix='myapp_'):
+        name: str = 'default'
+        port: int = 8080
+
+    env.set('PYDANTIC_SETTINGS_DEBUG', flag)
+    env.set('myapp_name', 'from_env')
+    with caplog.at_level(logging.DEBUG, logger='pydantic_settings'):
+        Settings(port=9000)
+
+    messages = [r.getMessage() for r in caplog.records if 'Resolving settings for' in r.getMessage()]
+    assert len(messages) == 1
+    message = messages[0]
+    # Each source reports the data it collected, in priority order (highest first).
+    assert (
+        message.index('InitSettingsSource')
+        < message.index('EnvSettingsSource')
+        < message.index('DefaultSettingsSource')
+    )
+    assert "InitSettingsSource: {'port': 9000}" in message
+    assert "EnvSettingsSource: {'name': 'from_env'}" in message
+
+
+def test_debug_sources_falsy_env_value(env, caplog):
+    class Settings(BaseSettings):
+        port: int = 8080
+
+    env.set('PYDANTIC_SETTINGS_DEBUG', 'false')
+    with caplog.at_level(logging.DEBUG, logger='pydantic_settings'):
+        Settings(port=9000)
+
+    assert not any('Resolving settings for' in r.getMessage() for r in caplog.records)
