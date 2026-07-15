@@ -4107,3 +4107,54 @@ def test_debug_sources_falsy_env_value(env, caplog):
         Settings(port=9000)
 
     assert not any('Resolving settings for' in r.getMessage() for r in caplog.records)
+
+
+def test_debug_env_file_resolution(env, caplog, tmp_path):
+    present = tmp_path / '.env'
+    present.write_text('name=from_dotenv')
+    missing = tmp_path / '.env.missing'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_file=[missing, present])
+        name: str = 'default'
+
+    env.set('PYDANTIC_SETTINGS_DEBUG', '1')
+    with caplog.at_level(logging.DEBUG, logger='pydantic_settings'):
+        s = Settings()
+
+    assert s.name == 'from_dotenv'
+    messages = [r.getMessage() for r in caplog.records]
+    assert any(f'Loading env file: {present.resolve()}' == m for m in messages)
+    assert any(f'Env file not found, skipping: {missing.resolve()}' == m for m in messages)
+
+
+def test_debug_env_file_resolution_disabled_by_default(env, caplog, tmp_path, monkeypatch):
+    monkeypatch.delenv('PYDANTIC_SETTINGS_DEBUG', raising=False)
+    missing = tmp_path / '.env.missing'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_file=missing)
+        name: str = 'default'
+
+    with caplog.at_level(logging.DEBUG, logger='pydantic_settings'):
+        Settings()
+
+    assert not any('env file' in r.getMessage().lower() for r in caplog.records)
+
+
+def test_debug_secret_file_resolution(env, caplog, tmp_path):
+    (tmp_path / 'name').write_text('from_secret')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(secrets_dir=tmp_path)
+        name: str = 'default'
+        missing: str = 'default'
+
+    env.set('PYDANTIC_SETTINGS_DEBUG', '1')
+    with caplog.at_level(logging.DEBUG, logger='pydantic_settings'):
+        s = Settings()
+
+    assert s.name == 'from_secret'
+    messages = [r.getMessage() for r in caplog.records]
+    assert any(f'Loading secret file: {(tmp_path / "name").resolve()}' == m for m in messages)
+    assert any('Secret file not found, skipping' in m and 'missing' in m for m in messages)

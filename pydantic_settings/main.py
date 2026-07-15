@@ -3,7 +3,6 @@ from __future__ import annotations as _annotations
 import asyncio
 import inspect
 import logging
-import os
 import re
 import threading
 import warnings
@@ -42,17 +41,9 @@ from .sources import (
     get_subcommand,
 )
 from .sources.utils import InitState, _get_alias_names, _warn_if_field_info_incomplete
+from .utils import _settings_debug_enabled, logger
 
 T = TypeVar('T')
-
-logger = logging.getLogger('pydantic_settings')
-
-_DEBUG_ENV_VAR = 'PYDANTIC_SETTINGS_DEBUG'
-
-
-def _settings_debug_enabled() -> bool:
-    """Whether settings source debugging is enabled via the `PYDANTIC_SETTINGS_DEBUG` env var."""
-    return os.environ.get(_DEBUG_ENV_VAR, '').strip().lower() in ('1', 'true', 'yes', 'on')
 
 
 class SettingsConfigDict(ConfigDict, total=False):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations as _annotations
 
+import logging
 import os
 import warnings
 from collections.abc import Mapping
@@ -14,6 +15,7 @@ from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
 )
 from typing_inspection.introspection import is_union_origin
 
+from ...utils import _settings_debug_enabled, logger
 from ..types import ENV_FILE_SENTINEL, DotenvFiltering, DotenvType, EnvPrefixTarget
 from ..utils import (
     InitState,
@@ -103,11 +105,17 @@ class DotEnvSettingsSource(EnvSettingsSource):
         if isinstance(env_files, (str, os.PathLike)):
             env_files = [env_files]
 
+        debug = _settings_debug_enabled() and logger.isEnabledFor(logging.DEBUG)
+
         dotenv_vars: dict[str, str | None] = {}
         for env_file in env_files:
             env_path = Path(env_file).expanduser()
             if env_path.is_file() or env_path.is_fifo():
+                if debug:
+                    logger.debug('Loading env file: %s', env_path.resolve())
                 dotenv_vars.update(self._read_env_file(env_path))
+            elif debug:
+                logger.debug('Env file not found, skipping: %s', env_path.resolve())
 
         return dotenv_vars
 
