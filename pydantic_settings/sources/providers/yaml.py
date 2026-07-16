@@ -61,8 +61,11 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         self.yaml_data = self._read_files(self.yaml_file_path, deep_merge=deep_merge)
 
         if self.yaml_config_section is not None:
-            self.yaml_data = self._traverse_nested_section(
-                self.yaml_data, self.yaml_config_section, self.yaml_config_section
+            # An empty section (`section:` with no children) parses to `None`; coerce it to
+            # an empty mapping so it falls back to defaults, mirroring `_read_file`'s `or {}`
+            # for an empty whole file (otherwise `InitSettingsSource` chokes on `None.keys()`).
+            self.yaml_data = (
+                self._traverse_nested_section(self.yaml_data, self.yaml_config_section, self.yaml_config_section) or {}
             )
         super().__init__(settings_cls, self.yaml_data, _init_state=_init_state)
 
