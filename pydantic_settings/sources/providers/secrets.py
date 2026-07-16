@@ -2,6 +2,7 @@
 
 from __future__ import annotations as _annotations
 
+import logging
 import os
 import warnings
 from pathlib import Path
@@ -12,7 +13,7 @@ from typing import (
 
 from pydantic.fields import FieldInfo
 
-from pydantic_settings.utils import path_type_label
+from pydantic_settings.utils import _settings_debug_enabled, logger, path_type_label
 
 from ...exceptions import SettingsError
 from ..base import PydanticBaseEnvSettingsSource
@@ -113,15 +114,21 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
                 a flag to determine whether value is complex.
         """
 
+        debug = _settings_debug_enabled() and logger.isEnabledFor(logging.DEBUG)
+
         for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
             # paths reversed to match the last-wins behaviour of `env_file`
             for secrets_path in reversed(self.secrets_paths):
                 path = self.find_case_path(secrets_path, env_name, self.case_sensitive)
                 if not path:
                     # path does not exist, we currently don't return a warning for this
+                    if debug:
+                        logger.debug('Secret file not found, skipping: %s', (secrets_path / env_name).resolve())
                     continue
 
                 if path.is_file():
+                    if debug:
+                        logger.debug('Loading secret file: %s', path.resolve())
                     return path.read_text().strip(), field_key, value_is_complex
                 else:
                     warnings.warn(

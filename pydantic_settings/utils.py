@@ -1,6 +1,18 @@
+import logging
+import os
 import types
 from pathlib import Path
 from typing import Any, _Final, _GenericAlias, get_origin  # type: ignore [attr-defined]
+
+logger = logging.getLogger('pydantic_settings')
+
+_DEBUG_ENV_VAR = 'PYDANTIC_SETTINGS_DEBUG'
+
+
+def _settings_debug_enabled() -> bool:
+    """Whether settings source debugging is enabled via the `PYDANTIC_SETTINGS_DEBUG` env var."""
+    return os.environ.get(_DEBUG_ENV_VAR, '').strip().lower() in ('1', 'true', 'yes', 'on')
+
 
 _PATH_TYPE_LABELS = {
     Path.is_dir: 'directory',
