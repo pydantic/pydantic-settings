@@ -72,6 +72,29 @@ def cd_tmp_path(tmp_path: Path) -> Iterator[Path]:
 
 
 @pytest.fixture
+def non_utf8_default_encoding(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    """Make an encoding-less text read behave as it does on a non-UTF-8 locale.
+
+    The real lever is the platform locale, which a test cannot portably change: on
+    CPython the default encoding for ``open()`` is resolved in C and ignores a patched
+    ``locale.getpreferredencoding``. So instead this makes ``Path.read_text()`` fall back
+    to cp1252 (a stand-in for any non-UTF-8 Windows code page) when the caller does not
+    pass an encoding, which is exactly the bug's precondition.
+
+    Reads that pass an explicit encoding are untouched, so a source that names its
+    encoding is unaffected and one that relies on the default is caught on any platform.
+    """
+    fallback = 'cp1252'
+    real_read_text = Path.read_text
+
+    def read_text(self: Path, encoding: str | None = None, *args: object, **kwargs: object) -> str:
+        return real_read_text(self, encoding or fallback, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'read_text', read_text)
+    yield fallback
+
+
+@pytest.fixture
 def env():
     setenv = SetEnv()
 
