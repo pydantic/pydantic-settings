@@ -1879,6 +1879,22 @@ def test_secrets_path(tmp_path):
     assert Settings().model_dump() == {'foo': 'foo_secret_value_str'}
 
 
+def test_secrets_path_utf8_bytes_independent_of_locale(tmp_path, monkeypatch):
+    """Secret files are UTF-8 on disk; do not decode with the process locale (#916)."""
+    expected = 'pässwörd-\U0001f510'
+    (tmp_path / 'token').write_bytes(expected.encode('utf-8'))
+
+    class Settings(BaseSettings):
+        token: str
+
+        model_config = SettingsConfigDict(secrets_dir=tmp_path)
+
+    # Force a non-UTF-8 preferred encoding so a bare read_text() would mis-decode.
+    monkeypatch.setattr('locale.getpreferredencoding', lambda do_setlocale=True: 'cp936')
+
+    assert Settings().token == expected
+
+
 def test_secrets_path_multiple(tmp_path):
     d1 = tmp_path / 'dir1'
     d2 = tmp_path / 'dir2'

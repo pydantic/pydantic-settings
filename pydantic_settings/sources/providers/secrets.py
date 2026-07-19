@@ -129,7 +129,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
                 if path.is_file():
                     if debug:
                         logger.debug('Loading secret file: %s', path.resolve())
-                    return path.read_text().strip(), field_key, value_is_complex
+                    return path.read_text(encoding='utf-8').strip(), field_key, value_is_complex
                 else:
                     warnings.warn(
                         f'attempted to load secret file "{path}" but found a {path_type_label(path)} instead.',

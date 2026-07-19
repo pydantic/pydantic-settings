@@ -202,7 +202,7 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
 
     @classmethod
     def load_secrets(cls, path: Path) -> dict[str, str]:
-        return {str(p.relative_to(path)): p.read_text().strip() for p in cls._iter_secret_files(path)}
+        return {str(p.relative_to(path)): p.read_text(encoding='utf-8').strip() for p in cls._iter_secret_files(path)}
 
     def __repr__(self) -> str:
         return f'NestedSecretsSettingsSource(secrets_dir={self.secrets_dir!r})'

@@ -501,6 +501,31 @@ def test_multiple_secrets_dirs(conf: SettingsConfigDict, secrets, dirs, expected
         raise AssertionError('unreachable')
 
 
+def test_nested_secrets_utf8_bytes_independent_of_locale(tmp_path, monkeypatch):
+    """Nested secret files must decode as UTF-8 regardless of locale (#916)."""
+    expected = 'pässwörd-\U0001f510'
+    secrets = tmp_path / 'secrets'
+    secrets.mkdir()
+    (secrets / 'app_key').write_bytes(expected.encode('utf-8'))
+    (secrets / 'db').mkdir()
+    (secrets / 'db' / 'user').write_text('u', encoding='utf-8')
+    (secrets / 'db' / 'passwd').write_bytes(expected.encode('utf-8'))
+
+    monkeypatch.setattr('locale.getpreferredencoding', lambda do_setlocale=True: 'cp936')
+
+    class Settings(AppSettings):
+        model_config = SettingsConfigDict(
+            secrets_dir=secrets,
+            env_nested_delimiter='__',
+            secrets_nested_subdir=True,
+        )
+
+    conf = Settings()
+    assert conf.app_key == expected
+    assert conf.db.user == 'u'
+    assert conf.db.passwd == expected
+
+
 def test_strip_whitespace(env, tmp_files):
     env.set('DB__USER', 'user')
     tmp_files.write(
