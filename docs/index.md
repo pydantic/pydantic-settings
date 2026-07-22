@@ -318,6 +318,12 @@ the same way it would be if passed directly to the initialiser (as a string).
 Complex types like `list`, `set`, `dict`, and sub-models are populated from the environment by treating the
 environment variable's value as a JSON-encoded string.
 
+!!! warning
+    Because these values are JSON-decoded, an environment variable whose value is not valid JSON raises a
+    [`SettingsError`](../api/pydantic_settings.md#pydantic_settings.SettingsError). For example, `NUMBERS=1,2,3`
+    for a `numbers: list[int]` field fails, because `1,2,3` is not valid JSON. See
+    [Disabling JSON parsing](#disabling-json-parsing) if you want to parse such values with your own logic.
+
 Another way to populate nested complex variables is to configure your model with the `env_nested_delimiter`
 config setting, then use an environment variable with a name pointing to the nested module fields.
 What it does is simply explodes your variable into nested models or dicts.
@@ -486,9 +492,29 @@ print(Settings().model_dump())
 
 ### Disabling JSON parsing
 
-pydantic-settings by default parses complex types from environment variables as JSON strings. If you want to disable
-this behavior for a field and parse the value in your own validator, you can annotate the field with
-[`NoDecode`](../api/pydantic_settings.md#pydantic_settings.NoDecode):
+pydantic-settings by default parses complex types from environment variables as JSON strings. This means a value
+that is not valid JSON raises a [`SettingsError`](../api/pydantic_settings.md#pydantic_settings.SettingsError):
+
+```py
+import os
+
+from pydantic_settings import BaseSettings, SettingsError
+
+
+class Settings(BaseSettings):
+    numbers: list[int]
+
+
+os.environ['numbers'] = '1,2,3'
+try:
+    Settings()
+except SettingsError as e:
+    print(e)
+    #> error parsing value for field "numbers" from source "EnvSettingsSource"
+```
+
+If you want to disable this behavior for a field and parse the value in your own validator, you can annotate the
+field with [`NoDecode`](../api/pydantic_settings.md#pydantic_settings.NoDecode):
 
 ```py
 import os
@@ -515,6 +541,42 @@ print(Settings().model_dump())
 
 1. The `NoDecode` annotation disables JSON parsing for the `numbers` field. The `decode_numbers` field validator
    will be called to parse the value.
+
+To reuse the same parsing across multiple fields, combine `NoDecode` with a
+[`BeforeValidator`](https://docs.pydantic.dev/latest/concepts/validators/#annotated-validators) in a single
+annotated type. This is a common way to accept comma-separated values, for example for CORS origins or allowed
+hosts:
+
+```py
+import os
+from typing import Annotated, Any
+
+from pydantic import BeforeValidator
+
+from pydantic_settings import BaseSettings, NoDecode
+
+
+def split_comma(value: Any) -> Any:
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(',')]
+    return value
+
+
+CommaSeparated = Annotated[list[str], NoDecode, BeforeValidator(split_comma)]
+
+
+class Settings(BaseSettings):
+    cors_origins: CommaSeparated = []
+    trusted_hosts: CommaSeparated = []
+
+
+os.environ['cors_origins'] = 'https://a.com, https://b.com'
+os.environ['trusted_hosts'] = 'a.internal'
+print(Settings().model_dump())
+"""
+{'cors_origins': ['https://a.com', 'https://b.com'], 'trusted_hosts': ['a.internal']}
+"""
+```
 
 You can also disable JSON parsing for all fields by setting the `enable_decoding` config setting to `False`:
 
