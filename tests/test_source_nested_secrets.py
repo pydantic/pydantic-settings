@@ -587,3 +587,17 @@ def test_env_ignore_empty(conf: SettingsConfigDict, expected, tmp_files):
     assert original.model_dump() == evaluated.model_dump()
     for k, v in expected.items():
         assert getattr(original, k) == getattr(evaluated, k) == v
+
+
+def test_load_secrets_reads_utf8(tmp_path):
+    """Secret files are UTF-8 regardless of the platform's locale encoding."""
+    (tmp_path / 'token').write_bytes('pässwörd-\U0001f510'.encode('utf-8'))
+
+    assert NestedSecretsSettingsSource.load_secrets(tmp_path) == {'token': 'pässwörd-\U0001f510'}
+
+
+def test_load_secrets_utf8_under_non_utf8_locale(tmp_path, non_utf8_default_encoding):
+    """An implicit read would decode this with the locale encoding and corrupt it silently."""
+    (tmp_path / 'token').write_bytes('café-pässwörd'.encode())
+
+    assert NestedSecretsSettingsSource.load_secrets(tmp_path) == {'token': 'café-pässwörd'}

@@ -1956,6 +1956,35 @@ def test_secrets_path_url(tmp_path):
     assert settings.bar == SecretStr('snap')
 
 
+def test_secrets_path_utf8(tmp_path):
+    p = tmp_path / 'foo'
+    p.write_bytes('pässwörd-\U0001f510'.encode('utf-8'))
+
+    class Settings(BaseSettings):
+        foo: str
+
+        model_config = SettingsConfigDict(secrets_dir=tmp_path)
+
+    assert Settings().model_dump() == {'foo': 'pässwörd-\U0001f510'}
+
+
+def test_secrets_path_utf8_under_non_utf8_locale(tmp_path, non_utf8_default_encoding):
+    """A UTF-8 secret must not be decoded with the locale encoding.
+
+    On a Windows code page such as cp1252 or cp936 an implicit `read_text()` either
+    raises `UnicodeDecodeError` or, worse, silently returns a different string.
+    """
+    p = tmp_path / 'foo'
+    p.write_bytes('café-pässwörd'.encode())
+
+    class Settings(BaseSettings):
+        foo: str
+
+        model_config = SettingsConfigDict(secrets_dir=tmp_path)
+
+    assert Settings().model_dump() == {'foo': 'café-pässwörd'}
+
+
 def test_secrets_path_json(tmp_path):
     p = tmp_path / 'foo'
     p.write_text('{"a": "b"}')
