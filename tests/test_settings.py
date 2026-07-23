@@ -3751,6 +3751,33 @@ def test_parsing_secret_field(env):
     assert s.bar.get_secret_value() == PostgresDsn('postgres://user:password@localhost/dbname')
 
 
+def test_parsing_secret_subclass_field(env):
+    # A subclass of the generic `Secret` type must be treated like `Secret`
+    # itself, i.e. not as a "complex" field that gets JSON-decoded. Regression
+    # test for https://github.com/pydantic/pydantic-settings/issues/716.
+    SecretT = TypeVar('SecretT')
+
+    class MySecret(Secret[SecretT]):
+        @override
+        def _display(self) -> str:
+            return '***'
+
+    class Settings(BaseSettings):
+        foo: MySecret[int]
+        bar: MySecret[PostgresDsn]
+        baz: MySecret[PostgresDsn] | None = None
+
+    env.set('foo', '123')
+    env.set('bar', 'postgres://user:password@localhost/dbname')
+    env.set('baz', 'postgres://user:password@localhost/other')
+
+    s = Settings()
+    assert s.foo.get_secret_value() == 123
+    assert s.bar.get_secret_value() == PostgresDsn('postgres://user:password@localhost/dbname')
+    assert s.baz is not None
+    assert s.baz.get_secret_value() == PostgresDsn('postgres://user:password@localhost/other')
+
+
 def test_field_annotated_no_decode(env):
     class Settings(BaseSettings):
         a: list[str]  # this field will be decoded because of default `enable_decoding=True`
