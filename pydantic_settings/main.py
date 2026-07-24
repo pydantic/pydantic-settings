@@ -108,6 +108,21 @@ class SettingsConfigDict(ConfigDict, total=False):
     To use the root table, exclude this config setting or provide an empty tuple.
     """
 
+    pyproject_toml_additional_fields: tuple[tuple[str, ...], ...]
+    """
+    Additional fields to load from a `pyproject.toml` file that live outside of the table defined by
+    `pyproject_toml_table_header`.
+
+    Each entry is a `tuple[str, ...]` describing the full path to a field within the file. The field's
+    leaf key is merged into the loaded settings alongside the values from the table header, which lets
+    settings reuse values declared elsewhere in `pyproject.toml`.
+
+    For example, `pyproject_toml_additional_fields = (("project", "version"),)` makes the `version`
+    field from the `[project]` table available to the settings model.
+
+    Fields whose path is not present in the file are silently skipped. Defaults to an empty tuple.
+    """
+
     toml_file: ConfigFileSourceType | None
 
     toml_table_header: tuple[str, ...]
@@ -610,7 +625,10 @@ class BaseSettings(BaseModel):
                         )
 
         warn_if_not_used(JsonConfigSettingsSource, ('json_file', 'json_file_encoding'))
-        warn_if_not_used(PyprojectTomlConfigSettingsSource, ('pyproject_toml_depth', 'pyproject_toml_table_header'))
+        warn_if_not_used(
+            PyprojectTomlConfigSettingsSource,
+            ('pyproject_toml_depth', 'pyproject_toml_table_header', 'pyproject_toml_additional_fields'),
+        )
         warn_if_not_used(TomlConfigSettingsSource, ('toml_file', 'toml_table_header'))
         warn_if_not_used(YamlConfigSettingsSource, ('yaml_file', 'yaml_file_encoding', 'yaml_config_section'))
 

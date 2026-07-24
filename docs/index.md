@@ -3038,6 +3038,53 @@ field = "default-table"
 field = "some-table"
 ```
 
+#### Loading additional fields from outside the table
+
+Sometimes you want to reuse a value declared elsewhere in "pyproject.toml" (such as the project version) without moving it into your settings table.
+`SettingsConfigDict(pyproject_toml_additional_fields=tuple[tuple[str, ...], ...])` accepts a tuple of field paths; the leaf key of each path is merged into the settings alongside the values loaded from `pyproject_toml_table_header`.
+Paths that are not present in the file are silently skipped.
+
+```python
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    PyprojectTomlConfigSettingsSource,
+    SettingsConfigDict,
+)
+
+
+class AdditionalFieldsSettings(BaseSettings):
+    """Example pulling `version` from the `[project]` table into the settings."""
+
+    model_config = SettingsConfigDict(
+        pyproject_toml_additional_fields=(('project', 'version'),)
+    )
+
+    field: str
+    version: str
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (PyprojectTomlConfigSettingsSource(settings_cls),)
+```
+
+Given the following "pyproject.toml", this results in `AdditionalFieldsSettings(field='default-table', version='1.2.3')`:
+
+```toml
+[project]
+version = "1.2.3"
+
+[tool.pydantic-settings]
+field = "default-table"
+```
+
 By default, `PyprojectTomlConfigSettingsSource` will only look for a "pyproject.toml" in the your current working directory.
 However, there are two options to change this behavior.
 

@@ -56,6 +56,23 @@ class TestPyprojectTomlConfigSettingsSource:
         assert obj.toml_data == {'field': 'some'}
         assert obj.toml_file_path == tmp_path / 'pyproject.toml'
 
+    def test___init___additional_fields(self, mocker: MockerFixture, tmp_path: Path) -> None:
+        """Test __init__ merges additional fields from outside the table header."""
+        mocker.patch(f'{MODULE}.Path.cwd', return_value=tmp_path)
+        pyproject = tmp_path / 'pyproject.toml'
+        pyproject.write_text(SOME_TOML_DATA)
+
+        class AdditionalFieldsSettings(BaseSettings):
+            model_config = SettingsConfigDict(
+                pyproject_toml_table_header=('some', 'table'),
+                pyproject_toml_additional_fields=(('other', 'table', 'field'), ('missing', 'field')),
+            )
+
+        obj = PyprojectTomlConfigSettingsSource(AdditionalFieldsSettings)
+        # The leaf key of each present path is merged alongside the table values;
+        # missing paths are silently skipped.
+        assert obj.toml_data == {'field': 'other'}
+
     def test___init___explicit(self, mocker: MockerFixture, tmp_path: Path) -> None:
         """Test __init__ explicit file."""
         mocker.patch(f'{MODULE}.Path.cwd', return_value=tmp_path)
@@ -246,6 +263,39 @@ def test_pyproject_toml_file_header(cd_tmp_path: Path):
 
     s = Settings()
     assert s.status == 'success'
+
+
+@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
+def test_pyproject_toml_additional_fields(cd_tmp_path: Path):
+    pyproject = cd_tmp_path / 'pyproject.toml'
+    pyproject.write_text(
+        """
+    [project]
+    version = "1.2.3"
+
+    [tool.pydantic-settings]
+    field = "default-table"
+    """
+    )
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            extra='forbid',
+            pyproject_toml_additional_fields=(('project', 'version'),),
+        )
+
+        field: str
+        version: str
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls: type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (PyprojectTomlConfigSettingsSource(settings_cls, pyproject),)
+
+    s = Settings()
+    assert s.field == 'default-table'
+    assert s.version == '1.2.3'
 
 
 @pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')

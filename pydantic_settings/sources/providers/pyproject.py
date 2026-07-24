@@ -31,9 +31,21 @@ class PyprojectTomlConfigSettingsSource(TomlConfigSettingsSource):
         self.toml_table_header: tuple[str, ...] = settings_cls.model_config.get(
             'pyproject_toml_table_header', ('tool', 'pydantic-settings')
         )
+        self.toml_additional_fields: tuple[tuple[str, ...], ...] = settings_cls.model_config.get(
+            'pyproject_toml_additional_fields', ()
+        )
         self.toml_data = self._read_files(self.toml_file_path)
+        additional_fields = {}
+        for field_path in self.toml_additional_fields:
+            data = self.toml_data
+            for key in field_path[:-1]:
+                data = data.get(key, {})
+            key = field_path[-1]
+            if key in data:
+                additional_fields[key] = data[key]
         for key in self.toml_table_header:
             self.toml_data = self.toml_data.get(key, {})
+        self.toml_data.update(additional_fields)
         super(TomlConfigSettingsSource, self).__init__(settings_cls, self.toml_data, _init_state=_init_state)
 
     @staticmethod
