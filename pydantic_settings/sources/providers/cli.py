@@ -196,7 +196,7 @@ class _CliArg(BaseModel):
         for type_ in get_args(annotation):
             enum_names += cls.get_enum_names(type_, kebab_case)
         if annotation and _lenient_issubclass(annotation, Enum):
-            enum_names += tuple(cls.get_kebab_case(name, kebab_case == 'all') for name in annotation.__members__.keys())
+            enum_names += tuple(cls.get_kebab_case(name, kebab_case == 'all') for name in annotation.__members__)
         return enum_names
 
     def subcommand_alias(self, sub_model: type[BaseModel]) -> str:
@@ -517,7 +517,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         Returns:
             CliSettingsSource: The object instance itself.
         """
-        ...
 
     @overload
     def __call__(self, *, parsed_args: Namespace | SimpleNamespace | dict[str, Any]) -> CliSettingsSource[T]:
@@ -534,7 +533,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         Returns:
             CliSettingsSource: The object instance itself.
         """
-        ...
 
     def __call__(
         self,
@@ -573,7 +571,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         Returns:
             CliSettingsSource: The object instance itself.
         """
-        ...
 
     def _load_env_vars(
         self, *, parsed_args: Namespace | SimpleNamespace | dict[str, list[str] | str] | None = None
@@ -598,7 +595,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         }
         if selected_subcommands:
             last_selected_subcommand = max(selected_subcommands, key=len)
-            if not any(field_name for field_name in parsed_args.keys() if f'{last_selected_subcommand}.' in field_name):
+            if not any(field_name for field_name in parsed_args if f'{last_selected_subcommand}.' in field_name):
                 parsed_args[last_selected_subcommand] = '{}'
         else:
             last_selected_subcommand = ''
@@ -748,14 +745,14 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         val = self._consume_comma(val, merged_list, is_last_consumed_a_value)
                         is_last_consumed_a_value = False
                     else:
-                        if val.startswith('{') or val.startswith('['):
+                        if val.startswith(('{', '[')):
                             val = self._consume_object_or_array(val, merged_list)
                         else:
                             try:
                                 val = self._consume_string_or_number(val, merged_list, merge_type)
-                            except ValueError as e:
+                            except ValueError:
                                 if merge_type is inferred_type:
-                                    raise e
+                                    raise
                                 merge_type = inferred_type
                                 val = self._consume_string_or_number(val, merged_list, merge_type)
                         is_last_consumed_a_value = True
@@ -1024,7 +1021,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 help='show this help message and exit',
             )
 
-    def _add_parser_args(
+    def _add_parser_args(  # noqa: C901
         self,
         parser: Any,
         model: type[BaseModel],
@@ -1035,11 +1032,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         alias_prefixes: list[str],
         model_default: Any,
         is_model_suppressed: bool = False,
-        discriminator_vals: dict[str, set[Any]] = {},
+        discriminator_vals: dict[str, set[Any]] | None = None,
         is_last_discriminator: bool = True,
         model_path: set[type[BaseModel]] | None = None,
         env_prefixes: tuple[tuple[str, bool], ...] = (),
     ) -> ArgumentParser:
+        if discriminator_vals is None:
+            discriminator_vals = {}
         if model_path is None:
             model_path = set()
         model_path = model_path | {model}
@@ -1360,10 +1359,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         discriminator_vals: dict[str, set[Any]] = (
             {f'{arg_prefix}{preferred_alias}.{field_info.discriminator}': set()} if field_info.discriminator else {}
         )
-        for model in sub_models:
+        for sub_model in sub_models:
             self._add_parser_args(
                 parser=parser,
-                model=model,
+                model=sub_model,
                 added_args=added_args,
                 arg_prefix=f'{arg_prefix}{preferred_alias}.',
                 subcommand_prefix=subcommand_prefix,
@@ -1372,7 +1371,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 model_default=model_default,
                 is_model_suppressed=is_model_suppressed,
                 discriminator_vals=discriminator_vals,
-                is_last_discriminator=model is sub_models[-1],
+                is_last_discriminator=sub_model is sub_models[-1],
                 model_path=model_path,
                 env_prefixes=self._nested_env_prefixes(env_var_names),
             )
@@ -1405,7 +1404,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     kwargs['metavar'] = 'dict'
                     self._cli_dict_args[arg_name] = dict
                 args = [f'{self._cli_flag_prefix}{arg_name}']
-                for key, arg in self._parser_map[arg_name].items():
+                for arg in self._parser_map[arg_name].values():
                     arg.args, arg.kwargs = args, kwargs
                 self._add_argument(context, *args, **kwargs)
                 added_args.append(arg_name)
@@ -1448,7 +1447,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             return self._metavar_format_choices(list(map(str, self._get_modified_args(obj))))
         elif _lenient_issubclass(obj, Enum):
             return self._metavar_format_choices(
-                [_CliArg.get_kebab_case(name, self.cli_kebab_case == 'all') for name in obj.__members__.keys()]
+                [_CliArg.get_kebab_case(name, self.cli_kebab_case == 'all') for name in obj.__members__]
             )
         elif isinstance(obj, _WithArgsTypes):
             return self._metavar_format_choices(
@@ -1566,11 +1565,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _update_alias_path_only_default(
         self, arg_name: str, value: Any, field_info: FieldInfo, alias_path_only_defaults: dict[str, Any]
     ) -> list[Any] | dict[str, Any]:
-        alias_path: AliasPath = [
+        alias_path: AliasPath = next(
             alias if isinstance(alias, AliasPath) else cast(AliasPath, alias.choices[0])
             for alias in (field_info.alias, field_info.validation_alias)
             if isinstance(alias, (AliasPath, AliasChoices))
-        ][0]
+        )
 
         alias_nested_paths: list[str] = alias_path.path[1:-1]  # type: ignore
         if not alias_nested_paths:
@@ -1605,9 +1604,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     values = [','.join(f'{v}' for v in json.loads(value))]
                 elif list_style == 'argparse':
                     values = [f'{v}' for v in json.loads(value)]
-            elif isinstance(model_default, dict):
-                if dict_style == 'env':
-                    values = [f'{k}={v}' for k, v in json.loads(value).items()]
+            elif isinstance(model_default, dict) and dict_style == 'env':
+                values = [f'{k}={v}' for k, v in json.loads(value).items()]
         return values
 
     @staticmethod
@@ -1686,12 +1684,14 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if arg.kwargs.get('action') == BooleanOptionalAction and model_default is False and flag_chars == '--':
                 flag_chars += 'no-'
 
-            for value in self._coerce_value_styles(model_default, value, list_style=list_style, dict_style=dict_style):
+            for coerced_value in self._coerce_value_styles(
+                model_default, value, list_style=list_style, dict_style=dict_style
+            ):
                 optional_args.append(f'{flag_chars}{arg_name}')
 
                 # If implicit bool flag, do not add a value
                 if arg.kwargs.get('action') not in (BooleanOptionalAction, 'store_true', 'store_false'):
-                    optional_args.append(value)
+                    optional_args.append(coerced_value)
 
         return {
             'optional': [json.dumps(value) if not isinstance(value, str) else value for value in optional_args],

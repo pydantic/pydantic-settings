@@ -346,4 +346,4 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
         )
 
 
-__all__ = ['GoogleSecretManagerSettingsSource', 'GoogleSecretManagerMapping']
+__all__ = ['GoogleSecretManagerMapping', 'GoogleSecretManagerSettingsSource']

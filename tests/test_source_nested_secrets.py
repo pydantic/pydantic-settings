@@ -122,15 +122,15 @@ def test_secrets_dir_as_arg(env, tmp_files):
     'conf,secrets',
     (
         (
-            dict(secrets_nested_delimiter='___', secrets_prefix='prefix_'),
+            {'secrets_nested_delimiter': '___', 'secrets_prefix': 'prefix_'},
             {'prefix_app_key': 'secret1', 'prefix_db___passwd': 'secret2'},
         ),
         (
-            dict(secrets_nested_subdir=True, secrets_prefix='prefix_'),
+            {'secrets_nested_subdir': True, 'secrets_prefix': 'prefix_'},
             {'prefix_app_key': 'secret1', 'prefix_db/passwd': 'secret2'},
         ),
         (
-            dict(secrets_nested_subdir=True, secrets_prefix=f'dir1{sep}dir2{sep}'),
+            {'secrets_nested_subdir': True, 'secrets_prefix': f'dir1{sep}dir2{sep}'},
             {'dir1/dir2/app_key': 'secret1', 'dir1/dir2/db/passwd': 'secret2'},
         ),
     ),
@@ -361,98 +361,98 @@ def test_symlinked_dir_escaping_secrets_dir_is_not_walked(tmp_path):
     (
         (
             # when multiple secrets_dir values are given, their values are merged
-            dict(),
+            {},
             {'dir1/key1': 'a', 'dir1/key2': 'b', 'dir2/key2': 'c'},
             ['dir1', 'dir2'],
             {'key1': 'a', 'key2': 'c'},
         ),
         (
             # when secrets_dir is not a directory, error is raised
-            dict(),
+            {},
             {'some_file': ''},
             'some_file',
             (SettingsError, 'must reference a directory'),
         ),
         (
             # missing secrets_dir emits warning by default
-            dict(),
+            {},
             {'key1': 'value'},
             'missing_subdir',
             (UserWarning, 1, 'does not exist', {'key1': None, 'key2': None}),
         ),
         (
             # ...or expect warning explicitly (identical behaviour)
-            dict(secrets_dir_missing='warn'),
+            {'secrets_dir_missing': 'warn'},
             {'key1': 'value'},
             'missing_subdir',
             (UserWarning, 1, 'does not exist', {'key1': None, 'key2': None}),
         ),
         (
             # missing secrets_dir warning can be suppressed
-            dict(secrets_dir_missing='ok'),
+            {'secrets_dir_missing': 'ok'},
             {'key1': 'value'},
             'missing_subdir',
             {'key1': None, 'key2': None},
         ),
         (
             # missing secrets_dir can raise error
-            dict(secrets_dir_missing='error'),
+            {'secrets_dir_missing': 'error'},
             {'key1': 'value'},
             'missing_subdir',
             (SettingsError, 'does not exist'),
         ),
         (
             # invalid secrets_dir_missing value raises error
-            dict(secrets_dir_missing='uNeXpEcTeD'),
+            {'secrets_dir_missing': 'uNeXpEcTeD'},
             {'key1': 'value'},
             'missing_subdir',
             (SettingsError, 'invalid secrets_dir_missing value'),
         ),
         (
             # when multiple secrets_dir do not exist, multiple warnings are emitted
-            dict(),
+            {},
             {'key1': 'value'},
             ['missing_subdir1', 'missing_subdir2'],
             (UserWarning, 2, 'does not exist', {'key1': None, 'key2': None}),
         ),
         (
             # secrets_dir size is limited
-            dict(),
+            {},
             {'key1': 'x' * SECRETS_DIR_MAX_SIZE},
             '.',
             {'key1': 'x' * SECRETS_DIR_MAX_SIZE, 'key2': None},
         ),
         (
             # ...and raises error if file is larger than the limit
-            dict(),
+            {},
             {'key1': 'x' * (SECRETS_DIR_MAX_SIZE + 1)},
             '.',
             (SettingsError, 'secrets_dir size'),
         ),
         (
             # secrets_dir size limit can be adjusted
-            dict(secrets_dir_max_size=100),
+            {'secrets_dir_max_size': 100},
             {'key1': 'x' * 100},
             '.',
             {'key1': 'x' * 100, 'key2': None},
         ),
         (
             # ...and raises error if file is larger than the limit
-            dict(secrets_dir_max_size=100),
+            {'secrets_dir_max_size': 100},
             {'key1': 'x' * 101},
             '.',
             (SettingsError, 'secrets_dir size'),
         ),
         (
             # ...even if secrets_dir size exceeds limit because of another file
-            dict(secrets_dir_max_size=100),
+            {'secrets_dir_max_size': 100},
             {'another_file': 'x' * 101},
             '.',
             (SettingsError, 'secrets_dir size'),
         ),
         (
             # when multiple secrets_dir values are given, their sizes are not added
-            dict(secrets_dir_max_size=100),
+            {'secrets_dir_max_size': 100},
             {'dir1/key1': 'x' * 100, 'dir2/key2': 'y' * 100},
             ['dir1', 'dir2'],
             {'key1': 'x' * 100, 'key2': 'y' * 100},
@@ -540,15 +540,15 @@ def test_invalid_options(tmp_path):
     'conf,expected',
     (
         # default settings
-        ({}, dict(field_empty='', field_none='null', field_enum=SampleEnum.TEST)),
+        ({}, {'field_empty': '', 'field_none': 'null', 'field_enum': SampleEnum.TEST}),
         # env_ignore_empty has no effect on secrets
-        ({'env_ignore_empty': True}, dict(field_empty='')),
-        ({'env_ignore_empty': False}, dict(field_empty='')),
+        ({'env_ignore_empty': True}, {'field_empty': ''}),
+        ({'env_ignore_empty': False}, {'field_empty': ''}),
         # env_parse_none_str has no effect on secrets
-        ({'env_parse_none_str': 'null'}, dict(field_none='null')),
+        ({'env_parse_none_str': 'null'}, {'field_none': 'null'}),
         # env_parse_enums has no effect on secrets
-        ({'env_parse_enums': True}, dict(field_enum=SampleEnum.TEST)),
-        ({'env_parse_enums': False}, dict(field_enum=SampleEnum.TEST)),
+        ({'env_parse_enums': True}, {'field_enum': SampleEnum.TEST}),
+        ({'env_parse_enums': False}, {'field_enum': SampleEnum.TEST}),
     ),
 )
 def test_env_ignore_empty(conf: SettingsConfigDict, expected, tmp_files):

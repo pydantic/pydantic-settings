@@ -147,11 +147,11 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
 
     def _extract_field_info(self, field: FieldInfo, field_name: str) -> list[tuple[str, str, bool]]:
         if self._snake_case_conversion:
-            field_info = list((x[0], x[1], x[2]) for x in super()._extract_field_info(field, field_name))
+            field_info = [(x[0], x[1], x[2]) for x in super()._extract_field_info(field, field_name)]
             return field_info
 
         if self._dash_to_underscore:
-            return list((x[0], x[1].replace('_', '-'), x[2]) for x in super()._extract_field_info(field, field_name))
+            return [(x[0], x[1].replace('_', '-'), x[2]) for x in super()._extract_field_info(field, field_name)]
 
         return super()._extract_field_info(field, field_name)
 
