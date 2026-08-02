@@ -157,7 +157,6 @@ class PydanticBaseSettingsSource(ABC):
         Returns:
             A tuple that contains the value, key and a flag to determine whether value is complex.
         """
-        pass
 
     def field_is_complex(self, field: FieldInfo) -> bool:
         """
@@ -451,16 +450,14 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             if isinstance(v_alias, list):  # AliasChoices, AliasPath
                 for alias in v_alias:
                     if isinstance(alias, str):  # AliasPath
-                        field_info.append(
-                            (alias, self._apply_case_sensitive(env_prefix + alias), True if len(alias) > 1 else False)
-                        )
+                        field_info.append((alias, self._apply_case_sensitive(env_prefix + alias), len(alias) > 1))
                     elif isinstance(alias, list):  # AliasChoices
                         first_arg = cast(str, alias[0])  # first item of an AliasChoices must be a str
                         field_info.append(
                             (
                                 first_arg,
                                 self._apply_case_sensitive(env_prefix + first_arg),
-                                True if len(alias) > 1 else False,
+                                len(alias) > 1,
                             )
                         )
             else:  # string validation alias

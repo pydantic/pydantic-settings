@@ -181,9 +181,8 @@ def _union_is_complex(annotation: type[Any] | None, metadata: list[Any], init_st
             _, *inner_meta = get_args(arg)
             if any(isinstance(md, Json) for md in inner_meta):  # type: ignore[misc]
                 continue
-        if is_union_origin(get_origin(inner)):
-            if _union_is_complex(inner, metadata, init_state):
-                return True
+        if is_union_origin(get_origin(inner)) and _union_is_complex(inner, metadata, init_state):
+            return True
     return False
 
 
@@ -266,7 +265,7 @@ def _annotation_enum_name_to_val(annotation: type[Any] | None, name: Any) -> Any
     for type_ in (annotation, get_origin(annotation)):
         if _lenient_issubclass(type_, Enum):
             enum_type = cast('type[Enum]', type_)
-            if name in enum_type.__members__.keys():
+            if name in enum_type.__members__:
                 return enum_type[name]
     for arg in get_args(annotation):
         enum_val = _annotation_enum_name_to_val(arg, name)

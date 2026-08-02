@@ -423,7 +423,6 @@ class GenerationConfig(BaseSettings):
     )
 
     llm: LLMConfig
-    ...
 
 
 print(GenerationConfig().model_dump())
@@ -1303,9 +1302,8 @@ class Git(BaseSettings):
         CliApp.run_subcommand(self)
 
 
-CliApp.run(Git, cli_args=['clone', 'repo', 'dir']).model_dump() == {
-    'repository': 'repo',
-    'directory': 'dir',
+assert CliApp.run(Git, cli_args=['clone', 'repo', 'dir']).model_dump() == {
+    'clone': {'repository': 'repo', 'directory': 'dir'}
 }
 ```
 

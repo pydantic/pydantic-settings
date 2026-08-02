@@ -95,9 +95,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
             Whether file path or `None` if file does not exist in directory.
         """
         for f in dir_path.iterdir():
-            if f.name == file_name:
-                return f
-            elif not case_sensitive and f.name.lower() == file_name.lower():
+            if f.name == file_name or (not case_sensitive and f.name.lower() == file_name.lower()):
                 return f
         return None
 
