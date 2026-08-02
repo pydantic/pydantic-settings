@@ -145,9 +145,6 @@ pydocstyle = { convention = 'google' }
 
 [tool.ruff.format]
 quote-style = 'single'
-# Ruff 0.16 formats Python code blocks in Markdown by default; disable it so the
-# `#>` example-output markers in our docs aren't rewritten to `# >`.
-exclude = ['*.md']
 
 [tool.mypy]
 python_version = '3.10'
