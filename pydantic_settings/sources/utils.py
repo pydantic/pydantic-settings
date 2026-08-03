@@ -137,7 +137,7 @@ def _annotation_is_complex(annotation: Any, metadata: list[Any], init_state: Ini
         inner, *meta = get_args(annotation)
         return _annotation_is_complex(inner, meta, init_state)
 
-    if origin is Secret:
+    if _lenient_issubclass(origin, Secret):
         return False
 
     return (
