@@ -805,7 +805,7 @@ class CliApp:
             command = model_cls(_build_sources=(sources, init_kwargs))
 
         subcommand_dest = ':subcommand'
-        cli_settings_source = [source for source in sources if isinstance(source, CliSettingsSource)][0]
+        cli_settings_source = next(source for source in sources if isinstance(source, CliSettingsSource))
         CliApp._subcommand_stack[id(command)] = (cli_settings_source, cli_settings_source.root_parser, subcommand_dest)
         try:
             data_model = CliApp._run_cli_cmd(command, cli_cmd_method_name, is_required=False)

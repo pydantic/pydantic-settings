@@ -1908,7 +1908,7 @@ def test_cli_variadic_positional_arg_custom_type():
     from string import ascii_letters
 
     class AsciiLetters(str):
-        def __new__(cls, content: object) -> 'AsciiLetters':
+        def __new__(cls, content: object) -> typing_extensions.Self:
             if not all(c in ascii_letters for c in str(content)):
                 raise Exception('Non-ascii letter')
             return super().__new__(cls, content)
@@ -2770,13 +2770,11 @@ def test_cli_enum_default_through_nested_annotation(capsys, monkeypatch):
         (DirectoryPath, 'Path'),
         (FruitsEnum, '{pear,kiwi,lime}'),
         (time.time_ns, 'time_ns'),
-        (foobar, 'foobar'),
         (CliDummyParser.add_argument, 'CliDummyParser.add_argument'),
         (lambda: str | int, '{str,int}'),
         (lambda: list[int], 'list[int]'),
         (lambda: List[int], 'List[int]'),  # noqa: UP006
         (lambda: list[dict[str, int]], 'list[dict[str,int]]'),
-        (lambda: list[str | int], 'list[{str,int}]'),
         (lambda: list[str | int], 'list[{str,int}]'),
         (lambda: LoggedVar[int], 'LoggedVar[int]'),
         (lambda: LoggedVar[Dict[int, str]], 'LoggedVar[Dict[int,str]]'),  # noqa: UP006
@@ -2789,7 +2787,7 @@ def test_cli_metavar_format(hide_none_type, value, expected):
 
     cli_settings = CliSettingsSource(SimpleSettings, cli_hide_none_type=hide_none_type)
     if hide_none_type:
-        if value == [1, 2, 3] or isinstance(value, LoggedVar) or isinstance(value, Representation):
+        if value == [1, 2, 3] or isinstance(value, (LoggedVar, Representation)):
             pytest.skip()
         if value in ('foobar', 'SomeForwardRefString'):
             expected = f"ForwardRef('{value}')"  # forward ref implicit cast
@@ -2969,8 +2967,8 @@ def test_cli_mutually_exclusive_group(capsys, monkeypatch):
         circle_optional: Circle = Circle(radius=None, diameter=None, perimeter=24)
         circle_required: Circle
 
-    CliApp.run(Settings, cli_args=['--circle-required.radius=1', '--circle-optional.radius=1']).model_dump() == {
-        'circle_optional': {'radius': 1, 'diameter': 22, 'perimeter': 24},
+    assert CliApp.run(Settings, cli_args=['--circle-required.radius=1', '--circle-optional.radius=1']).model_dump() == {
+        'circle_optional': {'radius': 1, 'diameter': None, 'perimeter': 24},
         'circle_required': {'radius': 1, 'diameter': 22, 'perimeter': 23},
     }
 

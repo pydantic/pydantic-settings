@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 if sys.version_info >= (3, 11):
-    from importlib.resources.abc import Traversable as Traversable
+    from importlib.resources.abc import Traversable as Traversable  # noqa: PLC0414  (explicit re-export)
 else:
-    from importlib.abc import Traversable as Traversable
+    from importlib.abc import Traversable as Traversable  # noqa: PLC0414  (explicit re-export)
 
 if TYPE_CHECKING:
     from pydantic._internal._dataclasses import PydanticDataclass
@@ -28,13 +28,9 @@ class EnvNoneType(str):
 class NoDecode:
     """Annotation to prevent decoding of a field value."""
 
-    pass
-
 
 class ForceDecode:
     """Annotation to force decoding of a field value."""
-
-    pass
 
 
 EnvPrefixTarget = Literal['variable', 'alias', 'all']
@@ -91,22 +87,22 @@ class SecretVersion:
 
 
 __all__ = [
-    'ConfigFileSourceType',
     'DEFAULT_PATH',
     'ENV_FILE_SENTINEL',
-    'EnvPrefixTarget',
+    'ConfigFileSourceType',
     'DotenvType',
     'EnvNoneType',
+    'EnvPrefixTarget',
     'ForceDecode',
     'NoDecode',
     'PathType',
     'PydanticModel',
     'SecretVersion',
+    '_CliDualFlag',
     '_CliExplicitFlag',
     '_CliImplicitFlag',
-    '_CliToggleFlag',
-    '_CliDualFlag',
     '_CliPositionalArg',
     '_CliSubCommand',
+    '_CliToggleFlag',
     '_CliUnknownArgs',
 ]

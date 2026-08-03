@@ -794,12 +794,12 @@ def test_alias_resolution_init_source(env):
         @model_validator(mode='before')
         def check_for_deprecated_attributes(cls, data: Any) -> Any:
             if isinstance(data, dict):
-                old_keys = {k for k in data.keys() if k.startswith('OLD_')}
+                old_keys = {k for k in data if k.startswith('OLD_')}
                 assert not old_keys
             return data
 
     s = Settings(NAME='foo')
-    s.model_dump() == {'NAME': 'foo'}
+    assert s.model_dump() == {'NAME': 'foo'}
 
     with pytest.raises(ValidationError, match="Assertion failed, assert not {'OLD_NAME'}"):
         Settings(OLD_NAME='foo')
@@ -2230,7 +2230,7 @@ def test_external_settings_sources_filter_env_vars():
             vault_vars = vault_storage[f'{self.user}:{self.password}']
             return {
                 field_name: vault_vars[field_name]
-                for field_name in self.settings_cls.model_fields.keys()
+                for field_name in self.settings_cls.model_fields
                 if field_name in vault_vars
             }
 
@@ -3891,7 +3891,7 @@ def test_env_strict_coercion(env):
     env.set('MY_INT', '0')
     env.set('SUB_MODEL__MY_STR', '1')
     env.set('SUB_MODEL__MY_INT', '1')
-    Settings().model_dump() == {
+    assert Settings().model_dump() == {
         'my_str': '0',
         'my_int': 0,
         'sub_model': {
@@ -3905,7 +3905,7 @@ def test_env_strict_coercion(env):
         my_int: int
         sub_model: SubModel
 
-    StrictSettings().model_dump() == {
+    assert StrictSettings().model_dump() == {
         'my_str': '0',
         'my_int': 0,
         'sub_model': {
@@ -4050,9 +4050,11 @@ def test_warn_on_incomplete_field_info():
 
     assert not App.model_fields['service']._complete
 
-    with pytest.warns(IncompleteFieldDefinitionWarning) as caught:
-        with pytest.raises(PydanticUserError, match='`App` is not fully defined'):
-            App()
+    with (
+        pytest.warns(IncompleteFieldDefinitionWarning) as caught,
+        pytest.raises(PydanticUserError, match='`App` is not fully defined'),
+    ):
+        App()
 
     incomplete_warnings = [str(w.message) for w in caught if w.category is IncompleteFieldDefinitionWarning]
     # The shared init state deduplicates warnings across all sources within a single resolution:

@@ -148,9 +148,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                 # field is complex and there's a value, decode that as JSON, then add explode_env_vars
                 try:
                     value = self.decode_complex_value(field_name, field, value)
-                except ValueError as e:
+                except ValueError:
                     if not allow_parse_failure:
-                        raise e
+                        raise
 
                 if isinstance(value, dict):
                     return deep_update(value, self.explode_env_vars(field_name, field, self.env_vars))
@@ -328,12 +328,13 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     try:
                         field_info = target_field if isinstance(target_field, FieldInfo) else None
                         env_val = self.decode_complex_value(last_key, field_info, env_val)  # type: ignore
-                    except ValueError as e:
+                    except ValueError:
                         if not allow_json_failure:
-                            raise e
-            if isinstance(env_var, dict):
-                if last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] == {}:
-                    env_var[last_key] = self._coerce_env_val_strict(target_field, env_val)
+                            raise
+            if isinstance(env_var, dict) and (
+                last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] == {}
+            ):
+                env_var[last_key] = self._coerce_env_val_strict(target_field, env_val)
         return result
 
     def _coerce_env_val_strict(self, field: FieldInfo | None, value: Any) -> Any:
@@ -362,10 +363,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                         return TypeAdapter(field.annotation).validate_python(value)
                     except ValidationError:
                         # Try JSON decoding as fallback (e.g. 'true' -> True for StrictBool)
-                        try:
-                            decoded = json.loads(value)
-                        except (ValueError, json.JSONDecodeError):
-                            raise
+                        decoded = json.loads(value)
                         if not isinstance(decoded, str):
                             return TypeAdapter(field.annotation).validate_python(decoded)
                         raise
