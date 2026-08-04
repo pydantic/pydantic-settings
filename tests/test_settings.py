@@ -3949,6 +3949,40 @@ def test_env_strict_coercion_optional_strict_types(env):
     assert s.my_int == 42
 
 
+def test_env_strict_coercion_non_json_value(env):
+    from pydantic import StrictBool
+
+    class Settings(BaseSettings):
+        my_bool: StrictBool | None = None
+
+    env.set('MY_BOOL', 'maybe')
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert exc_info.value.errors(include_url=False) == [
+        {
+            'type': 'bool_type',
+            'loc': ('my_bool',),
+            'msg': 'Input should be a valid boolean',
+            'input': 'maybe',
+        }
+    ]
+
+    class StrictSettings(BaseSettings, strict=True):
+        my_int: int = 0
+
+    env.set('MY_INT', 'not-a-number')
+    with pytest.raises(ValidationError) as exc_info:
+        StrictSettings()
+    assert exc_info.value.errors(include_url=False) == [
+        {
+            'type': 'int_type',
+            'loc': ('my_int',),
+            'msg': 'Input should be a valid integer',
+            'input': 'not-a-number',
+        }
+    ]
+
+
 def test_env_source_when_load_multi_nested_config(env):
     class EmbeddingModel(BaseModel):
         model: str = 'text-embedding-3-small'
