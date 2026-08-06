@@ -29,6 +29,7 @@ from pydantic import (
     RootModel,
     Secret,
     SecretStr,
+    StrictBool,
     Tag,
     ValidationError,
     field_validator,
@@ -3950,8 +3951,6 @@ def test_env_strict_coercion_optional_strict_types(env):
 
 
 def test_env_strict_coercion_non_json_value(env):
-    from pydantic import StrictBool
-
     class Settings(BaseSettings):
         my_bool: StrictBool | None = None
 
