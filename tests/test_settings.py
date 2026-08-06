@@ -130,6 +130,12 @@ def test_ignore_empty_when_not_empty_uses_value(env):
     assert s.apple == 'a'
 
 
+def test_ignore_empty_when_whitespace_uses_value(env):
+    env.set('apple', '   ')
+    s = SettingWithIgnoreEmpty()
+    assert s.apple == '   '
+
+
 def test_ignore_empty_with_dotenv_when_empty_uses_default(tmp_path):
     p = tmp_path / '.env'
     p.write_text('a=')
