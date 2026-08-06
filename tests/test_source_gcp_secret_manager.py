@@ -5,7 +5,7 @@ Test pydantic_settings.GoogleSecretSettingsSource
 from typing import Annotated
 
 import pytest
-from pydantic import Field
+from pydantic import Field, ValidationError
 from pytest_mock import MockerFixture
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
@@ -312,8 +312,6 @@ class TestGoogleSecretManagerSettingsSource:
         assert settings.test_secret == 'test-value'
 
     def test_pydantic_base_settings_with_unknown_attribute(self, mock_secret_client, monkeypatch, mocker):
-        from pydantic_core._pydantic_core import ValidationError
-
         class Settings(BaseSettings, case_sensitive=False):
             test_secret: str = Field(..., alias='test-secret')
             another_secret: str = Field(..., alias='ANOTHER_SECRET')
@@ -688,8 +686,6 @@ class TestGoogleSecretManagerSettingsSource:
                     ),
                 )
 
-        from pydantic import ValidationError
-
         with pytest.raises(ValidationError) as excinfo:
             Settings()
 
@@ -769,8 +765,6 @@ class TestGoogleSecretManagerSettingsSource:
                 file_secret_settings: PydanticBaseSettingsSource,
             ) -> tuple[PydanticBaseSettingsSource, ...]:
                 return (GoogleSecretManagerSettingsSource(cls, secret_client=client, project_id='test-project'),)
-
-        from pydantic import ValidationError
 
         # EXPECTATION: ValidationError because v1 is missing.
         # REALITY (Bug): It gets 'latest-val' and succeeds.
