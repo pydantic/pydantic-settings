@@ -7,7 +7,8 @@ import time
 import typing
 from enum import Enum, IntEnum
 from pathlib import Path, PureWindowsPath
-from typing import Annotated, Any, Dict, Generic, List, Literal, Tuple, TypeVar, Union  # noqa: UP035
+from string import ascii_letters
+from typing import Annotated, Any, Dict, Generic, List, Literal, Optional, Tuple, TypeVar, Union  # noqa: UP035
 
 import pytest
 import typing_extensions
@@ -1905,7 +1906,6 @@ def test_cli_variadic_positional_arg_custom_type():
 
     Regression test for https://github.com/pydantic/pydantic-settings/issues/823
     """
-    from string import ascii_letters
 
     class AsciiLetters(str):
         def __new__(cls, content: object) -> typing_extensions.Self:
@@ -3167,7 +3167,6 @@ def test_cli_self_referential_model():
 
     Self-referential models should not cause infinite recursion in CLI arg parser.
     """
-    from typing import Optional
 
     class Foo(BaseModel):
         foo: Optional['Foo'] = None
@@ -3195,7 +3194,6 @@ def test_cli_mutually_recursive_models():
     Mutually recursive models (A -> B -> A) via discriminated unions should not
     cause infinite recursion in CLI arg parser.
     """
-    from typing import Annotated, Literal, Union
 
     class A(BaseModel):
         type: Literal['a'] = 'a'

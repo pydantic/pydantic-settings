@@ -4,6 +4,7 @@ import logging
 import os
 import pathlib
 import sys
+import threading
 import uuid
 from collections.abc import Callable, Hashable
 from datetime import date, datetime, timezone
@@ -13,7 +14,7 @@ from typing import Annotated, Any, Generic, Literal, TypeVar
 from unittest import mock
 
 import pytest
-from annotated_types import MinLen
+from annotated_types import Len, MinLen
 from pydantic import (
     AliasChoices,
     AliasGenerator,
@@ -30,6 +31,7 @@ from pydantic import (
     Secret,
     SecretStr,
     StrictBool,
+    StrictInt,
     Tag,
     ValidationError,
     field_validator,
@@ -55,7 +57,7 @@ from pydantic_settings import (
     SettingsConfigDict,
     SettingsError,
 )
-from pydantic_settings.sources import DefaultSettingsSource
+from pydantic_settings.sources import DefaultSettingsSource, read_env_file
 
 try:
     import dotenv
@@ -511,8 +513,6 @@ def test_annotated_with_parameterized_type_alias(env):
     Parameterized PEP 695 type aliases should correctly substitute type params
     when determining if a field is complex.
     """
-    from annotated_types import Len
-
     T = TypeVar('T')
 
     MaxLenA = Annotated[T, Len(max_length=4)]
@@ -1762,8 +1762,6 @@ def test_read_dotenv_vars(tmp_path):
 @pytest.mark.skipif(not hasattr(os, 'mkfifo'), reason='requires os.mkfifo (Unix)')
 def test_read_dotenv_vars_from_fifo(tmp_path):
     """Named pipes / FIFOs (e.g. 1Password Environments) should be read as env files."""
-    import threading
-
     env_content = 'KEY=value\nOTHER=123'
     fifo_path = tmp_path / '.env'
     os.mkfifo(fifo_path)
@@ -1814,8 +1812,6 @@ def test_dotenvsource_override(env):
 # test that calling read_env_file issues a DeprecationWarning
 # TODO: remove this test once read_env_file is removed
 def test_read_env_file_deprecation(tmp_path):
-    from pydantic_settings.sources import read_env_file
-
     base_env = tmp_path / '.env'
     base_env.write_text(test_default_env_file)
 
@@ -3917,8 +3913,6 @@ def test_env_strict_coercion(env):
 
 
 def test_env_strict_coercion_optional_strict_types(env):
-    from pydantic import StrictBool, StrictInt
-
     class StrictSettings(BaseSettings, strict=True):
         my_bool: StrictBool | None = None
 
