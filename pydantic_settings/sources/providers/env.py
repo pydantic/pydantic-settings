@@ -367,7 +367,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                         if not isinstance(decoded, str):
                             return TypeAdapter(field.annotation).validate_python(decoded)
                         raise
-        except ValidationError:
+        except (ValidationError, json.JSONDecodeError):
             # Allow validation error to be raised at time of instantiation
             pass
         return value
