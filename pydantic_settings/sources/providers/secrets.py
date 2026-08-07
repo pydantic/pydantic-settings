@@ -68,7 +68,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
 
         for path in secrets_paths:
             if not path.exists():
-                warnings.warn(f'directory "{path}" does not exist')
+                warnings.warn(f'directory "{path}" does not exist', stacklevel=2)
             else:
                 self.secrets_paths.append(path)
 

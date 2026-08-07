@@ -3864,7 +3864,7 @@ def test_warns_if_config_keys_are_set_but_source_is_missing():
         ('yaml_config_section', 'YamlConfigSettingsSource'),
     ]
 
-    for warning, key_class_pair in zip(record, key_class_pairs):
+    for warning, key_class_pair in zip(record, key_class_pairs, strict=True):
         assert warning.category is UserWarning
         expected_message = (
             f'Config key `{key_class_pair[0]}` is set in model_config but will be ignored because no '
