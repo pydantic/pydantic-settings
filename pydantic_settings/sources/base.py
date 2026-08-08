@@ -14,6 +14,7 @@ from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
     get_origin,
 )
 from pydantic._internal._utils import deep_update, is_model_class
+from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
 from typing_inspection.introspection import is_union_origin
 
@@ -250,6 +251,16 @@ def _unwrap_optional_annotation(annotation: Any) -> Any:
     return annotation
 
 
+def _nested_model_annotation(annotation: Any) -> bool:
+    """Whether ``annotation`` describes a nested model or pydantic dataclass.
+
+    ``Optional[T]`` is unwrapped so that a field aliased by a plain string keeps being
+    reachable by its real field name even when the field is optional (see #923).
+    """
+    annotation = _unwrap_optional_annotation(annotation)
+    return is_model_class(annotation) or is_pydantic_dataclass(annotation)
+
+
 def _has_discriminator(field_info: FieldInfo) -> bool:
     """Check if a field uses a discriminated union (via Annotated or Field(discriminator=...))."""
     if field_info.discriminator is not None:
@@ -472,6 +483,17 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                 field_info.append((field_name, self._apply_case_sensitive(env_prefix + field_name), True))
             else:
                 field_info.append((field_name, self._apply_case_sensitive(env_prefix + field_name), False))
+        elif isinstance(v_alias, str) and _nested_model_annotation(
+            _strip_annotated(_resolve_type_alias(field.annotation))
+        ):
+            # A nested model field aliased by a plain string must also be reachable by
+            # its real field name so that lower-priority sources (e.g. a config file or
+            # another env source) which use the field name instead of the alias can
+            # populate -- and be merged with -- the same nested model (see #923).
+            # This is scoped to complex model/dataclass fields in order to leave scalar
+            # alias input behavior unchanged.
+            name_prefix = self.env_prefix if self.env_prefix_target in ('variable', 'all') else ''
+            field_info.append((field_name, self._apply_case_sensitive(name_prefix + field_name), False))
 
         return field_info
 

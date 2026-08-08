@@ -3,7 +3,7 @@ from __future__ import annotations as _annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AliasChoices, AliasGenerator, AnyHttpUrl, Field
+from pydantic import AliasChoices, AliasGenerator, AnyHttpUrl, BaseModel, Field
 from pydantic.alias_generators import to_camel
 
 from pydantic_settings import (
@@ -163,6 +163,77 @@ def test_env_overrides_init_with_alias_choices_and_custom_source_order(env):
     env.set('data_store_path', '/env-data-2')
     s = Settings(data_store_path='/init-data')
     assert s.data_store_path == '/env-data-2'
+
+
+def test_nested_model_alias_merged_env_and_dotenv(tmp_path: Path, env):
+    """Regression for https://github.com/pydantic/pydantic-settings/issues/923
+
+    A nested model field aliased by a plain string must also be reachable by its real
+    field name, so that a lower-priority source (e.g. ``.env``) using the field name
+    prefix can populate -- and be merged with -- the nested model populated from the
+    alias prefix in env.
+    """
+    env_file = tmp_path / '.env'
+    env_file.write_text('SUBMODEL_VAR1="var1 from dotenv"\nSUBMODEL_VAR2="var2 from dotenv"\n')
+
+    class SubModel(BaseModel):
+        var1: str | None = None
+        var2: str | None = None
+
+    class Settings(BaseSettings):
+        submodel: SubModel | None = Field(alias='SUB', default=None)
+        model_config = SettingsConfigDict(env_file=env_file, env_nested_delimiter='_')
+
+    env.set('SUB_VAR1', 'var1 from env')
+    s = Settings()
+    assert s.submodel is not None
+    assert s.submodel.var1 == 'var1 from env'
+    assert s.submodel.var2 == 'var2 from dotenv'
+
+
+def test_nested_model_alias_field_name_dotenv_only(tmp_path: Path):
+    """Field-name prefix should populate an aliased nested model from dotenv alone."""
+    env_file = tmp_path / '.env'
+    env_file.write_text('SUBMODEL_VAR1="var1 from dotenv"\n')
+
+    class SubModel(BaseModel):
+        var1: str
+
+    class Settings(BaseSettings):
+        submodel: SubModel = Field(alias='SUB')
+        model_config = SettingsConfigDict(env_file=env_file, env_nested_delimiter='_')
+
+    s = Settings()
+    assert s.submodel.var1 == 'var1 from dotenv'
+
+
+def test_nested_model_alias_choices_field_name_env(env):
+    """AliasChoices listing both the alias and field name still resolve from env."""
+
+    class SubModel(BaseModel):
+        var1: str
+
+    class Settings(BaseSettings):
+        submodel: SubModel = Field(validation_alias=AliasChoices('SUB', 'SUBMODEL'))
+        model_config = SettingsConfigDict(env_nested_delimiter='_')
+
+    env.set('SUBMODEL_VAR1', 'from env')
+    s = Settings()
+    assert s.submodel.var1 == 'from env'
+
+
+def test_scalar_alias_field_name_does_not_claim_nested_prefix(tmp_path: Path):
+    """A scalar field's alias must not be broadened to its field name (see #923 scoping)."""
+    env_file = tmp_path / '.env'
+    env_file.write_text('SUBMODEL_VAR1="x"\n')
+
+    class Settings(BaseSettings):
+        sub: str = Field(alias='SUB', default='d')
+        model_config = SettingsConfigDict(env_file=env_file, env_nested_delimiter='_', extra='allow')
+
+    s = Settings()
+    assert s.sub == 'd'
+    assert s.model_extra == {'submodel_var1': 'x'}
 
 
 def test_init_kwargs_override_env_with_alias_and_extra_forbid(env):
