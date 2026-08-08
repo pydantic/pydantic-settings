@@ -2744,6 +2744,81 @@ def test_env_prefix_from_args(env):
     assert s.apple == 'has_prefix'
 
 
+def test_env_settings_source_extra_allow(env):
+    """Env vars for undeclared fields become extras when extra='allow' (#818)."""
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='PREFIX_', extra='allow')
+        apple: str = 'default'
+
+    env.set('PREFIX_apple', 'from_env')
+    env.set('PREFIX_banana', 'also_from_env')
+    s = Settings()
+    assert s.apple == 'from_env'
+    assert s.__pydantic_extra__ == {'banana': 'also_from_env'}
+
+
+def test_env_settings_source_extra_forbid_unaffected(env):
+    """extra='forbid' (the pydantic-settings default) is a no-op here, unaffected by #818's fix.
+
+    Env vars for undeclared fields are a common, often coincidental occurrence in real
+    deployments (shared prefixes, orchestration-injected vars, etc). Unlike
+    `DotEnvSettingsSource` -- whose vars come from a small, curated `.env` file, so raising for
+    an unexpected one is more likely to reflect a real config typo -- turning every
+    prefix-matching stray process env var into a hard validation error under the *default*
+    config would be a surprising, unrequested behavior change. So this only ever activates for
+    explicit extra='allow'.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='PREFIX_', extra='forbid')
+        apple: str = 'default'
+
+    env.set('PREFIX_banana', 'unexpected')
+    assert Settings().model_dump() == {'apple': 'default'}
+
+
+def test_env_settings_source_extra_allow_no_prefix_does_not_leak_environ(env):
+    """Without an explicit env_prefix, extras are not pulled from the whole environment.
+
+    `env_vars` for `EnvSettingsSource` is effectively `os.environ`, unlike
+    `DotEnvSettingsSource`, whose `env_vars` are scoped to a small `.env` file. Surfacing
+    every unrelated process env var as an "extra" field would be a footgun, so this is
+    deliberately conservative and requires an explicit prefix to opt in.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(extra='allow')
+
+    env.set('SOME_UNRELATED_VAR', 'should_not_appear')
+    s = Settings()
+    assert 'SOME_UNRELATED_VAR' not in s.__pydantic_extra__
+    assert 'some_unrelated_var' not in s.__pydantic_extra__
+
+
+def test_env_settings_source_extra_allow_does_not_spoof_aliased_field(env):
+    """A prefix-stripped extra can't accidentally satisfy a field whose validation_alias
+    bypasses env_prefix (the default, when env_prefix_target isn't 'alias'/'all').
+
+    Regression for an edge case caught while fixing #818: a field aliased "foo" is looked up
+    unprefixed, so an unrelated env var like "PREFIX_foo" must not get treated as an extra
+    normalized down to the exact key "foo" -- that would silently (and wrongly) satisfy the
+    aliased field via a completely different, coincidentally-prefixed variable.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='PREFIX_', extra='allow')
+        foobar: str = Field(default='unset', validation_alias='foo')
+
+    env.set('PREFIX_foo', 'should_not_satisfy_foobar')
+    s = Settings()
+    assert s.foobar == 'unset'
+    assert s.__pydantic_extra__ == {}
+
+    env.set('foo', 'satisfies_foobar')
+    assert Settings().foobar == 'satisfies_foobar'
+
+
 def test_env_json_field(env):
     class Settings(BaseSettings):
         x: Json

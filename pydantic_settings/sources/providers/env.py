@@ -372,6 +372,75 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             pass
         return value
 
+    def __call__(self) -> dict[str, Any]:
+        data = super().__call__()
+        return self._merge_extra_env_vars(data)
+
+    def _merge_extra_env_vars(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Add prefixed environment variables that don't correspond to a declared field into ``data``.
+
+        Without this, environment variables for undeclared fields were silently dropped even
+        when the model allows extras (``extra='allow'``), instead of being made available for
+        pydantic to pick up as extra fields (see #818).
+
+        This only kicks in when ``extra`` is explicitly ``'allow'``, and only ever considers
+        variables matching ``env_prefix``:
+
+        - ``extra='forbid'`` is pydantic-settings' own default. Unlike `DotEnvSettingsSource`
+          (whose `env_vars` are scoped to a small, developer-controlled `.env` file), `env_vars`
+          here is effectively the entire process environment -- surfacing every unrelated,
+          prefix-coincidental var as a hard validation error under the *default* config would
+          be a significant behavior change for existing users who never opted into this.
+        - Without an explicit `env_prefix` there's similarly no safe boundary between "this
+          app's config" and everything else in `os.environ`.
+        """
+        if self.config.get('extra') != 'allow' or not self.env_prefix:
+            return data
+
+        prefix = self._apply_case_sensitive(self.env_prefix)
+        for env_name, env_value in self.env_vars.items():
+            if not env_value or not env_name.startswith(prefix) or env_name in self.settings_cls.model_fields:
+                continue
+            normalized_env_name = env_name[len(self.env_prefix) :]
+            if normalized_env_name in data:
+                continue
+            env_used = False
+            for field_name, field in self.settings_cls.model_fields.items():
+                for field_key, field_env_name, _ in self._extract_field_info(field, field_name):
+                    is_complex = _annotation_is_complex(field.annotation, field.metadata, self._init_state) or (
+                        is_union_origin(get_origin(field.annotation))
+                        and _union_is_complex(field.annotation, field.metadata, self._init_state)
+                    )
+                    # A var only belongs to a complex field when it sits at the nested
+                    # delimiter boundary (`db<delim>...`, matching what explode_env_vars
+                    # consumes). A bare name-prefix match (e.g. `dbx_token` vs field `db`)
+                    # must not claim the var, otherwise it is silently dropped instead of
+                    # being kept as an extra.
+                    matches_complex_field = (
+                        is_complex
+                        and self.env_nested_delimiter
+                        and env_name.startswith(f'{field_env_name}{self.env_nested_delimiter}')
+                    )
+                    if (
+                        env_name == field_env_name
+                        # A field whose validation_alias isn't prefix-targeted (the default)
+                        # is looked up by its bare alias, bypassing env_prefix entirely. Our
+                        # prefix-stripped name can still collide with that bare field_key
+                        # (e.g. field alias "foo" vs env var "PREFIX_foo" normalizing to
+                        # "foo") -- treat that as claimed too, or we'd inject a spoofed value
+                        # under the exact key that field's own resolution expects.
+                        or normalized_env_name == field_key
+                        or matches_complex_field
+                    ):
+                        env_used = True
+                        break
+                if env_used:
+                    break
+            if not env_used:
+                data[normalized_env_name] = env_value
+
+        return data
+
     def __repr__(self) -> str:
         return (
             f'{self.__class__.__name__}(env_nested_delimiter={self.env_nested_delimiter!r}, '
