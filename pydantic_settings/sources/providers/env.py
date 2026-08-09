@@ -399,7 +399,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
         prefix = self._apply_case_sensitive(self.env_prefix)
         for env_name, env_value in self.env_vars.items():
-            if not env_value or not env_name.startswith(prefix) or env_name in self.settings_cls.model_fields:
+            if env_value is None or not env_name.startswith(prefix):
                 continue
             normalized_env_name = env_name[len(self.env_prefix) :]
             if normalized_env_name in data:

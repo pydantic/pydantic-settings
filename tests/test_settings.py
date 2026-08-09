@@ -2819,6 +2819,37 @@ def test_env_settings_source_extra_allow_does_not_spoof_aliased_field(env):
     assert Settings().foobar == 'satisfies_foobar'
 
 
+def test_env_settings_source_extra_allow_preserves_empty_value(env):
+    """An empty-string env var is still a real value (with the default
+    env_ignore_empty=False) and must be kept as an extra, not silently dropped.
+
+    Caught by automated review on the PR: the original `if not env_value` check treated an
+    empty string the same as an absent variable.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='PREFIX_', extra='allow')
+        apple: str = 'default'
+
+    env.set('PREFIX_option', '')
+    s = Settings()
+    assert s.__pydantic_extra__ == {'option': ''}
+
+
+def test_env_settings_source_extra_allow_ignores_empty_value_when_configured(env):
+    """With env_ignore_empty=True, an empty-string extra is dropped like any other
+    empty-string value, consistent with how declared fields already behave.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='PREFIX_', extra='allow', env_ignore_empty=True)
+        apple: str = 'default'
+
+    env.set('PREFIX_option', '')
+    s = Settings()
+    assert 'option' not in s.__pydantic_extra__
+
+
 def test_env_json_field(env):
     class Settings(BaseSettings):
         x: Json
