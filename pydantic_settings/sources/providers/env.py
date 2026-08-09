@@ -437,6 +437,11 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                 if env_used:
                     break
             if not env_used:
+                # Mirror the EnvNoneType -> None conversion PydanticBaseEnvSettingsSource.__call__
+                # already applies to declared fields, so an extra doesn't leak the raw
+                # env_parse_none_str sentinel (e.g. the literal string 'null') instead of None.
+                if self.env_parse_none_str is not None and isinstance(env_value, EnvNoneType):
+                    env_value = None
                 data[normalized_env_name] = env_value
 
         return data

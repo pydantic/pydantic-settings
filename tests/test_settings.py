@@ -2850,6 +2850,25 @@ def test_env_settings_source_extra_allow_ignores_empty_value_when_configured(env
     assert 'option' not in s.__pydantic_extra__
 
 
+def test_env_settings_source_extra_allow_converts_none_str(env):
+    """An extra whose raw value matches env_parse_none_str becomes real None,
+    not the internal EnvNoneType sentinel leaking out as a literal string.
+
+    Caught by automated review on the PR: PydanticBaseEnvSettingsSource.__call__
+    already does this conversion for declared fields; _merge_extra_env_vars needs
+    the same conversion for extras.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='PREFIX_', extra='allow', env_parse_none_str='null')
+        apple: str = 'default'
+
+    env.set('PREFIX_option', 'null')
+    s = Settings()
+    assert s.__pydantic_extra__ == {'option': None}
+    assert s.__pydantic_extra__['option'] is None
+
+
 def test_env_json_field(env):
     class Settings(BaseSettings):
         x: Json
