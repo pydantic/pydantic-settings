@@ -202,6 +202,7 @@ Check the [`Field` aliases documentation](fields.md#field-aliases) for more info
     print(Settings(_env_file=dotenv_file).model_dump())
     #> {'submodel': {'var1': 'var1 from env', 'var2': 'var2 from dotenv'}}
     dotenv_file.unlink(missing_ok=True)
+    del os.environ['SUB_VAR1']
     ```
 
 To apply `env_prefix` not only to variable names but also to aliases, set `env_prefix_target='all'`.
