@@ -401,7 +401,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         for env_name, env_value in self.env_vars.items():
             if env_value is None or not env_name.startswith(prefix):
                 continue
-            normalized_env_name = env_name[len(self.env_prefix) :]
+            normalized_env_name = env_name[len(prefix) :]
             if normalized_env_name in data:
                 continue
             env_used = False
@@ -429,7 +429,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                         # (e.g. field alias "foo" vs env var "PREFIX_foo" normalizing to
                         # "foo") -- treat that as claimed too, or we'd inject a spoofed value
                         # under the exact key that field's own resolution expects.
-                        or normalized_env_name == field_key
+                        or normalized_env_name == self._apply_case_sensitive(field_key)
                         or matches_complex_field
                     ):
                         env_used = True

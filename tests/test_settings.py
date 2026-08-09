@@ -2869,6 +2869,46 @@ def test_env_settings_source_extra_allow_converts_none_str(env):
     assert s.__pydantic_extra__['option'] is None
 
 
+def test_env_settings_source_extra_allow_case_insensitive_prefix(env):
+    """The prefix is stripped using its case-normalized length, not the raw
+    env_prefix's length.
+
+    Caught by automated review on the PR: with case-insensitive matching, if
+    lowercasing ever changes a prefix's length (e.g. certain Unicode
+    characters), slicing by the raw env_prefix length produces a mis-sliced,
+    malformed extra key. This test covers the ordinary case-insensitive path.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='PREFIX_', extra='allow', case_sensitive=False)
+        apple: str = 'default'
+
+    env.set('prefix_banana', 'x')
+    s = Settings()
+    assert s.__pydantic_extra__ == {'banana': 'x'}
+
+
+def test_env_settings_source_extra_allow_does_not_spoof_aliased_field_case_insensitive(env):
+    """The field_key collision guard from #818 also applies case-insensitively.
+
+    Caught by automated review on the PR: comparing the case-normalized
+    normalized_env_name against the raw-case field_key meant an uppercase
+    validation_alias (looked up unprefixed, per the default env_prefix_target)
+    wasn't recognized as claimed under case_sensitive=False, so a
+    coincidentally-prefixed var was wrongly injected as a stray extra instead
+    of being left alone.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='PREFIX_', extra='allow', case_sensitive=False)
+        foobar: str = Field(default='unset', validation_alias='FOO')
+
+    env.set('PREFIX_FOO', 'should_not_become_an_extra')
+    s = Settings()
+    assert s.foobar == 'unset'
+    assert s.__pydantic_extra__ == {}
+
+
 def test_env_json_field(env):
     class Settings(BaseSettings):
         x: Json
