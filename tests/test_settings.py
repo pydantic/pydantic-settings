@@ -2819,6 +2819,28 @@ def test_env_settings_source_extra_allow_does_not_spoof_aliased_field(env):
     assert Settings().foobar == 'satisfies_foobar'
 
 
+def test_env_settings_source_extra_allow_does_not_spoof_field_by_its_own_name(env):
+    """A field with populate_by_name=False (the default) and a validation_alias is looked
+    up only by that alias, so _extract_field_info never yields the field's own declared
+    name. An env var that normalizes down to that bare name must still not be injected as
+    an extra under the same key -- that would silently shadow the real field's value in
+    model_extra, even though it doesn't overwrite the actual attribute.
+
+    Regression for a finding from automated review on PR #932: field ``foobar`` aliased to
+    ``foo`` was allowing ``PREFIX_foobar`` through as a spoofed ``model_extra['foobar']``.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='PREFIX_', extra='allow')
+        foobar: str = Field(validation_alias='foo')
+
+    env.set('foo', 'real_value')
+    env.set('PREFIX_foobar', 'leaked_value')
+    s = Settings()
+    assert s.foobar == 'real_value'
+    assert s.__pydantic_extra__ == {}
+
+
 def test_env_settings_source_extra_allow_preserves_empty_value(env):
     """An empty-string env var is still a real value (with the default
     env_ignore_empty=False) and must be kept as an extra, not silently dropped.

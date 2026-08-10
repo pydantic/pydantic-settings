@@ -434,6 +434,14 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     ):
                         env_used = True
                         break
+                # A field with an alias and populate_by_name=False is validated by its
+                # alias only, so _extract_field_info above never yields field_name itself.
+                # But pydantic's extra='allow' still stores an extra under any leftover
+                # dict key that matches the field's own declared name, colliding with (and
+                # shadowing in model_extra, though not overwriting) the real attribute. Treat
+                # the bare field_name as claimed too, or we'd inject that spoofed extra.
+                if not env_used and normalized_env_name == self._apply_case_sensitive(field_name):
+                    env_used = True
                 if env_used:
                     break
             if not env_used:
