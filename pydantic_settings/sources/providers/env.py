@@ -416,8 +416,12 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     # consumes). A bare name-prefix match (e.g. `dbx_token` vs field `db`)
                     # must not claim the var, otherwise it is silently dropped instead of
                     # being kept as an extra.
+                    # A scalar field that's the head of a multi-part AliasPath (e.g.
+                    # AliasPath('path', 'child')) is consumed the same way a genuinely
+                    # complex field is -- explode_env_vars/_matches_alias_path_head already
+                    # treats it as such -- even though _annotation_is_complex says no.
                     matches_complex_field = (
-                        is_complex
+                        (is_complex or self._matches_alias_path_head(field, self._apply_case_sensitive(field_key)))
                         and self.env_nested_delimiter
                         and env_name.startswith(f'{field_env_name}{self.env_nested_delimiter}')
                     )

@@ -2841,6 +2841,28 @@ def test_env_settings_source_extra_allow_does_not_spoof_field_by_its_own_name(en
     assert s.__pydantic_extra__ == {}
 
 
+def test_env_settings_source_extra_allow_does_not_duplicate_alias_path_head(env):
+    """A scalar field whose validation_alias is a multi-part AliasPath (e.g.
+    AliasPath('path', 'child')) is consumed, at the nested-delimiter boundary, by the
+    AliasPath-head special case in explode_env_vars/_matches_alias_path_head -- even though
+    the field's own annotation isn't "complex" by _annotation_is_complex's normal definition.
+    _merge_extra_env_vars must recognize that too, or it duplicates the already-consumed
+    value into extras under the literal nested-delimiter env var name.
+
+    Regression for a finding from automated review on PR #932.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_prefix='APP_', env_prefix_target='alias', env_nested_delimiter='__', extra='allow'
+        )
+        x: str = Field(validation_alias=AliasPath('path', 'child'))
+
+    env.set('APP_path__child', 'value_from_path_child')
+    s = EnvSettingsSource(Settings)()
+    assert 'path__child' not in s
+
+
 def test_env_settings_source_extra_allow_preserves_empty_value(env):
     """An empty-string env var is still a real value (with the default
     env_ignore_empty=False) and must be kept as an extra, not silently dropped.
