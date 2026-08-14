@@ -6,11 +6,16 @@ import logging
 import os
 import warnings
 from pathlib import Path
+from types import UnionType
 from typing import (
     TYPE_CHECKING,
     Any,
+    Union,
+    get_args,
+    get_origin,
 )
 
+from pydantic import SecretBytes, SecretStr
 from pydantic.fields import FieldInfo
 
 from pydantic_settings.utils import _settings_debug_enabled, logger, path_type_label
@@ -22,6 +27,33 @@ from ..utils import InitState
 
 if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
+
+
+def _secret_type(annotation: Any) -> type[SecretStr | SecretBytes] | None:
+    """Return SecretStr/SecretBytes if *annotation* is one of those types (or Optional/Annotated of them)."""
+    if annotation is SecretStr:
+        return SecretStr
+    if annotation is SecretBytes:
+        return SecretBytes
+    origin = get_origin(annotation)
+    if origin is Union or origin is UnionType:
+        args = [arg for arg in get_args(annotation) if arg is not type(None)]
+        if len(args) == 1:
+            return _secret_type(args[0])
+    if origin is not None and getattr(origin, '__name__', None) == 'Annotated':
+        args = get_args(annotation)
+        if args:
+            return _secret_type(args[0])
+    return None
+
+
+def _wrap_secret_value(field: FieldInfo, value: str) -> Any:
+    secret_cls = _secret_type(field.annotation)
+    if secret_cls is SecretStr:
+        return SecretStr(value)
+    if secret_cls is SecretBytes:
+        return SecretBytes(value.encode())
+    return value
 
 
 class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
@@ -130,7 +162,8 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
                     # Explicit encoding: `read_text()` would otherwise decode with the
                     # locale encoding, so a UTF-8 secret is corrupted on a non-UTF-8
                     # Windows code page (silently, when every byte happens to map).
-                    return path.read_text(encoding='utf-8').strip(), field_key, value_is_complex
+                    raw = path.read_text(encoding='utf-8').strip()
+                    return _wrap_secret_value(field, raw), field_key, value_is_complex
                 else:
                     warnings.warn(
                         f'attempted to load secret file "{path}" but found a {path_type_label(path)} instead.',

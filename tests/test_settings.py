@@ -1864,6 +1864,36 @@ def test_prefix_on_parent(env):
     assert MySubSettings().model_dump() == {'var': 'new'}
 
 
+def test_secrets_source_does_not_leak_secretstr_in_validation_error(tmp_path):
+    """SecretsSettingsSource must not put plaintext secrets into ValidationError (#937)."""
+    the_password = 'super_secret'
+    (tmp_path / 'password').write_text(the_password)
+
+    class Settings(BaseSettings):
+        the_username: str
+        password: SecretStr
+
+        model_config = SettingsConfigDict(secrets_dir=tmp_path)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return init_settings, file_secret_settings
+
+    settings = Settings(the_username='my_user')
+    assert settings.password.get_secret_value() == the_password
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert the_password not in str(exc_info.value)
+
+
 def test_secrets_path(tmp_path):
     p = tmp_path / 'foo'
     p.write_text('foo_secret_value_str')
