@@ -107,7 +107,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         """
 
         env_val: str | None = None
-        for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
+        # `field_key` and `value_is_complex` are deliberately read after the loop, so B007's
+        # "unused loop variable" report doesn't apply here.
+        for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):  # noqa: B007
             env_val = self.env_vars.get(env_name)
             if env_val is not None:
                 break

@@ -135,14 +135,16 @@ target-version = 'py310'
 keep-runtime-typing = true
 
 [tool.ruff.lint]
-extend-select = ['Q', 'RUF100', 'C90', 'UP', 'I']
+extend-select = ['Q', 'RUF100', 'C90', 'UP', 'I', 'B', 'RUF036']
 ignore = [
-    # Defensive/fallback code in the settings sources intentionally catches broad
-    # exceptions (thread boundaries, best-effort docstring and secret lookups).
+    # Selecting `B` also matches the `BLE` prefix. Defensive/fallback code in the
+    # settings sources intentionally catches broad exceptions (thread boundaries,
+    # best-effort docstring and secret lookups).
     'BLE001',
     'S110',
-    # We target 3.10+ and use PEP 604/585 syntax without `from __future__ import
-    # annotations`; the future-annotations rules would fight that (and our docs).
+    # `pytest-examples` lints the docs snippets with its own (broader) rule set, which
+    # selects `FA`. We target 3.10+ and use PEP 604/585 syntax without `from __future__
+    # import annotations`, so these would fail every example in docs/index.md.
     'FA100',
     'FA102',
 ]

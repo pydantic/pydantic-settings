@@ -156,7 +156,7 @@ class _CliArg(BaseModel):
     def __init__(
         self,
         field_info: FieldInfo,
-        parser_map: defaultdict[str | FieldInfo, dict[int | None | str | type[BaseModel], _CliArg]],
+        parser_map: defaultdict[str | FieldInfo, dict[int | str | type[BaseModel] | None, _CliArg]],
         **values: Any,
     ) -> None:
         super().__init__(**values)
@@ -769,7 +769,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     merged_dict.update(json.loads(item))
                 return json.dumps(merged_dict)
         except Exception as e:
-            raise SettingsError(f'Parsing error encountered for {field_name}: {e}')
+            raise SettingsError(f'Parsing error encountered for {field_name}: {e}') from e
 
     def _consume_comma(self, item: str, merged_list: list[str], is_last_consumed_a_value: bool) -> str:
         if not is_last_consumed_a_value:
@@ -981,7 +981,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self._format_help = self._connect_parser_method(format_help_method, 'format_help_method')
         self._formatter_class = formatter_class
         self._cli_dict_args: dict[str, type[Any] | None] = {}
-        self._parser_map: defaultdict[str | FieldInfo, dict[int | None | str | type[BaseModel], _CliArg]] = defaultdict(
+        self._parser_map: defaultdict[str | FieldInfo, dict[int | str | type[BaseModel] | None, _CliArg]] = defaultdict(
             dict
         )
         self._add_default_help()
