@@ -181,7 +181,8 @@ Check the [`Field` aliases documentation](fields.md#field-aliases) for more info
     simply not picked up; with `extra='ignore'` both are dropped silently.
 
     To accept both spellings, widen the set of accepted names — either globally with `populate_by_name=True`
-    (or `validate_by_name=True`), or per field with `AliasChoices`. Both let mixed-naming sources merge:
+    (or `validate_by_name=True`), or per field with [`AliasChoices`][pydantic.AliasChoices]. Both let
+    mixed-naming sources merge:
 
     ```py
     import os
@@ -214,7 +215,8 @@ Check the [`Field` aliases documentation](fields.md#field-aliases) for more info
 
     `AliasChoices` is often the better fit when only some fields need both spellings — for example a
     configuration file that spells section names out in full alongside abbreviated environment variables.
-    It states per field exactly which names are accepted, instead of accepting every field name globally:
+    It states per field exactly which names are accepted, instead of accepting every field name globally,
+    and lets you opt each nesting level into both spellings independently:
 
     ```py
     import os
