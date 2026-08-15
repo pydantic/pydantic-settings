@@ -169,17 +169,19 @@ There are two ways to do this:
 Check the [`Field` aliases documentation](fields.md#field-aliases) for more information about aliases.
 
 !!! note
-    When a nested model field has an alias, environment variables for its sub-fields are looked up using
-    *only* that alias as the prefix — the field's own name is not considered, even for values coming from a
-    dotenv file or other sources. If different sources for the same nested field use different naming (e.g. one
-    source uses the alias, another uses the field name), only the alias-based values will be found; the rest
-    aren't recognized as belonging to that field at all. What then happens to them depends on your `extra`
-    setting: with the default `extra='forbid'`, an unmatched dotenv entry is kept as an extra input and raises
-    a `ValidationError`, while a plain environment variable (not from a dotenv file) is simply not picked up.
-    With `extra='ignore'` both are dropped silently. Either way, the underlying issue is the same: those values
-    were never associated with the field's alias in the first place. Set `populate_by_name=True` (or
-    `validate_by_name=True`) so that both the alias *and* the field's own name are recognized, letting
-    mixed-naming sources merge correctly:
+    Setting an alias on a nested model field *narrows* which environment variables can reach it: its
+    sub-fields are then looked up using only that alias as the prefix, in every source. The field's own name
+    is not an accepted name at all, including for dotenv files and other non-env sources.
+
+    This matters most when sources disagree on naming. If a higher-priority source uses the alias and a
+    lower-priority one uses the field name, only the alias-based values are found — the others were never
+    associated with the field, so there is nothing to merge and the lower-priority values appear to be
+    ignored. What happens to them depends on `extra`: with the default `extra='forbid'` an unmatched dotenv
+    entry is kept as an extra input and raises a `ValidationError`, while a plain environment variable is
+    simply not picked up; with `extra='ignore'` both are dropped silently.
+
+    To accept both spellings, widen the set of accepted names — either globally with `populate_by_name=True`
+    (or `validate_by_name=True`), or per field with `AliasChoices`. Both let mixed-naming sources merge:
 
     ```py
     import os
@@ -198,6 +200,41 @@ Check the [`Field` aliases documentation](fields.md#field-aliases) for more info
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(env_nested_delimiter='_', populate_by_name=True)
         submodel: SubModel | None = Field(alias='SUB', default=None)
+
+
+    dotenv_file = Path('example.env')
+    dotenv_file.write_text("SUBMODEL_VAR2='var2 from dotenv'")
+    os.environ['SUB_VAR1'] = 'var1 from env'
+
+    print(Settings(_env_file=dotenv_file).model_dump())
+    #> {'submodel': {'var1': 'var1 from env', 'var2': 'var2 from dotenv'}}
+    dotenv_file.unlink(missing_ok=True)
+    del os.environ['SUB_VAR1']
+    ```
+
+    `AliasChoices` is often the better fit when only some fields need both spellings — for example a
+    configuration file that spells section names out in full alongside abbreviated environment variables.
+    It states per field exactly which names are accepted, instead of accepting every field name globally:
+
+    ```py
+    import os
+    from pathlib import Path
+
+    from pydantic import AliasChoices, BaseModel, Field
+
+    from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+    class SubModel(BaseModel):
+        var1: str | None = None
+        var2: str | None = None
+
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='_')
+        submodel: SubModel | None = Field(
+            validation_alias=AliasChoices('SUB', 'SUBMODEL'), default=None
+        )
 
 
     dotenv_file = Path('example.env')
