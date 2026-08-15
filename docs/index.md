@@ -168,6 +168,41 @@ There are two ways to do this:
 
 Check the [`Field` aliases documentation](fields.md#field-aliases) for more information about aliases.
 
+When a nested model field has an alias, that alias **narrows** which source keys can reach it: the field's
+sub-keys are looked up only under the alias prefix, so a lower-priority source that uses the field's real name
+contributes nothing and its values are silently ignored. When you want each nesting level to accept *both* the
+alias and the field's own name explicitly, use [`AliasChoices`][pydantic.AliasChoices] instead of a single alias:
+
+```py
+import os
+from pathlib import Path
+
+from pydantic import AliasChoices, BaseModel, Field
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class SubModel(BaseModel):
+    var1: str | None = None
+    var2: str | None = None
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_nested_delimiter='_')
+    submodel: SubModel | None = Field(
+        validation_alias=AliasChoices('SUB', 'SUBMODEL'), default=None
+    )
+
+
+dotenv_file = Path('example.env')
+dotenv_file.write_text("SUBMODEL_VAR2='var2 from dotenv'")
+os.environ['SUB_VAR1'] = 'var1 from env'
+
+print(Settings(_env_file=dotenv_file).model_dump())
+#> {'submodel': {'var1': 'var1 from env', 'var2': 'var2 from dotenv'}}
+dotenv_file.unlink(missing_ok=True)
+del os.environ['SUB_VAR1']
+```
 
 To apply `env_prefix` not only to variable names but also to aliases, set `env_prefix_target='all'`.
 To apply `env_prefix` only to aliases and not to variable names, set `env_prefix_target='alias'`.
