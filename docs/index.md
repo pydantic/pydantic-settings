@@ -169,9 +169,10 @@ There are two ways to do this:
 Check the [`Field` aliases documentation](fields.md#field-aliases) for more information about aliases.
 
 !!! note
-    Setting an alias on a nested model field *narrows* which environment variables can reach it: its
+    By default, setting an alias on a nested model field *narrows* which environment variables can reach it: its
     sub-fields are then looked up using only that alias as the prefix, in every source. The field's own name
-    is not an accepted name at all, including for dotenv files and other non-env sources.
+    is not accepted as a lookup prefix unless `populate_by_name=True` (or `validate_by_name=True`) is enabled,
+    including for dotenv files and other non-env sources.
 
     This matters most when sources disagree on naming. If a higher-priority source uses the alias and a
     lower-priority one uses the field name, only the alias-based values are found — the others were never
