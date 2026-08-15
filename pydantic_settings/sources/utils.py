@@ -2,11 +2,14 @@
 
 from __future__ import annotations as _annotations
 
+import os
 import warnings
 from collections import deque
 from collections.abc import Mapping, Sequence
 from dataclasses import is_dataclass
 from enum import Enum
+from itertools import islice
+from pathlib import Path
 from typing import Any, TypedDict, TypeVar, cast, get_args, get_origin
 
 from pydantic import BaseModel, Json, RootModel, Secret
@@ -72,6 +75,25 @@ def parse_env_vars(
         for k, v in env_vars.items()
         if not (ignore_empty and v == '')
     }
+
+
+def _resolve_config_file(file: str | os.PathLike[str], depth: int = 0, *, allow_fifo: bool = False) -> Path | None:
+    """Resolve a config file path, optionally searching parent directories of the cwd."""
+
+    file_path = Path(file).expanduser()
+
+    if file_path.is_file() or (allow_fifo and file_path.is_fifo()):
+        return file_path
+
+    if depth <= 0 or file_path.is_absolute():
+        return None
+
+    for parent in islice(Path.cwd().resolve().parents, depth):
+        candidate = parent / file_path
+        if candidate.is_file() or (allow_fifo and candidate.is_fifo()):
+            return candidate
+
+    return None
 
 
 def _substitute_typevars(tp: Any, param_map: dict[Any, Any]) -> Any:
@@ -367,6 +389,7 @@ __all__ = [
     '_is_function',
     '_literal_has_numeric_enum',
     '_parse_env_none_str',
+    '_resolve_config_file',
     '_resolve_type_alias',
     '_strip_annotated',
     '_union_has_strict_types',
