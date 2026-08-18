@@ -731,7 +731,19 @@ validating them.
 
 !!! note
     If a filename is specified for `env_file`, Pydantic will only check the current working directory and
-    won't check any parent directories for the `.env` file.
+    won't check any parent directories for the `.env` file. Set `env_file_depth` to the number of
+    directory levels **up** from the current working directory that should also be checked:
+
+```py
+    from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_file='.env', env_file_depth=2)
+```
+
+    This is only used when the file is not found in the current working directory, and only applies to
+    relative paths. It can also be set via the `_env_file_depth` keyword argument on instantiation.
 
 !!! tip
     Named pipes (FIFOs) are also supported as dotenv files. This is useful for tools like
