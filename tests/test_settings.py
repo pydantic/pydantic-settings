@@ -1702,6 +1702,85 @@ def test_multiple_env_file(tmp_path):
     assert s.port == 8000
 
 
+def test_env_file_depth_not_searched_by_default(cd_tmp_path):
+    (cd_tmp_path / '.env').write_text('a="test"')
+    sub = cd_tmp_path / 'sub'
+    sub.mkdir()
+    os.chdir(sub)
+
+    class Settings(BaseSettings):
+        a: str
+
+        model_config = SettingsConfigDict(env_file='.env')
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert exc_info.value.errors(include_url=False)[0]['type'] == 'missing'
+
+
+def test_env_file_depth_finds_parent(cd_tmp_path):
+    (cd_tmp_path / '.env').write_text('a="test"')
+    sub = cd_tmp_path / 'x' / 'y'
+    sub.mkdir(parents=True)
+    os.chdir(sub)
+
+    class Settings(BaseSettings):
+        a: str
+
+        model_config = SettingsConfigDict(env_file='.env', env_file_depth=2)
+
+    assert Settings().a == 'test'
+
+
+def test_env_file_depth_from_init_kwarg(cd_tmp_path):
+    (cd_tmp_path / '.env').write_text('a="test"')
+    sub = cd_tmp_path / 'sub'
+    sub.mkdir()
+    os.chdir(sub)
+
+    class Settings(BaseSettings):
+        a: str
+
+        model_config = SettingsConfigDict(env_file='.env')
+
+    assert Settings(_env_file_depth=1).a == 'test'
+
+
+def test_env_file_depth_init_kwarg_overrides_config(cd_tmp_path):
+    (cd_tmp_path / '.env').write_text('a="test"')
+    sub = cd_tmp_path / 'sub'
+    sub.mkdir()
+    os.chdir(sub)
+
+    class Settings(BaseSettings):
+        a: str = 'default'
+
+        model_config = SettingsConfigDict(env_file='.env', env_file_depth=2)
+
+    assert Settings().a == 'test'
+    assert Settings(_env_file_depth=0).a == 'default'
+
+
+def test_multiple_env_file_depth(cd_tmp_path):
+    (cd_tmp_path / '.env').write_text(test_default_env_file)
+    sub = cd_tmp_path / 'sub'
+    sub.mkdir()
+    (sub / '.env.prod').write_text(test_prod_env_file)
+    os.chdir(sub)
+
+    class Settings(BaseSettings):
+        debug_mode: bool
+        host: str
+        port: int
+
+        model_config = SettingsConfigDict(env_file=['.env', '.env.prod'], env_file_depth=1)
+
+    s = Settings()
+    assert s.debug_mode is False
+    assert s.host == 'https://example.com/services'
+    assert s.port == 8000
+
+
 def test_model_env_file_override_model_config(tmp_path):
     base_env = tmp_path / '.env'
     base_env.write_text(test_default_env_file)
@@ -1757,6 +1836,42 @@ def test_read_dotenv_vars(tmp_path):
         'host': 'https://example.com/services',
         'Port': '8000',
     }
+
+
+def test_read_dotenv_vars_cwd_only_by_default(cd_tmp_path):
+    (cd_tmp_path / '.env').write_text(test_default_env_file)
+    sub = cd_tmp_path / 'sub'
+    sub.mkdir()
+    os.chdir(sub)
+
+    source = DotEnvSettingsSource(BaseSettings(), env_file='.env', env_file_encoding='utf8')
+    assert source._read_env_files() == {}
+
+
+def test_read_dotenv_vars_with_depth(cd_tmp_path):
+    (cd_tmp_path / '.env').write_text('a=1')
+    sub = cd_tmp_path / 'a' / 'b'
+    sub.mkdir(parents=True)
+    os.chdir(sub)
+
+    source = DotEnvSettingsSource(BaseSettings(), env_file='.env', env_file_depth=2)
+    assert source._read_env_files() == {'a': '1'}
+
+    source = DotEnvSettingsSource(BaseSettings(), env_file='.env', env_file_depth=1)
+    assert source._read_env_files() == {}
+
+    source = DotEnvSettingsSource(BaseSettings(), env_file='.env')
+    assert source._read_env_files() == {}
+
+
+def test_read_dotenv_vars_absolute_path_with_depth(cd_tmp_path):
+    (cd_tmp_path / '.env').write_text('a=1')
+    sub = cd_tmp_path / 'sub'
+    sub.mkdir()
+    os.chdir(sub)
+
+    source = DotEnvSettingsSource(BaseSettings(), env_file=sub / '.env', env_file_depth=5)
+    assert source._read_env_files() == {}
 
 
 @pytest.mark.skipif(not hasattr(os, 'mkfifo'), reason='requires os.mkfifo (Unix)')
@@ -2282,7 +2397,7 @@ def test_builtins_settings_source_repr():
         == "EnvSettingsSource(env_nested_delimiter='__', env_prefix_len=0)"
     )
     assert repr(DotEnvSettingsSource(BaseSettings, env_file='.env', env_file_encoding='utf-8')) == (
-        "DotEnvSettingsSource(env_file='.env', env_file_encoding='utf-8', env_nested_delimiter=None, env_prefix_len=0)"
+        "DotEnvSettingsSource(env_file='.env', env_file_encoding='utf-8', env_nested_delimiter=None, env_prefix_len=0, env_file_depth=0)"
     )
     assert (
         repr(SecretsSettingsSource(BaseSettings, secrets_dir='/secrets'))
