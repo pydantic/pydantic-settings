@@ -1,6 +1,6 @@
 """Package containing individual source implementations."""
 
-from .aws import AWSSecretsManagerSettingsSource
+from .aws import AWSSecretsManagerSettingsSource, AWSSystemsManagerSettingsSource
 from .azure import AzureKeyVaultSettingsSource
 from .cli import (
     CliDualFlag,
@@ -24,6 +24,7 @@ from .yaml import YamlConfigSettingsSource
 
 __all__ = [
     'AWSSecretsManagerSettingsSource',
+    'AWSSystemsManagerSettingsSource',
     'AzureKeyVaultSettingsSource',
     'CliDualFlag',
     'CliExplicitFlag',

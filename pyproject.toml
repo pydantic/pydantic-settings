@@ -51,6 +51,7 @@ yaml = ["pyyaml>=6.0.1"]
 toml = ["tomli>=2.0.1"]
 azure-key-vault = ["azure-keyvault-secrets>=4.8.0", "azure-identity>=1.16.0"]
 aws-secrets-manager = ["boto3>=1.35.0"]
+aws-systems-manager = ["boto3>=1.35.0"]
 gcp-secret-manager = [
     "google-cloud-secret-manager>=2.23.1",
 ]
@@ -70,7 +71,7 @@ linting = [
     "pyyaml",
     "ruff",
     "types-pyyaml",
-    "types-boto3[secretsmanager]",
+    "types-boto3[secretsmanager,ssm]",
 ]
 testing = [
     "coverage[toml]",
@@ -78,7 +79,7 @@ testing = [
     "pytest-examples",
     "pytest-mock",
     "pytest-pretty",
-    "moto[secretsmanager]",
+    "moto[secretsmanager,ssm]",
     "diff-cover>=9.2.0",
     "chardet<6",
 ]

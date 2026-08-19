@@ -612,7 +612,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -1057,6 +1057,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/53/c7/4b0bc06f0811caa67f7e8c3ca2e637bd8cb4317c2f8839b7d643d7ace68c/moto-5.1.21-py3-none-any.whl", hash = "sha256:311a30095b08b39dd2707f161f1440d361684fe0090b9fd0751dfd1c9b022445", size = 6514163, upload-time = "2026-02-08T21:52:36.91Z" },
 ]
 
+[package.optional-dependencies]
+ssm = [
+    { name = "pyyaml" },
+]
+
 [[package]]
 name = "msal"
 version = "1.35.1"
@@ -1414,6 +1419,9 @@ dependencies = [
 aws-secrets-manager = [
     { name = "boto3" },
 ]
+aws-systems-manager = [
+    { name = "boto3" },
+]
 azure-key-vault = [
     { name = "azure-identity" },
     { name = "azure-keyvault-secrets" },
@@ -1435,14 +1443,14 @@ linting = [
     { name = "pre-commit" },
     { name = "pyyaml" },
     { name = "ruff" },
-    { name = "types-boto3", extra = ["secretsmanager"] },
+    { name = "types-boto3", extra = ["secretsmanager", "ssm"] },
     { name = "types-pyyaml" },
 ]
 testing = [
     { name = "chardet" },
     { name = "coverage", extra = ["toml"] },
     { name = "diff-cover" },
-    { name = "moto" },
+    { name = "moto", extra = ["ssm"] },
     { name = "pytest" },
     { name = "pytest-examples" },
     { name = "pytest-mock" },
@@ -1454,6 +1462,7 @@ requires-dist = [
     { name = "azure-identity", marker = "extra == 'azure-key-vault'", specifier = ">=1.16.0" },
     { name = "azure-keyvault-secrets", marker = "extra == 'azure-key-vault'", specifier = ">=4.8.0" },
     { name = "boto3", marker = "extra == 'aws-secrets-manager'", specifier = ">=1.35.0" },
+    { name = "boto3", marker = "extra == 'aws-systems-manager'", specifier = ">=1.35.0" },
     { name = "google-cloud-secret-manager", marker = "extra == 'gcp-secret-manager'", specifier = ">=2.23.1" },
     { name = "pydantic", specifier = ">=2.7.0" },
     { name = "python-dotenv", specifier = ">=0.21.0" },
@@ -1461,7 +1470,7 @@ requires-dist = [
     { name = "tomli", marker = "extra == 'toml'", specifier = ">=2.0.1" },
     { name = "typing-inspection", specifier = ">=0.4.0" },
 ]
-provides-extras = ["aws-secrets-manager", "azure-key-vault", "gcp-secret-manager", "toml", "yaml"]
+provides-extras = ["aws-secrets-manager", "aws-systems-manager", "azure-key-vault", "gcp-secret-manager", "toml", "yaml"]
 
 [package.metadata.requires-dev]
 linting = [
@@ -1470,14 +1479,14 @@ linting = [
     { name = "pre-commit" },
     { name = "pyyaml" },
     { name = "ruff" },
-    { name = "types-boto3", extras = ["secretsmanager"] },
+    { name = "types-boto3", extras = ["secretsmanager", "ssm"] },
     { name = "types-pyyaml" },
 ]
 testing = [
     { name = "chardet", specifier = "<6" },
     { name = "coverage", extras = ["toml"] },
     { name = "diff-cover", specifier = ">=9.2.0" },
-    { name = "moto", extras = ["secretsmanager"] },
+    { name = "moto", extras = ["secretsmanager", "ssm"] },
     { name = "pytest" },
     { name = "pytest-examples" },
     { name = "pytest-mock" },
@@ -1882,6 +1891,9 @@ wheels = [
 secretsmanager = [
     { name = "types-boto3-secretsmanager" },
 ]
+ssm = [
+    { name = "types-boto3-ssm" },
+]
 
 [[package]]
 name = "types-boto3-secretsmanager"
@@ -1893,6 +1905,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/fa/06/2b13da1dea04e74ff941150d2fc5fa59a9a180f8e580425d21157895ed32/types_boto3_secretsmanager-1.42.8.tar.gz", hash = "sha256:9134df496a352acff861c3d046ae83740881d7aead1bc656d1ca32abcb921ae3", size = 19889, upload-time = "2025-12-11T22:12:47.67Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6d/63/15a5649fbf769e92d0a55c1091696d50ebb922ba77735c263c27267011df/types_boto3_secretsmanager-1.42.8-py3-none-any.whl", hash = "sha256:af75257c3c26da97a8ee470bb1a2e199a25bf70859740cdcdfb74f53853f24da", size = 27194, upload-time = "2025-12-11T22:12:39.498Z" },
+]
+
+[[package]]
+name = "types-boto3-ssm"
+version = "1.42.54"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.12'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/84/82/beff9a0368158ebd53a5c89e870f487f5a46eaff9c29332796d630a67303/types_boto3_ssm-1.42.54.tar.gz", hash = "sha256:317257f38db758df1541f0c36aefa27bcd0fb744c0b0d4b57be73061d519cf8e", size = 94228, upload-time = "2026-02-20T20:49:45.757Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/14/1e/768cbf3e3a6bfa0b8dca15f48c60d9d22bf4c15093f25c973cea750d9afe/types_boto3_ssm-1.42.54-py3-none-any.whl", hash = "sha256:4dfceadad2a982727660b4c3a30693847df123d6caf69967ab905165d3c7c472", size = 95912, upload-time = "2026-02-20T20:49:43.079Z" },
 ]
 
 [[package]]
