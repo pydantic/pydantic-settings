@@ -90,6 +90,7 @@ __all__ = [
     'DEFAULT_PATH',
     'ENV_FILE_SENTINEL',
     'ConfigFileSourceType',
+    'DotenvFiltering',
     'DotenvType',
     'EnvNoneType',
     'EnvPrefixTarget',
