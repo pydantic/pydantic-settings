@@ -2548,6 +2548,63 @@ class AWSSecretsManagerSettings(BaseSettings):
         )
 ```
 
+## AWS Systems Manager Parameter Store
+
+You may set the following parameters:
+
+- `ssm_path`: The path hierarchy the parameters live under, for example `/prod/my-app`. Must start with `/`, and defaults to `/`.
+
+All parameters below `ssm_path` are read recursively with the [`get_parameters_by_path`](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ssm/client/get_parameters_by_path.html)
+API (with `WithDecryption=True`, so `SecureString` parameters are decrypted). The `ssm_path` prefix is stripped from
+each parameter name, and the remaining path is used as the field name.
+
+Because Parameter Store already uses a `/`-delimited hierarchy, nested models are supported with the `/` separator.
+For example, a parameter named `/prod/my-app/sub/a` populates the `a` field of the `sub` model. You must have the same
+naming convention in the field name as in the parameter name, or use an alias.
+
+```py
+import os
+
+from pydantic import BaseModel
+
+from pydantic_settings import (
+    AWSSystemsManagerSettingsSource,
+    BaseSettings,
+    PydanticBaseSettingsSource,
+)
+
+
+class SubModel(BaseModel):
+    a: str
+
+
+class AWSSystemsManagerSettings(BaseSettings):
+    foo: str
+    bar: int
+    sub: SubModel
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        aws_systems_manager_settings = AWSSystemsManagerSettingsSource(
+            settings_cls,
+            os.environ['AWS_SSM_PATH'],
+        )
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+            aws_systems_manager_settings,
+        )
+```
+
 ## Azure Key Vault
 
 You must set two parameters:

@@ -3,6 +3,7 @@ from .main import BaseSettings, CliApp, SettingsConfigDict
 from .sources import (
     CLI_SUPPRESS,
     AWSSecretsManagerSettingsSource,
+    AWSSystemsManagerSettingsSource,
     AzureKeyVaultSettingsSource,
     CliDualFlag,
     CliExplicitFlag,
@@ -34,6 +35,7 @@ from .version import VERSION
 __all__ = (
     'CLI_SUPPRESS',
     'AWSSecretsManagerSettingsSource',
+    'AWSSystemsManagerSettingsSource',
     'AzureKeyVaultSettingsSource',
     'BaseSettings',
     'CliApp',
