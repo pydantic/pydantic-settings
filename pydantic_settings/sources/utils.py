@@ -88,8 +88,7 @@ def _resolve_config_file(file: str | os.PathLike[str], depth: int = 0, *, allow_
     if depth <= 0 or file_path.is_absolute():
         return None
 
-    for parent in islice(Path.cwd().resolve().parents, depth):
-        candidate = parent / file_path
+    for parent in islice(Path.cwd().parents, depth):
         if candidate.is_file() or (allow_fifo and candidate.is_fifo()):
             return candidate
 
