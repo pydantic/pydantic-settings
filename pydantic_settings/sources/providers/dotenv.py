@@ -17,12 +17,7 @@ from typing_inspection.introspection import is_union_origin
 
 from ...utils import _settings_debug_enabled, logger
 from ..types import ENV_FILE_SENTINEL, DotenvFiltering, DotenvType, EnvPrefixTarget
-from ..utils import (
-    InitState,
-    _annotation_is_complex,
-    _union_is_complex,
-    parse_env_vars,
-)
+from ..utils import InitState, _annotation_is_complex, _resolve_config_file, _union_is_complex, parse_env_vars
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
@@ -48,11 +43,15 @@ class DotEnvSettingsSource(EnvSettingsSource):
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
+        env_file_depth: int | None = None,
         _init_state: InitState | None = None,
     ) -> None:
         self.env_file = env_file if env_file != ENV_FILE_SENTINEL else settings_cls.model_config.get('env_file')
         self.env_file_encoding = (
             env_file_encoding if env_file_encoding is not None else settings_cls.model_config.get('env_file_encoding')
+        )
+        self.env_file_depth = (
+            env_file_depth if env_file_depth is not None else settings_cls.model_config.get('env_file_depth', 0)
         )
         self.dotenv_filtering = (
             dotenv_filtering if dotenv_filtering is not None else settings_cls.model_config.get('dotenv_filtering')
@@ -109,13 +108,13 @@ class DotEnvSettingsSource(EnvSettingsSource):
 
         dotenv_vars: dict[str, str | None] = {}
         for env_file in env_files:
-            env_path = Path(env_file).expanduser()
-            if env_path.is_file() or env_path.is_fifo():
+            env_path = _resolve_config_file(env_file, self.env_file_depth, allow_fifo=True)
+            if env_path is not None:
                 if debug:
                     logger.debug('Loading env file: %s', env_path.resolve())
                 dotenv_vars.update(self._read_env_file(env_path))
             elif debug:
-                logger.debug('Env file not found, skipping: %s', env_path.resolve())
+                logger.debug('Env file not found, skipping: %s', Path(env_file).expanduser().resolve())
 
         return dotenv_vars
 
@@ -182,7 +181,8 @@ class DotEnvSettingsSource(EnvSettingsSource):
     def __repr__(self) -> str:
         return (
             f'{self.__class__.__name__}(env_file={self.env_file!r}, env_file_encoding={self.env_file_encoding!r}, '
-            f'env_nested_delimiter={self.env_nested_delimiter!r}, env_prefix_len={self.env_prefix_len!r})'
+            f'env_file_depth={self.env_file_depth!r}, env_nested_delimiter={self.env_nested_delimiter!r}, '
+            f'env_prefix_len={self.env_prefix_len!r})'
         )
 
 
