@@ -4,6 +4,7 @@ import json
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
+from ...exceptions import SettingsError
 from ..utils import InitState, parse_env_vars
 from .env import EnvSettingsSource
 
@@ -111,6 +112,9 @@ class AWSSystemsManagerSettingsSource(EnvSettingsSource):
         env_parse_enums: bool | None = None,
         _init_state: InitState | None = None,
     ) -> None:
+        if not ssm_path.startswith('/'):
+            raise SettingsError(f'AWS Systems Manager path must start with "/": {ssm_path!r}')
+
         import_aws_systems_manager()
         self._ssm_client = boto3_client('ssm', region_name=region_name, endpoint_url=endpoint_url)  # type: ignore
         self._ssm_path = ssm_path

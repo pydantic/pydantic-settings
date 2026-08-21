@@ -7,10 +7,8 @@ import os
 import pytest
 
 try:
-    import yaml
     from moto import mock_aws
 except ImportError:
-    yaml = None
     mock_aws = None
 
 from pydantic import BaseModel, Field
@@ -19,6 +17,7 @@ from pydantic_settings import (
     AWSSystemsManagerSettingsSource,
     BaseSettings,
     PydanticBaseSettingsSource,
+    SettingsError,
 )
 from pydantic_settings.sources.providers.aws import import_aws_systems_manager
 
@@ -32,10 +31,8 @@ except ImportError:
     aws_systems_manager = False
 
 
-MODULE = 'pydantic_settings.sources'
-
-if not yaml:
-    pytest.skip('PyYAML is not installed', allow_module_level=True)
+if not mock_aws:
+    pytest.skip('moto is not installed', allow_module_level=True)
 
 
 @pytest.mark.skipif(not aws_systems_manager, reason='pydantic-settings[aws-systems-manager] is not installed')
@@ -161,3 +158,54 @@ class TestAWSSystemsManagerSettingsSource:
         settings = obj()
 
         assert settings['foo'] == 'bar'
+
+    @mock_aws
+    def test_trailing_slash_is_normalized(self) -> None:
+        """``ssm_path`` with and without a trailing slash behave the same."""
+
+        class AWSSystemsManagerSettings(BaseSettings):
+            foo: str
+
+        client = boto3.client('ssm')
+        client.put_parameter(Name='/test-path/foo', Value='bar', Type='String')
+
+        assert AWSSystemsManagerSettingsSource(AWSSystemsManagerSettings, '/test-path')() == {'foo': 'bar'}
+        assert AWSSystemsManagerSettingsSource(AWSSystemsManagerSettings, '/test-path/')() == {'foo': 'bar'}
+
+    @mock_aws
+    def test_sibling_path_prefix_is_not_matched(self) -> None:
+        """A path sharing a textual prefix with ``ssm_path`` is not picked up."""
+
+        class AWSSystemsManagerSettings(BaseSettings):
+            foo: str
+
+        client = boto3.client('ssm')
+        client.put_parameter(Name='/app/foo', Value='included', Type='String')
+        client.put_parameter(Name='/app-other/bar', Value='excluded', Type='String')
+
+        assert AWSSystemsManagerSettingsSource(AWSSystemsManagerSettings, '/app')() == {'foo': 'included'}
+
+    @mock_aws
+    def test_pagination(self) -> None:
+        """All parameters are read, beyond a single ``get_parameters_by_path`` page."""
+
+        class AWSSystemsManagerSettings(BaseSettings):
+            """AWSSystemsManager settings."""
+
+        client = boto3.client('ssm')
+        for index in range(25):
+            client.put_parameter(Name=f'/test-path/key{index:02d}', Value=str(index), Type='String')
+
+        obj = AWSSystemsManagerSettingsSource(AWSSystemsManagerSettings, '/test-path')
+
+        assert obj._load_env_vars() == {f'key{index:02d}': str(index) for index in range(25)}
+
+    @pytest.mark.parametrize('ssm_path', ['', 'test-path'])
+    def test_path_must_start_with_slash(self, ssm_path: str) -> None:
+        """An ``ssm_path`` without a leading slash is rejected up front."""
+
+        class AWSSystemsManagerSettings(BaseSettings):
+            """AWSSystemsManager settings."""
+
+        with pytest.raises(SettingsError, match='must start with "/"'):
+            AWSSystemsManagerSettingsSource(AWSSystemsManagerSettings, ssm_path)

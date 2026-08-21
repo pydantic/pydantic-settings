@@ -2540,7 +2540,7 @@ class AWSSecretsManagerSettings(BaseSettings):
 
 You may set the following parameters:
 
-- `ssm_path`: The path hierarchy the parameters live under, for example `/prod/my-app`. Defaults to `/`.
+- `ssm_path`: The path hierarchy the parameters live under, for example `/prod/my-app`. Must start with `/`, and defaults to `/`.
 
 All parameters below `ssm_path` are read recursively with the [`get_parameters_by_path`](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ssm/client/get_parameters_by_path.html)
 API (with `WithDecryption=True`, so `SecureString` parameters are decrypted). The `ssm_path` prefix is stripped from
