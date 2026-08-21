@@ -44,8 +44,8 @@ ConfigFileSourceType = Path | str | Traversable | Sequence[Path | str | Traversa
 DotenvFiltering = Literal['match_prefix', 'only_existing']
 DEFAULT_PATH: PathType = Path('')
 
-# This is used as default value for `_env_file` in the `BaseSettings` class and
-# `env_file` in `DotEnvSettingsSource` so the default can be distinguished from `None`.
+# This is used as the default value for `_env_file` in the `BaseSettings` class and
+# `env_file` in `DotEnvSettingsSource` so that the default can be distinguished from `None`.
 # See the docstring of `BaseSettings` for more details.
 ENV_FILE_SENTINEL: DotenvType = Path('')
 
@@ -90,6 +90,7 @@ __all__ = [
     'DEFAULT_PATH',
     'ENV_FILE_SENTINEL',
     'ConfigFileSourceType',
+    'DotenvFiltering',
     'DotenvType',
     'EnvNoneType',
     'EnvPrefixTarget',

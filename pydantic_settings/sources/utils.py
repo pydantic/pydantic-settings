@@ -47,7 +47,7 @@ def _warn_if_field_info_incomplete(field_info: FieldInfo, field_name: str, init_
     if id(field_info) in warned_ids:
         return
     warned_ids.add(id(field_info))
-    warnings.warn(
+    warnings.warn(  # noqa: B028  (called from many sources at differing depths, so no stacklevel is correct)
         f'Field {field_name!r} has an incomplete definition: its annotation contains an unresolved '
         'forward reference, so settings sources may fail to correctly resolve its value. '
         'Call `model_rebuild()` on the model where the field is defined, once all the referenced '
@@ -60,7 +60,7 @@ def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
     return key if case_sensitive else key.lower()
 
 
-def _parse_env_none_str(value: str | None, parse_none_str: str | None = None) -> str | None | EnvNoneType:
+def _parse_env_none_str(value: str | None, parse_none_str: str | None = None) -> str | EnvNoneType | None:
     return value if not (value == parse_none_str and parse_none_str is not None) else EnvNoneType(value)
 
 
@@ -130,7 +130,9 @@ def _resolve_type_alias(annotation: Any) -> Any:
         type_args = get_args(annotation)
         value = origin.__value__
         if type_params and type_args:
-            return _substitute_typevars(value, dict(zip(type_params, type_args)))
+            # Not `strict=True`: a parameterized alias may supply fewer args than
+            # params (e.g. type params with defaults), which is valid.
+            return _substitute_typevars(value, dict(zip(type_params, type_args, strict=False)))
         return value
     return annotation
 

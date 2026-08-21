@@ -197,6 +197,7 @@ def read_env_file(
     warnings.warn(
         'read_env_file will be removed in the next version, use DotEnvSettingsSource._static_read_env_file if you must',
         DeprecationWarning,
+        stacklevel=2,
     )
     return DotEnvSettingsSource._static_read_env_file(
         file_path,
