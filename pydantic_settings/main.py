@@ -88,6 +88,13 @@ class SettingsConfigDict(ConfigDict, total=False):
     and you only want to load a specific subset into your settings model.
     """
 
+    env_file_depth: int
+    """
+    Number of levels **up** from the current working directory to attempt to find the env file.
+
+    This is only used when the env file is not found in the current working directory.
+    """
+
     pyproject_toml_depth: int
     """
     Number of levels **up** from the current working directory to attempt to find a pyproject.toml
@@ -149,6 +156,8 @@ class BaseSettings(BaseModel):
             means that the value from `model_config['env_file']` should be used. You can also pass
             `None` to indicate that environment variables should not be loaded from an env file.
         _env_file_encoding: The env file encoding, e.g. `'latin-1'`. Defaults to `None`.
+        _env_file_depth: The number of parent directories of the current working directory to
+            search for the env file if it is not found there. Defaults to `0` (no search).
         _env_ignore_empty: Ignore environment variables where the value is an empty string. Default to `False`.
         _env_nested_delimiter: The nested env values delimiter. Defaults to `None`.
         _env_nested_max_split: The nested env values maximum nesting. Defaults to `None`, which means no limit.
@@ -198,6 +207,7 @@ class BaseSettings(BaseModel):
         _env_prefix_target: EnvPrefixTarget | None = None,
         _env_file: DotenvType | None = ENV_FILE_SENTINEL,
         _env_file_encoding: str | None = None,
+        _env_file_depth: int | None = None,
         _env_ignore_empty: bool | None = None,
         _env_nested_delimiter: str | None = None,
         _env_nested_max_split: int | None = None,
@@ -233,6 +243,7 @@ class BaseSettings(BaseModel):
                 _env_prefix_target=_env_prefix_target,
                 _env_file=_env_file,
                 _env_file_encoding=_env_file_encoding,
+                _env_file_depth=_env_file_depth,
                 _env_ignore_empty=_env_ignore_empty,
                 _env_nested_delimiter=_env_nested_delimiter,
                 _env_nested_max_split=_env_nested_max_split,
@@ -294,6 +305,7 @@ class BaseSettings(BaseModel):
         _env_prefix_target: EnvPrefixTarget | None = None,
         _env_file: DotenvType | None = ENV_FILE_SENTINEL,
         _env_file_encoding: str | None = None,
+        _env_file_depth: int | None = None,
         _env_ignore_empty: bool | None = None,
         _env_nested_delimiter: str | None = None,
         _env_nested_max_split: int | None = None,
@@ -333,6 +345,7 @@ class BaseSettings(BaseModel):
         env_file_encoding = (
             _env_file_encoding if _env_file_encoding is not None else cls.model_config.get('env_file_encoding')
         )
+        env_file_depth = _env_file_depth if _env_file_depth is not None else cls.model_config.get('env_file_depth')
         env_ignore_empty = (
             _env_ignore_empty if _env_ignore_empty is not None else cls.model_config.get('env_ignore_empty')
         )
@@ -419,6 +432,7 @@ class BaseSettings(BaseModel):
             cls,
             env_file=env_file,
             env_file_encoding=env_file_encoding,
+            env_file_depth=env_file_depth,
             case_sensitive=case_sensitive,
             env_prefix=env_prefix,
             env_prefix_target=env_prefix_target,
@@ -624,6 +638,7 @@ class BaseSettings(BaseModel):
         nested_model_default_partial_update=False,
         env_file=None,
         env_file_encoding=None,
+        env_file_depth=0,
         env_ignore_empty=False,
         env_nested_delimiter=None,
         env_nested_max_split=None,
