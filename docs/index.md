@@ -735,11 +735,11 @@ validating them.
     directory levels **up** from the current working directory that should also be checked:
 
     ```py
-        from pydantic_settings import BaseSettings, SettingsConfigDict
+    from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-        class Settings(BaseSettings):
-            model_config = SettingsConfigDict(env_file='.env', env_file_depth=2)
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_file='.env', env_file_depth=2)
     ```
 
     This is only used when the file is not found in the current working directory, and only applies to

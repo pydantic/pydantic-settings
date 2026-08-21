@@ -34,7 +34,6 @@ class DotEnvSettingsSource(EnvSettingsSource):
         settings_cls: type[BaseSettings],
         env_file: DotenvType | None = ENV_FILE_SENTINEL,
         env_file_encoding: str | None = None,
-        env_file_depth: int | None = None,
         dotenv_filtering: DotenvFiltering | None = None,
         case_sensitive: bool | None = None,
         env_prefix: str | None = None,
@@ -44,6 +43,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
         env_ignore_empty: bool | None = None,
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
+        env_file_depth: int | None = None,
         _init_state: InitState | None = None,
     ) -> None:
         self.env_file = env_file if env_file != ENV_FILE_SENTINEL else settings_cls.model_config.get('env_file')
@@ -181,8 +181,8 @@ class DotEnvSettingsSource(EnvSettingsSource):
     def __repr__(self) -> str:
         return (
             f'{self.__class__.__name__}(env_file={self.env_file!r}, env_file_encoding={self.env_file_encoding!r}, '
-            f'env_nested_delimiter={self.env_nested_delimiter!r}, env_prefix_len={self.env_prefix_len!r}, '
-            f'env_file_depth={self.env_file_depth!r})'
+            f'env_file_depth={self.env_file_depth!r}, env_nested_delimiter={self.env_nested_delimiter!r}, '
+            f'env_prefix_len={self.env_prefix_len!r})'
         )
 
 

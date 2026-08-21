@@ -1781,6 +1781,61 @@ def test_multiple_env_file_depth(cd_tmp_path):
     assert s.port == 8000
 
 
+def test_env_file_depth_nearest_wins(cd_tmp_path):
+    (cd_tmp_path / '.env').write_text('a="top"')
+    mid = cd_tmp_path / 'mid'
+    mid.mkdir()
+    (mid / '.env').write_text('a="mid"')
+    sub = mid / 'sub'
+    sub.mkdir()
+    os.chdir(sub)
+
+    class Settings(BaseSettings):
+        a: str
+
+        model_config = SettingsConfigDict(env_file='.env', env_file_depth=2)
+
+    assert Settings().a == 'mid'
+
+
+def test_env_file_depth_nested_relative_path(cd_tmp_path):
+    (cd_tmp_path / 'cfg').mkdir()
+    (cd_tmp_path / 'cfg' / '.env').write_text('a="nested"')
+    sub = cd_tmp_path / 'sub'
+    sub.mkdir()
+    os.chdir(sub)
+
+    class Settings(BaseSettings):
+        a: str
+
+        model_config = SettingsConfigDict(env_file='cfg/.env', env_file_depth=1)
+
+    assert Settings().a == 'nested'
+
+
+def test_env_file_depth_negative(cd_tmp_path):
+    (cd_tmp_path / '.env').write_text('a="test"')
+    sub = cd_tmp_path / 'sub'
+    sub.mkdir()
+    os.chdir(sub)
+
+    class Settings(BaseSettings):
+        a: str = 'default'
+
+        model_config = SettingsConfigDict(env_file='.env', env_file_depth=-1)
+
+    assert Settings().a == 'default'
+
+
+def test_dotenv_source_positional_args_order(cd_tmp_path):
+    """`env_file_depth` must not shift the position of pre-existing positional parameters."""
+    (cd_tmp_path / '.env').write_text('a=1')
+
+    source = DotEnvSettingsSource(BaseSettings(), '.env', 'utf-8', 'only_existing')
+    assert source.dotenv_filtering == 'only_existing'
+    assert source.env_file_depth == 0
+
+
 def test_model_env_file_override_model_config(tmp_path):
     base_env = tmp_path / '.env'
     base_env.write_text(test_default_env_file)
@@ -2397,7 +2452,7 @@ def test_builtins_settings_source_repr():
         == "EnvSettingsSource(env_nested_delimiter='__', env_prefix_len=0)"
     )
     assert repr(DotEnvSettingsSource(BaseSettings, env_file='.env', env_file_encoding='utf-8')) == (
-        "DotEnvSettingsSource(env_file='.env', env_file_encoding='utf-8', env_nested_delimiter=None, env_prefix_len=0, env_file_depth=0)"
+        "DotEnvSettingsSource(env_file='.env', env_file_encoding='utf-8', env_file_depth=0, env_nested_delimiter=None, env_prefix_len=0)"
     )
     assert (
         repr(SecretsSettingsSource(BaseSettings, secrets_dir='/secrets'))
