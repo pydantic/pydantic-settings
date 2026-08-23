@@ -2530,6 +2530,24 @@ def test_cli_flag_prefix_char():
     assert cfg.model_dump() == {'my_var': 'hello'}
 
 
+def test_cli_prefix_from_model_config():
+    class Cfg(BaseSettings, cli_prefix='cfg'):
+        my_var: str
+
+    cfg = CliApp.run(Cfg, cli_args=['--cfg.my_var=hello'])
+    assert cfg.model_dump() == {'my_var': 'hello'}
+
+    assert '--cfg.my_var' in CliApp.format_help(Cfg)
+
+    for invalid_prefix in ('.cfg', 'cfg.', '123'):
+
+        class InvalidCfg(BaseSettings, cli_prefix=invalid_prefix):
+            my_var: str = ''
+
+        with pytest.raises(SettingsError, match=f'CLI settings source prefix is invalid: {re.escape(invalid_prefix)}'):
+            CliSettingsSource(InvalidCfg)
+
+
 @pytest.mark.parametrize('parser_type', [pytest.Parser, argparse.ArgumentParser, CliDummyParser])
 @pytest.mark.parametrize('prefix', ['', 'cfg'])
 def test_cli_user_settings_source(parser_type, prefix):
