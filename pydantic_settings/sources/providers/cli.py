@@ -423,8 +423,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         )
         self._cli_flag_prefix = self.cli_flag_prefix_char * 2
         if self.cli_prefix:
-            if cli_prefix.startswith('.') or cli_prefix.endswith('.') or not cli_prefix.replace('.', '').isidentifier():  # type: ignore
-                raise SettingsError(f'CLI settings source prefix is invalid: {cli_prefix}')
+            if (
+                self.cli_prefix.startswith('.')
+                or self.cli_prefix.endswith('.')
+                or not self.cli_prefix.replace('.', '').isidentifier()
+            ):
+                raise SettingsError(f'CLI settings source prefix is invalid: {self.cli_prefix}')
             self.cli_prefix += '.'
         self.cli_implicit_flags = (
             cli_implicit_flags
