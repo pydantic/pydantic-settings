@@ -20,6 +20,8 @@ def skip_docs_tests():
     if platform.python_implementation() != 'CPython':
         return 'not cpython'
 
+    return None
+
 
 class GroupModuleGlobals:
     def __init__(self) -> None:
@@ -29,6 +31,8 @@ class GroupModuleGlobals:
     def get(self, name: str | None):
         if name is not None and name == self.name:
             return self.module_dict
+
+        return None
 
     def set(self, name: str | None, module_dict: dict[str, str]):
         self.name = name
