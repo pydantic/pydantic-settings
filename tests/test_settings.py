@@ -6,12 +6,14 @@ import pathlib
 import re
 import sys
 import threading
+import time
 import uuid
 from collections.abc import Callable, Hashable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from enum import Enum, IntEnum
 from pathlib import Path
-from typing import Annotated, Any, Generic, Literal, TypeVar
+from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar
 from unittest import mock
 
 import pytest
@@ -98,6 +100,71 @@ def test_sub_env(env):
     env.set('apple', 'hello')
     s = SimpleSettings()
     assert s.apple == 'hello'
+
+
+def test_settings_cached(env):
+    class Settings(BaseSettings):
+        apple: str
+
+    env.set('apple', 'honeycrisp')
+    initial = Settings.settings_cached()
+
+    env.set('apple', 'granny_smith')
+    assert Settings.settings_cached() is initial
+    assert Settings.settings_cached().apple == 'honeycrisp'
+    assert Settings().apple == 'granny_smith'
+
+    Settings.settings_clear_cache()
+    reloaded = Settings.settings_cached()
+    assert reloaded is not initial
+    assert reloaded.apple == 'granny_smith'
+
+    Settings.settings_clear_cache()
+
+
+def test_settings_cached_per_subclass():
+    class ParentSettings(BaseSettings):
+        parent: bool = True
+
+    class ChildSettings(ParentSettings):
+        child: bool = True
+
+    parent = ParentSettings.settings_cached()
+    child = ChildSettings.settings_cached()
+
+    assert type(parent) is ParentSettings
+    assert type(child) is ChildSettings
+
+    ParentSettings.settings_clear_cache()
+    assert ParentSettings.settings_cached() is not parent
+    assert ChildSettings.settings_cached() is child
+
+    ParentSettings.settings_clear_cache()
+    ChildSettings.settings_clear_cache()
+
+
+def test_settings_cached_is_thread_safe():
+    class Settings(BaseSettings):
+        constructions: ClassVar[int] = 0
+
+        def __init__(self) -> None:
+            type(self).constructions += 1
+            time.sleep(0.01)
+            super().__init__()
+
+    barrier = threading.Barrier(8)
+
+    def load_settings(_: int) -> Settings:
+        barrier.wait()
+        return Settings.settings_cached()
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        settings = list(executor.map(load_settings, range(8)))
+
+    assert Settings.constructions == 1
+    assert all(instance is settings[0] for instance in settings)
+
+    Settings.settings_clear_cache()
 
 
 def test_sub_env_override(env):

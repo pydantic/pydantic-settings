@@ -17,6 +17,7 @@ from pydantic._internal._signature import _field_name_for_signature
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.main import BaseModel
+from typing_extensions import Self
 
 from .exceptions import SettingsError
 from .sources import (
@@ -44,6 +45,9 @@ from .sources.utils import InitState, _get_alias_names, _warn_if_field_info_inco
 from .utils import _settings_debug_enabled, logger
 
 T = TypeVar('T')
+
+_settings_cache: dict[type[BaseSettings], BaseSettings] = {}
+_settings_cache_lock = threading.RLock()
 
 
 class SettingsConfigDict(ConfigDict, total=False):
@@ -271,6 +275,22 @@ class BaseSettings(BaseModel):
         )
 
         super().__init__(**__pydantic_self__.__class__._settings_build_values(sources, init_kwargs))
+
+    @classmethod
+    def settings_cached(cls) -> Self:
+        """Return the cached default settings instance for this settings class."""
+        with _settings_cache_lock:
+            settings = _settings_cache.get(cls)
+            if settings is None:
+                settings = cls()
+                _settings_cache[cls] = settings
+            return cast(Self, settings)
+
+    @classmethod
+    def settings_clear_cache(cls) -> None:
+        """Remove the cached default settings instance for this settings class, if any."""
+        with _settings_cache_lock:
+            _settings_cache.pop(cls, None)
 
     @classmethod
     def settings_customise_sources(
@@ -665,7 +685,13 @@ class BaseSettings(BaseModel):
         yaml_config_section=None,
         toml_file=None,
         secrets_dir=None,
-        protected_namespaces=('model_validate', 'model_dump', 'settings_customise_sources'),
+        protected_namespaces=(
+            'model_validate',
+            'model_dump',
+            'settings_cached',
+            'settings_clear_cache',
+            'settings_customise_sources',
+        ),
         enable_decoding=True,
     )
 

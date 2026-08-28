@@ -3527,6 +3527,52 @@ print(mutable_settings.foo)
 ```
 
 
+## Caching settings
+
+Constructing a settings model reads and validates its configured settings sources each time. This can be costly when
+sources read from disk, such as dotenv, secrets, JSON, TOML, or YAML files, or retrieve secrets from cloud secret
+managers and parameter stores. Use `settings_cached()` when an application needs one default settings instance per
+settings class and process:
+
+```py
+import os
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    foo: str = 'foo'
+
+
+settings = Settings.settings_cached()
+
+print(settings.foo)
+#> foo
+
+os.environ['foo'] = 'bar'
+print(Settings.settings_cached().foo)
+#> foo
+
+print(Settings().foo)
+#> bar
+
+Settings.settings_clear_cache()
+reloaded_settings = Settings.settings_cached()
+
+print(reloaded_settings.foo)
+#> bar
+
+os.environ.pop('foo')
+Settings.settings_clear_cache()
+```
+
+Calling the settings class directly continues to create a fresh instance. Calling `settings_clear_cache()` removes the
+cached instance for that class, so that the next `settings_cached()` call loads the settings sources again.
+
+The cache is local to each process. The cached object is shared and remains mutable unless the settings model is
+configured as frozen.
+
+
 ## Async environments
 
 Settings are loaded synchronously. When you use sources that read from disk, such as dotenv, secrets, JSON, TOML, or
