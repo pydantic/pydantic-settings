@@ -317,6 +317,53 @@ print(TargetVarSettings().model_dump())
 
 1. `env_prefix` will be ignored and the value will be read from `FooAlias` environment variable.
 
+The same applies to an alias on a nested model field:
+
+```py
+import os
+
+from pydantic import BaseModel, Field
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class SubModel(BaseModel):
+    var1: str | None = None
+
+
+class NestedSettings(BaseSettings):
+    # default
+    model_config = SettingsConfigDict(env_prefix='APP_', env_nested_delimiter='_')
+    submodel: SubModel | None = Field(alias='SUB', default=None)
+
+
+os.environ['APP_SUB_VAR1'] = 'ignored'  # (1)!
+print(NestedSettings().model_dump())
+#> {'submodel': None}
+del os.environ['APP_SUB_VAR1']
+
+os.environ['SUB_VAR1'] = 'unprefixed alias value'
+print(NestedSettings().model_dump())
+#> {'submodel': {'var1': 'unprefixed alias value'}}
+del os.environ['SUB_VAR1']
+
+
+class NestedTargetAllSettings(NestedSettings):
+    model_config = SettingsConfigDict(
+        env_prefix='APP_',
+        env_nested_delimiter='_',
+        env_prefix_target='all',
+    )
+
+
+os.environ['APP_SUB_VAR1'] = 'prefixed alias value'
+print(NestedTargetAllSettings().model_dump())
+#> {'submodel': {'var1': 'prefixed alias value'}}
+del os.environ['APP_SUB_VAR1']
+```
+
+1. `env_prefix` will be ignored and the alias is looked up under `SUB_VAR1`, not `APP_SUB_VAR1`.
+
 ### Case-sensitivity
 
 By default, environment variable names are case-insensitive.
