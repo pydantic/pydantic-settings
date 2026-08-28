@@ -136,7 +136,12 @@ target-version = 'py310'
 keep-runtime-typing = true
 
 [tool.ruff.lint]
-extend-select = ['Q', 'RUF100', 'C90', 'UP', 'I', 'B', 'RUF036']
+extend-select = [
+    'Q', 'RUF100', 'C90', 'UP', 'I', 'B', 'RUF036',
+    # Rule sets the codebase already satisfies; selected to keep it that way.
+    'C4', 'PIE', 'PERF', 'ISC', 'ICN', 'LOG', 'G', 'INT', 'DTZ', 'YTT', 'ASYNC', 'FLY',
+    'FURB110', 'PTH201', 'RSE102', 'RUF043',
+]
 ignore = [
     # Selecting `B` also matches the `BLE` prefix. Defensive/fallback code in the
     # settings sources intentionally catches broad exceptions (thread boundaries,

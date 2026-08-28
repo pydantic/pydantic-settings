@@ -157,7 +157,7 @@ class TestAzureKeyVaultSettingsSource:
         key_vault_secret = KeyVaultSecret(SecretProperties(), expected_secret_value)
 
         if secret_name == 'SqlServer':
-            raise ResourceNotFoundError()
+            raise ResourceNotFoundError
 
         return key_vault_secret
 

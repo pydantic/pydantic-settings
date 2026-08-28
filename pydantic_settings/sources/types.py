@@ -42,12 +42,12 @@ PathType = Path | str | Sequence[Path | str]
 # See https://github.com/pydantic/pydantic-settings/issues/299
 ConfigFileSourceType = Path | str | Traversable | Sequence[Path | str | Traversable]
 DotenvFiltering = Literal['match_prefix', 'only_existing']
-DEFAULT_PATH: PathType = Path('')
+DEFAULT_PATH: PathType = Path()
 
 # This is used as the default value for `_env_file` in the `BaseSettings` class and
 # `env_file` in `DotEnvSettingsSource` so that the default can be distinguished from `None`.
 # See the docstring of `BaseSettings` for more details.
-ENV_FILE_SENTINEL: DotenvType = Path('')
+ENV_FILE_SENTINEL: DotenvType = Path()
 
 
 class _CliSubCommand:
