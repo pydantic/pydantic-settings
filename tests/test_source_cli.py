@@ -401,7 +401,7 @@ def test_cli_alias_nested_arg(capsys, monkeypatch, avoid_json):
 
 
 def test_cli_alias_exceptions(capsys, monkeypatch):
-    with pytest.raises(SettingsError, match='subcommand argument BadCliSubCommand.foo has multiple aliases'):
+    with pytest.raises(SettingsError, match=re.escape('subcommand argument BadCliSubCommand.foo has multiple aliases')):
 
         class SubCmd(BaseModel):
             v0: int
@@ -411,7 +411,9 @@ def test_cli_alias_exceptions(capsys, monkeypatch):
 
         CliApp.run(BadCliSubCommand)
 
-    with pytest.raises(SettingsError, match='positional argument BadCliPositionalArg.foo has multiple alias'):
+    with pytest.raises(
+        SettingsError, match=re.escape('positional argument BadCliPositionalArg.foo has multiple alias')
+    ):
 
         class BadCliPositionalArg(BaseSettings):
             foo: CliPositionalArg[int] = Field(validation_alias=AliasChoices('bar', 'boo'))
@@ -1737,9 +1739,11 @@ def test_cli_subcommand_with_positionals():
         my_feature: bool = False
 
     bar = BarPlugin()
-    with pytest.raises(SystemExit, match='Error: CLI subcommand is required but no subcommands were found.'):
+    with pytest.raises(SystemExit, match=re.escape('Error: CLI subcommand is required but no subcommands were found.')):
         get_subcommand(bar)
-    with pytest.raises(SettingsError, match='Error: CLI subcommand is required but no subcommands were found.'):
+    with pytest.raises(
+        SettingsError, match=re.escape('Error: CLI subcommand is required but no subcommands were found.')
+    ):
         get_subcommand(bar, cli_exit_on_error=False)
 
     @pydantic_dataclasses.dataclass
@@ -1770,9 +1774,9 @@ def test_cli_subcommand_with_positionals():
         'plugins': None,
     }
     assert get_subcommand(git, is_required=False) is None
-    with pytest.raises(SystemExit, match='Error: CLI subcommand is required {clone, init, plugins}'):
+    with pytest.raises(SystemExit, match=re.escape('Error: CLI subcommand is required {clone, init, plugins}')):
         get_subcommand(git)
-    with pytest.raises(SettingsError, match='Error: CLI subcommand is required {clone, init, plugins}'):
+    with pytest.raises(SettingsError, match=re.escape('Error: CLI subcommand is required {clone, init, plugins}')):
         get_subcommand(git, cli_exit_on_error=False)
 
     git = CliApp.run(Git, cli_args=['init', '--quiet', 'true', 'dir/path'])
@@ -1807,17 +1811,19 @@ def test_cli_subcommand_with_positionals():
     class NotModel: ...
 
     with pytest.raises(
-        SettingsError, match='Error: NotModel is not subclass of BaseModel or pydantic.dataclasses.dataclass'
+        SettingsError, match=re.escape('Error: NotModel is not subclass of BaseModel or pydantic.dataclasses.dataclass')
     ):
         get_subcommand(NotModel())
 
     class NotSettingsConfigDict(BaseModel):
         model_config = ConfigDict(cli_exit_on_error='not a bool')
 
-    with pytest.raises(SystemExit, match='Error: CLI subcommand is required but no subcommands were found.'):
+    with pytest.raises(SystemExit, match=re.escape('Error: CLI subcommand is required but no subcommands were found.')):
         get_subcommand(NotSettingsConfigDict())
 
-    with pytest.raises(SettingsError, match='Error: CLI subcommand is required but no subcommands were found.'):
+    with pytest.raises(
+        SettingsError, match=re.escape('Error: CLI subcommand is required but no subcommands were found.')
+    ):
         get_subcommand(NotSettingsConfigDict(), cli_exit_on_error=False)
 
 
@@ -2011,7 +2017,8 @@ def test_cli_annotation_exceptions(monkeypatch):
         m.setattr(sys, 'argv', ['example.py', '--help'])
 
         with pytest.raises(
-            SettingsError, match='CliSubCommand is not outermost annotation for SubCommandNotOutermost.subcmd'
+            SettingsError,
+            match=re.escape('CliSubCommand is not outermost annotation for SubCommandNotOutermost.subcmd'),
         ):
 
             class SubCommandNotOutermost(BaseSettings, cli_parse_args=True):
@@ -2019,7 +2026,9 @@ def test_cli_annotation_exceptions(monkeypatch):
 
             SubCommandNotOutermost()
 
-        with pytest.raises(SettingsError, match='subcommand argument SubCommandHasDefault.subcmd has a default value'):
+        with pytest.raises(
+            SettingsError, match=re.escape('subcommand argument SubCommandHasDefault.subcmd has a default value')
+        ):
 
             class SubCommandHasDefault(BaseSettings, cli_parse_args=True):
                 subcmd: CliSubCommand[SubCmd] = SubCmd()
@@ -2028,7 +2037,7 @@ def test_cli_annotation_exceptions(monkeypatch):
 
         with pytest.raises(
             SettingsError,
-            match='subcommand argument SubCommandMultipleTypes.subcmd has type not derived from BaseModel',
+            match=re.escape('subcommand argument SubCommandMultipleTypes.subcmd has type not derived from BaseModel'),
         ):
 
             class SubCommandMultipleTypes(BaseSettings, cli_parse_args=True):
@@ -2037,7 +2046,8 @@ def test_cli_annotation_exceptions(monkeypatch):
             SubCommandMultipleTypes()
 
         with pytest.raises(
-            SettingsError, match='subcommand argument SubCommandNotModel.subcmd has type not derived from BaseModel'
+            SettingsError,
+            match=re.escape('subcommand argument SubCommandNotModel.subcmd has type not derived from BaseModel'),
         ):
 
             class SubCommandNotModel(BaseSettings, cli_parse_args=True):
@@ -2046,7 +2056,8 @@ def test_cli_annotation_exceptions(monkeypatch):
             SubCommandNotModel()
 
         with pytest.raises(
-            SettingsError, match='CliPositionalArg is not outermost annotation for PositionalArgNotOutermost.pos_arg'
+            SettingsError,
+            match=re.escape('CliPositionalArg is not outermost annotation for PositionalArgNotOutermost.pos_arg'),
         ):
 
             class PositionalArgNotOutermost(BaseSettings, cli_parse_args=True):
@@ -2085,7 +2096,9 @@ def test_cli_annotation_exceptions(monkeypatch):
 
         InvalidCliParseArgsType()
 
-    with pytest.raises(SettingsError, match='CliExplicitFlag argument CliFlagNotBool.flag is not of type bool'):
+    with pytest.raises(
+        SettingsError, match=re.escape('CliExplicitFlag argument CliFlagNotBool.flag is not of type bool')
+    ):
 
         class CliFlagNotBool(BaseSettings, cli_parse_args=True):
             flag: CliExplicitFlag[int] = False
@@ -2093,7 +2106,7 @@ def test_cli_annotation_exceptions(monkeypatch):
         CliFlagNotBool()
 
     with pytest.raises(
-        SettingsError, match='CliToggleFlag argument CliToggleNoDefault.flag must have a default bool value'
+        SettingsError, match=re.escape('CliToggleFlag argument CliToggleNoDefault.flag must have a default bool value')
     ):
 
         class CliToggleNoDefault(BaseSettings, cli_parse_args=True):
@@ -2721,10 +2734,10 @@ def test_cli_user_settings_source_exceptions():
         cli_cfg_settings = CliSettingsSource(Cfg)
         Cfg(_cli_settings_source=cli_cfg_settings(args=args, parsed_args=parsed_args))
 
-    with pytest.raises(SettingsError, match='CLI settings source prefix is invalid: .cfg'):
+    with pytest.raises(SettingsError, match=re.escape('CLI settings source prefix is invalid: .cfg')):
         CliSettingsSource(Cfg, cli_prefix='.cfg')
 
-    with pytest.raises(SettingsError, match='CLI settings source prefix is invalid: cfg.'):
+    with pytest.raises(SettingsError, match=re.escape('CLI settings source prefix is invalid: cfg.')):
         CliSettingsSource(Cfg, cli_prefix='cfg.')
 
     with pytest.raises(SettingsError, match='CLI settings source prefix is invalid: 123'):
@@ -2900,7 +2913,8 @@ def test_cli_app_async_method_with_existing_loop():
 
 def test_cli_app_exceptions():
     with pytest.raises(
-        SettingsError, match='Error: NotPydanticModel is not subclass of BaseModel or pydantic.dataclasses.dataclass'
+        SettingsError,
+        match=re.escape('Error: NotPydanticModel is not subclass of BaseModel or pydantic.dataclasses.dataclass'),
     ):
 
         class NotPydanticModel: ...

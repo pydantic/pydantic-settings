@@ -270,7 +270,7 @@ def test_toml_table_header_no_header(tmp_path):
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (TomlConfigSettingsSource(settings_cls),)
 
-    with pytest.raises(KeyError, match='toml_table_header key "app" not found in .*'):
+    with pytest.raises(KeyError, match=r'toml_table_header key "app" not found in .*'):
         Settings()
 
 
@@ -383,7 +383,7 @@ def test_toml_table_header_file_multiple_no_header(tmp_path):
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (TomlConfigSettingsSource(settings_cls),)
 
-    with pytest.raises(KeyError, match='toml_table_header key "app" not found in .*'):
+    with pytest.raises(KeyError, match=r'toml_table_header key "app" not found in .*'):
         Settings()
 
 

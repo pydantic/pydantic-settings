@@ -81,7 +81,6 @@ def test_docs_examples(  # noqa C901
     if group_name:
         eval_example.set_config(ruff_ignore=['F821'])
 
-    # eval_example.set_config(line_length=120)
     if lint_settings != 'skip':
         if eval_example.update_examples:
             eval_example.format(example)

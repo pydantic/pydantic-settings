@@ -1537,7 +1537,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         is_model_suppressed: bool,
         env_var_names: tuple[str, ...] = (),
     ) -> str:
-        _help = field_info.description if field_info.description else ''
+        _help = field_info.description or ''
         if is_model_suppressed or self._is_field_suppressed(field_info):
             return CLI_SUPPRESS
 
@@ -1563,7 +1563,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         return _help.replace('%', '%%') if issubclass(type(self._root_parser), ArgumentParser) else _help
 
     def _is_field_suppressed(self, field_info: FieldInfo) -> bool:
-        _help = field_info.description if field_info.description else ''
+        _help = field_info.description or ''
         return _help == CLI_SUPPRESS or CLI_SUPPRESS in field_info.metadata
 
     def _update_alias_path_only_default(

@@ -46,7 +46,7 @@ def _lenient_issubclass(cls: Any, class_or_tuple: Any) -> bool:  # pragma: no co
     except TypeError:
         if get_origin(cls) is not None:
             # Up until Python 3.10, isinstance(<generic_alias>, type) is True
-            # (e.g. list[int])
+            # for generic aliases such as `list[int]`
             return False
         raise
 

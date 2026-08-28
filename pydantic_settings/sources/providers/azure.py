@@ -54,7 +54,7 @@ class AzureKeyVaultMapping(Mapping[str, str | None]):
         self._secret_client = secret_client
         self._case_sensitive = case_sensitive
         self._snake_case_conversion = snake_case_conversion
-        self._env_prefix = env_prefix if env_prefix else ''
+        self._env_prefix = env_prefix or ''
         self._secret_map: dict[str, str] = self._load_remote()
 
     def _load_remote(self) -> dict[str, str]:
