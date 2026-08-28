@@ -529,10 +529,9 @@ class BaseSettings(BaseModel):
             cls._settings_restore_init_kwarg_names(cls, init_kwargs, state, init_state)
 
             return state
-        else:
-            # no one should mean to do this, but I think returning an empty dict is marginally preferable
-            # to an informative error and much better than a confusing error
-            return {}
+        # no one should mean to do this, but I think returning an empty dict is marginally preferable
+        # to an informative error and much better than a confusing error
+        return {}
 
     @classmethod
     def _settings_log_debug(cls, states: dict[str, dict[str, Any]]) -> None:
@@ -875,8 +874,7 @@ class CliApp:
             if err.__context__ is None and err.__cause__ is None and cli_settings_source._format_help is not None:
                 error_message = f'{err}\n{cli_settings_source._format_help(parser)}'
                 raise type(err)(error_message) from None
-            else:
-                raise err
+            raise err
 
         subcommand_cls = cast(type[BaseModel], type(subcommand))
         subcommand_arg = cli_settings_source._parser_map[subcommand_dest][subcommand_cls]

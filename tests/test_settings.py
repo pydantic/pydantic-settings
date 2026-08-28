@@ -2681,10 +2681,9 @@ def test_discriminated_union_with_callable_discriminator(env):
 
         if v0 == 'a':
             return 'a'
-        elif v0 == 'b':
+        if v0 == 'b':
             return 'b'
-        else:
-            return None
+        return None
 
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(env_nested_delimiter='__')

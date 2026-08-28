@@ -268,8 +268,7 @@ def _annotation_contains_types(
 def _strip_annotated(annotation: Any) -> Any:
     if typing_objects.is_annotated(get_origin(annotation)):
         return annotation.__origin__
-    else:
-        return annotation
+    return annotation
 
 
 def _annotation_enum_val_to_name(annotation: type[Any] | None, value: Any) -> str | None:
@@ -342,7 +341,7 @@ def _get_alias_names(
         for alias in (field_info.alias, field_info.validation_alias):
             if alias is None:
                 continue
-            elif isinstance(alias, str):
+            if isinstance(alias, str):
                 alias_names.append(alias)
                 is_alias_path_only = False
             elif isinstance(alias, AliasChoices):

@@ -518,8 +518,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             if not annotation or not hasattr(annotation, 'model_fields'):
                 values[name] = value
                 continue
-            else:
-                model_fields: dict[str, FieldInfo] = annotation.model_fields
+            model_fields: dict[str, FieldInfo] = annotation.model_fields
 
             # Find field in sub model by looking in fields case insensitively
             field_key: str | None = None
