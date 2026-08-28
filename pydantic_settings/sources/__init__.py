@@ -22,6 +22,7 @@ from .providers.cli import (
     CliSuppress,
     CliToggleFlag,
     CliUnknownArgs,
+    CliVariadicArg,
 )
 from .providers.dotenv import DotEnvSettingsSource, read_env_file
 from .providers.env import EnvSettingsSource
@@ -62,6 +63,7 @@ __all__ = [
     'CliSuppress',
     'CliToggleFlag',
     'CliUnknownArgs',
+    'CliVariadicArg',
     'ConfigFileSourceMixin',
     'ConfigFileSourceType',
     'DefaultSettingsSource',

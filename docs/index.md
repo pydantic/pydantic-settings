@@ -1136,6 +1136,9 @@ not required, set the `is_required` flag to `False` to disable raising an error 
 !!! note
     `CliSubCommand` and `CliPositionalArg` are always case sensitive.
 
+List fields are repeated options by default (`--param a --param b`). Wrap the field in
+`CliVariadicArg` to accept remaining values after a single option (`--param a b c`).
+
 ```py
 import sys
 

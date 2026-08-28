@@ -56,6 +56,7 @@ from pydantic_settings.sources import (
     CliSuppress,
     CliToggleFlag,
     CliUnknownArgs,
+    CliVariadicArg,
     get_subcommand,
 )
 from pydantic_settings.sources.providers.cli import _get_model_description
@@ -1899,6 +1900,15 @@ def test_cli_variadic_positional_arg(env):
 
     assert CliApp.run(MainOptional, cli_args=['7', '8', '9']).model_dump() == {'values': [7, 8, 9]}
     assert CliApp.run(MainRequired, cli_args=['7', '8', '9']).model_dump() == {'values': [7, 8, 9]}
+
+
+def test_cli_variadic_named_arg():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+        param: CliVariadicArg[list[str]] = Field(default_factory=list)
+
+    assert CliApp.run(Settings, cli_args=[]).model_dump() == {'param': []}
+    assert CliApp.run(Settings, cli_args=['--param', 'a', 'b', 'c']).model_dump() == {'param': ['a', 'b', 'c']}
 
 
 def test_cli_variadic_positional_arg_custom_type():

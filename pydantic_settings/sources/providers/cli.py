@@ -59,6 +59,7 @@ from ..types import (
     _CliSubCommand,
     _CliToggleFlag,
     _CliUnknownArgs,
+    _CliVariadicArg,
 )
 from ..utils import (
     InitState,
@@ -249,6 +250,10 @@ class _CliArg(BaseModel):
                 raise SettingsError(
                     f'CliPositionalArg is not outermost annotation for {self.model.__name__}.{self.field_name}'
                 )
+            elif _annotation_contains_types(type_, (_CliVariadicArg,), is_include_origin=False):
+                raise SettingsError(
+                    f'CliVariadicArg is not outermost annotation for {self.model.__name__}.{self.field_name}'
+                )
             _collect_sub_models(type_, sub_models)
         return sub_models
 
@@ -289,6 +294,7 @@ class _CliArg(BaseModel):
 T = TypeVar('T')
 CliSubCommand = Annotated[T | None, _CliSubCommand]
 CliPositionalArg = Annotated[T, _CliPositionalArg]
+CliVariadicArg = Annotated[T, _CliVariadicArg]
 _CliBoolFlag = TypeVar('_CliBoolFlag', bound=bool)
 CliImplicitFlag = Annotated[_CliBoolFlag, _CliImplicitFlag]
 CliExplicitFlag = Annotated[_CliBoolFlag, _CliExplicitFlag]
@@ -1199,9 +1205,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _convert_append_action(self, kwargs: dict[str, Any], field_info: FieldInfo, is_append_action: bool) -> None:
         if is_append_action:
-            kwargs['action'] = 'append'
-            if _annotation_contains_types(field_info.annotation, (dict, Mapping), is_strip_annotated=True):
-                self._cli_dict_args[kwargs['dest']] = field_info.annotation
+            if _CliVariadicArg in field_info.metadata:
+                kwargs['nargs'] = '*'
+            else:
+                kwargs['action'] = 'append'
+                if _annotation_contains_types(field_info.annotation, (dict, Mapping), is_strip_annotated=True):
+                    self._cli_dict_args[kwargs['dest']] = field_info.annotation
 
     def _convert_bool_flag(self, kwargs: dict[str, Any], field_info: FieldInfo, model_default: Any) -> None:
         if kwargs['metavar'] == 'bool':

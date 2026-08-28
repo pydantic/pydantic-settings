@@ -58,6 +58,10 @@ class _CliPositionalArg:
     pass
 
 
+class _CliVariadicArg:
+    pass
+
+
 class _CliImplicitFlag:
     pass
 
@@ -106,4 +110,5 @@ __all__ = [
     '_CliSubCommand',
     '_CliToggleFlag',
     '_CliUnknownArgs',
+    '_CliVariadicArg',
 ]
