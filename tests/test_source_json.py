@@ -81,6 +81,29 @@ def test_json_no_file():
     assert s.model_dump() == {}
 
 
+@pytest.mark.parametrize('content', ['', '   \n\t'])
+def test_json_empty_file(tmp_path, content):
+    p = tmp_path / '.env'
+    p.write_text(content)
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(json_file=p)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (JsonConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.model_dump() == {}
+
+
 def test_multiple_file_json(tmp_path):
     p5 = tmp_path / '.env.json5'
     p6 = tmp_path / '.env.json6'
