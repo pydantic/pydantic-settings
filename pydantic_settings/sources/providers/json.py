@@ -44,7 +44,11 @@ class JsonConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
 
     def _read_file(self, file_path: Path | Traversable) -> dict[str, Any]:
         with file_path.open(encoding=self.json_file_encoding) as json_file:
-            return json.load(json_file)
+            content = json_file.read()
+        # An empty (or whitespace-only) file is not valid JSON; treat it as an empty
+        # mapping so it falls back to defaults, mirroring `YamlConfigSettingsSource`'s
+        # `yaml.safe_load(...) or {}` (and `tomllib`, which returns `{}` for an empty file).
+        return json.loads(content) if content.strip() else {}
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}(json_file={self.json_file_path})'
