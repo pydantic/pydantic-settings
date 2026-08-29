@@ -246,11 +246,11 @@ class _CliArg(BaseModel):
                 raise SettingsError(
                     f'CliSubCommand is not outermost annotation for {self.model.__name__}.{self.field_name}'
                 )
-            elif _annotation_contains_types(type_, (_CliPositionalArg,), is_include_origin=False):
+            if _annotation_contains_types(type_, (_CliPositionalArg,), is_include_origin=False):
                 raise SettingsError(
                     f'CliPositionalArg is not outermost annotation for {self.model.__name__}.{self.field_name}'
                 )
-            elif _annotation_contains_types(type_, (_CliVariadicArg,), is_include_origin=False):
+            if _annotation_contains_types(type_, (_CliVariadicArg,), is_include_origin=False):
                 raise SettingsError(
                     f'CliVariadicArg is not outermost annotation for {self.model.__name__}.{self.field_name}'
                 )
