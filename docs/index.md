@@ -3574,10 +3574,12 @@ clearing: `settings_clear_cache()` only removes the entry for the exact class it
 through a base class, clear each subclass you have cached as well, otherwise those subclasses keep serving their
 existing instances.
 
-The cache is local to each process. The cached object is shared and remains mutable unless the settings model is
-configured as frozen. A cached instance keeps its own class alive for the lifetime of the process, which is what makes
-it a singleton. If you build settings classes dynamically and need them collected, call `settings_clear_cache()` when
-you are done with one, and its cache entry is dropped.
+The cache is local to each process. The cached object is shared, so any change to it is seen by every caller.
+Configuring the model as frozen only prevents assigning to its attributes; it does not freeze the values themselves, so
+a mutable field such as a list or dict can still be updated in place and that change is shared process-wide. A cached
+instance keeps its own class alive for the lifetime of the process, which is what makes it a singleton. If you build
+settings classes dynamically and need them collected, call `settings_clear_cache()` when you are done with one, and its
+cache entry is dropped.
 
 Since `settings_cached` and `settings_clear_cache` are added to `protected_namespaces`, defining a field whose name
 starts with either of those raises a `UserWarning`. If you already have such a field, rename it or override

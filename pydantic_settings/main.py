@@ -285,23 +285,25 @@ class BaseSettings(BaseModel):
         The instance is constructed on first use and reused afterwards. Subclasses are cached
         separately, so caching a class does not affect its parents or children.
         """
-        settings = _settings_cache.get(cls)
-        if settings is not None:
-            return cast(Self, settings)
-
         with _settings_cache_guard:
+            settings = _settings_cache.get(cls)
+            if settings is not None:
+                return cast(Self, settings)
             lock = _settings_cache_locks.get(cls)
             if lock is None:
                 lock = _settings_cache_locks.setdefault(cls, threading.Lock())
 
-        # The class is constructed outside of the global guard so that settings sources which
-        # wait on other threads, e.g. cloud secret managers, cannot deadlock the cache, and so
-        # that unrelated settings classes can be loaded concurrently.
+        # The settings are constructed without holding `_settings_cache_guard` so that sources
+        # which wait on other threads, e.g. cloud secret managers, cannot deadlock the cache,
+        # and so that unrelated settings classes can be loaded concurrently. The per-class lock
+        # keeps a class from being built more than once.
         with lock:
-            settings = _settings_cache.get(cls)
+            with _settings_cache_guard:
+                settings = _settings_cache.get(cls)
             if settings is None:
                 settings = cls()
-                _settings_cache[cls] = settings
+                with _settings_cache_guard:
+                    _settings_cache[cls] = settings
             return cast(Self, settings)
 
     @classmethod
@@ -310,8 +312,12 @@ class BaseSettings(BaseModel):
 
         Only the cache entry for this exact class is removed. Subclasses keep their own cached
         instances and must be cleared individually.
+
+        A `settings_cached()` call already in flight may still return the instance it was
+        building, so clearing does not retroactively invalidate references other threads hold.
         """
-        _settings_cache.pop(cls, None)
+        with _settings_cache_guard:
+            _settings_cache.pop(cls, None)
 
     @classmethod
     def settings_customise_sources(

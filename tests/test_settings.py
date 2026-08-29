@@ -194,30 +194,31 @@ def test_settings_cached_does_not_deadlock_on_other_threads(env, clear_settings_
 
 
 def test_settings_cached_loads_unrelated_classes_concurrently(env, clear_settings_cache):
-    """A slow class must not block loading of an unrelated one."""
+    """A class being constructed must not block loading of an unrelated one.
 
-    class Slow(BaseSettings):
+    Both classes wait on the same barrier from inside ``__init__``, so this only completes if
+    they are constructed at the same time. If loading were serialized, the second class would
+    never start and the barrier would time out.
+    """
+    both_constructing = threading.Barrier(2, timeout=10)
+
+    class First(BaseSettings):
         def __init__(self) -> None:
-            time.sleep(0.2)
+            both_constructing.wait()
             super().__init__()
 
-    class AlsoSlow(BaseSettings):
+    class Second(BaseSettings):
         def __init__(self) -> None:
-            time.sleep(0.2)
+            both_constructing.wait()
             super().__init__()
-
-    barrier = threading.Barrier(2)
 
     def load(settings_cls: type[BaseSettings]) -> BaseSettings:
-        barrier.wait()
         return settings_cls.settings_cached()
 
-    start = time.monotonic()
     with ThreadPoolExecutor(max_workers=2) as executor:
-        list(executor.map(load, [Slow, AlsoSlow]))
-    elapsed = time.monotonic() - start
+        loaded = list(executor.map(load, [First, Second]))
 
-    assert elapsed < 0.35, f'unrelated settings classes were serialized ({elapsed:.2f}s)'
+    assert [type(instance) for instance in loaded] == [First, Second]
 
 
 def test_settings_cached_releases_class_after_clearing(env, clear_settings_cache):
