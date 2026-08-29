@@ -1276,6 +1276,33 @@ def test_validation_alias_with_env_prefix_and_env_prefix_target(env, env_prefix_
     assert Settings().foobar == 'bar'
 
 
+@pytest.mark.parametrize('env_prefix_target', ['variable', 'alias', 'all'])
+def test_validation_alias_with_env_prefix_and_env_prefix_target_nested(env, env_prefix_target):
+    class SubModel(BaseModel):
+        var1: str | None = None
+
+    class Settings(BaseSettings):
+        submodel: SubModel | None = Field(alias='SUB', default=None)
+
+        model_config = SettingsConfigDict(
+            env_prefix='APP_', env_nested_delimiter='_', env_prefix_target=env_prefix_target
+        )
+
+    unprefixed_alias_matches = env_prefix_target == 'variable'
+
+    env.set('SUB_VAR1', 'unprefixed-value')
+    if unprefixed_alias_matches:
+        assert Settings().submodel == SubModel(var1='unprefixed-value')
+    else:
+        assert Settings().submodel is None
+
+    env.set('APP_SUB_VAR1', 'prefixed-value')
+    if unprefixed_alias_matches:
+        assert Settings().submodel == SubModel(var1='unprefixed-value')
+    else:
+        assert Settings().submodel == SubModel(var1='prefixed-value')
+
+
 def test_case_sensitive(monkeypatch):
     class Settings(BaseSettings):
         foo: str
