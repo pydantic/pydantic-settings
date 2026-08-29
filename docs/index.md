@@ -3569,8 +3569,19 @@ Settings.settings_clear_cache()
 Calling the settings class directly continues to create a fresh instance. Calling `settings_clear_cache()` removes the
 cached instance for that class, so that the next `settings_cached()` call loads the settings sources again.
 
+Each class is cached under its own key, so a subclass never shares an instance with its parent. This also applies when
+clearing: `settings_clear_cache()` only removes the entry for the exact class it is called on. If you reload settings
+through a base class, clear each subclass you have cached as well, otherwise those subclasses keep serving their
+existing instances.
+
 The cache is local to each process. The cached object is shared and remains mutable unless the settings model is
-configured as frozen.
+configured as frozen. A cached instance keeps its own class alive for the lifetime of the process, which is what makes
+it a singleton. If you build settings classes dynamically and need them collected, call `settings_clear_cache()` when
+you are done with one, and its cache entry is dropped.
+
+Since `settings_cached` and `settings_clear_cache` are added to `protected_namespaces`, defining a field whose name
+starts with either of those raises a `UserWarning`. If you already have such a field, rename it or override
+`protected_namespaces` in your model config.
 
 
 ## Async environments

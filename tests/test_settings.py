@@ -1,4 +1,5 @@
 import dataclasses
+import gc
 import json
 import logging
 import os
@@ -8,6 +9,7 @@ import sys
 import threading
 import time
 import uuid
+import weakref
 from collections.abc import Callable, Hashable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
@@ -60,6 +62,7 @@ from pydantic_settings import (
     SettingsConfigDict,
     SettingsError,
 )
+from pydantic_settings.main import _settings_cache
 from pydantic_settings.sources import DefaultSettingsSource, read_env_file
 
 try:
@@ -102,7 +105,15 @@ def test_sub_env(env):
     assert s.apple == 'hello'
 
 
-def test_settings_cached(env):
+@pytest.fixture
+def clear_settings_cache():
+    """Leave the process-wide settings cache empty, even if a test fails part way through."""
+    _settings_cache.clear()
+    yield
+    _settings_cache.clear()
+
+
+def test_settings_cached(env, clear_settings_cache):
     class Settings(BaseSettings):
         apple: str
 
@@ -119,10 +130,8 @@ def test_settings_cached(env):
     assert reloaded is not initial
     assert reloaded.apple == 'granny_smith'
 
-    Settings.settings_clear_cache()
 
-
-def test_settings_cached_per_subclass():
+def test_settings_cached_per_subclass(env, clear_settings_cache):
     class ParentSettings(BaseSettings):
         parent: bool = True
 
@@ -139,11 +148,8 @@ def test_settings_cached_per_subclass():
     assert ParentSettings.settings_cached() is not parent
     assert ChildSettings.settings_cached() is child
 
-    ParentSettings.settings_clear_cache()
-    ChildSettings.settings_clear_cache()
 
-
-def test_settings_cached_is_thread_safe():
+def test_settings_cached_is_thread_safe(env, clear_settings_cache):
     class Settings(BaseSettings):
         constructions: ClassVar[int] = 0
 
@@ -164,7 +170,86 @@ def test_settings_cached_is_thread_safe():
     assert Settings.constructions == 1
     assert all(instance is settings[0] for instance in settings)
 
+
+def test_settings_cached_does_not_deadlock_on_other_threads(env, clear_settings_cache):
+    """Construction must not hold a global lock, or waiting on another thread deadlocks."""
+
+    class Inner(BaseSettings):
+        inner: bool = True
+
+    class Outer(BaseSettings):
+        outer: bool = True
+
+        @model_validator(mode='after')
+        def load_inner(self) -> 'Outer':
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                executor.submit(Inner.settings_cached).result(timeout=10)
+            return self
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        outer = executor.submit(Outer.settings_cached).result(timeout=10)
+
+    assert isinstance(outer, Outer)
+    assert Outer.settings_cached() is outer
+
+
+def test_settings_cached_loads_unrelated_classes_concurrently(env, clear_settings_cache):
+    """A slow class must not block loading of an unrelated one."""
+
+    class Slow(BaseSettings):
+        def __init__(self) -> None:
+            time.sleep(0.2)
+            super().__init__()
+
+    class AlsoSlow(BaseSettings):
+        def __init__(self) -> None:
+            time.sleep(0.2)
+            super().__init__()
+
+    barrier = threading.Barrier(2)
+
+    def load(settings_cls: type[BaseSettings]) -> BaseSettings:
+        barrier.wait()
+        return settings_cls.settings_cached()
+
+    start = time.monotonic()
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        list(executor.map(load, [Slow, AlsoSlow]))
+    elapsed = time.monotonic() - start
+
+    assert elapsed < 0.35, f'unrelated settings classes were serialized ({elapsed:.2f}s)'
+
+
+def test_settings_cached_releases_class_after_clearing(env, clear_settings_cache):
+    """A cleared class must be collectable.
+
+    While cached, the instance necessarily references its own class, so the entry is kept
+    alive on purpose: that is what makes it a per-process singleton. Clearing the cache
+    must drop the entry entirely so dynamically built classes can be collected.
+    """
+
+    class Settings(BaseSettings):
+        apple: str = 'honeycrisp'
+
+    Settings.settings_cached()
     Settings.settings_clear_cache()
+    ref = weakref.ref(Settings)
+
+    del Settings
+    gc.collect()
+
+    assert ref() is None, 'cleared settings class was kept alive by the cache'
+
+
+def test_settings_cached_retries_after_failure(env, clear_settings_cache):
+    class Settings(BaseSettings):
+        apple: str
+
+    with pytest.raises(ValidationError):
+        Settings.settings_cached()
+
+    env.set('apple', 'honeycrisp')
+    assert Settings.settings_cached().apple == 'honeycrisp'
 
 
 def test_sub_env_override(env):
