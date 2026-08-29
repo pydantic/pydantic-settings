@@ -10,6 +10,7 @@ from argparse import Namespace
 from collections.abc import Mapping
 from types import SimpleNamespace
 from typing import Any, ClassVar, Literal, TextIO, TypeVar, cast
+from weakref import WeakKeyDictionary
 
 from pydantic import ConfigDict
 from pydantic._internal._config import config_keys
@@ -17,6 +18,7 @@ from pydantic._internal._signature import _field_name_for_signature
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.main import BaseModel
+from typing_extensions import Self
 
 from .exceptions import SettingsError
 from .sources import (
@@ -44,6 +46,10 @@ from .sources.utils import InitState, _get_alias_names, _warn_if_field_info_inco
 from .utils import _settings_debug_enabled, logger
 
 T = TypeVar('T')
+
+_settings_cache: WeakKeyDictionary[type[BaseSettings], BaseSettings] = WeakKeyDictionary()
+_settings_cache_locks: WeakKeyDictionary[type[BaseSettings], threading.Lock] = WeakKeyDictionary()
+_settings_cache_guard = threading.Lock()
 
 
 class SettingsConfigDict(ConfigDict, total=False):
@@ -271,6 +277,47 @@ class BaseSettings(BaseModel):
         )
 
         super().__init__(**__pydantic_self__.__class__._settings_build_values(sources, init_kwargs))
+
+    @classmethod
+    def settings_cached(cls) -> Self:
+        """Return the cached default settings instance for this settings class.
+
+        The instance is constructed on first use and reused afterwards. Subclasses are cached
+        separately, so caching a class does not affect its parents or children.
+        """
+        with _settings_cache_guard:
+            settings = _settings_cache.get(cls)
+            if settings is not None:
+                return cast(Self, settings)
+            lock = _settings_cache_locks.get(cls)
+            if lock is None:
+                lock = _settings_cache_locks.setdefault(cls, threading.Lock())
+
+        # The settings are constructed without holding `_settings_cache_guard` so that sources
+        # which wait on other threads, e.g. cloud secret managers, cannot deadlock the cache,
+        # and so that unrelated settings classes can be loaded concurrently. The per-class lock
+        # keeps a class from being built more than once.
+        with lock:
+            with _settings_cache_guard:
+                settings = _settings_cache.get(cls)
+            if settings is None:
+                settings = cls()
+                with _settings_cache_guard:
+                    _settings_cache[cls] = settings
+            return cast(Self, settings)
+
+    @classmethod
+    def settings_clear_cache(cls) -> None:
+        """Remove the cached default settings instance for this settings class, if any.
+
+        Only the cache entry for this exact class is removed. Subclasses keep their own cached
+        instances and must be cleared individually.
+
+        A `settings_cached()` call already in flight may still return the instance it was
+        building, so clearing does not retroactively invalidate references other threads hold.
+        """
+        with _settings_cache_guard:
+            _settings_cache.pop(cls, None)
 
     @classmethod
     def settings_customise_sources(
@@ -665,7 +712,13 @@ class BaseSettings(BaseModel):
         yaml_config_section=None,
         toml_file=None,
         secrets_dir=None,
-        protected_namespaces=('model_validate', 'model_dump', 'settings_customise_sources'),
+        protected_namespaces=(
+            'model_validate',
+            'model_dump',
+            'settings_cached',
+            'settings_clear_cache',
+            'settings_customise_sources',
+        ),
         enable_decoding=True,
     )
 
