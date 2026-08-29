@@ -339,7 +339,7 @@ class NestedSettings(BaseSettings):
 
 os.environ['APP_SUB_VAR1'] = 'ignored'  # (1)!
 print(NestedSettings().model_dump())
-#> {'submodel': None}
+#> {'submodel': {'var1': None}}
 del os.environ['APP_SUB_VAR1']
 
 os.environ['SUB_VAR1'] = 'unprefixed alias value'
