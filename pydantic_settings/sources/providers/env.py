@@ -141,7 +141,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         if is_complex or value_is_complex:
             if isinstance(value, EnvNoneType):
                 return value
-            elif value is None:
+            if value is None:
                 # field is complex but no value found so far, try explode_env_vars
                 env_val_built = self.explode_env_vars(field_name, field, self.env_vars)
                 if env_val_built:
@@ -156,11 +156,13 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
                 if isinstance(value, dict):
                     return deep_update(value, self.explode_env_vars(field_name, field, self.env_vars))
-                else:
-                    return value
+                return value
         elif value is not None:
             # simplest case, field is not complex, we only need to add the value if it was found
             return self._coerce_env_val_strict(field, value)
+
+        # No value resolved for this field; `None` tells the caller to skip it.
+        return None
 
     def _matches_alias_path_head(self, field: FieldInfo | Any | None, key: str) -> bool:
         """
@@ -253,7 +255,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         if _lenient_issubclass(get_origin(annotation), dict):
             # get value type if it's a dict
             return get_args(annotation)[-1]
-        elif is_model_class(annotation) or is_pydantic_dataclass(annotation):  # type: ignore[arg-type]
+        if is_model_class(annotation) or is_pydantic_dataclass(annotation):  # type: ignore[arg-type]
             fields = _get_model_fields(annotation)
             # `case_sensitive is None` is here to be compatible with the old behavior.
             # Has to be removed in V3.

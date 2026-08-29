@@ -93,8 +93,7 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
         if self.secrets_nested_subdir:
             if secrets_nested_delimiter or conf.get('secrets_nested_delimiter'):
                 raise SettingsError('Options secrets_nested_delimiter and secrets_nested_subdir are mutually exclusive')
-            else:
-                self.secrets_nested_delimiter = os.sep
+            self.secrets_nested_delimiter = os.sep
 
         # ensure valid secrets_path
         if self.secrets_dir is None:

@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import pathlib
+import re
 import sys
 import threading
 import uuid
@@ -802,7 +803,7 @@ def test_alias_resolution_init_source(env):
     s = Settings(NAME='foo')
     assert s.model_dump() == {'NAME': 'foo'}
 
-    with pytest.raises(ValidationError, match="Assertion failed, assert not {'OLD_NAME'}"):
+    with pytest.raises(ValidationError, match=re.escape("Assertion failed, assert not {'OLD_NAME'}")):
         Settings(OLD_NAME='foo')
 
 
@@ -981,7 +982,8 @@ def test_env_inheritance_config(env):
 
 def test_invalid_validation_alias(env):
     with pytest.raises(
-        TypeError, match='Invalid `validation_alias` type. it should be `str`, `AliasChoices`, or `AliasPath`'
+        TypeError,
+        match=re.escape('Invalid `validation_alias` type. it should be `str`, `AliasChoices`, or `AliasPath`'),
     ):
 
         class Settings(BaseSettings):
@@ -2679,10 +2681,9 @@ def test_discriminated_union_with_callable_discriminator(env):
 
         if v0 == 'a':
             return 'a'
-        elif v0 == 'b':
+        if v0 == 'b':
             return 'b'
-        else:
-            return None
+        return None
 
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(env_nested_delimiter='__')

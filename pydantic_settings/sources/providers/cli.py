@@ -552,16 +552,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     ) -> dict[str, Any] | CliSettingsSource[T]:
         if args is not None and parsed_args is not None:
             raise SettingsError('`args` and `parsed_args` are mutually exclusive')
-        elif args is not None:
+        if args is not None:
             if args is False:
                 return self._load_env_vars(parsed_args={})
             if args is True:
                 args = sys.argv[1:]
             return self._load_env_vars(parsed_args=self._parse_args(self.root_parser, args))
-        elif parsed_args is not None:
+        if parsed_args is not None:
             return self._load_env_vars(parsed_args=copy.copy(parsed_args))
-        else:
-            return super().__call__()
+        return super().__call__()
 
     @overload
     def _load_env_vars(self) -> Mapping[str, str | None]: ...
@@ -771,13 +770,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
             if merge_type is str:
                 return merged_list[0]
-            elif merge_type is list:
+            if merge_type is list:
                 return self._merged_list_to_str(merged_list, field_name)
-            else:
-                merged_dict: dict[str, str] = {}
-                for item in merged_list:
-                    merged_dict.update(json.loads(item))
-                return json.dumps(merged_dict)
+            merged_dict: dict[str, str] = {}
+            for item in merged_list:
+                merged_dict.update(json.loads(item))
+            return json.dumps(merged_dict)
         except Exception as e:
             raise SettingsError(f'Parsing error encountered for {field_name}: {e}') from e
 
@@ -859,16 +857,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if _CliSubCommand in field_info.metadata:
                 if not field_info.is_required():
                     raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has a default value')
-                else:
-                    alias_names, *_ = _get_alias_names(field_name, field_info)
-                    if len(alias_names) > 1:
-                        raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has multiple aliases')
-                    field_types = [type_ for type_ in get_args(field_info.annotation) if type_ is not type(None)]
-                    for field_type in field_types:
-                        if not (is_model_class(field_type) or is_pydantic_dataclass(field_type)):
-                            raise SettingsError(
-                                f'subcommand argument {model.__name__}.{field_name} has type not derived from BaseModel'
-                            )
+                alias_names, *_ = _get_alias_names(field_name, field_info)
+                if len(alias_names) > 1:
+                    raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has multiple aliases')
+                field_types = [type_ for type_ in get_args(field_info.annotation) if type_ is not type(None)]
+                for field_type in field_types:
+                    if not (is_model_class(field_type) or is_pydantic_dataclass(field_type)):
+                        raise SettingsError(
+                            f'subcommand argument {model.__name__}.{field_name} has type not derived from BaseModel'
+                        )
                 subcommand_args.append((field_name, field_info))
             elif _CliPositionalArg in field_info.metadata:
                 alias_names, *_ = _get_alias_names(field_name, field_info)
@@ -889,7 +886,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if len(positional_variadic_arg) > 1:
                 field_names = ', '.join([name for name, info in positional_variadic_arg])
                 raise SettingsError(f'{model.__name__} has multiple variadic positional arguments: {field_names}')
-            elif subcommand_args:
+            if subcommand_args:
                 field_names = ', '.join([name for name, info in positional_variadic_arg + subcommand_args])
                 raise SettingsError(
                     f'{model.__name__} has variadic positional arguments and subcommand arguments: {field_names}'
@@ -928,7 +925,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
             return parse_args_insensitive_method
 
-        elif parser_method is None:
+        if parser_method is None:
 
             def none_parser_method(*args: Any, **kwargs: Any) -> Any:
                 raise SettingsError(
@@ -937,8 +934,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
             return none_parser_method
 
-        else:
-            return parser_method
+        return parser_method
 
     def _connect_group_method(self, add_argument_group_method: Callable[..., Any] | None) -> Callable[..., Any]:
         add_argument_group = self._connect_parser_method(add_argument_group_method, 'add_argument_group_method')
@@ -947,16 +943,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if not kwargs.pop('_is_cli_mutually_exclusive_group'):
                 kwargs.pop('required')
                 return add_argument_group(parser, **kwargs)
-            else:
-                main_group_kwargs = {arg: kwargs.pop(arg) for arg in ['title', 'description'] if arg in kwargs}
-                main_group_kwargs['title'] += ' (mutually exclusive)'
-                group = add_argument_group(parser, **main_group_kwargs)
-                if not hasattr(group, 'add_mutually_exclusive_group'):
-                    raise SettingsError(
-                        'cannot connect CLI settings source root parser: '
-                        'group object is missing add_mutually_exclusive_group but is needed for connecting'
-                    )
-                return group.add_mutually_exclusive_group(**kwargs)
+            main_group_kwargs = {arg: kwargs.pop(arg) for arg in ['title', 'description'] if arg in kwargs}
+            main_group_kwargs['title'] += ' (mutually exclusive)'
+            group = add_argument_group(parser, **main_group_kwargs)
+            if not hasattr(group, 'add_mutually_exclusive_group'):
+                raise SettingsError(
+                    'cannot connect CLI settings source root parser: '
+                    'group object is missing add_mutually_exclusive_group but is needed for connecting'
+                )
+            return group.add_mutually_exclusive_group(**kwargs)
 
         return add_group_method
 
@@ -1432,8 +1427,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _get_modified_args(self, obj: Any) -> tuple[str, ...]:
         if not self.cli_hide_none_type:
             return get_args(obj)
-        else:
-            return tuple([type_ for type_ in get_args(obj) if type_ is not type(None)])
+        return tuple([type_ for type_ in get_args(obj) if type_ is not type(None)])
 
     def _metavar_format_choices(self, args: list[str], obj_qualname: str | None = None) -> str:
         if 'JSON' in args:
@@ -1441,8 +1435,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         metavar = ','.join(args)
         if obj_qualname:
             return f'{obj_qualname}[{metavar}]'
-        else:
-            return metavar if len(args) == 1 else f'{{{metavar}}}'
+        return metavar if len(args) == 1 else f'{{{metavar}}}'
 
     def _metavar_format_recurse(self, obj: Any) -> str:
         """Pretty metavar representation of a type. Adapts logic from `pydantic._repr.display_as_type`."""
@@ -1450,11 +1443,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         if _is_function(obj):
             # If function is locally defined use __name__ instead of __qualname__
             return obj.__name__ if '<locals>' in obj.__qualname__ else obj.__qualname__
-        elif obj is ...:
+        if obj is ...:
             return '...'
-        elif isinstance(obj, Representation):
+        if isinstance(obj, Representation):
             return repr(obj)
-        elif isinstance(obj, typing.ForwardRef) or typing_objects.is_typealiastype(obj):
+        if isinstance(obj, typing.ForwardRef) or typing_objects.is_typealiastype(obj):
             return str(obj)
 
         if not isinstance(obj, (_typing_base, _WithArgsTypes, type)):
@@ -1463,29 +1456,28 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         origin = get_origin(obj)
         if is_union_origin(origin):
             return self._metavar_format_choices(list(map(self._metavar_format_recurse, self._get_modified_args(obj))))
-        elif typing_objects.is_literal(origin):
+        if typing_objects.is_literal(origin):
             return self._metavar_format_choices(list(map(str, self._get_modified_args(obj))))
-        elif _lenient_issubclass(obj, Enum):
+        if _lenient_issubclass(obj, Enum):
             return self._metavar_format_choices(
                 [_CliArg.get_kebab_case(name, self.cli_kebab_case == 'all') for name in obj.__members__]
             )
-        elif isinstance(obj, _WithArgsTypes):
+        if isinstance(obj, _WithArgsTypes):
             return self._metavar_format_choices(
                 list(map(self._metavar_format_recurse, self._get_modified_args(obj))),
                 obj_qualname=obj.__qualname__ if hasattr(obj, '__qualname__') else str(obj),
             )
-        elif obj is type(None):
+        if obj is type(None):
             return self.cli_parse_none_str
-        elif is_model_class(obj) or is_pydantic_dataclass(obj):
+        if is_model_class(obj) or is_pydantic_dataclass(obj):
             return (
                 self._metavar_format_recurse(_get_model_fields(obj)['root'].annotation)
                 if getattr(obj, '__pydantic_root_model__', False)
                 else 'JSON'
             )
-        elif isinstance(obj, type):
+        if isinstance(obj, type):
             return obj.__qualname__
-        else:
-            return repr(obj).replace('typing.', '').replace('typing_extensions.', '')
+        return repr(obj).replace('typing.', '').replace('typing_extensions.', '')
 
     def _metavar_format(self, obj: Any) -> str:
         return self._metavar_format_recurse(obj).replace(', ', ',')
@@ -1553,7 +1545,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         is_model_suppressed: bool,
         env_var_names: tuple[str, ...] = (),
     ) -> str:
-        _help = field_info.description if field_info.description else ''
+        _help = field_info.description or ''
         if is_model_suppressed or self._is_field_suppressed(field_info):
             return CLI_SUPPRESS
 
@@ -1579,7 +1571,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         return _help.replace('%', '%%') if issubclass(type(self._root_parser), ArgumentParser) else _help
 
     def _is_field_suppressed(self, field_info: FieldInfo) -> bool:
-        _help = field_info.description if field_info.description else ''
+        _help = field_info.description or ''
         return _help == CLI_SUPPRESS or CLI_SUPPRESS in field_info.metadata
 
     def _update_alias_path_only_default(

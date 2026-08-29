@@ -54,7 +54,7 @@ class AzureKeyVaultMapping(Mapping[str, str | None]):
         self._secret_client = secret_client
         self._case_sensitive = case_sensitive
         self._snake_case_conversion = snake_case_conversion
-        self._env_prefix = env_prefix if env_prefix else ''
+        self._env_prefix = env_prefix or ''
         self._secret_map: dict[str, str] = self._load_remote()
 
     def _load_remote(self) -> dict[str, str]:
@@ -147,8 +147,7 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
 
     def _extract_field_info(self, field: FieldInfo, field_name: str) -> list[tuple[str, str, bool]]:
         if self._snake_case_conversion:
-            field_info = [(x[0], x[1], x[2]) for x in super()._extract_field_info(field, field_name)]
-            return field_info
+            return [(x[0], x[1], x[2]) for x in super()._extract_field_info(field, field_name)]
 
         if self._dash_to_underscore:
             return [(x[0], x[1].replace('_', '-'), x[2]) for x in super()._extract_field_info(field, field_name)]

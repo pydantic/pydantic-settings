@@ -269,7 +269,7 @@ def test_invalid_yaml_config_section(tmp_path):
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls),)
 
-    with pytest.raises(KeyError, match='yaml_config_section key "invalid_key" not found in .+'):
+    with pytest.raises(KeyError, match=r'yaml_config_section key "invalid_key" not found in .+'):
         Settings()
 
 
@@ -372,7 +372,7 @@ def test_invalid_yaml_config_section_nested_path(tmp_path):
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls),)
 
-    with pytest.raises(KeyError, match='yaml_config_section key "config.app.invalid" not found in .+'):
+    with pytest.raises(KeyError, match=r'yaml_config_section key "config\.app\.invalid" not found in .+'):
         Settings()
 
 
@@ -662,7 +662,7 @@ def test_yaml_config_section_non_dict_intermediate(tmp_path):
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (YamlConfigSettingsSource(settings_cls),)
 
-    with pytest.raises(TypeError, match='yaml_config_section path.*cannot be traversed.*not a dictionary'):
+    with pytest.raises(TypeError, match=r'yaml_config_section path.*cannot be traversed.*not a dictionary'):
         Settings()
 
 
