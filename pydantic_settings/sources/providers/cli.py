@@ -1204,13 +1204,17 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         return parser
 
     def _convert_append_action(self, kwargs: dict[str, Any], field_info: FieldInfo, is_append_action: bool) -> None:
+        if _CliVariadicArg in field_info.metadata and not is_append_action:
+            raise SettingsError(
+                f'CliVariadicArg requires a list, set, dict, Sequence, or Mapping type for {kwargs["dest"]}'
+            )
         if is_append_action:
             if _CliVariadicArg in field_info.metadata:
                 kwargs['nargs'] = '*'
             else:
                 kwargs['action'] = 'append'
-                if _annotation_contains_types(field_info.annotation, (dict, Mapping), is_strip_annotated=True):
-                    self._cli_dict_args[kwargs['dest']] = field_info.annotation
+            if _annotation_contains_types(field_info.annotation, (dict, Mapping), is_strip_annotated=True):
+                self._cli_dict_args[kwargs['dest']] = field_info.annotation
 
     def _convert_bool_flag(self, kwargs: dict[str, Any], field_info: FieldInfo, model_default: Any) -> None:
         if kwargs['metavar'] == 'bool':
@@ -1247,8 +1251,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         # Note: CLI positional args are always strictly required at the CLI. Therefore, use field_info.is_required in
         # conjunction with model_default instead of the derived kwargs['required'].
         is_required = field_info.is_required() and model_default is PydanticUndefined
-        if kwargs.get('action') == 'append':
-            del kwargs['action']
+        is_variadic = (
+            kwargs.get('action') == 'append' or kwargs.get('nargs') == '*' or _CliVariadicArg in field_info.metadata
+        )
+        if is_variadic:
+            kwargs.pop('action', None)
             kwargs['nargs'] = '+' if is_required else '*'
         elif not is_required:
             kwargs['nargs'] = '?'

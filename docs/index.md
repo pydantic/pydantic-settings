@@ -1117,6 +1117,18 @@ print(User().model_dump())
 #> {'first_name': 'John', 'last_name': 'Doe'}
 ```
 
+### Variadic named options
+
+List fields are repeated options by default (`--param a --param b`). Wrap a collection
+field in `CliVariadicArg` to accept remaining values after a single option
+(`--param a b c`).
+
+Repeating the option **replaces** the previous values (`--param a b --param c` becomes
+`['c']`), which is the opposite of `action=append`. `nargs='*'` is greedy: it consumes
+values until the next option flag, so a following subcommand name can be swallowed.
+
+`CliVariadicArg` is ignored on `AliasPath` fields; those still use `action=append`.
+
 ### Subcommands and Positional Arguments
 
 Subcommands and positional arguments are expressed using the `CliSubCommand` and `CliPositionalArg` annotations. The
@@ -1135,9 +1147,6 @@ not required, set the `is_required` flag to `False` to disable raising an error 
 
 !!! note
     `CliSubCommand` and `CliPositionalArg` are always case sensitive.
-
-List fields are repeated options by default (`--param a --param b`). Wrap the field in
-`CliVariadicArg` to accept remaining values after a single option (`--param a b c`).
 
 ```py
 import sys
