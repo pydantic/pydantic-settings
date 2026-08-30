@@ -1,4 +1,5 @@
 import dataclasses
+import gc
 import json
 import logging
 import os
@@ -6,12 +7,15 @@ import pathlib
 import re
 import sys
 import threading
+import time
 import uuid
+import weakref
 from collections.abc import Callable, Hashable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from enum import Enum, IntEnum
 from pathlib import Path
-from typing import Annotated, Any, Generic, Literal, TypeVar
+from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar
 from unittest import mock
 
 import pytest
@@ -58,6 +62,7 @@ from pydantic_settings import (
     SettingsConfigDict,
     SettingsError,
 )
+from pydantic_settings.main import _settings_cache
 from pydantic_settings.sources import DefaultSettingsSource, read_env_file
 
 try:
@@ -98,6 +103,154 @@ def test_sub_env(env):
     env.set('apple', 'hello')
     s = SimpleSettings()
     assert s.apple == 'hello'
+
+
+@pytest.fixture
+def clear_settings_cache():
+    """Leave the process-wide settings cache empty, even if a test fails part way through."""
+    _settings_cache.clear()
+    yield
+    _settings_cache.clear()
+
+
+def test_settings_cached(env, clear_settings_cache):
+    class Settings(BaseSettings):
+        apple: str
+
+    env.set('apple', 'honeycrisp')
+    initial = Settings.settings_cached()
+
+    env.set('apple', 'granny_smith')
+    assert Settings.settings_cached() is initial
+    assert Settings.settings_cached().apple == 'honeycrisp'
+    assert Settings().apple == 'granny_smith'
+
+    Settings.settings_clear_cache()
+    reloaded = Settings.settings_cached()
+    assert reloaded is not initial
+    assert reloaded.apple == 'granny_smith'
+
+
+def test_settings_cached_per_subclass(env, clear_settings_cache):
+    class ParentSettings(BaseSettings):
+        parent: bool = True
+
+    class ChildSettings(ParentSettings):
+        child: bool = True
+
+    parent = ParentSettings.settings_cached()
+    child = ChildSettings.settings_cached()
+
+    assert type(parent) is ParentSettings
+    assert type(child) is ChildSettings
+
+    ParentSettings.settings_clear_cache()
+    assert ParentSettings.settings_cached() is not parent
+    assert ChildSettings.settings_cached() is child
+
+
+def test_settings_cached_is_thread_safe(env, clear_settings_cache):
+    class Settings(BaseSettings):
+        constructions: ClassVar[int] = 0
+
+        def __init__(self) -> None:
+            type(self).constructions += 1
+            time.sleep(0.01)
+            super().__init__()
+
+    barrier = threading.Barrier(8)
+
+    def load_settings(_: int) -> Settings:
+        barrier.wait()
+        return Settings.settings_cached()
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        settings = list(executor.map(load_settings, range(8)))
+
+    assert Settings.constructions == 1
+    assert all(instance is settings[0] for instance in settings)
+
+
+def test_settings_cached_does_not_deadlock_on_other_threads(env, clear_settings_cache):
+    """Construction must not hold a global lock, or waiting on another thread deadlocks."""
+
+    class Inner(BaseSettings):
+        inner: bool = True
+
+    class Outer(BaseSettings):
+        outer: bool = True
+
+        @model_validator(mode='after')
+        def load_inner(self) -> 'Outer':
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                executor.submit(Inner.settings_cached).result(timeout=10)
+            return self
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        outer = executor.submit(Outer.settings_cached).result(timeout=10)
+
+    assert isinstance(outer, Outer)
+    assert Outer.settings_cached() is outer
+
+
+def test_settings_cached_loads_unrelated_classes_concurrently(env, clear_settings_cache):
+    """A class being constructed must not block loading of an unrelated one.
+
+    Both classes wait on the same barrier from inside ``__init__``, so this only completes if
+    they are constructed at the same time. If loading were serialized, the second class would
+    never start and the barrier would time out.
+    """
+    both_constructing = threading.Barrier(2, timeout=10)
+
+    class First(BaseSettings):
+        def __init__(self) -> None:
+            both_constructing.wait()
+            super().__init__()
+
+    class Second(BaseSettings):
+        def __init__(self) -> None:
+            both_constructing.wait()
+            super().__init__()
+
+    def load(settings_cls: type[BaseSettings]) -> BaseSettings:
+        return settings_cls.settings_cached()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        loaded = list(executor.map(load, [First, Second]))
+
+    assert [type(instance) for instance in loaded] == [First, Second]
+
+
+def test_settings_cached_releases_class_after_clearing(env, clear_settings_cache):
+    """A cleared class must be collectable.
+
+    While cached, the instance necessarily references its own class, so the entry is kept
+    alive on purpose: that is what makes it a per-process singleton. Clearing the cache
+    must drop the entry entirely so dynamically built classes can be collected.
+    """
+
+    class Settings(BaseSettings):
+        apple: str = 'honeycrisp'
+
+    Settings.settings_cached()
+    Settings.settings_clear_cache()
+    ref = weakref.ref(Settings)
+
+    del Settings
+    gc.collect()
+
+    assert ref() is None, 'cleared settings class was kept alive by the cache'
+
+
+def test_settings_cached_retries_after_failure(env, clear_settings_cache):
+    class Settings(BaseSettings):
+        apple: str
+
+    with pytest.raises(ValidationError):
+        Settings.settings_cached()
+
+    env.set('apple', 'honeycrisp')
+    assert Settings.settings_cached().apple == 'honeycrisp'
 
 
 def test_sub_env_override(env):
@@ -1121,6 +1274,33 @@ def test_validation_alias_with_env_prefix_and_env_prefix_target(env, env_prefix_
 
     env.set('p_foo', 'bar')
     assert Settings().foobar == 'bar'
+
+
+@pytest.mark.parametrize('env_prefix_target', ['variable', 'alias', 'all'])
+def test_validation_alias_with_env_prefix_and_env_prefix_target_nested(env, env_prefix_target):
+    class SubModel(BaseModel):
+        var1: str | None = None
+
+    class Settings(BaseSettings):
+        submodel: SubModel | None = Field(alias='SUB', default=None)
+
+        model_config = SettingsConfigDict(
+            env_prefix='APP_', env_nested_delimiter='_', env_prefix_target=env_prefix_target
+        )
+
+    unprefixed_alias_matches = env_prefix_target == 'variable'
+
+    env.set('SUB_VAR1', 'unprefixed-value')
+    if unprefixed_alias_matches:
+        assert Settings().submodel == SubModel(var1='unprefixed-value')
+    else:
+        assert Settings().submodel is None
+
+    env.set('APP_SUB_VAR1', 'prefixed-value')
+    if unprefixed_alias_matches:
+        assert Settings().submodel == SubModel(var1='unprefixed-value')
+    else:
+        assert Settings().submodel == SubModel(var1='prefixed-value')
 
 
 def test_case_sensitive(monkeypatch):

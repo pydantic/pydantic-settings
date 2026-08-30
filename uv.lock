@@ -1419,6 +1419,7 @@ source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
+    { name = "typing-extensions" },
     { name = "typing-inspection" },
 ]
 
@@ -1475,6 +1476,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=0.21.0" },
     { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6.0.1" },
     { name = "tomli", marker = "extra == 'toml'", specifier = ">=2.0.1" },
+    { name = "typing-extensions", specifier = ">=4.0.0" },
     { name = "typing-inspection", specifier = ">=0.4.0" },
 ]
 provides-extras = ["aws-secrets-manager", "aws-systems-manager", "azure-key-vault", "gcp-secret-manager", "toml", "yaml"]
