@@ -706,6 +706,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         return merge_type, inferred_type
 
     def _merged_list_to_str(self, merged_list: list[str], field_name: str) -> str:
+        if not merged_list:
+            # `nargs='*'` accepts the option with no values, which consumes nothing.
+            # There is no cli_arg left to infer decoding from, and '' is not decodable.
+            return '[]'
         decode_list: list[str] = []
         is_use_decode: bool | None = None
         cli_arg_map = self._parser_map.get(field_name, {})

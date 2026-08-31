@@ -1918,6 +1918,16 @@ def test_cli_variadic_named_arg():
     assert CliApp.run(Settings, cli_args=['--param', 'a', 'b', '--param', 'c']).model_dump() == {'param': ['c']}
 
 
+def test_cli_variadic_named_arg_no_values():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+        param: CliVariadicArg[list[str]] = Field(default_factory=list)
+        options: CliVariadicArg[dict[str, str]] = Field(default_factory=dict)
+
+    assert CliApp.run(Settings, cli_args=['--param']).model_dump() == {'param': [], 'options': {}}
+    assert CliApp.run(Settings, cli_args=['--options']).model_dump() == {'param': [], 'options': {}}
+
+
 def test_cli_variadic_named_with_positional():
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(cli_parse_args=True)
