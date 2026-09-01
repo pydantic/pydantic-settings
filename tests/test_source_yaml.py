@@ -706,3 +706,64 @@ def test_yaml_file_traversable(tmp_path):
         if str(zip_path) in sys.path:
             sys.path.remove(str(zip_path))
         importlib.invalidate_caches()
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
+def test_yaml_file_is_read_as_utf8_by_default(tmp_path: Path, non_utf8_default_encoding: str) -> None:
+    p = tmp_path / 'config.yaml'
+    p.write_text(
+        """
+        name: Álvaro
+        city: café
+        """,
+        encoding='utf-8',
+    )
+
+    class Settings(BaseSettings):
+        name: str
+        city: str
+
+        model_config = SettingsConfigDict(yaml_file=p)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.name == 'Álvaro'
+    assert s.city == 'café'
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
+def test_yaml_file_encoding_overrides_the_utf8_default(tmp_path: Path) -> None:
+    p = tmp_path / 'config.yaml'
+    p.write_bytes(
+        """
+        city: café
+        """.encode('latin-1')
+    )
+
+    class Settings(BaseSettings):
+        city: str
+
+        model_config = SettingsConfigDict(yaml_file=p, yaml_file_encoding='latin-1')
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls),)
+
+    assert Settings().city == 'café'
