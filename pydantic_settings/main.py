@@ -42,7 +42,7 @@ from .sources import (
     YamlConfigSettingsSource,
     get_subcommand,
 )
-from .sources.utils import InitState, _get_alias_names, _warn_if_field_info_incomplete
+from .sources.utils import InitState, _get_alias_names, _warn_if_field_info_unsupported
 from .utils import _settings_debug_enabled, logger
 
 T = TypeVar('T')
@@ -612,7 +612,7 @@ class BaseSettings(BaseModel):
             state_kwarg_names = set(state.keys())
             init_kwarg_names = set(init_kwargs.keys())
             for field_name, field_info in settings_cls.model_fields.items():
-                _warn_if_field_info_incomplete(field_info, field_name, init_state)
+                _warn_if_field_info_unsupported(field_info, field_name, init_state)
                 alias_names, *_ = _get_alias_names(field_name, field_info)
                 matchable_names = set(alias_names)
                 include_name = settings_cls.model_config.get(

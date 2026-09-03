@@ -53,6 +53,7 @@ from pydantic_settings import (
     DotEnvSettingsSource,
     EnvSettingsSource,
     ForceDecode,
+    IgnoredEnvKwargWarning,
     IncompleteFieldDefinitionWarning,
     InitSettingsSource,
     JsonConfigSettingsSource,
@@ -4493,6 +4494,33 @@ def test_warn_on_incomplete_field_info_standalone_source():
     incomplete_warnings = [str(w.message) for w in caught if w.category is IncompleteFieldDefinitionWarning]
     assert len(incomplete_warnings) == 1
     assert incomplete_warnings[0].startswith("Field 'service' ")
+
+
+@pytest.mark.filterwarnings('ignore:Using extra keyword arguments on `Field` is deprecated.*')
+def test_warn_on_dropped_v1_env_kwarg(env):
+    """The pydantic v1 `env` keyword argument lands in `json_schema_extra` and is ignored, so the
+    field silently keeps its default. Settings sources emit a single `IgnoredEnvKwargWarning` per
+    field per settings resolution, and leave a correctly declared `validation_alias` alone.
+    """
+
+    class Settings(BaseSettings):
+        legacy: str = Field(default='unset', env='LEGACY_VAR')
+        aliased: str = Field(default='unset', validation_alias='ALIASED_VAR')
+
+    env.set('LEGACY_VAR', 'env-value')
+    env.set('ALIASED_VAR', 'alias-value')
+
+    with pytest.warns(IgnoredEnvKwargWarning) as caught:
+        s = Settings()
+
+    ignored_env_warnings = [str(w.message) for w in caught if w.category is IgnoredEnvKwargWarning]
+    assert len(ignored_env_warnings) == 1
+    assert ignored_env_warnings[0].startswith("Field 'legacy' is declared with `env='LEGACY_VAR'`")
+    assert "Use `validation_alias='LEGACY_VAR'` instead." in ignored_env_warnings[0]
+
+    # `env` is ignored, so the field keeps its default instead of reading `LEGACY_VAR`:
+    assert s.legacy == 'unset'
+    assert s.aliased == 'alias-value'
 
 
 def test_debug_sources_disabled_by_default(env, caplog, monkeypatch):

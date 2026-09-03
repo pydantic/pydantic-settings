@@ -1,4 +1,4 @@
-from .exceptions import IncompleteFieldDefinitionWarning, SettingsError
+from .exceptions import IgnoredEnvKwargWarning, IncompleteFieldDefinitionWarning, SettingsError
 from .main import BaseSettings, CliApp, SettingsConfigDict
 from .sources import (
     CLI_SUPPRESS,
@@ -53,6 +53,7 @@ __all__ = (
     'EnvSettingsSource',
     'ForceDecode',
     'GoogleSecretManagerSettingsSource',
+    'IgnoredEnvKwargWarning',
     'IncompleteFieldDefinitionWarning',
     'InitSettingsSource',
     'JsonConfigSettingsSource',

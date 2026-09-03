@@ -20,7 +20,7 @@ from pydantic.types import Strict
 from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
 
-from ..exceptions import IncompleteFieldDefinitionWarning, SettingsError
+from ..exceptions import IgnoredEnvKwargWarning, IncompleteFieldDefinitionWarning, SettingsError
 from ..utils import _lenient_issubclass
 from .types import EnvNoneType
 
@@ -29,30 +29,46 @@ class InitState(TypedDict, total=False):
     """State shared between settings sources during a single settings resolution."""
 
     field_info_ids: set[int]
-    """The `id()`s of the incomplete `FieldInfo` instances that were already warned about."""
+    """The `id()`s of the `FieldInfo` instances that were already warned about."""
 
 
-def _warn_if_field_info_incomplete(field_info: FieldInfo, field_name: str, init_state: InitState) -> None:
-    """Warn if the field is incomplete, i.e. its annotation contains unresolved forward references.
+def _warn_if_field_info_unsupported(field_info: FieldInfo, field_name: str, init_state: InitState) -> None:
+    """Warn if settings sources cannot resolve the field as it is declared.
 
-    An incomplete `FieldInfo` instance is unsafe to inspect — any of its attributes (annotation,
-    aliases, metadata, default) may rely on the unresolved annotation, so settings sources may
-    silently fail to resolve the field's value. Each instance is only warned about once per
-    `init_state`, so that a field accessed by multiple sources during a single settings
-    resolution doesn't emit duplicate warnings.
+    Two declarations are reported. An incomplete `FieldInfo` instance is unsafe to inspect —
+    any of its attributes (annotation, aliases, metadata, default) may rely on an unresolved
+    forward reference, so settings sources may silently fail to resolve the field's value. A
+    field declared with the pydantic v1 `env` keyword argument is not bound to that environment
+    variable at all, because pydantic v2 stores unknown `Field` keyword arguments in
+    `json_schema_extra`. Each instance is only warned about once per `init_state`, so that a
+    field accessed by multiple sources during a single settings resolution doesn't emit
+    duplicate warnings.
     """
-    if getattr(field_info, '_complete', True):
+    if not getattr(field_info, '_complete', True):
+        message = (
+            f'Field {field_name!r} has an incomplete definition: its annotation contains an unresolved '
+            'forward reference, so settings sources may fail to correctly resolve its value. '
+            'Call `model_rebuild()` on the model where the field is defined, once all the referenced '
+            'types are defined.'
+        )
+        category: type[UserWarning] = IncompleteFieldDefinitionWarning
+    elif isinstance(field_info.json_schema_extra, dict) and 'env' in field_info.json_schema_extra:
+        env = field_info.json_schema_extra['env']
+        message = (
+            f'Field {field_name!r} is declared with `env={env!r}`, the pydantic v1 spelling. It is '
+            'stored in `json_schema_extra` and ignored, so the field is not read from that '
+            f'environment variable. Use `validation_alias={env!r}` instead.'
+        )
+        category = IgnoredEnvKwargWarning
+    else:
         return
     warned_ids = init_state.setdefault('field_info_ids', set())
     if id(field_info) in warned_ids:
         return
     warned_ids.add(id(field_info))
     warnings.warn(  # noqa: B028  (called from many sources at differing depths, so no stacklevel is correct)
-        f'Field {field_name!r} has an incomplete definition: its annotation contains an unresolved '
-        'forward reference, so settings sources may fail to correctly resolve its value. '
-        'Call `model_rebuild()` on the model where the field is defined, once all the referenced '
-        'types are defined.',
-        IncompleteFieldDefinitionWarning,
+        message,
+        category,
     )
 
 
@@ -145,7 +161,7 @@ def _annotation_is_complex(annotation: Any, metadata: list[Any], init_state: Ini
         annotation = cast('type[RootModel[Any]]', annotation)
         root_field = annotation.model_fields['root']
         if init_state is not None:
-            _warn_if_field_info_incomplete(root_field, f'{annotation.__name__}.root', init_state)
+            _warn_if_field_info_unsupported(root_field, f'{annotation.__name__}.root', init_state)
         root_annotation = root_field.annotation
         if root_annotation is not None:  # pragma: no branch
             annotation = root_annotation
@@ -395,6 +411,6 @@ __all__ = [
     '_strip_annotated',
     '_union_has_strict_types',
     '_union_is_complex',
-    '_warn_if_field_info_incomplete',
+    '_warn_if_field_info_unsupported',
     'parse_env_vars',
 ]
