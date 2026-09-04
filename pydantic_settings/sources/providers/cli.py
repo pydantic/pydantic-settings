@@ -59,6 +59,7 @@ from ..types import (
     _CliSubCommand,
     _CliToggleFlag,
     _CliUnknownArgs,
+    _CliVariadicArg,
 )
 from ..utils import (
     InitState,
@@ -249,6 +250,10 @@ class _CliArg(BaseModel):
                 raise SettingsError(
                     f'CliPositionalArg is not outermost annotation for {self.model.__name__}.{self.field_name}'
                 )
+            if _annotation_contains_types(type_, (_CliVariadicArg,), is_include_origin=False):
+                raise SettingsError(
+                    f'CliVariadicArg is not outermost annotation for {self.model.__name__}.{self.field_name}'
+                )
             _collect_sub_models(type_, sub_models)
         return sub_models
 
@@ -289,6 +294,7 @@ class _CliArg(BaseModel):
 T = TypeVar('T')
 CliSubCommand = Annotated[T | None, _CliSubCommand]
 CliPositionalArg = Annotated[T, _CliPositionalArg]
+CliVariadicArg = Annotated[T, _CliVariadicArg]
 _CliBoolFlag = TypeVar('_CliBoolFlag', bound=bool)
 CliImplicitFlag = Annotated[_CliBoolFlag, _CliImplicitFlag]
 CliExplicitFlag = Annotated[_CliBoolFlag, _CliExplicitFlag]
@@ -700,6 +706,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         return merge_type, inferred_type
 
     def _merged_list_to_str(self, merged_list: list[str], field_name: str) -> str:
+        if not merged_list:
+            # `nargs='*'` accepts the option with no values, which consumes nothing.
+            # There is no cli_arg left to infer decoding from, and '' is not decodable.
+            return '[]'
         decode_list: list[str] = []
         is_use_decode: bool | None = None
         cli_arg_map = self._parser_map.get(field_name, {})
@@ -1193,8 +1203,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         return parser
 
     def _convert_append_action(self, kwargs: dict[str, Any], field_info: FieldInfo, is_append_action: bool) -> None:
+        if _CliVariadicArg in field_info.metadata and not is_append_action:
+            raise SettingsError(
+                f'CliVariadicArg requires a list, set, dict, Sequence, or Mapping type for {kwargs["dest"]}'
+            )
         if is_append_action:
-            kwargs['action'] = 'append'
+            if _CliVariadicArg in field_info.metadata:
+                kwargs['nargs'] = '*'
+            else:
+                kwargs['action'] = 'append'
             if _annotation_contains_types(field_info.annotation, (dict, Mapping), is_strip_annotated=True):
                 self._cli_dict_args[kwargs['dest']] = field_info.annotation
 
@@ -1233,8 +1250,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         # Note: CLI positional args are always strictly required at the CLI. Therefore, use field_info.is_required in
         # conjunction with model_default instead of the derived kwargs['required'].
         is_required = field_info.is_required() and model_default is PydanticUndefined
-        if kwargs.get('action') == 'append':
-            del kwargs['action']
+        is_variadic = (
+            kwargs.get('action') == 'append' or kwargs.get('nargs') == '*' or _CliVariadicArg in field_info.metadata
+        )
+        if is_variadic:
+            kwargs.pop('action', None)
             kwargs['nargs'] = '+' if is_required else '*'
         elif not is_required:
             kwargs['nargs'] = '?'
