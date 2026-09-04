@@ -83,7 +83,8 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         # Default to UTF-8 rather than the locale encoding, matching `DotEnvSettingsSource`
         # and `SecretsSettingsSource`: the YAML spec requires UTF-8/UTF-16, and the locale
         # default corrupts (or fails to decode) it on a non-UTF-8 Windows code page.
-        with file_path.open(encoding=self.yaml_file_encoding or 'utf-8') as yaml_file:
+        encoding = self.yaml_file_encoding if self.yaml_file_encoding is not None else 'utf-8'
+        with file_path.open(encoding=encoding) as yaml_file:
             return yaml.safe_load(yaml_file) or {}
 
     def _traverse_nested_section(

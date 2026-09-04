@@ -81,7 +81,8 @@ class DotEnvSettingsSource(EnvSettingsSource):
         ignore_empty: bool = False,
         parse_none_str: str | None = None,
     ) -> Mapping[str, str | None]:
-        file_vars: dict[str, str | None] = dotenv_values(file_path, encoding=encoding or 'utf8')
+        encoding = encoding if encoding is not None else 'utf-8'
+        file_vars: dict[str, str | None] = dotenv_values(file_path, encoding=encoding)
         return parse_env_vars(file_vars, case_sensitive, ignore_empty, parse_none_str)
 
     def _read_env_file(
