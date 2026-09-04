@@ -3095,6 +3095,215 @@ def test_env_prefix_from_args(env):
     assert s.apple == 'has_prefix'
 
 
+def test_env_settings_source_extra_allow(env):
+    """Env vars for undeclared fields become extras when extra='allow' (#818)."""
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='PREFIX_', extra='allow')
+        apple: str = 'default'
+
+    env.set('PREFIX_apple', 'from_env')
+    env.set('PREFIX_banana', 'also_from_env')
+    s = Settings()
+    assert s.apple == 'from_env'
+    assert s.__pydantic_extra__ == {'banana': 'also_from_env'}
+
+
+def test_env_settings_source_extra_forbid_unaffected(env):
+    """extra='forbid' (the pydantic-settings default) is a no-op here, unaffected by #818's fix.
+
+    Env vars for undeclared fields are a common, often coincidental occurrence in real
+    deployments (shared prefixes, orchestration-injected vars, etc). Unlike
+    `DotEnvSettingsSource` -- whose vars come from a small, curated `.env` file, so raising for
+    an unexpected one is more likely to reflect a real config typo -- turning every
+    prefix-matching stray process env var into a hard validation error under the *default*
+    config would be a surprising, unrequested behavior change. So this only ever activates for
+    explicit extra='allow'.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='PREFIX_', extra='forbid')
+        apple: str = 'default'
+
+    env.set('PREFIX_banana', 'unexpected')
+    assert Settings().model_dump() == {'apple': 'default'}
+
+
+def test_env_settings_source_extra_allow_no_prefix_does_not_leak_environ(env):
+    """Without an explicit env_prefix, extras are not pulled from the whole environment.
+
+    `env_vars` for `EnvSettingsSource` is effectively `os.environ`, unlike
+    `DotEnvSettingsSource`, whose `env_vars` are scoped to a small `.env` file. Surfacing
+    every unrelated process env var as an "extra" field would be a footgun, so this is
+    deliberately conservative and requires an explicit prefix to opt in.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(extra='allow')
+
+    env.set('SOME_UNRELATED_VAR', 'should_not_appear')
+    s = Settings()
+    assert 'SOME_UNRELATED_VAR' not in s.__pydantic_extra__
+    assert 'some_unrelated_var' not in s.__pydantic_extra__
+
+
+def test_env_settings_source_extra_allow_does_not_spoof_aliased_field(env):
+    """A prefix-stripped extra can't accidentally satisfy a field whose validation_alias
+    bypasses env_prefix (the default, when env_prefix_target isn't 'alias'/'all').
+
+    Regression for an edge case caught while fixing #818: a field aliased "foo" is looked up
+    unprefixed, so an unrelated env var like "PREFIX_foo" must not get treated as an extra
+    normalized down to the exact key "foo" -- that would silently (and wrongly) satisfy the
+    aliased field via a completely different, coincidentally-prefixed variable.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='PREFIX_', extra='allow')
+        foobar: str = Field(default='unset', validation_alias='foo')
+
+    env.set('PREFIX_foo', 'should_not_satisfy_foobar')
+    s = Settings()
+    assert s.foobar == 'unset'
+    assert s.__pydantic_extra__ == {}
+
+    env.set('foo', 'satisfies_foobar')
+    assert Settings().foobar == 'satisfies_foobar'
+
+
+def test_env_settings_source_extra_allow_does_not_spoof_field_by_its_own_name(env):
+    """A field with populate_by_name=False (the default) and a validation_alias is looked
+    up only by that alias, so _extract_field_info never yields the field's own declared
+    name. An env var that normalizes down to that bare name must still not be injected as
+    an extra under the same key -- that would silently shadow the real field's value in
+    model_extra, even though it doesn't overwrite the actual attribute.
+
+    Regression for a finding from automated review on PR #932: field ``foobar`` aliased to
+    ``foo`` was allowing ``PREFIX_foobar`` through as a spoofed ``model_extra['foobar']``.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='PREFIX_', extra='allow')
+        foobar: str = Field(validation_alias='foo')
+
+    env.set('foo', 'real_value')
+    env.set('PREFIX_foobar', 'leaked_value')
+    s = Settings()
+    assert s.foobar == 'real_value'
+    assert s.__pydantic_extra__ == {}
+
+
+def test_env_settings_source_extra_allow_does_not_duplicate_alias_path_head(env):
+    """A scalar field whose validation_alias is a multi-part AliasPath (e.g.
+    AliasPath('path', 'child')) is consumed, at the nested-delimiter boundary, by the
+    AliasPath-head special case in explode_env_vars/_matches_alias_path_head -- even though
+    the field's own annotation isn't "complex" by _annotation_is_complex's normal definition.
+    _merge_extra_env_vars must recognize that too, or it duplicates the already-consumed
+    value into extras under the literal nested-delimiter env var name.
+
+    Regression for a finding from automated review on PR #932.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_prefix='APP_', env_prefix_target='alias', env_nested_delimiter='__', extra='allow'
+        )
+        x: str = Field(validation_alias=AliasPath('path', 'child'))
+
+    env.set('APP_path__child', 'value_from_path_child')
+    s = EnvSettingsSource(Settings)()
+    assert 'path__child' not in s
+
+
+def test_env_settings_source_extra_allow_preserves_empty_value(env):
+    """An empty-string env var is still a real value (with the default
+    env_ignore_empty=False) and must be kept as an extra, not silently dropped.
+
+    Caught by automated review on the PR: the original `if not env_value` check treated an
+    empty string the same as an absent variable.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='PREFIX_', extra='allow')
+        apple: str = 'default'
+
+    env.set('PREFIX_option', '')
+    s = Settings()
+    assert s.__pydantic_extra__ == {'option': ''}
+
+
+def test_env_settings_source_extra_allow_ignores_empty_value_when_configured(env):
+    """With env_ignore_empty=True, an empty-string extra is dropped like any other
+    empty-string value, consistent with how declared fields already behave.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='PREFIX_', extra='allow', env_ignore_empty=True)
+        apple: str = 'default'
+
+    env.set('PREFIX_option', '')
+    s = Settings()
+    assert 'option' not in s.__pydantic_extra__
+
+
+def test_env_settings_source_extra_allow_converts_none_str(env):
+    """An extra whose raw value matches env_parse_none_str becomes real None,
+    not the internal EnvNoneType sentinel leaking out as a literal string.
+
+    Caught by automated review on the PR: PydanticBaseEnvSettingsSource.__call__
+    already does this conversion for declared fields; _merge_extra_env_vars needs
+    the same conversion for extras.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='PREFIX_', extra='allow', env_parse_none_str='null')
+        apple: str = 'default'
+
+    env.set('PREFIX_option', 'null')
+    s = Settings()
+    assert s.__pydantic_extra__ == {'option': None}
+    assert s.__pydantic_extra__['option'] is None
+
+
+def test_env_settings_source_extra_allow_case_insensitive_prefix(env):
+    """The prefix is stripped using its case-normalized length, not the raw
+    env_prefix's length.
+
+    Caught by automated review on the PR: with case-insensitive matching, if
+    lowercasing ever changes a prefix's length (e.g. certain Unicode
+    characters), slicing by the raw env_prefix length produces a mis-sliced,
+    malformed extra key. This test covers the ordinary case-insensitive path.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='PREFIX_', extra='allow', case_sensitive=False)
+        apple: str = 'default'
+
+    env.set('prefix_banana', 'x')
+    s = Settings()
+    assert s.__pydantic_extra__ == {'banana': 'x'}
+
+
+def test_env_settings_source_extra_allow_does_not_spoof_aliased_field_case_insensitive(env):
+    """The field_key collision guard from #818 also applies case-insensitively.
+
+    Caught by automated review on the PR: comparing the case-normalized
+    normalized_env_name against the raw-case field_key meant an uppercase
+    validation_alias (looked up unprefixed, per the default env_prefix_target)
+    wasn't recognized as claimed under case_sensitive=False, so a
+    coincidentally-prefixed var was wrongly injected as a stray extra instead
+    of being left alone.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='PREFIX_', extra='allow', case_sensitive=False)
+        foobar: str = Field(default='unset', validation_alias='FOO')
+
+    env.set('PREFIX_FOO', 'should_not_become_an_extra')
+    s = Settings()
+    assert s.foobar == 'unset'
+    assert s.__pydantic_extra__ == {}
+
+
 def test_env_json_field(env):
     class Settings(BaseSettings):
         x: Json

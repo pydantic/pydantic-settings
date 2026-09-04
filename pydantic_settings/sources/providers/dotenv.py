@@ -16,6 +16,7 @@ from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
 from typing_inspection.introspection import is_union_origin
 
 from ...utils import _settings_debug_enabled, logger
+from ..base import PydanticBaseEnvSettingsSource
 from ..types import ENV_FILE_SENTINEL, DotenvFiltering, DotenvType, EnvPrefixTarget
 from ..utils import InitState, _annotation_is_complex, _resolve_config_file, _union_is_complex, parse_env_vars
 from .env import EnvSettingsSource
@@ -119,7 +120,13 @@ class DotEnvSettingsSource(EnvSettingsSource):
         return dotenv_vars
 
     def __call__(self) -> dict[str, Any]:  # noqa: C901
-        data: dict[str, Any] = super().__call__()
+        # Bypass EnvSettingsSource.__call__() here (rather than plain super().__call__()):
+        # it now also merges prefix-matched extra env vars into the result (see #818), which
+        # would run before we've had a chance to apply our own dotenv_filtering modes below,
+        # breaking e.g. 'only_existing's documented "just return existing fields" contract.
+        # Get the raw, declared-fields-only data instead and keep applying our own filtering
+        # on top exactly as before.
+        data: dict[str, Any] = PydanticBaseEnvSettingsSource.__call__(self)
         if self.dotenv_filtering == 'only_existing':
             # This case behaves like the EnvSettingsSource, only return existing fields
             return data
