@@ -1928,6 +1928,30 @@ def test_cli_variadic_named_arg_no_values():
     assert CliApp.run(Settings, cli_args=['--options']).model_dump() == {'param': [], 'options': {}}
 
 
+def test_cli_variadic_named_arg_required_no_values():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True, cli_enforce_required=True)
+        param: CliVariadicArg[list[str]]
+
+    with pytest.raises(SettingsError, match='error parsing CLI: argument --param: expected at least one argument'):
+        CliApp.run(Settings, cli_args=['--param'], cli_exit_on_error=False)
+    assert CliApp.run(Settings, cli_args=['--param', 'a', 'b']).model_dump() == {'param': ['a', 'b']}
+
+
+def test_cli_variadic_named_arg_no_decode_no_values(env):
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True, env_ignore_empty=True)
+        param: Annotated[CliVariadicArg[list[str]], NoDecode] = Field(default_factory=list)
+
+    # A valueless variadic must resolve to an empty list, not '', otherwise the arg looks unset and a
+    # lower priority source would win over the explicitly provided CLI flag.
+    assert CliApp.run(Settings, cli_args=['--param']).model_dump() == {'param': []}
+
+    # The explicit CLI flag must still win over an environment variable.
+    env.set('PARAM', 'x')
+    assert CliApp.run(Settings, cli_args=['--param']).model_dump() == {'param': []}
+
+
 def test_cli_variadic_named_with_positional():
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(cli_parse_args=True)
