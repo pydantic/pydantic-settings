@@ -56,6 +56,7 @@ from pydantic_settings.sources import (
     CliSuppress,
     CliToggleFlag,
     CliUnknownArgs,
+    CliVariadicArg,
     get_subcommand,
 )
 from pydantic_settings.sources.providers.cli import _get_model_description
@@ -1905,6 +1906,95 @@ def test_cli_variadic_positional_arg(env):
 
     assert CliApp.run(MainOptional, cli_args=['7', '8', '9']).model_dump() == {'values': [7, 8, 9]}
     assert CliApp.run(MainRequired, cli_args=['7', '8', '9']).model_dump() == {'values': [7, 8, 9]}
+
+
+def test_cli_variadic_named_arg():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+        param: CliVariadicArg[list[str]] = Field(default_factory=list)
+
+    assert CliApp.run(Settings, cli_args=[]).model_dump() == {'param': []}
+    assert CliApp.run(Settings, cli_args=['--param', 'a', 'b', 'c']).model_dump() == {'param': ['a', 'b', 'c']}
+    assert CliApp.run(Settings, cli_args=['--param', 'a', 'b', '--param', 'c']).model_dump() == {'param': ['c']}
+
+
+def test_cli_variadic_named_arg_no_values():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+        param: CliVariadicArg[list[str]] = Field(default_factory=list)
+        options: CliVariadicArg[dict[str, str]] = Field(default_factory=dict)
+
+    assert CliApp.run(Settings, cli_args=['--param']).model_dump() == {'param': [], 'options': {}}
+    assert CliApp.run(Settings, cli_args=['--options']).model_dump() == {'param': [], 'options': {}}
+
+
+def test_cli_variadic_named_arg_required_no_values():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True, cli_enforce_required=True)
+        param: CliVariadicArg[list[str]]
+
+    with pytest.raises(SettingsError, match='error parsing CLI: argument --param: expected at least one argument'):
+        CliApp.run(Settings, cli_args=['--param'], cli_exit_on_error=False)
+    assert CliApp.run(Settings, cli_args=['--param', 'a', 'b']).model_dump() == {'param': ['a', 'b']}
+
+
+def test_cli_variadic_named_arg_no_decode_no_values(env):
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True, env_ignore_empty=True)
+        param: Annotated[CliVariadicArg[list[str]], NoDecode] = Field(default_factory=list)
+
+    # A valueless variadic must resolve to an empty list, not '', otherwise the arg looks unset and a
+    # lower priority source would win over the explicitly provided CLI flag.
+    assert CliApp.run(Settings, cli_args=['--param']).model_dump() == {'param': []}
+
+    # The explicit CLI flag must still win over an environment variable.
+    env.set('PARAM', 'x')
+    assert CliApp.run(Settings, cli_args=['--param']).model_dump() == {'param': []}
+
+
+def test_cli_variadic_named_with_positional():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+        param: CliPositionalArg[CliVariadicArg[list[str]]] = Field(default_factory=list)
+
+    assert CliApp.run(Settings, cli_args=['a', 'b', 'c']).model_dump() == {'param': ['a', 'b', 'c']}
+    assert CliApp.run(Settings, cli_args=[]).model_dump() == {'param': []}
+
+
+def test_cli_variadic_named_required_positional():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+        param: CliPositionalArg[CliVariadicArg[list[str]]]
+
+    with pytest.raises(SettingsError, match='error parsing CLI: the following arguments are required: PARAM'):
+        CliApp.run(Settings, cli_args=[], cli_exit_on_error=False)
+    assert CliApp.run(Settings, cli_args=['a', 'b']).model_dump() == {'param': ['a', 'b']}
+
+
+def test_cli_variadic_dict_arg():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+        options: CliVariadicArg[dict[str, str]] = Field(default_factory=dict)
+
+    assert CliApp.run(Settings, cli_args=['--options', 'a=b', 'c=d']).model_dump() == {'options': {'a': 'b', 'c': 'd'}}
+
+
+def test_cli_variadic_non_collection_raises():
+    with pytest.raises(SettingsError, match='CliVariadicArg requires a list, set, dict, Sequence, or Mapping type'):
+
+        class Settings(BaseSettings, cli_parse_args=True):
+            param: CliVariadicArg[str]
+
+        Settings()
+
+
+def test_cli_variadic_not_outermost_raises():
+    with pytest.raises(SettingsError, match='CliVariadicArg is not outermost annotation'):
+
+        class Settings(BaseSettings, cli_parse_args=True):
+            param: int | CliVariadicArg[list[str]]
+
+        Settings()
 
 
 def test_cli_variadic_positional_arg_custom_type():
