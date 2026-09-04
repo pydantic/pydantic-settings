@@ -3458,6 +3458,19 @@ def test_dotenv_with_extra_and_env_prefix(tmp_path):
     assert s.model_dump() == {'foo': '1', 'extra_var': 'extra_value'}
 
 
+def test_dotenv_with_extra_and_uppercase_env_prefix(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('XXX__FOO=1\nXXX__EXTRA_VAR=extra_value')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(extra='allow', env_file=p, env_prefix='XXX__')
+
+        foo: str = ''
+
+    s = Settings()
+    assert s.model_dump() == {'foo': '1', 'extra_var': 'extra_value'}
+
+
 def test_nested_field_with_alias_init_source():
     class NestedSettings(BaseModel):
         foo: str = Field(alias='fooAlias')
