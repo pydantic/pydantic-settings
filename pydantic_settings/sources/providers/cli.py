@@ -645,7 +645,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
                 cli_arg = self._parser_map.get(field_name, {}).get(None)
                 if cli_arg and cli_arg.is_no_decode:
-                    parsed_args[field_name] = ','.join(val)
+                    # `nargs='*'` accepts the option with no values. Joining to '' would make the arg
+                    # indistinguishable from unset (and dropped entirely under env_ignore_empty), so keep
+                    # the empty list intact. A NoDecode value is never JSON decoded, so '[]' is not usable.
+                    parsed_args[field_name] = ','.join(val) if val else val
                     continue
 
                 parsed_args[field_name] = self._merge_parsed_list(val, field_name)
@@ -1209,7 +1212,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             )
         if is_append_action:
             if _CliVariadicArg in field_info.metadata:
-                kwargs['nargs'] = '*'
+                # A required variadic option must consume at least one value, otherwise a bare flag would
+                # satisfy argparse and silently resolve to an empty list.
+                kwargs['nargs'] = '+' if kwargs.get('required') else '*'
             else:
                 kwargs['action'] = 'append'
             if _annotation_contains_types(field_info.annotation, (dict, Mapping), is_strip_annotated=True):
