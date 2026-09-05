@@ -45,6 +45,28 @@ class SampleEnum(str, Enum):
     TEST = 'test'
 
 
+@pytest.mark.parametrize('case_sensitive, expected', [(False, 'third'), (True, 'second')])
+def test_directory_precedence_with_different_filename_cases(tmp_path, case_sensitive, expected):
+    directories = [tmp_path / str(i) for i in range(3)]
+    for directory, filename, value in zip(
+        directories, ['TOKEN', 'token', 'TOKEN'], ['first', 'second', 'third'], strict=True
+    ):
+        directory.mkdir()
+        (directory / filename).write_text(value)
+
+    class Settings(BaseSettings):
+        token: str
+        model_config = SettingsConfigDict(secrets_dir=directories, secrets_case_sensitive=case_sensitive)
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            return (NestedSecretsSettingsSource(file_secret_settings),)
+
+    assert Settings().token == expected
+
+
 def test_repr(tmp_path):
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(
