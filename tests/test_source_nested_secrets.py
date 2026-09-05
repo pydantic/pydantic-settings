@@ -1,3 +1,4 @@
+import os
 from enum import Enum
 from os import sep
 from pathlib import Path
@@ -46,7 +47,10 @@ class SampleEnum(str, Enum):
 
 
 @pytest.mark.parametrize('case_sensitive, expected', [(False, 'third'), (True, 'second')])
-def test_directory_precedence_with_different_filename_cases(tmp_path, case_sensitive, expected):
+def test_directory_precedence_with_different_filename_cases(tmp_path, monkeypatch, case_sensitive, expected):
+    # Like the case-sensitive environment tests, use a plain mapping so the
+    # inherited Windows environment fallback does not override this control.
+    monkeypatch.setattr(os, 'environ', {})
     directories = [tmp_path / str(i) for i in range(3)]
     for directory, filename, value in zip(
         directories, ['TOKEN', 'token', 'TOKEN'], ['first', 'second', 'third'], strict=True
@@ -64,8 +68,7 @@ def test_directory_precedence_with_different_filename_cases(tmp_path, case_sensi
         ):
             return (NestedSecretsSettingsSource(file_secret_settings),)
 
-    source = NestedSecretsSettingsSource(SecretsSettingsSource(Settings))
-    assert Settings().token == expected, (source.case_sensitive, source.env_vars)
+    assert Settings().token == expected
 
 
 def test_repr(tmp_path):
