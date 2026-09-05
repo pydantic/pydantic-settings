@@ -64,7 +64,8 @@ def test_directory_precedence_with_different_filename_cases(tmp_path, case_sensi
         ):
             return (NestedSecretsSettingsSource(file_secret_settings),)
 
-    assert Settings().token == expected
+    source = NestedSecretsSettingsSource(SecretsSettingsSource(Settings))
+    assert Settings().token == expected, (source.case_sensitive, source.env_vars)
 
 
 def test_repr(tmp_path):
