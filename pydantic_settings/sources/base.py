@@ -48,8 +48,79 @@ if TYPE_CHECKING:
     from .types import Traversable
 
 
+def _external_field_paths(settings_cls: type[BaseSettings]) -> dict[str, list[list[str | int]]]:
+    """Return source input paths, including names only when name-based population is enabled."""
+    include_name = settings_cls.model_config.get('populate_by_name', False) or settings_cls.model_config.get(
+        'validate_by_name', False
+    )
+    paths: dict[str, list[list[str | int]]] = {}
+    for name, field in settings_cls.model_fields.items():
+        alias = field.validation_alias
+        if isinstance(alias, AliasChoices):
+            paths[name] = alias.convert_to_aliases()
+        elif isinstance(alias, AliasPath):
+            paths[name] = [alias.path]
+        elif isinstance(alias, str):
+            paths[name] = [[alias]]
+        else:
+            paths[name] = [[name]]
+        if include_name and [name] not in paths[name]:
+            paths[name].append([name])
+    return paths
+
+
+def _validate_external_field_paths(settings_cls: type[BaseSettings], data: dict[str, Any] | None = None) -> None:
+    """Reject ambiguous exclusions instead of deleting input needed by an ordinary field."""
+    if not isinstance(settings_cls, type):
+        settings_cls = type(settings_cls)
+    excluded = {name for name, field in settings_cls.model_fields.items() if NoExternalSources in field.metadata}
+    if not excluded:
+        return
+    case_sensitive = settings_cls.model_config.get('case_sensitive', False)
+
+    def normalize(path: list[str | int]) -> list[str | int]:
+        normalized = path.copy()
+        value: Any = data
+        for index, key in enumerate(path):
+            if index == 0 and isinstance(key, str) and not case_sensitive:
+                normalized[index] = key.lower()
+                if isinstance(value, dict) and key not in value:
+                    key = next((name for name in value if isinstance(name, str) and name.lower() == key.lower()), key)
+            if isinstance(value, dict):
+                value = value.get(key)
+            elif isinstance(value, list) and isinstance(key, int) and -len(value) <= key < len(value):
+                normalized[index] = key % len(value)
+                value = value[key]
+            else:
+                value = None
+        return normalized
+
+    paths = {
+        name: [normalize(path) for path in field_paths]
+        for name, field_paths in _external_field_paths(settings_cls).items()
+    }
+    for name, excluded_paths in paths.items():
+        if name not in excluded:
+            continue
+        for other_name, ordinary_paths in paths.items():
+            if other_name in excluded:
+                continue
+            if any(
+                left[: min(len(left), len(right))] == right[: min(len(left), len(right))]
+                for left in excluded_paths
+                for right in ordinary_paths
+            ):
+                raise SettingsError(
+                    f'NoExternalSources field {name!r} and field {other_name!r} have overlapping input paths; '
+                    'use distinct aliases or remove NoExternalSources'
+                )
+
+
 def _exclude_external_fields(settings_cls: type[BaseSettings], data: dict[str, Any]) -> dict[str, Any]:
     """Remove excluded inputs without mutating a source's data or unrelated alias-path values."""
+    if not any(NoExternalSources in field.metadata for field in settings_cls.model_fields.values()):
+        return data
+    _validate_external_field_paths(settings_cls, data)
 
     def remove_path(value: Any, path: list[str | int]) -> Any:
         key, *rest = path
@@ -66,17 +137,20 @@ def _exclude_external_fields(settings_cls: type[BaseSettings], data: dict[str, A
             return result_list
         return value
 
+    field_paths = _external_field_paths(settings_cls)
+    protected_roots = {
+        path[0]
+        for name, paths in field_paths.items()
+        if NoExternalSources not in settings_cls.model_fields[name].metadata
+        for path in paths
+    }
+    alias_roots = {path[0] for paths in field_paths.values() for path in paths if len(path) > 1}
     for name, field in settings_cls.model_fields.items():
         if NoExternalSources not in field.metadata:
             continue
-        paths: list[list[str | int]] = [[name]]
-        alias = field.validation_alias
-        if isinstance(alias, str):
-            paths.append([alias])
-        elif isinstance(alias, AliasPath):
-            paths.append(alias.path)
-        elif isinstance(alias, AliasChoices):
-            paths.extend(alias.convert_to_aliases())
+        paths = field_paths[name].copy()
+        if name not in protected_roots | alias_roots and [name] not in paths:
+            paths.append([name])
         for path in paths:
             data = remove_path(data, path)
     return data
@@ -148,6 +222,7 @@ class PydanticBaseSettingsSource(ABC):
         self._init_state: InitState = {} if _init_state is None else _init_state
         self.settings_cls = settings_cls
         self.config = settings_cls.model_config
+        _validate_external_field_paths(settings_cls)
         self._current_state: dict[str, Any] = {}
         self._settings_sources_data: dict[str, dict[str, Any]] = {}
 

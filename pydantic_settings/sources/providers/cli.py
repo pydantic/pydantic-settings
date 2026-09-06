@@ -597,11 +597,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if NoExternalSources in field.metadata
             for _, env_name, _ in self._extract_field_info(field, field_name)
         ]
+        excluded_names.extend(self._excluded_cli_dests)
         if excluded_names:
             parsed_args = {
                 key: val
                 for key, val in parsed_args.items()
-                if not any(key == name or key.startswith(f'{name}.') for name in excluded_names)
+                if key in self._parser_map
+                or not any(key == name or key.startswith(f'{name}.') for name in excluded_names)
             }
 
         selected_subcommands = self._resolve_parsed_args(parsed_args)
@@ -876,6 +878,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         positional_args, subcommand_args, optional_args = [], [], []
         for field_name, field_info in _get_model_fields(model).items():
             if model is self.settings_cls and NoExternalSources in field_info.metadata:
+                optional_args.append((field_name, field_info))
                 continue
             if _CliSubCommand in field_info.metadata:
                 if not field_info.is_required():
@@ -1009,6 +1012,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self._format_help = self._connect_parser_method(format_help_method, 'format_help_method')
         self._formatter_class = formatter_class
         self._cli_dict_args: dict[str, type[Any] | None] = {}
+        self._excluded_cli_dests: set[str] = set()
         self._parser_map: defaultdict[str | FieldInfo, dict[int | str | type[BaseModel] | None, _CliArg]] = defaultdict(
             dict
         )
@@ -1082,10 +1086,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             else model_default
         )
         for field_name, field_info in self._sort_arg_fields(model):
+            excluded = model is self.settings_cls and NoExternalSources in field_info.metadata
+            parser_map = defaultdict(dict) if excluded else self._parser_map
             arg = _CliArg(
                 parser=parser,
                 field_info=field_info,
-                parser_map=self._parser_map,
+                parser_map=parser_map,
                 model=model,
                 field_name=field_name,
                 arg_prefix=arg_prefix,
@@ -1097,6 +1103,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 enable_decoding=self.config.get('enable_decoding'),
                 env_prefix_len=self.env_prefix_len,
             )
+            if excluded:
+                self._excluded_cli_dests.update(key for key in parser_map if isinstance(key, str))
+                continue
             alias_path_args.update(arg.alias_paths)
 
             if arg.subcommand_dest:

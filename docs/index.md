@@ -104,6 +104,52 @@ print(Settings().model_dump())
 
     Check the [Environment variable names documentation](#environment-variable-names) for more information.
 
+## Excluding fields from external sources
+
+Annotate a settings field with `NoExternalSources` to allow constructor arguments and defaults while ignoring
+values from external settings sources. The field remains part of `model_fields`, `model_dump()`, and JSON Schema.
+
+```py
+import os
+from typing import Annotated
+
+from pydantic_settings import BaseSettings, NoExternalSources
+
+
+class Settings(BaseSettings):
+    protocol: Annotated[str, NoExternalSources] = 'v1'
+    workers: int = 1
+
+
+os.environ['PROTOCOL'] = 'v2'
+os.environ['WORKERS'] = '4'
+print(Settings().model_dump())
+#> {'protocol': 'v1', 'workers': 4}
+print(Settings(protocol='v3').protocol)
+#> v3
+```
+
+The annotation applies to fields directly on the settings model, including inherited fields. Marking a field
+containing a nested model excludes that whole field; annotations inside ordinary nested models are not
+recursively interpreted. Environment variables, dotenv entries, secret files, configuration file sources,
+and custom source results cannot supply the marked field. Custom sources still execute.
+
+Generated CLI parsers and `CliApp.serialize()` omit marked fields. Constructor values are validated normally,
+and a required field without a default must be supplied through constructor arguments. This annotation does
+not make the field immutable or prevent assignment after construction.
+
+Marked fields must have input paths distinct from ordinary fields. A shared validation alias, an overlapping
+`AliasChoices` alternative, or a parent/child `AliasPath` combination raises `SettingsError` instead of removing
+input that another field needs. Root names are compared case-insensitively when `case_sensitive=False`, matching
+the default source name handling. Distinct sibling paths such as `AliasPath('group', 'fixed')` and
+`AliasPath('group', 'ordinary')` are supported. List indices that resolve to the same element, including negative
+indices, are also rejected when source data is read. This restriction applies only to overlaps between marked
+and ordinary fields; models without `NoExternalSources` retain their existing alias behavior.
+
+If an attribute does not need to be a model field, use `ClassVar` instead. Class variables are omitted from
+settings fields, serialization, and JSON Schema. In contrast, `Field(exclude=True)` only affects serialization;
+it does not prevent a field from being loaded from settings sources.
+
 ## Validation of default values
 
 Unlike pydantic `BaseModel`, default values of `BaseSettings` fields are validated by default.

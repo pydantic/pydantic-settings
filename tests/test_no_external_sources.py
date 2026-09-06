@@ -11,6 +11,7 @@ from pydantic_settings import (
     JsonConfigSettingsSource,
     NoExternalSources,
     SettingsConfigDict,
+    SettingsError,
 )
 
 
@@ -92,6 +93,139 @@ def test_shared_alias_path():
 
     assert Settings().model_dump() == {'fixed': 1, 'ordinary': 2}
     assert data['group']['fixed'] == 'invalid'
+
+
+def test_alias_path_root_matches_excluded_field_name():
+    data = {'group': {'fixed': 'invalid', 'ordinary': 2}}
+
+    class Settings(BaseSettings):
+        group: Annotated[int, NoExternalSources] = Field(1, validation_alias=AliasPath('group', 'fixed'))
+        ordinary: int = Field(validation_alias=AliasPath('group', 'ordinary'))
+
+        @classmethod
+        def settings_customise_sources(cls, settings_cls, **kwargs):
+            return (lambda: data,)
+
+    assert Settings().model_dump() == {'group': 1, 'ordinary': 2}
+    assert data == {'group': {'fixed': 'invalid', 'ordinary': 2}}
+
+
+@pytest.mark.parametrize(
+    'excluded_alias,ordinary_alias',
+    [
+        ('VALUE', 'VALUE'),
+        ('VALUE', 'value'),
+        (AliasChoices('FIRST', 'VALUE'), 'VALUE'),
+        (AliasPath('group', 'value'), AliasPath('group', 'value')),
+        ('group', AliasPath('group', 'value')),
+        (AliasPath('group', 'value'), 'group'),
+    ],
+)
+def test_reject_overlapping_external_field_paths(excluded_alias, ordinary_alias):
+    class Settings(BaseSettings):
+        secret: Annotated[str, NoExternalSources] = Field('default', validation_alias=excluded_alias)
+        endpoint: str = Field('endpoint', validation_alias=ordinary_alias)
+
+    with pytest.raises(SettingsError, match=r"NoExternalSources.*'secret'.*'endpoint'.*overlap"):
+        Settings()
+
+
+def test_case_sensitive_distinct_aliases():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(case_sensitive=True)
+        secret: Annotated[str, NoExternalSources] = Field('default', validation_alias='VALUE')
+        endpoint: str = Field(validation_alias='value')
+
+        @classmethod
+        def settings_customise_sources(cls, settings_cls, **kwargs):
+            return (lambda: {'VALUE': 'ignored', 'value': 'kept'},)
+
+    assert Settings().model_dump() == {'secret': 'default', 'endpoint': 'kept'}
+
+
+def test_populate_by_name_overlapping_alias():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(populate_by_name=True)
+        secret: Annotated[str, NoExternalSources] = Field('default', validation_alias='SECRET')
+        endpoint: str = Field('endpoint', validation_alias='secret')
+
+    with pytest.raises(SettingsError, match='overlap'):
+        Settings()
+
+
+def test_non_input_field_name_does_not_hide_another_fields_alias():
+    class Settings(BaseSettings):
+        secret: Annotated[str, NoExternalSources] = Field('default', validation_alias='PRIVATE')
+        endpoint: str = Field(validation_alias='secret')
+
+        @classmethod
+        def settings_customise_sources(cls, settings_cls, **kwargs):
+            return (lambda: {'PRIVATE': 'ignored', 'secret': 'kept'},)
+
+    assert Settings().model_dump() == {'secret': 'default', 'endpoint': 'kept'}
+
+
+def test_negative_alias_path_index_overlap():
+    class Settings(BaseSettings):
+        secret: Annotated[str, NoExternalSources] = Field('default', validation_alias=AliasPath('group', -1))
+        endpoint: str = Field(validation_alias=AliasPath('group', 0))
+
+        @classmethod
+        def settings_customise_sources(cls, settings_cls, **kwargs):
+            return (lambda: {'group': ['shared']},)
+
+    with pytest.raises(SettingsError, match='overlap'):
+        Settings()
+
+
+def test_unmarked_shared_aliases_are_unchanged():
+    class Settings(BaseSettings):
+        first: str = Field(validation_alias='VALUE')
+        second: str = Field(validation_alias='VALUE')
+
+    assert Settings(VALUE='shared').model_dump() == {'first': 'shared', 'second': 'shared'}
+
+
+def test_two_excluded_fields_can_share_an_alias():
+    class Settings(BaseSettings):
+        first: Annotated[str, NoExternalSources] = Field('first', validation_alias='VALUE')
+        second: Annotated[str, NoExternalSources] = Field('second', validation_alias='VALUE')
+
+        @classmethod
+        def settings_customise_sources(cls, settings_cls, init_settings, **kwargs):
+            return init_settings, lambda: {'VALUE': 'ignored'}
+
+    assert Settings().model_dump() == {'first': 'first', 'second': 'second'}
+    assert Settings(VALUE='explicit').model_dump() == {'first': 'explicit', 'second': 'explicit'}
+
+
+@pytest.mark.parametrize('target', ['variable', 'alias', 'all'])
+def test_cli_exclusion_uses_parser_destination(target, monkeypatch):
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix_target=target)
+        fixed: Annotated[str, NoExternalSources] = Field('default', validation_alias='FIXED')
+
+    source = CliSettingsSource(Settings, cli_prefix='app')
+    resolve = source._resolve_parsed_args
+
+    def check_args(parsed_args):
+        assert 'FIXED' not in parsed_args
+        return resolve(parsed_args)
+
+    monkeypatch.setattr(source, '_resolve_parsed_args', check_args)
+    assert CliApp.run(Settings, cli_args={'FIXED': 'external'}, cli_settings_source=source).fixed == 'default'
+
+
+def test_cli_exclusion_preserves_shared_alias_path():
+    class Settings(BaseSettings):
+        fixed: Annotated[int, NoExternalSources] = Field(1, validation_alias=AliasPath('group', 'fixed'))
+        ordinary: int = Field(validation_alias=AliasPath('group', 'ordinary'))
+
+    source = CliSettingsSource(Settings)
+    settings = CliApp.run(
+        Settings, cli_args={'group': '{"fixed": "invalid", "ordinary": 2}'}, cli_settings_source=source
+    )
+    assert settings.model_dump() == {'fixed': 1, 'ordinary': 2}
 
 
 def test_cli():
