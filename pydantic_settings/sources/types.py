@@ -33,6 +33,10 @@ class ForceDecode:
     """Annotation to force decoding of a field value."""
 
 
+class NoExternalSources:
+    """Exclude a settings field from external sources, retaining constructor inputs and defaults."""
+
+
 EnvPrefixTarget = Literal['variable', 'alias', 'all']
 DotenvType = Path | str | Sequence[Path | str]
 PathType = Path | str | Sequence[Path | str]
@@ -100,6 +104,7 @@ __all__ = [
     'EnvPrefixTarget',
     'ForceDecode',
     'NoDecode',
+    'NoExternalSources',
     'PathType',
     'PydanticModel',
     'SecretVersion',

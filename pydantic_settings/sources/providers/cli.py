@@ -51,6 +51,7 @@ from ...utils import _lenient_issubclass, _typing_base, _WithArgsTypes
 from ..types import (
     ForceDecode,
     NoDecode,
+    NoExternalSources,
     PydanticModel,
     _CliDualFlag,
     _CliExplicitFlag,
@@ -590,6 +591,19 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         if isinstance(parsed_args, (Namespace, SimpleNamespace)):
             parsed_args = vars(parsed_args)
 
+        excluded_names = [
+            env_name
+            for field_name, field in self.settings_cls.model_fields.items()
+            if NoExternalSources in field.metadata
+            for _, env_name, _ in self._extract_field_info(field, field_name)
+        ]
+        if excluded_names:
+            parsed_args = {
+                key: val
+                for key, val in parsed_args.items()
+                if not any(key == name or key.startswith(f'{name}.') for name in excluded_names)
+            }
+
         selected_subcommands = self._resolve_parsed_args(parsed_args)
         for arg_dest, arg_map in self._parser_map.items():
             if isinstance(arg_dest, str) and arg_dest.endswith(':subcommand'):
@@ -861,6 +875,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         positional_variadic_arg: list[tuple[str, FieldInfo]] = []
         positional_args, subcommand_args, optional_args = [], [], []
         for field_name, field_info in _get_model_fields(model).items():
+            if model is self.settings_cls and NoExternalSources in field_info.metadata:
+                continue
             if _CliSubCommand in field_info.metadata:
                 if not field_info.is_required():
                     raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has a default value')
@@ -1653,6 +1669,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         positional_args: list[str | list[Any] | dict[str, Any]] = []
         subcommand_args: list[str] = []
         for field_name, field_info in _get_model_fields(type(model) if _is_submodel else self.settings_cls).items():
+            if not _is_submodel and NoExternalSources in field_info.metadata:
+                continue
             model_default = getattr(model, field_name)
             if field_info.default == model_default:
                 continue

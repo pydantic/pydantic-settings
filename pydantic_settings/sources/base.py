@@ -15,6 +15,7 @@ from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
 )
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.fields import FieldInfo
+from pydantic_core import PydanticUndefined
 from typing_inspection.introspection import is_union_origin
 
 from ..exceptions import SettingsError
@@ -25,6 +26,7 @@ from .types import (
     EnvPrefixTarget,
     ForceDecode,
     NoDecode,
+    NoExternalSources,
     PydanticModel,
     _CliSubCommand,
 )
@@ -44,6 +46,40 @@ if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
 
     from .types import Traversable
+
+
+def _exclude_external_fields(settings_cls: type[BaseSettings], data: dict[str, Any]) -> dict[str, Any]:
+    """Remove excluded inputs without mutating a source's data or unrelated alias-path values."""
+
+    def remove_path(value: Any, path: list[str | int]) -> Any:
+        key, *rest = path
+        if isinstance(value, dict) and key in value:
+            result = value.copy()
+            if rest:
+                result[key] = remove_path(value[key], rest)
+            else:
+                del result[key]
+            return result
+        if isinstance(value, list) and isinstance(key, int) and -len(value) <= key < len(value):
+            result_list = value.copy()
+            result_list[key] = remove_path(value[key], rest) if rest else PydanticUndefined
+            return result_list
+        return value
+
+    for name, field in settings_cls.model_fields.items():
+        if NoExternalSources not in field.metadata:
+            continue
+        paths: list[list[str | int]] = [[name]]
+        alias = field.validation_alias
+        if isinstance(alias, str):
+            paths.append([alias])
+        elif isinstance(alias, AliasPath):
+            paths.append(alias.path)
+        elif isinstance(alias, AliasChoices):
+            paths.extend(alias.convert_to_aliases())
+        for path in paths:
+            data = remove_path(data, path)
+    return data
 
 
 def get_subcommand(
@@ -318,8 +354,12 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         init_kwargs: dict[str, Any],
         nested_model_default_partial_update: bool | None = None,
         _init_state: InitState | None = None,
+        _is_init_source: bool = False,
     ):
         super().__init__(settings_cls, _init_state)
+        self._is_init_source = _is_init_source
+        if not _is_init_source:
+            init_kwargs = _exclude_external_fields(settings_cls, init_kwargs)
         case_sensitive = self.config.get('case_sensitive', False)
         include_name = self.config.get('populate_by_name', False) or self.config.get('validate_by_name', False)
 
@@ -596,6 +636,8 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
         for field_name, field in self.settings_cls.model_fields.items():
             _warn_if_field_info_incomplete(field, field_name, self._init_state)
+            if NoExternalSources in field.metadata:
+                continue
             try:
                 field_value, field_key, value_is_complex = self._get_resolved_field_value(field, field_name)
             except Exception as e:

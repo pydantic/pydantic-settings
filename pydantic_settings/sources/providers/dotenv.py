@@ -16,7 +16,7 @@ from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
 from typing_inspection.introspection import is_union_origin
 
 from ...utils import _settings_debug_enabled, logger
-from ..types import ENV_FILE_SENTINEL, DotenvFiltering, DotenvType, EnvPrefixTarget
+from ..types import ENV_FILE_SENTINEL, DotenvFiltering, DotenvType, EnvPrefixTarget, NoExternalSources
 from ..utils import InitState, _annotation_is_complex, _resolve_config_file, _union_is_complex, parse_env_vars
 from .env import EnvSettingsSource
 
@@ -121,6 +121,20 @@ class DotEnvSettingsSource(EnvSettingsSource):
 
     def __call__(self) -> dict[str, Any]:  # noqa: C901
         data: dict[str, Any] = super().__call__()
+        excluded_names = [
+            env_name
+            for field_name, field in self.settings_cls.model_fields.items()
+            if NoExternalSources in field.metadata
+            for _, env_name, _ in self._extract_field_info(field, field_name)
+        ]
+
+        def is_excluded(name: str) -> bool:
+            return any(
+                name == excluded
+                or bool(self.env_nested_delimiter and name.startswith(f'{excluded}{self.env_nested_delimiter}'))
+                for excluded in excluded_names
+            )
+
         if self.dotenv_filtering == 'only_existing':
             # This case behaves like the EnvSettingsSource, only return existing fields
             return data
@@ -128,6 +142,8 @@ class DotEnvSettingsSource(EnvSettingsSource):
             # In this case add all env vars that match the prefix, stripping the prefix.
             prefix = self._apply_case_sensitive(self.env_prefix)
             for env_name, env_value in self.env_vars.items():
+                if is_excluded(env_name):
+                    continue
                 if env_name.startswith(prefix):
                     normalized_env_name = env_name[len(self.env_prefix) :]
                     if (
@@ -145,6 +161,8 @@ class DotEnvSettingsSource(EnvSettingsSource):
         # As `extra` config is allowed in dotenv settings source, We have to
         # update data with extra env variables from dotenv file.
         for env_name, env_value in self.env_vars.items():
+            if is_excluded(env_name):
+                continue
             if not env_value or env_name in data or (self.env_prefix and env_name in self.settings_cls.model_fields):
                 continue
             env_used = False

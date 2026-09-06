@@ -42,6 +42,7 @@ from .sources import (
     YamlConfigSettingsSource,
     get_subcommand,
 )
+from .sources.base import _exclude_external_fields
 from .sources.utils import InitState, _get_alias_names, _warn_if_field_info_incomplete
 from .utils import _settings_debug_enabled, logger
 
@@ -462,6 +463,7 @@ class BaseSettings(BaseModel):
             init_kwargs=_init_kwargs if _init_kwargs is not None else {},
             nested_model_default_partial_update=nested_model_default_partial_update,
             _init_state=default_settings._init_state,
+            _is_init_source=True,
         )
         env_settings = EnvSettingsSource(
             cls,
@@ -557,6 +559,10 @@ class BaseSettings(BaseModel):
 
                 source_name = source.__name__ if hasattr(source, '__name__') else type(source).__name__
                 source_state = source()
+                if not isinstance(source, DefaultSettingsSource) and not (
+                    isinstance(source, InitSettingsSource) and source._is_init_source
+                ):
+                    source_state = _exclude_external_fields(cls, source_state)
 
                 if isinstance(source, DefaultSettingsSource):
                     defaults = source_state

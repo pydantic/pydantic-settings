@@ -42,6 +42,7 @@ from .types import (
     EnvPrefixTarget,
     ForceDecode,
     NoDecode,
+    NoExternalSources,
     PathType,
     PydanticModel,
 )
@@ -78,6 +79,7 @@ __all__ = [
     'JsonConfigSettingsSource',
     'NestedSecretsSettingsSource',
     'NoDecode',
+    'NoExternalSources',
     'PathType',
     'PydanticBaseEnvSettingsSource',
     'PydanticBaseSettingsSource',
