@@ -133,7 +133,17 @@ jobs:
           name: diff-coverage-html
           path: index.html
 
+      # Overall gate, including the test suite itself. Test files legitimately carry
+      # uncovered lines (platform/version skip guards, optional-dependency import
+      # fallbacks), so this stays below 100.
       - run: uv run coverage report --fail-under 98
+
+      # Library code is fully covered once results are combined across the matrix, and
+      # must stay that way. Some lines only run on one leg (`toml.py` and `types.py`
+      # split on py3.11, `yaml.py`'s ImportError needs the "test without deps" run), so
+      # this is only meaningful on the combined report.
+      - name: check library coverage is complete
+        run: uv run coverage report --include='pydantic_settings/*' --fail-under 100
 
   check: # This job does nothing and is only used for the branch protection
     if: always()
