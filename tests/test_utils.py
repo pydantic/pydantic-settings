@@ -81,16 +81,21 @@ def test_annotation_contains_types_is_instance_collect():
 
 
 def test_annotation_contains_types_is_instance_origin_collect():
-    """`is_instance` matches on the *origin* are collected too."""
+    """`is_instance` matches on the *origin* are collected too.
+
+    `list[int]` has `list` as its origin, which is an instance of `type`. Avoid
+    `Annotated[...]` here: its origin is a class on Python 3.12 but a special form
+    from 3.13 on, so `isinstance(origin, type)` is version dependent.
+    """
     tags: set[Any] = set()
 
-    assert _annotation_contains_types(Json[list[int]], (type(Json),), is_instance=True, collect=tags) is False
-    assert Json[list[int]] in tags
+    assert _annotation_contains_types(list[int], (type,), is_instance=True, collect=tags) is False
+    assert list[int] in tags
 
 
 def test_annotation_contains_types_is_instance_origin_short_circuits():
     """Without `collect`, an `is_instance` origin match returns True immediately."""
-    assert _annotation_contains_types(Json[list[int]], (type(Json),), is_instance=True) is True
+    assert _annotation_contains_types(list[int], (type,), is_instance=True) is True
 
 
 def test_unwrap_optional_annotation():
