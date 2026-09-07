@@ -244,7 +244,7 @@ def _unwrap_optional_annotation(annotation: Any) -> Any:
     if is_union_origin(get_origin(annotation)):
         args = get_args(annotation)
         if len(args) == 2 and type(None) in args:
-            for arg in args:
+            for arg in args:  # pragma: no branch
                 if arg is not type(None):
                     return arg
     return annotation

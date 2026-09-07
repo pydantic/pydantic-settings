@@ -77,6 +77,78 @@ class TestAzureKeyVaultSettingsSource:
         assert settings['SqlServerUser'] == expected_secret_value
         assert settings['SqlServer']['Password'] == expected_secret_value
 
+    def test_repr(self, mocker: MockerFixture) -> None:
+        class AzureKeyVaultSettings(BaseSettings):
+            """AzureKeyVault settings."""
+
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.list_properties_of_secrets.__qualname__}',
+            return_value=[],
+        )
+        obj = AzureKeyVaultSettingsSource(
+            AzureKeyVaultSettings, 'https://my-resource.vault.azure.net/', DefaultAzureCredential()
+        )
+
+        assert repr(obj) == (
+            "AzureKeyVaultSettingsSource(url='https://my-resource.vault.azure.net/', env_nested_delimiter='--')"
+        )
+
+    def test_mapping_case_sensitive(self, mocker: MockerFixture) -> None:
+        """With `case_sensitive=True` secret names are mapped verbatim."""
+
+        class AzureKeyVaultSettings(BaseSettings):
+            """AzureKeyVault settings."""
+
+            SqlServerUser: str
+
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.list_properties_of_secrets.__qualname__}',
+            return_value=[type('', (), {'name': 'SqlServerUser', 'enabled': True})],
+        )
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.get_secret.__qualname__}',
+            return_value=KeyVaultSecret(SecretProperties(), 'SecretValue'),
+        )
+        obj = AzureKeyVaultSettingsSource(
+            AzureKeyVaultSettings,
+            'https://my-resource.vault.azure.net/',
+            DefaultAzureCredential(),
+            case_sensitive=True,
+        )
+
+        assert len(obj.env_vars) == 1
+        assert list(obj.env_vars) == ['SqlServerUser']
+        assert obj.env_vars['SqlServerUser'] == 'SecretValue'
+        with pytest.raises(KeyError):
+            obj.env_vars['sqlserveruser']
+
+    def test_mapping_case_insensitive(self, mocker: MockerFixture) -> None:
+        """With `case_sensitive=False` lookups are lower-cased on both sides."""
+
+        class AzureKeyVaultSettings(BaseSettings):
+            """AzureKeyVault settings."""
+
+            sqlserveruser: str
+
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.list_properties_of_secrets.__qualname__}',
+            return_value=[type('', (), {'name': 'SqlServerUser', 'enabled': True})],
+        )
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.get_secret.__qualname__}',
+            return_value=KeyVaultSecret(SecretProperties(), 'SecretValue'),
+        )
+        obj = AzureKeyVaultSettingsSource(
+            AzureKeyVaultSettings,
+            'https://my-resource.vault.azure.net/',
+            DefaultAzureCredential(),
+            case_sensitive=False,
+        )
+
+        assert len(obj.env_vars) == 1
+        assert obj.env_vars['SqlServerUser'] == 'SecretValue'
+        assert obj.env_vars['sqlserveruser'] == 'SecretValue'
+
     def test_do_not_load_disabled_secrets(self, mocker: MockerFixture) -> None:
         class AzureKeyVaultSettings(BaseSettings):
             """AzureKeyVault settings."""

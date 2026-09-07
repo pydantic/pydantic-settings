@@ -377,6 +377,55 @@ def test_invalid_yaml_config_section_nested_path(tmp_path):
 
 
 @pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
+def test_traverse_nested_section_defaults_original_path(tmp_path):
+    """`original_path` defaults to `section_path`, which is what error messages report."""
+    p = tmp_path / 'config.yaml'
+    p.write_text(
+        """
+    a:
+      b: 1
+    """
+    )
+
+    source = YamlConfigSettingsSource(BaseSettings, p)
+
+    assert source._traverse_nested_section({'a': {'b': 1}}, 'a.b') == 1
+    with pytest.raises(KeyError, match=r'yaml_config_section key "a\.missing" not found in .+'):
+        source._traverse_nested_section({'a': {'b': 1}}, 'a.missing')
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
+def test_invalid_yaml_config_section_no_matching_prefix(tmp_path):
+    """A dotted path whose first segment matches nothing exhausts every prefix candidate."""
+    p = tmp_path / 'config.yaml'
+    p.write_text(
+        """
+    zzz:
+      q: 1
+    """
+    )
+
+    class Settings(BaseSettings):
+        x: int = 0
+
+        model_config = SettingsConfigDict(yaml_file=p, yaml_config_section='a.b')
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls),)
+
+    with pytest.raises(KeyError, match=r'yaml_config_section key "a\.b" not found in .+'):
+        Settings()
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
 def test_yaml_config_section_with_literal_dots(tmp_path):
     """Test that keys containing literal dots can be accessed using greedy matching."""
     p = tmp_path / 'config.yaml'

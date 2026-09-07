@@ -629,13 +629,11 @@ class BaseSettings(BaseModel):
                     # Source key: prefer the alias (first in alias_names) if present in state,
                     # as InitSettingsSource normalizes to the preferred alias.
                     # This ensures we get the highest-priority value for this field.
-                    source_key = None
-                    for alias in alias_names:
-                        if alias in state_kwarg_name:
-                            source_key = alias
-                            break
-                    if source_key is None:
-                        # Fall back to field_name if no alias found in state
+                    source_key = next((alias for alias in alias_names if alias in state_kwarg_name), None)
+                    if source_key is None:  # pragma: no cover
+                        # Unreachable in practice: `InitSettingsSource` normalizes every matched
+                        # init kwarg to the preferred alias, so when `init_kwarg_name` is non-empty
+                        # that alias is always present in the state. Kept as a defensive fallback.
                         source_key = field_name if field_name in state_kwarg_name else next(iter(state_kwarg_name))
                     # Get the value from the source key and remove all matching keys
                     value = state.pop(source_key)
@@ -927,7 +925,9 @@ class CliApp:
             if err.__context__ is None and err.__cause__ is None and cli_settings_source._format_help is not None:
                 error_message = f'{err}\n{cli_settings_source._format_help(parser)}'
                 raise type(err)(error_message) from None
-            raise err
+            # Unreachable in practice: `get_subcommand` raises a freshly constructed error (no
+            # context/cause) and `_format_help` is never None. Kept as a defensive fallback.
+            raise err  # pragma: no cover
 
         subcommand_cls = cast(type[BaseModel], type(subcommand))
         subcommand_arg = cli_settings_source._parser_map[subcommand_dest][subcommand_cls]

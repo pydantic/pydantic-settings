@@ -64,6 +64,7 @@ from pydantic_settings import (
 )
 from pydantic_settings.main import _settings_cache
 from pydantic_settings.sources import DefaultSettingsSource, read_env_file
+from pydantic_settings.sources.providers import env as env_provider
 
 try:
     import dotenv
@@ -1354,6 +1355,21 @@ def test_case_sensitive_windows_env_fallback(env):
     assert Settings().model_dump() == {'redis': {'host': 'localhost', 'port': 6379}}
 
 
+def test_case_sensitive_downgraded_when_environ_is_case_insensitive():
+    """The Windows fallback from #295, exercised on any platform by patching the probe."""
+
+    class Settings(BaseSettings):
+        foo: str = 'default'
+
+    with mock.patch.object(env_provider, '_environ_is_case_insensitive', return_value=True):
+        source = EnvSettingsSource(Settings, case_sensitive=True)
+    assert source.case_sensitive is False
+
+    with mock.patch.object(env_provider, '_environ_is_case_insensitive', return_value=False):
+        source = EnvSettingsSource(Settings, case_sensitive=True)
+    assert source.case_sensitive is True
+
+
 def test_init_source_case_insensitive():
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(case_sensitive=False, extra='allow')
@@ -1405,6 +1421,32 @@ def test_config_file_source_case_insensitive(tmp_path):
             return (JsonConfigSettingsSource(settings_cls),)
 
     assert Settings().model_dump() == {'api_key': 'secret'}
+
+
+def test_init_and_default_sources_get_field_value_stubs():
+    """`get_field_value` is unused by these sources; it exists to satisfy the abstract API."""
+
+    class Settings(BaseSettings):
+        foo: str = 'default'
+
+    field = Settings.model_fields['foo']
+
+    assert InitSettingsSource(Settings, {}).get_field_value(field, 'foo') == (None, '', False)
+    assert DefaultSettingsSource(Settings).get_field_value(field, 'foo') == (None, '', False)
+
+
+def test_settings_customise_sources_returning_no_sources():
+    """With no sources at all, no values are built and field defaults apply."""
+
+    class Settings(BaseSettings):
+        foo: str = 'default'
+
+        @classmethod
+        def settings_customise_sources(cls, settings_cls, **_kwargs):
+            return ()
+
+    assert Settings._settings_build_values((), {}) == {}
+    assert Settings().model_dump() == {'foo': 'default'}
 
 
 def test_nested_dataclass(env):
@@ -4325,6 +4367,58 @@ def test_env_strict_coercion_non_json_value(env):
             'input': 'not-a-number',
         }
     ]
+
+
+def test_env_strict_coercion_none_str_passthrough(env):
+    """`env_parse_none_str` matches are left alone rather than strict-coerced."""
+
+    class Settings(BaseSettings, strict=True, env_parse_none_str='null'):
+        my_int: StrictInt | None = None
+
+    env.set('MY_INT', 'null')
+    assert Settings().my_int is None
+
+
+def test_env_strict_coercion_skips_json_annotation(env):
+    """`Json`-annotated fields keep their raw string so the Json parser handles them."""
+
+    # The strict-annotated union member enables coercion, but the `Json` marker opts out of it.
+    class Settings(BaseSettings):
+        my_json: Json[StrictInt] | None = None
+
+    env.set('MY_JSON', '42')
+    assert Settings().my_json == 42
+
+
+def test_env_strict_coercion_json_decodes_to_str(env):
+    """A JSON string that decodes to another string re-raises the original validation error."""
+
+    class Settings(BaseSettings, strict=True):
+        my_int: StrictInt = 0
+
+    env.set('MY_INT', '"hello"')
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert exc_info.value.errors(include_url=False) == [
+        {
+            'type': 'int_type',
+            'loc': ('my_int',),
+            'msg': 'Input should be a valid integer',
+            'input': '"hello"',
+        }
+    ]
+
+
+def test_matches_alias_path_head_non_field_info():
+    """The alias-path check only applies to `FieldInfo`; anything else is not a path head."""
+
+    class Settings(BaseSettings):
+        foo: str = 'x'
+
+    source = EnvSettingsSource(Settings)
+
+    assert source._matches_alias_path_head(None, 'foo') is False
+    assert source._matches_alias_path_head(int, 'foo') is False
 
 
 def test_env_source_when_load_multi_nested_config(env):

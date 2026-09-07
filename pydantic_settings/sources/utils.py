@@ -117,7 +117,9 @@ def _substitute_typevars(tp: Any, param_map: dict[Any, Any]) -> Any:
             import operator
 
             return functools.reduce(operator.or_, new_args)
-    return tp
+    # Unreachable in practice: an annotation with args always has an origin.
+    # Kept as a defensive fallback.
+    return tp  # pragma: no cover
 
 
 def _resolve_type_alias(annotation: Any) -> Any:
@@ -133,7 +135,9 @@ def _resolve_type_alias(annotation: Any) -> Any:
             # Not `strict=True`: a parameterized alias may supply fewer args than
             # params (e.g. type params with defaults), which is valid.
             return _substitute_typevars(value, dict(zip(type_params, type_args, strict=False)))
-        return value
+        # Unreachable in practice: only a subscripted alias reaches here, and subscripting
+        # requires type params. Kept as a defensive fallback.
+        return value  # pragma: no cover
     return annotation
 
 

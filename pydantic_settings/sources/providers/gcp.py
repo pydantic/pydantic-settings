@@ -47,7 +47,7 @@ def _is_not_found_error(exc: Exception) -> bool:
         from google.api_core.exceptions import NotFound
 
         return isinstance(exc, NotFound)
-    except ImportError:
+    except ImportError:  # pragma: no cover
         return False
 
 
@@ -246,7 +246,9 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
                     gcp_secret_name: str | None = env_name
                 else:
                     gcp_secret_name = self.env_vars._secret_name_map.get(env_name)
-                    if gcp_secret_name is None:
+                    if gcp_secret_name is None:  # pragma: no cover
+                        # Unreachable in practice: `_extract_field_info` already lower-cases
+                        # `env_name` when case-insensitive. Kept as a defensive fallback.
                         gcp_secret_name = self.env_vars._secret_name_map.get(env_name.lower())
 
                 if gcp_secret_name:
@@ -321,7 +323,9 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
             return {}
 
         self._resolve_gcp_project()
-        if self._project_id is None or self._secret_client is None:
+        # Unreachable in practice: `_resolve_gcp_project` either raises or sets both
+        # attributes. Kept as a defensive fallback.
+        if self._project_id is None or self._secret_client is None:  # pragma: no cover
             raise SettingsError(
                 'GoogleSecretManagerSettingsSource: could not determine GCP project_id or initialize the Secret Manager client. '
                 'Pass project_id explicitly or ensure it is available via application default credentials or a previous settings source.'

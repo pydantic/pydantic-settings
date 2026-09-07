@@ -114,7 +114,9 @@ def _get_model_description(model_cls: type[Any]) -> str | None:
             desc = None
             if is_model_class(model_cls):
                 desc = model_cls.model_json_schema().get('description')
-            elif is_pydantic_dataclass(model_cls):
+            # Only models and pydantic dataclasses carry a config, so reaching here with a
+            # callable `json_schema_extra` means `model_cls` is a pydantic dataclass.
+            elif is_pydantic_dataclass(model_cls):  # pragma: no branch
                 desc = TypeAdapter(model_cls).json_schema().get('description')
             if desc is not None:
                 return desc
@@ -1051,7 +1053,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     ) -> ArgumentParser:
         if discriminator_vals is None:
             discriminator_vals = {}
-        if model_path is None:
+        if model_path is None:  # pragma: no cover
             model_path = set()
         model_path = model_path | {model}
         subparsers: Any = None
@@ -1192,7 +1194,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 elif _CliUnknownArgs in field_info.metadata:
                     self._cli_unknown_args[arg.kwargs['dest']] = []
                 elif not arg.is_alias_path_only:
-                    if isinstance(group, dict):
+                    if isinstance(group, dict):  # pragma: no cover
                         group = self._add_group(parser, **group)
                     context = parser if group is None else group
                     if arg.kwargs.get('action') == 'store_false':

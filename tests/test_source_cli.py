@@ -707,6 +707,45 @@ def test_cli_show_env_vars_alias_choices():
     assert '[env: TOKEN | LEGACY_TOKEN]' in help_text
 
 
+def test_cli_show_env_vars_alias_choices_deduplicated():
+    """Aliases that render to the same env var name are only listed once."""
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            cli_prog_name='example.py',
+            cli_show_env_vars=True,
+            env_prefix='MYAPP_',
+            case_sensitive=False,
+        )
+
+        foo: str = Field('x', validation_alias=AliasChoices('foo', 'FOO'))
+
+    help_text = CliApp.format_help(Settings, strip_ansi_color=True)
+
+    assert '[env: FOO]' in help_text
+
+
+def test_cli_show_env_vars_nested_alias_gets_prefix():
+    """A nested field whose alias drops the prefix still gets the nested prefix applied."""
+
+    class Nested(BaseModel):
+        inner: str = Field('x', validation_alias='INNER_ALIAS')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            cli_prog_name='example.py',
+            cli_show_env_vars=True,
+            env_prefix='MYAPP_',
+            env_nested_delimiter='__',
+        )
+
+        nested: Nested = Nested()
+
+    help_text = CliApp.format_help(Settings, strip_ansi_color=True)
+
+    assert '[env: MYAPP_NESTED__INNER_ALIAS]' in help_text
+
+
 def test_cli_show_env_vars_nested_model():
     class Database(BaseModel):
         url: str
@@ -2598,6 +2637,51 @@ def test_cli_ignore_unknown_args_nested_subcommand():
         CliApp.run(Root, cli_args=['mid', 'a', '--bad'])
 
 
+def test_cli_unknown_args_rejected_with_non_argparse_root_parser():
+    """A non-argparse root parser cannot call `.error()`, so unknown args raise SystemExit(2)."""
+
+    class SubB(BaseModel):
+        ignored_args: CliUnknownArgs
+        my_feature: bool = False
+
+    class SubA(BaseModel):
+        my_feature: bool = False
+
+    class Root(BaseSettings):
+        a: CliSubCommand[SubA]
+        b: CliSubCommand[SubB]
+
+    class UnknownArgsParser(CliDummyParser):
+        """Mimics the built-in `parse_known_args` upgrade, stashing unknown args."""
+
+        source: Any = None
+
+        def parse_args(self, *args: Any, **kwargs: Any) -> argparse.Namespace:
+            namespace, unknown_args = self.parser.parse_known_args(*args, **kwargs)
+            for dest in self.source._cli_unknown_args:
+                self.source._cli_unknown_args[dest] = unknown_args
+            return namespace
+
+    parser = UnknownArgsParser()
+    cli_settings = CliSettingsSource(
+        Root,
+        root_parser=parser,
+        parse_args_method=UnknownArgsParser.parse_args,
+        add_argument_method=CliDummyParser.add_argument,
+        add_argument_group_method=CliDummyParser.add_argument_group,
+        add_parser_method=CliDummySubParsers.add_parser,
+        add_subparsers_method=CliDummyParser.add_subparsers,
+    )
+    parser.source = cli_settings
+
+    # Subcommand "a" does not accept unknown args, and the root parser is not an
+    # ArgumentParser, so the source exits directly instead of calling parser.error().
+    with pytest.raises(SystemExit) as exc_info:
+        Root(_cli_settings_source=cli_settings(args=['a', '--bad']))
+
+    assert exc_info.value.code == 2
+
+
 def test_cli_ignore_unknown_args_nested_subcommand_higher_in_hierarchy():
     class SubB(BaseModel):
         my_feature: bool = False
@@ -2999,6 +3083,20 @@ def test_cli_app_async_method_with_existing_loop():
         return CliApp.run(Command, cli_args=[])
 
     assert asyncio.run(run_as_coro()).called
+
+
+def test_cli_app_async_method_with_existing_loop_propagates_exception():
+    """An exception raised in the worker thread's loop is re-raised to the caller."""
+
+    class Command(BaseSettings):
+        async def cli_cmd(self) -> None:
+            raise ValueError('boom')
+
+    async def run_as_coro():
+        return CliApp.run(Command, cli_args=[])
+
+    with pytest.raises(ValueError, match='boom'):
+        asyncio.run(run_as_coro())
 
 
 def test_cli_app_exceptions():
@@ -4099,6 +4197,51 @@ def test_get_model_description_base_settings():
 
     MySettings.__doc__ = None  # type: ignore
     assert _get_model_description(MySettings) == 'Settings description.'
+
+
+def test_get_model_description_plain_class():
+    """A class that is neither a model nor a pydantic dataclass falls back to `__doc__`."""
+
+    class Plain:
+        """Plain docstring."""
+
+    assert _get_model_description(Plain) == 'Plain docstring.'
+
+
+def test_get_model_description_plain_class_without_docstring():
+    class Plain:
+        pass
+
+    Plain.__doc__ = None  # type: ignore
+    assert _get_model_description(Plain) is None
+
+
+def test_get_model_description_callable_json_schema_extra_no_description():
+    """A callable `json_schema_extra` that sets no description falls through to `__doc__`."""
+
+    def add_title(schema: dict) -> None:
+        schema['title'] = 'No description set'
+
+    class MyModel(BaseModel):
+        """Docstring fallback."""
+
+        model_config = ConfigDict(json_schema_extra=add_title)
+
+    assert _get_model_description(MyModel) == 'Docstring fallback.'
+
+
+def test_get_model_description_callable_json_schema_extra_no_description_pydantic_dataclass():
+    """Same fall-through as above, via the pydantic dataclass branch."""
+
+    def add_title(schema: dict) -> None:
+        schema['title'] = 'No description set'
+
+    @pydantic_dataclasses.dataclass(config=ConfigDict(json_schema_extra=add_title))
+    class MyDC:
+        x: int = 1
+
+    MyDC.__doc__ = None  # type: ignore
+    assert _get_model_description(MyDC) is None
 
 
 def test_cli_json_schema_extra_description_fallback(capsys, monkeypatch):
