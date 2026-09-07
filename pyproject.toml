@@ -95,9 +95,13 @@ filterwarnings = [
 
 # https://coverage.readthedocs.io/en/latest/config.html#run
 [tool.coverage.run]
-include = [
-    "pydantic_settings/**/*.py",
-    "tests/**/*.py",
+# `source` rather than `include`: `include` only filters files that were imported during
+# the run, so a new module that nothing imports yet would be missing from the report
+# entirely and the 100% library gate in CI would still pass. `source` makes coverage
+# discover the packages, reporting such a module at 0%.
+source = [
+    "pydantic_settings",
+    "tests",
 ]
 branch = true
 
