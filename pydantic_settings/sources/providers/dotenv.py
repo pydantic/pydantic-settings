@@ -45,8 +45,16 @@ class DotEnvSettingsSource(EnvSettingsSource):
         env_parse_enums: bool | None = None,
         env_file_depth: int | None = None,
         _init_state: InitState | None = None,
+        env_file_inherit: bool | None = None,
     ) -> None:
         self.env_file = env_file if env_file != ENV_FILE_SENTINEL else settings_cls.model_config.get('env_file')
+        self.env_file_inherit = (
+            env_file_inherit
+            if env_file_inherit is not None
+            else settings_cls.model_config.get('env_file_inherit', False)
+        )
+        if self.env_file_inherit and self.env_file:
+            self.env_file = self._inherit_env_files(settings_cls, self.env_file)
         self.env_file_encoding = (
             env_file_encoding if env_file_encoding is not None else settings_cls.model_config.get('env_file_encoding')
         )
@@ -68,6 +76,27 @@ class DotEnvSettingsSource(EnvSettingsSource):
             env_parse_enums,
             _init_state,
         )
+
+    @staticmethod
+    def _inherit_env_files(settings_cls: type[BaseSettings], env_file: DotenvType) -> tuple[Path, ...]:
+        """Collect class fallbacks, preserving the last occurrence of each path."""
+        env_files: list[DotenvType | None] = [
+            getattr(base, 'model_config', {}).get('env_file') for base in reversed(settings_cls.__mro__)
+        ]
+        # Keep the effective class config (including Pydantic's multiple-inheritance
+        # merging) below explicit instance overrides, but above the other bases.
+        env_files.append(env_file)
+        paths: dict[Path, None] = {}
+        for files in reversed(env_files):
+            if not files:
+                continue
+            if isinstance(files, (str, os.PathLike)):
+                files = [files]
+            for file in reversed(files):
+                # Normalize strings and Path objects without resolving against the
+                # filesystem; depth lookup and expanduser remain the reader's job.
+                paths.setdefault(Path(file), None)
+        return tuple(reversed(paths))
 
     def _load_env_vars(self) -> Mapping[str, str | None]:
         return self._read_env_files()

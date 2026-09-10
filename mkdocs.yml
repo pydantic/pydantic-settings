@@ -39,6 +39,7 @@ extra_css:
 
 nav:
   - index.md
+  - Inheriting dotenv files: env-file-inheritance.md
 
 markdown_extensions:
   - tables

@@ -58,6 +58,14 @@ class SettingsConfigDict(ConfigDict, total=False):
     env_prefix: str
     env_prefix_target: EnvPrefixTarget
     env_file: DotenvType | None
+    env_file_inherit: bool
+    """
+    Load dotenv files from base classes as fallbacks, in reverse method resolution order.
+
+    The effective `env_file` of this class takes precedence over its bases. An explicit
+    `_env_file` adds higher-priority overrides. `None`, an empty string, or an empty sequence disables
+    all dotenv loading. Defaults to `False`.
+    """
     env_file_encoding: str | None
     dotenv_filtering: DotenvFiltering | None
     env_ignore_empty: bool
@@ -161,6 +169,9 @@ class BaseSettings(BaseModel):
         _env_file: The env file(s) to load settings values from. Defaults to `Path('')`, which
             means that the value from `model_config['env_file']` should be used. You can also pass
             `None` to indicate that environment variables should not be loaded from an env file.
+        _env_file_inherit: Load base-class dotenv files as fallbacks. When enabled, explicit `_env_file`
+            values add higher-priority overrides; `None`, an empty string, or an empty sequence disables dotenv loading.
+            Defaults to `False`.
         _env_file_encoding: The env file encoding, e.g. `'latin-1'`. Defaults to `None`.
         _env_file_depth: The number of parent directories of the current working directory to
             search for the env file if it is not found there. Defaults to `0` (no search).
@@ -237,6 +248,7 @@ class BaseSettings(BaseModel):
         _cli_shortcuts: Mapping[str, str | list[str]] | None = None,
         _secrets_dir: PathType | None = None,
         _build_sources: tuple[tuple[PydanticBaseSettingsSource, ...], dict[str, Any]] | None = None,
+        _env_file_inherit: bool | None = None,
         **values: Any,
     ) -> None:
         sources, init_kwargs = (
@@ -248,6 +260,7 @@ class BaseSettings(BaseModel):
                 _env_prefix=_env_prefix,
                 _env_prefix_target=_env_prefix_target,
                 _env_file=_env_file,
+                _env_file_inherit=_env_file_inherit,
                 _env_file_encoding=_env_file_encoding,
                 _env_file_depth=_env_file_depth,
                 _env_ignore_empty=_env_ignore_empty,
@@ -376,6 +389,7 @@ class BaseSettings(BaseModel):
         _cli_shortcuts: Mapping[str, str | list[str]] | None = None,
         _secrets_dir: PathType | None = None,
         _init_kwargs: dict[str, Any] | None = None,
+        _env_file_inherit: bool | None = None,
     ) -> tuple[tuple[PydanticBaseSettingsSource, ...], dict[str, Any]]:
         # Determine settings config values
         case_sensitive = _case_sensitive if _case_sensitive is not None else cls.model_config.get('case_sensitive')
@@ -389,6 +403,9 @@ class BaseSettings(BaseModel):
             else cls.model_config.get('nested_model_default_partial_update')
         )
         env_file = _env_file if _env_file != ENV_FILE_SENTINEL else cls.model_config.get('env_file')
+        env_file_inherit = (
+            _env_file_inherit if _env_file_inherit is not None else cls.model_config.get('env_file_inherit', False)
+        )
         env_file_encoding = (
             _env_file_encoding if _env_file_encoding is not None else cls.model_config.get('env_file_encoding')
         )
@@ -478,6 +495,7 @@ class BaseSettings(BaseModel):
         dotenv_settings = DotEnvSettingsSource(
             cls,
             env_file=env_file,
+            env_file_inherit=env_file_inherit,
             env_file_encoding=env_file_encoding,
             env_file_depth=env_file_depth,
             case_sensitive=case_sensitive,
@@ -681,6 +699,7 @@ class BaseSettings(BaseModel):
         env_prefix_target='variable',
         nested_model_default_partial_update=False,
         env_file=None,
+        env_file_inherit=False,
         env_file_encoding=None,
         env_file_depth=0,
         env_ignore_empty=False,
