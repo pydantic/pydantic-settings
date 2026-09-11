@@ -159,6 +159,13 @@ class Settings(BaseSettings):
     The default `env_prefix` is `''` (empty string). `env_prefix` is not only for env settings but also for
     dotenv files, secrets, and other sources.
 
+!!! note
+    With `extra='allow'` and an `env_prefix` set, environment variables that match the prefix but don't
+    correspond to a declared field are picked up as extra fields (with the prefix stripped), instead of being
+    silently ignored. This only applies when `env_prefix` is set and `extra` is explicitly `'allow'` — without
+    a prefix there's no safe boundary between this app's config and the rest of the process environment, so
+    unprefixed sources are left alone.
+
 If you want to change the environment variable name for a single field, you can use an alias.
 
 There are two ways to do this:
