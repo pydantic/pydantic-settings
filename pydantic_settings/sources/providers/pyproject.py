@@ -42,7 +42,7 @@ class PyprojectTomlConfigSettingsSource(TomlConfigSettingsSource):
 
         Args:
             provided: Explicit path provided when instantiating this class.
-            depth: Number of directories up the tree to check of a pyproject.toml.
+            depth: Number of directories up the tree to check for a pyproject.toml.
 
         """
         if provided:

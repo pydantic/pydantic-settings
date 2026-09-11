@@ -3500,6 +3500,19 @@ def test_dotenv_with_extra_and_env_prefix(tmp_path):
     assert s.model_dump() == {'foo': '1', 'extra_var': 'extra_value'}
 
 
+def test_dotenv_with_extra_and_uppercase_env_prefix(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('XXX__FOO=1\nXXX__EXTRA_VAR=extra_value')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(extra='allow', env_file=p, env_prefix='XXX__')
+
+        foo: str = ''
+
+    s = Settings()
+    assert s.model_dump() == {'foo': '1', 'extra_var': 'extra_value'}
+
+
 def test_nested_field_with_alias_init_source():
     class NestedSettings(BaseModel):
         foo: str = Field(alias='fooAlias')
@@ -4075,6 +4088,23 @@ def test_dotenv_match_prefix(tmp_path, prefix, case_sensitive):
         else:
             v = {'a': 'foo', 'b': 'x', 'test_a': 'bar', 'test_b': 'y'}
         assert s.model_dump() == v
+
+
+def test_dotenv_match_prefix_case_normalization_changes_length(tmp_path):
+    # `'İ'.lower()` is two code points, so slicing with the raw `env_prefix` length
+    # would under-strip and leave a partial prefix behind.
+    p = tmp_path / '.env'
+    p.write_text('İX_FOO=1\nİX_BAR=2', encoding='utf-8')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=p,
+            env_prefix='İX_',
+            dotenv_filtering='match_prefix',
+            extra='allow',
+        )
+
+    assert Settings().model_dump() == {'foo': '1', 'bar': '2'}
 
 
 @pytest.mark.parametrize('filtering', ['match_prefix', None])

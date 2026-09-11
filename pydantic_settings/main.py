@@ -646,7 +646,7 @@ class BaseSettings(BaseModel):
         """
         Warns if any values in model_config were set but the corresponding settings source has not been initialised.
 
-        The list alternative sources and their config keys can be found here:
+        The list of alternative sources and their config keys can be found here:
         https://docs.pydantic.dev/latest/concepts/pydantic_settings/#other-settings-source
 
         Args:

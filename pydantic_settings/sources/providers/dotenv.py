@@ -129,7 +129,10 @@ class DotEnvSettingsSource(EnvSettingsSource):
             prefix = self._apply_case_sensitive(self.env_prefix)
             for env_name, env_value in self.env_vars.items():
                 if env_name.startswith(prefix):
-                    normalized_env_name = env_name[len(self.env_prefix) :]
+                    # Slice with the case-normalized prefix: `str.lower()` can change
+                    # length (e.g. `'İ'` lowers to two code points), so the raw
+                    # `env_prefix` length would under-strip and leave a partial prefix.
+                    normalized_env_name = env_name[len(prefix) :]
                     if (
                         self.env_nested_delimiter
                         and self.env_nested_delimiter in normalized_env_name
@@ -141,6 +144,9 @@ class DotEnvSettingsSource(EnvSettingsSource):
             return data
 
         is_extra_allowed = self.config.get('extra') != 'forbid'
+        # `env_vars` keys are case-normalised, so the prefix must be too before it
+        # is matched against them.
+        env_prefix = self._apply_case_sensitive(self.env_prefix)
 
         # As `extra` config is allowed in dotenv settings source, We have to
         # update data with extra env variables from dotenv file.
@@ -171,9 +177,9 @@ class DotEnvSettingsSource(EnvSettingsSource):
                 if env_used:
                     break
             if not env_used:
-                if is_extra_allowed and env_name.startswith(self.env_prefix):
+                if is_extra_allowed and env_name.startswith(env_prefix):
                     # env_prefix should be respected and removed from the env_name
-                    normalized_env_name = env_name[len(self.env_prefix) :]
+                    normalized_env_name = env_name[len(env_prefix) :]
                     data[normalized_env_name] = env_value
                 else:
                     data[env_name] = env_value

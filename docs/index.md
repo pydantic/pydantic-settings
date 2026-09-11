@@ -2318,7 +2318,7 @@ For example, the default implementation does not support secret fields in nested
 `NestedSecretsSettingsSource` can be used as a drop-in replacement to `SecretsSettingsSource` to adjust the default behaviour.
 All differences are summarized in the table below.
 
-| `SecretsSettingsSource`                                                                                                                                         | `NestedSecretsSettingsSourcee`                                                                                                    |
+| `SecretsSettingsSource`                                                                                                                                         | `NestedSecretsSettingsSource`                                                                                                    |
 |-----------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
 | Secret fields must belong to a top level model.                                                                                                                 | Secrets can be fields of nested models.                                                                                           |
 | Secret files can be placed in `secrets_dir`s only.                                                                                                              | Secret files can be placed in subdirectories for nested models.                                                                   |
