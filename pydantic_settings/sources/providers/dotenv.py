@@ -129,7 +129,10 @@ class DotEnvSettingsSource(EnvSettingsSource):
             prefix = self._apply_case_sensitive(self.env_prefix)
             for env_name, env_value in self.env_vars.items():
                 if env_name.startswith(prefix):
-                    normalized_env_name = env_name[len(self.env_prefix) :]
+                    # Slice with the case-normalized prefix: `str.lower()` can change
+                    # length (e.g. `'İ'` lowers to two code points), so the raw
+                    # `env_prefix` length would under-strip and leave a partial prefix.
+                    normalized_env_name = env_name[len(prefix) :]
                     if (
                         self.env_nested_delimiter
                         and self.env_nested_delimiter in normalized_env_name
