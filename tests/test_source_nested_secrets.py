@@ -1,3 +1,4 @@
+import sys
 from enum import Enum
 from os import sep
 from pathlib import Path
@@ -634,6 +635,7 @@ def test_nested_secrets_case_insensitive_precedence(tmp_path):
     assert Settings().token == 'third'
 
 
+@pytest.mark.skipif(sys.platform.startswith('win'), reason='case_sensitive is not supported on Windows')
 def test_nested_secrets_case_sensitive_precedence(tmp_path):
     """When case_sensitive=True, casing distinguishes separate keys (#960)."""
     dir1 = tmp_path / 'dir1'
