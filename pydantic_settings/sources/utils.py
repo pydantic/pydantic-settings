@@ -4,6 +4,7 @@ from __future__ import annotations as _annotations
 
 import os
 import warnings
+import xml.etree.ElementTree as ET
 from collections import deque
 from collections.abc import Mapping, Sequence
 from dataclasses import is_dataclass
@@ -321,6 +322,52 @@ def _get_model_fields(model_cls: type[Any]) -> dict[str, FieldInfo]:
     raise SettingsError(f'Error: {model_cls.__name__} is not subclass of BaseModel or pydantic.dataclasses.dataclass')
 
 
+def _xml_to_dict(
+    node: ET.Element,
+    *,
+    attr_prefix: str = '',
+    text_key: str = 'value',
+    strip_namespaces: bool = True,
+    strip_whitespace: bool = True,
+    empty_as_none: bool = True,
+    force_list: str | None = None,
+) -> dict[str, Any]:
+    """Convert an XML element into a mapping suitable for a settings model."""
+
+    data: dict[str, Any] = {}
+    for name, value in node.attrib.items():
+        data[attr_prefix + (name.rpartition('}')[2] if strip_namespaces else name)] = value
+
+    children: dict[str, list[Any]] = {}
+    for child in node:
+        if not isinstance(child.tag, str):
+            continue
+        name = child.tag.rpartition('}')[2] if strip_namespaces else child.tag
+        result = _xml_to_dict(
+            child,
+            attr_prefix=attr_prefix,
+            text_key=text_key,
+            strip_namespaces=strip_namespaces,
+            strip_whitespace=strip_whitespace,
+            empty_as_none=empty_as_none,
+            force_list=force_list,
+        )
+        children.setdefault(name, []).append(result if len(child) or child.attrib else result.get(text_key))
+
+    for name, values in children.items():
+        if name in data:
+            raise SettingsError(f'Error: {name} is defined both as an attribute and as a child element')
+        data[name] = values if len(values) > 1 or (force_list and name in force_list) else values[0]
+
+    raw = node.text or ''
+    text = raw.strip() if strip_whitespace else raw
+    if text.strip():
+        data[text_key] = text
+    elif not empty_as_none and not data:
+        data[text_key] = ''
+    return data
+
+
 def _get_alias_names(
     field_name: str,
     field_info: FieldInfo,
@@ -396,5 +443,6 @@ __all__ = [
     '_union_has_strict_types',
     '_union_is_complex',
     '_warn_if_field_info_incomplete',
+    '_xml_to_dict',
     'parse_env_vars',
 ]

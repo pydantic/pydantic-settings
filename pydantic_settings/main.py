@@ -39,6 +39,7 @@ from .sources import (
     PyprojectTomlConfigSettingsSource,
     SecretsSettingsSource,
     TomlConfigSettingsSource,
+    XmlConfigSettingsSource,
     YamlConfigSettingsSource,
     get_subcommand,
 )
@@ -83,6 +84,14 @@ class SettingsConfigDict(ConfigDict, total=False):
     secrets_dir: PathType | None
     json_file: ConfigFileSourceType | None
     json_file_encoding: str | None
+    xml_file: ConfigFileSourceType | None
+    xml_file_encoding: str | None
+    xml_attr_prefix: str
+    xml_text_key: str
+    xml_strip_namespaces: bool
+    xml_strip_whitespace: bool
+    xml_empty_as_none: bool
+    xml_force_list: str | None
     yaml_file: ConfigFileSourceType | None
     yaml_file_encoding: str | None
     yaml_config_section: str | None
@@ -673,6 +682,7 @@ class BaseSettings(BaseModel):
         warn_if_not_used(PyprojectTomlConfigSettingsSource, ('pyproject_toml_depth', 'pyproject_toml_table_header'))
         warn_if_not_used(TomlConfigSettingsSource, ('toml_file', 'toml_table_header'))
         warn_if_not_used(YamlConfigSettingsSource, ('yaml_file', 'yaml_file_encoding', 'yaml_config_section'))
+        warn_if_not_used(XmlConfigSettingsSource, ('xml_file', 'xml_file_encoding'))
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         extra='forbid',
@@ -707,6 +717,14 @@ class BaseSettings(BaseModel):
         cli_shortcuts=None,
         json_file=None,
         json_file_encoding=None,
+        xml_file=None,
+        xml_file_encoding=None,
+        xml_attr_prefix='',
+        xml_text_key='value',
+        xml_strip_namespaces=True,
+        xml_strip_whitespace=True,
+        xml_empty_as_none=True,
+        xml_force_list=None,
         yaml_file=None,
         yaml_file_encoding=None,
         yaml_config_section=None,

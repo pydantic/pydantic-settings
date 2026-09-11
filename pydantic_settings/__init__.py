@@ -27,6 +27,7 @@ from .sources import (
     PyprojectTomlConfigSettingsSource,
     SecretsSettingsSource,
     TomlConfigSettingsSource,
+    XmlConfigSettingsSource,
     YamlConfigSettingsSource,
     get_subcommand,
 )
@@ -64,6 +65,7 @@ __all__ = (
     'SettingsConfigDict',
     'SettingsError',
     'TomlConfigSettingsSource',
+    'XmlConfigSettingsSource',
     'YamlConfigSettingsSource',
     '__version__',
     'get_subcommand',

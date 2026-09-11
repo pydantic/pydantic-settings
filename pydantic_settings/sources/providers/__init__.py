@@ -20,6 +20,7 @@ from .json import JsonConfigSettingsSource
 from .pyproject import PyprojectTomlConfigSettingsSource
 from .secrets import SecretsSettingsSource
 from .toml import TomlConfigSettingsSource
+from .xml import XmlConfigSettingsSource
 from .yaml import YamlConfigSettingsSource
 
 __all__ = [
@@ -42,5 +43,6 @@ __all__ = [
     'PyprojectTomlConfigSettingsSource',
     'SecretsSettingsSource',
     'TomlConfigSettingsSource',
+    'XmlConfigSettingsSource',
     'YamlConfigSettingsSource',
 ]

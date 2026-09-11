@@ -31,6 +31,7 @@ from .providers.nested_secrets import NestedSecretsSettingsSource
 from .providers.pyproject import PyprojectTomlConfigSettingsSource
 from .providers.secrets import SecretsSettingsSource
 from .providers.toml import TomlConfigSettingsSource
+from .providers.xml import XmlConfigSettingsSource
 from .providers.yaml import YamlConfigSettingsSource
 from .types import (
     DEFAULT_PATH,
@@ -83,6 +84,7 @@ __all__ = [
     'PyprojectTomlConfigSettingsSource',
     'SecretsSettingsSource',
     'TomlConfigSettingsSource',
+    'XmlConfigSettingsSource',
     'YamlConfigSettingsSource',
     'get_subcommand',
     'read_env_file',
