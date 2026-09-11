@@ -601,3 +601,71 @@ def test_load_secrets_utf8_under_non_utf8_locale(tmp_path, non_utf8_default_enco
     (tmp_path / 'token').write_bytes('café-pässwörd'.encode())
 
     assert NestedSecretsSettingsSource.load_secrets(tmp_path) == {'token': 'café-pässwörd'}
+
+
+def test_nested_secrets_case_insensitive_precedence(tmp_path):
+    """Last directory wins even when secret filenames vary in casing (#960)."""
+    dir1 = tmp_path / 'dir1'
+    dir2 = tmp_path / 'dir2'
+    dir3 = tmp_path / 'dir3'
+    dir1.mkdir()
+    dir2.mkdir()
+    dir3.mkdir()
+
+    (dir1 / 'TOKEN').write_text('first')
+    (dir2 / 'token').write_text('second')
+    (dir3 / 'TOKEN').write_text('third')
+
+    class Settings(BaseSettings):
+        token: str
+        model_config = SettingsConfigDict(secrets_dir=[dir1, dir2, dir3])
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls,
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+        ):
+            return (NestedSecretsSettingsSource(file_secret_settings),)
+
+    assert Settings().token == 'third'
+
+
+def test_nested_secrets_case_sensitive_precedence(tmp_path):
+    """When case_sensitive=True, casing distinguishes separate keys (#960)."""
+    dir1 = tmp_path / 'dir1'
+    dir2 = tmp_path / 'dir2'
+    dir3 = tmp_path / 'dir3'
+    dir1.mkdir()
+    dir2.mkdir()
+    dir3.mkdir()
+
+    (dir1 / 'TOKEN').write_text('first')
+    (dir2 / 'token').write_text('second')
+    (dir3 / 'TOKEN').write_text('third')
+
+    class Settings(BaseSettings):
+        TOKEN: str
+        token: str
+        model_config = SettingsConfigDict(
+            secrets_dir=[dir1, dir2, dir3],
+            case_sensitive=True,
+        )
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls,
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+        ):
+            return (NestedSecretsSettingsSource(file_secret_settings),)
+
+    s = Settings()
+    assert s.TOKEN == 'third'
+    assert s.token == 'second'
