@@ -4077,6 +4077,23 @@ def test_dotenv_match_prefix(tmp_path, prefix, case_sensitive):
         assert s.model_dump() == v
 
 
+def test_dotenv_match_prefix_case_normalization_changes_length(tmp_path):
+    # `'İ'.lower()` is two code points, so slicing with the raw `env_prefix` length
+    # would under-strip and leave a partial prefix behind.
+    p = tmp_path / '.env'
+    p.write_text('İX_FOO=1\nİX_BAR=2', encoding='utf-8')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=p,
+            env_prefix='İX_',
+            dotenv_filtering='match_prefix',
+            extra='allow',
+        )
+
+    assert Settings().model_dump() == {'foo': '1', 'bar': '2'}
+
+
 @pytest.mark.parametrize('filtering', ['match_prefix', None])
 def test_dotenv_match_prefix_nested_delimiter(tmp_path, filtering):
     p = tmp_path / '.env'
