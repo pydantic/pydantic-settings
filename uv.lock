@@ -1473,7 +1473,7 @@ requires-dist = [
     { name = "boto3", marker = "extra == 'aws-systems-manager'", specifier = ">=1.35.0" },
     { name = "google-cloud-secret-manager", marker = "extra == 'gcp-secret-manager'", specifier = ">=2.23.1" },
     { name = "pydantic", specifier = ">=2.7.0" },
-    { name = "python-dotenv", specifier = ">=0.21.0" },
+    { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6.0.1" },
     { name = "tomli", marker = "extra == 'toml'", specifier = ">=2.0.1" },
     { name = "typing-extensions", specifier = ">=4.0.0" },
