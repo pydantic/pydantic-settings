@@ -11,6 +11,7 @@ import time
 import uuid
 import weakref
 from collections.abc import Callable, Hashable
+from collections.abc import Set as AbstractSet
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from enum import Enum, IntEnum
@@ -714,6 +715,15 @@ def test_annotated_with_type_no_decode(env):
 
     s = Settings()
     assert s.model_dump() == {'a': ['one', 'two']}
+
+
+def test_abstract_set_env_var(env):
+    env.set('fruits', '["empire", "honeycrisp"]')
+
+    class Settings(BaseSettings):
+        fruits: AbstractSet[str] = frozenset()
+
+    assert Settings().fruits == frozenset({'empire', 'honeycrisp'})
 
 
 def test_set_dict_model(env):

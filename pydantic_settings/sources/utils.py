@@ -6,6 +6,7 @@ import os
 import warnings
 from collections import deque
 from collections.abc import Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from dataclasses import is_dataclass
 from enum import Enum
 from itertools import islice
@@ -191,7 +192,7 @@ def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:
         return False
 
     return _lenient_issubclass(
-        annotation, (BaseModel, Mapping, Sequence, tuple, set, frozenset, deque)
+        annotation, (BaseModel, Mapping, Sequence, AbstractSet, tuple, set, frozenset, deque)
     ) or is_dataclass(annotation)
 
 
