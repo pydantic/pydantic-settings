@@ -5,6 +5,8 @@ import re
 import sys
 import time
 import typing
+from collections import OrderedDict
+from collections.abc import MutableMapping, MutableSequence
 from enum import Enum, IntEnum
 from pathlib import Path, PureWindowsPath
 from string import ascii_letters
@@ -2064,6 +2066,85 @@ def test_cli_variadic_positional_arg_custom_type():
 
     assert CliApp.run(App, cli_args=['a', 'b']).model_dump() == {'args': ['a', 'b']}
     assert CliApp.run(App, cli_args=['hello']).model_dump() == {'args': ['hello']}
+
+
+def test_cli_variadic_named_sequence_subtypes():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+        values: CliVariadicArg[tuple[str, ...]] = ()
+        tags: CliVariadicArg[frozenset[str]] = frozenset()
+        items: CliVariadicArg[MutableSequence[str]] = Field(default_factory=list)
+
+    settings = CliApp.run(Settings, cli_args=['--values', 'a', 'b', '--tags', 'x', 'y', '--items', 'i', 'j'])
+    assert settings.model_dump() == {'values': ('a', 'b'), 'tags': frozenset({'x', 'y'}), 'items': ['i', 'j']}
+
+
+def test_cli_variadic_named_mapping_subtype():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+        options: CliVariadicArg[OrderedDict[str, str]] = Field(default_factory=OrderedDict)
+
+    settings = CliApp.run(Settings, cli_args=['--options', 'a=b', 'c=d'])
+    assert settings.model_dump() == {'options': {'a': 'b', 'c': 'd'}}
+    assert isinstance(settings.options, OrderedDict)
+
+
+def test_cli_variadic_positional_sequence_subtype():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+        values: CliPositionalArg[CliVariadicArg[tuple[str, ...]]] = ()
+
+    assert CliApp.run(Settings, cli_args=['a', 'b']).model_dump() == {'values': ('a', 'b')}
+    assert CliApp.run(Settings, cli_args=[]).model_dump() == {'values': ()}
+
+
+def test_cli_sequence_subtypes_are_repeated_options():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+        values: tuple[str, ...] = ()
+        tags: frozenset[str] = frozenset()
+
+    settings = CliApp.run(Settings, cli_args=['--values', 'a', '--values', 'b', '--tags', 'x'])
+    assert settings.model_dump() == {'values': ('a', 'b'), 'tags': frozenset({'x'})}
+    # a plain value is valid for a single element, it does not have to be JSON encoded
+    assert CliApp.run(Settings, cli_args=['--values', 'a']).model_dump() == {'values': ('a',), 'tags': frozenset()}
+
+
+def test_cli_bare_sequence_subtypes_are_repeated_options():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+        values: tuple = ()
+        tags: frozenset = frozenset()
+
+    settings = CliApp.run(Settings, cli_args=['--values', 'a', '--values', 'b', '--tags', 'x'])
+    assert settings.model_dump() == {'values': ('a', 'b'), 'tags': frozenset({'x'})}
+
+
+def test_cli_mapping_subtypes_use_dict_args():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+        options: OrderedDict[str, str] = Field(default_factory=OrderedDict)
+        extra: MutableMapping[str, str] = Field(default_factory=dict)
+        maybe: OrderedDict[str, str] | None = None
+
+    settings = CliApp.run(Settings, cli_args=['--options', 'a=b', '--extra', 'c=d', '--maybe', 'e=f'])
+    assert settings.model_dump() == {'options': {'a': 'b'}, 'extra': {'c': 'd'}, 'maybe': {'e': 'f'}}
+    assert isinstance(settings.options, OrderedDict)
+    assert isinstance(settings.maybe, OrderedDict)
+
+
+def test_cli_text_types_are_scalar_values():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_args=True)
+        name: str = ''
+        blob: bytes = b''
+
+    settings = CliApp.run(Settings, cli_args=['--name', 'a', '--blob', 'b'])
+    assert settings.model_dump() == {'name': 'a', 'blob': b'b'}
+
+    # text and bytes types are sequences themselves, but they take a single value
+    with pytest.raises(SettingsError, match='unrecognized arguments: c'):
+        CliApp.run(Settings, cli_args=['--name', 'a', 'c'], cli_exit_on_error=False)
 
 
 def test_cli_enums(capsys, monkeypatch):
