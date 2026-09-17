@@ -4297,6 +4297,40 @@ def test_warns_if_config_keys_are_set_but_source_is_missing():
         assert warning.message.args[0] == expected_message
 
 
+def test_warns_if_nested_secrets_config_keys_are_set_but_source_is_missing():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            secrets_dir_missing='error',
+            secrets_dir_max_size=1024,
+            secrets_case_sensitive=True,
+            secrets_prefix='app_',
+            secrets_nested_delimiter='__',
+            secrets_nested_subdir=True,
+        )
+
+    with pytest.warns() as record:
+        Settings()
+
+    keys = (
+        'secrets_dir_missing',
+        'secrets_dir_max_size',
+        'secrets_case_sensitive',
+        'secrets_prefix',
+        'secrets_nested_delimiter',
+        'secrets_nested_subdir',
+    )
+    assert len(record) == len(keys)
+
+    for warning, key in zip(record, keys, strict=True):
+        assert warning.category is UserWarning
+        expected_message = (
+            f'Config key `{key}` is set in model_config but will be ignored because no '
+            'NestedSecretsSettingsSource source is configured. To use this config key, add a '
+            'NestedSecretsSettingsSource source to the settings sources via the settings_customise_sources hook.'
+        )
+        assert warning.message.args[0] == expected_message
+
+
 def test_env_strict_coercion(env):
     class SubModel(BaseModel):
         my_str: str
