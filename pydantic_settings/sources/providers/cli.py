@@ -1707,10 +1707,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if arg.kwargs.get('action') == BooleanOptionalAction and model_default is False and flag_chars == '--':
                 flag_chars += 'no-'
 
-            for coerced_value in self._coerce_value_styles(
-                model_default, value, list_style=list_style, dict_style=dict_style
+            for index, coerced_value in enumerate(
+                self._coerce_value_styles(model_default, value, list_style=list_style, dict_style=dict_style)
             ):
-                optional_args.append(f'{flag_chars}{arg_name}')
+                if index == 0 or arg.kwargs.get('nargs') not in ('*', '+'):
+                    optional_args.append(f'{flag_chars}{arg_name}')
 
                 # If implicit bool flag, do not add a value
                 if arg.kwargs.get('action') not in (BooleanOptionalAction, 'store_true', 'store_false'):

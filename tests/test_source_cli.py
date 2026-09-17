@@ -3890,6 +3890,19 @@ def test_cli_serialize_styles():
     ]
 
 
+@pytest.mark.parametrize('list_style', ['json', 'lazy', 'argparse'])
+@pytest.mark.parametrize('dict_style', ['json', 'env'])
+def test_cli_serialize_variadic_styles(list_style, dict_style):
+    class Cfg(BaseModel):
+        my_list: CliVariadicArg[list[str]]
+        my_dict: CliVariadicArg[dict[str, int]]
+
+    cfg = Cfg(my_list=['a', 'b'], my_dict={'a': 1, 'b': 2})
+    serialized_cli_args = CliApp.serialize(cfg, list_style=list_style, dict_style=dict_style)
+
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+
+
 def test_cli_decoding():
     PATH_A_STR = str(PureWindowsPath(Path.cwd()))
     PATH_B_STR = str(PureWindowsPath(Path.cwd() / 'subdir'))
