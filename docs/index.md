@@ -2316,6 +2316,8 @@ The default secrets implementation, `SecretsSettingsSource`, has behaviour that 
 For example, the default implementation does not support secret fields in nested submodels.
 
 `NestedSecretsSettingsSource` can be used as a drop-in replacement to `SecretsSettingsSource` to adjust the default behaviour.
+It is opt-in: you have to configure it explicitly via the `settings_customise_sources` hook (see the examples below),
+otherwise `BaseSettings` keeps using the default `SecretsSettingsSource`.
 All differences are summarized in the table below.
 
 | `SecretsSettingsSource`                                                                                                                                         | `NestedSecretsSettingsSource`                                                                                                    |
@@ -2502,6 +2504,13 @@ class Settings(BaseSettings):
 ```
 
 ### Configuration Options
+
+!!! note
+    Apart from `secrets_dir`, which is shared with `SecretsSettingsSource`, all of the options below are read
+    only by `NestedSecretsSettingsSource`. They have no effect unless you add that source to your settings
+    sources via the `settings_customise_sources` hook, as shown in the examples above — the default
+    `SecretsSettingsSource` ignores them. Setting one of them without configuring the source raises a
+    `UserWarning` telling you it will be ignored.
 
 #### secrets_dir
 
