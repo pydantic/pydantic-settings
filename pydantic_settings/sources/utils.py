@@ -183,7 +183,7 @@ def _get_field_metadata(field: FieldInfo) -> list[Any]:
     origin = get_origin(annotation)
     if typing_objects.is_annotated(origin):
         _, *meta = get_args(annotation)
-        metadata += meta
+        metadata = metadata + meta
     return metadata
 
 
