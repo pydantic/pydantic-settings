@@ -1210,9 +1210,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _convert_append_action(self, kwargs: dict[str, Any], field_info: FieldInfo, is_append_action: bool) -> None:
         if _CliVariadicArg in field_info.metadata and not is_append_action:
-            raise SettingsError(
-                f'CliVariadicArg requires a list, set, dict, Sequence, or Mapping type for {kwargs["dest"]}'
-            )
+            raise SettingsError(f'CliVariadicArg requires a Sequence, Set, or Mapping type for {kwargs["dest"]}')
         if is_append_action:
             if _CliVariadicArg in field_info.metadata:
                 # A required variadic option must consume at least one value, otherwise a bare flag would

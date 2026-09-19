@@ -2021,7 +2021,7 @@ def test_cli_variadic_dict_arg():
 
 
 def test_cli_variadic_non_collection_raises():
-    with pytest.raises(SettingsError, match='CliVariadicArg requires a list, set, dict, Sequence, or Mapping type'):
+    with pytest.raises(SettingsError, match='CliVariadicArg requires a Sequence, Set, or Mapping type'):
 
         class Settings(BaseSettings, cli_parse_args=True):
             param: CliVariadicArg[str]
