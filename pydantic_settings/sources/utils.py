@@ -225,6 +225,15 @@ def _union_has_strict_types(annotation: type[Any] | None) -> bool:
     return False
 
 
+def _is_subtype_of(annotation: Any, types: tuple[Any, ...]) -> bool:
+    """Check if a type annotation is a class that subclasses any of the specified types.
+
+    Text and bytes types never match, since they are sequences themselves, but are treated as
+    scalar values by the settings sources.
+    """
+    return not _lenient_issubclass(annotation, (str, bytes, bytearray)) and _lenient_issubclass(annotation, types)
+
+
 def _annotation_contains_types(
     annotation: type[Any] | None,
     types: tuple[Any, ...],
@@ -232,13 +241,18 @@ def _annotation_contains_types(
     is_strip_annotated: bool = False,
     is_instance: bool = False,
     collect: set[Any] | None = None,
+    is_subtype: bool = False,
 ) -> bool:
-    """Check if a type annotation contains any of the specified types."""
+    """Check if a type annotation contains any of the specified types.
+
+    With `is_subtype`, subclasses of the specified types match as well, so `tuple` matches
+    `Sequence`, or `frozenset` matches `Set`.
+    """
     if is_strip_annotated:
         annotation = _strip_annotated(annotation)
     if is_include_origin is True:
         origin = get_origin(annotation)
-        if origin in types:
+        if origin in types or (is_subtype and _is_subtype_of(origin, types)):
             if collect is None:
                 return True
             collect.add(annotation)
@@ -255,6 +269,7 @@ def _annotation_contains_types(
                 is_strip_annotated=is_strip_annotated,
                 is_instance=is_instance,
                 collect=collect,
+                is_subtype=is_subtype,
             )
             and collect is None
         ):
@@ -263,7 +278,7 @@ def _annotation_contains_types(
         if collect is None:
             return True
         collect.add(annotation)
-    if annotation in types:
+    if annotation in types or (is_subtype and _is_subtype_of(annotation, types)):
         if collect is not None:
             collect.add(annotation)
         return True

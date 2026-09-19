@@ -1166,9 +1166,11 @@ print(User().model_dump())
 
 ### Variadic named options
 
-List fields are repeated options by default (`--param a --param b`). Wrap a collection
-field in `CliVariadicArg` to accept remaining values after a single option
-(`--param a b c`).
+Collection fields are repeated options by default (`--param a --param b`). This covers any
+`Sequence`, `Set`, or `Mapping` type, including subclasses such as `tuple`, `frozenset`,
+`deque`, and `OrderedDict`. `str`, `bytes`, and `bytearray` are sequences too, but they take
+a single value. Wrap a collection field in `CliVariadicArg` to accept remaining values after
+a single option (`--param a b c`).
 
 Repeating the option **replaces** the previous values (`--param a b --param c` becomes
 `['c']`), which is the opposite of `action=append`. `nargs='*'` is greedy: it consumes

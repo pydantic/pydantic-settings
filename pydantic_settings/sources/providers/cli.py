@@ -18,6 +18,7 @@ from argparse import (
 )
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from enum import Enum
 from functools import cached_property
 from itertools import chain
@@ -278,7 +279,7 @@ class _CliArg(BaseModel):
     @cached_property
     def is_append_action(self) -> bool:
         return not self.subcommand_dest and _annotation_contains_types(
-            self.field_info.annotation, (list, set, dict, Sequence, Mapping), is_strip_annotated=True
+            self.field_info.annotation, (Sequence, AbstractSet, Mapping), is_strip_annotated=True, is_subtype=True
         )
 
     @cached_property
@@ -701,7 +702,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             or not any(
                 type_
                 for type_ in get_args(merge_type)
-                if type_ is not type(None) and get_origin(type_) not in (dict, Mapping)
+                if type_ is not type(None) and not _annotation_contains_types(type_, (Mapping,), is_subtype=True)
             )
         ):
             inferred_type = merge_type
@@ -881,7 +882,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 if len(alias_names) > 1:
                     raise SettingsError(f'positional argument {model.__name__}.{field_name} has multiple aliases')
                 is_append_action = _annotation_contains_types(
-                    field_info.annotation, (list, set, dict, Sequence, Mapping), is_strip_annotated=True
+                    field_info.annotation, (Sequence, AbstractSet, Mapping), is_strip_annotated=True, is_subtype=True
                 )
                 if not is_append_action:
                     positional_args.append((field_name, field_info))
@@ -1209,9 +1210,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _convert_append_action(self, kwargs: dict[str, Any], field_info: FieldInfo, is_append_action: bool) -> None:
         if _CliVariadicArg in field_info.metadata and not is_append_action:
-            raise SettingsError(
-                f'CliVariadicArg requires a list, set, dict, Sequence, or Mapping type for {kwargs["dest"]}'
-            )
+            raise SettingsError(f'CliVariadicArg requires a Sequence, Set, or Mapping type for {kwargs["dest"]}')
         if is_append_action:
             if _CliVariadicArg in field_info.metadata:
                 # A required variadic option must consume at least one value, otherwise a bare flag would
@@ -1219,7 +1218,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 kwargs['nargs'] = '+' if kwargs.get('required') else '*'
             else:
                 kwargs['action'] = 'append'
-            if _annotation_contains_types(field_info.annotation, (dict, Mapping), is_strip_annotated=True):
+            if _annotation_contains_types(field_info.annotation, (Mapping,), is_strip_annotated=True, is_subtype=True):
                 self._cli_dict_args[kwargs['dest']] = field_info.annotation
 
     def _convert_bool_flag(self, kwargs: dict[str, Any], field_info: FieldInfo, model_default: Any) -> None:
