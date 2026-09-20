@@ -458,7 +458,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                                 len(alias) > 1,
                             )
                         )
-                elif v_alias:  # bare AliasPath: a single flat path, e.g. ['a', 0, 'b']
+                else:  # bare AliasPath: a single flat path, e.g. ['a', 0, 'b']
                     # Only the head names the env var to read; the remaining segments are
                     # navigated in-memory once the value has been JSON-decoded, so they must
                     # never be looked up as env vars of their own (previously each string
