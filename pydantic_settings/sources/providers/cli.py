@@ -1614,6 +1614,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         alias_default[alias_path_index] = value
         return alias_path_only_defaults[arg_name]
 
+    def _serialize_value(self, value: Any) -> str:
+        if value is None:
+            return self.cli_parse_none_str
+        return json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
+
     def _coerce_value_styles(
         self,
         model_default: Any,
@@ -1688,9 +1693,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
             matched = re.match(r'(-*)(.+)', arg.preferred_arg_name)
             flag_chars, arg_name = matched.groups() if matched else ('', '')
-            value: str | list[Any] | dict[str, Any] = (
-                json.dumps(model_default) if isinstance(model_default, (dict, list, set)) else str(model_default)
-            )
+            value: str | list[Any] | dict[str, Any] = self._serialize_value(model_default)
 
             if arg.is_alias_path_only:
                 # For alias path only, we won't know the complete value until we've finished parsing the entire class. In
@@ -1700,8 +1703,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
             if _CliPositionalArg in field_info.metadata:
                 for value in model_default if isinstance(model_default, list) else [model_default]:
-                    value = json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
-                    positional_args.append(value)
+                    positional_args.append(self._serialize_value(value))
                 continue
 
             # Note: prepend 'no-' for boolean optional action flag if model_default value is False and flag is not a short option
