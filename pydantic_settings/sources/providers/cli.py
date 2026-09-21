@@ -1117,6 +1117,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         )
 
                     subcommand_arg.parser = self._add_parser(subparsers, *subcommand_arg.args, **subcommand_arg.kwargs)
+                    if isinstance(subcommand_arg.parser, _CliInternalArgParser):
+                        subcommand_arg.parser._cli_exit_on_error = self.cli_exit_on_error
                     self._add_parser_args(
                         parser=subcommand_arg.parser,
                         model=sub_model,

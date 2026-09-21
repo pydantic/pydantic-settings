@@ -2631,6 +2631,37 @@ example.py: error: unrecognized arguments: --bad-arg
             CliApp.run(Settings, cli_exit_on_error=False)
 
 
+@pytest.mark.parametrize('cli_exit_on_error', [True, False])
+@pytest.mark.parametrize('nested', [True, False])
+@pytest.mark.parametrize('use_config', [True, False])
+def test_cli_subcommand_exit_on_error(cli_exit_on_error, nested, use_config):
+    class Child(BaseModel):
+        value: CliPositionalArg[str]
+
+    class Parent(BaseModel):
+        child: CliSubCommand[Child]
+
+    class Settings(BaseSettings, cli_exit_on_error=cli_exit_on_error if use_config else True):
+        child: CliSubCommand[Child]
+        parent: CliSubCommand[Parent]
+
+    cli_args = ['parent', 'child'] if nested else ['child']
+
+    def run() -> None:
+        if use_config:
+            Settings(_cli_parse_args=cli_args)
+        else:
+            CliApp.run(Settings, cli_args=cli_args, cli_exit_on_error=cli_exit_on_error)
+
+    if cli_exit_on_error:
+        with pytest.raises(SystemExit) as exc_info:
+            run()
+        assert exc_info.value.code == 2
+    else:
+        with pytest.raises(SettingsError, match='error parsing CLI: the following arguments are required: VALUE'):
+            run()
+
+
 def test_cli_ignore_unknown_args():
     class Cfg(BaseSettings, cli_ignore_unknown_args=True):
         this: str = 'hello'
