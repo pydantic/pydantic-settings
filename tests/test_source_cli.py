@@ -2565,13 +2565,20 @@ def test_cli_subcommand_exit_on_error(cli_exit_on_error, nested, use_config):
         parent: CliSubCommand[Parent]
 
     cli_args = ['parent', 'child'] if nested else ['child']
-    error_type = SystemExit if cli_exit_on_error else SettingsError
-    error_match = '2' if cli_exit_on_error else 'error parsing CLI: the following arguments are required: VALUE'
-    with pytest.raises(error_type, match=error_match):
+
+    def run() -> None:
         if use_config:
             Settings(_cli_parse_args=cli_args)
         else:
             CliApp.run(Settings, cli_args=cli_args, cli_exit_on_error=cli_exit_on_error)
+
+    if cli_exit_on_error:
+        with pytest.raises(SystemExit) as exc_info:
+            run()
+        assert exc_info.value.code == 2
+    else:
+        with pytest.raises(SettingsError, match='error parsing CLI: the following arguments are required: VALUE'):
+            run()
 
 
 def test_cli_ignore_unknown_args():
