@@ -1,3 +1,5 @@
+from collections.abc import MutableSet
+from collections.abc import Set as AbstractSet
 from typing import Any, Literal, TypeVar
 
 from pydantic import Json, RootModel
@@ -124,3 +126,9 @@ def test_annotation_is_complex_root_model_without_init_state():
         pass
 
     assert _annotation_is_complex(MyRootModel, []) is True
+
+
+def test_annotation_is_complex_abstract_set():
+    """`collections.abc.Set` is complex, like `set` and `frozenset`."""
+    assert _annotation_is_complex(AbstractSet[str], []) is True
+    assert _annotation_is_complex(MutableSet[str], []) is True

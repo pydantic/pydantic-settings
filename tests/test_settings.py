@@ -9,8 +9,10 @@ import sys
 import threading
 import time
 import uuid
+import warnings
 import weakref
 from collections.abc import Callable, Hashable
+from collections.abc import Set as AbstractSet
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from enum import Enum, IntEnum
@@ -56,6 +58,7 @@ from pydantic_settings import (
     IncompleteFieldDefinitionWarning,
     InitSettingsSource,
     JsonConfigSettingsSource,
+    NestedSecretsSettingsSource,
     NoDecode,
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
@@ -714,6 +717,15 @@ def test_annotated_with_type_no_decode(env):
 
     s = Settings()
     assert s.model_dump() == {'a': ['one', 'two']}
+
+
+def test_abstract_set_env_var(env):
+    env.set('fruits', '["empire", "honeycrisp"]')
+
+    class Settings(BaseSettings):
+        fruits: AbstractSet[str] = frozenset()
+
+    assert Settings().fruits == frozenset({'empire', 'honeycrisp'})
 
 
 def test_set_dict_model(env):
@@ -4295,6 +4307,68 @@ def test_warns_if_config_keys_are_set_but_source_is_missing():
             f'source to the settings sources via the settings_customise_sources hook.'
         )
         assert warning.message.args[0] == expected_message
+
+
+def test_warns_if_nested_secrets_config_keys_are_set_but_source_is_missing():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            secrets_dir_missing='error',
+            secrets_dir_max_size=1024,
+            secrets_case_sensitive=True,
+            secrets_prefix='app_',
+            secrets_nested_delimiter='__',
+            secrets_nested_subdir=True,
+        )
+
+    with pytest.warns() as record:
+        Settings()
+
+    keys = (
+        'secrets_dir_missing',
+        'secrets_dir_max_size',
+        'secrets_case_sensitive',
+        'secrets_prefix',
+        'secrets_nested_delimiter',
+        'secrets_nested_subdir',
+    )
+
+    def expected_message(key: str) -> str:
+        return (
+            f'Config key `{key}` is set in model_config but will be ignored because no '
+            'NestedSecretsSettingsSource source is configured. To use this config key, add a '
+            'NestedSecretsSettingsSource source to the settings sources via the settings_customise_sources hook.'
+        )
+
+    assert all(warning.category is UserWarning for warning in record)
+    # Compare as sets so the test does not depend on the order the keys are checked in.
+    assert {warning.message.args[0] for warning in record} == {expected_message(key) for key in keys}
+    assert len(record) == len(keys)
+
+
+@pytest.mark.parametrize(
+    'config',
+    [
+        {'secrets_dir_missing': 'error'},
+        {'secrets_dir_max_size': 1024},
+        {'secrets_case_sensitive': True},
+        {'secrets_prefix': 'app_'},
+        {'secrets_nested_delimiter': '__'},
+        {'secrets_nested_subdir': True},
+    ],
+)
+def test_does_not_warn_if_nested_secrets_config_keys_are_set_and_source_is_configured(config, tmp_path):
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(secrets_dir=tmp_path, **config)
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            return (init_settings, env_settings, dotenv_settings, NestedSecretsSettingsSource(file_secret_settings))
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        Settings()
 
 
 def test_env_strict_coercion(env):

@@ -33,6 +33,7 @@ from .sources import (
     EnvSettingsSource,
     InitSettingsSource,
     JsonConfigSettingsSource,
+    NestedSecretsSettingsSource,
     PathType,
     PydanticBaseSettingsSource,
     PydanticModel,
@@ -81,6 +82,12 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_kebab_case: bool | Literal['all', 'no_enums'] | None
     cli_shortcuts: Mapping[str, str | list[str]] | None
     secrets_dir: PathType | None
+    secrets_dir_missing: Literal['ok', 'warn', 'error'] | None
+    secrets_dir_max_size: int | None
+    secrets_case_sensitive: bool | None
+    secrets_prefix: str | None
+    secrets_nested_delimiter: str | None
+    secrets_nested_subdir: bool | None
     json_file: ConfigFileSourceType | None
     json_file_encoding: str | None
     yaml_file: ConfigFileSourceType | None
@@ -671,6 +678,17 @@ class BaseSettings(BaseModel):
         warn_if_not_used(PyprojectTomlConfigSettingsSource, ('pyproject_toml_depth', 'pyproject_toml_table_header'))
         warn_if_not_used(TomlConfigSettingsSource, ('toml_file', 'toml_table_header'))
         warn_if_not_used(YamlConfigSettingsSource, ('yaml_file', 'yaml_file_encoding', 'yaml_config_section'))
+        warn_if_not_used(
+            NestedSecretsSettingsSource,
+            (
+                'secrets_dir_missing',
+                'secrets_dir_max_size',
+                'secrets_case_sensitive',
+                'secrets_prefix',
+                'secrets_nested_delimiter',
+                'secrets_nested_subdir',
+            ),
+        )
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         extra='forbid',
@@ -710,6 +728,12 @@ class BaseSettings(BaseModel):
         yaml_config_section=None,
         toml_file=None,
         secrets_dir=None,
+        secrets_dir_missing=None,
+        secrets_dir_max_size=None,
+        secrets_case_sensitive=None,
+        secrets_prefix=None,
+        secrets_nested_delimiter=None,
+        secrets_nested_subdir=None,
         protected_namespaces=(
             'model_validate',
             'model_dump',
