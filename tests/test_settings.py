@@ -23,6 +23,7 @@ from unittest import mock
 import pytest
 from annotated_types import Len, MinLen
 from pydantic import (
+    AfterValidator,
     AliasChoices,
     AliasGenerator,
     AliasPath,
@@ -699,6 +700,34 @@ def test_annotated_with_parameterized_type_alias(env):
 
     with pytest.raises(ValidationError):
         MySettingsD()
+
+
+@pytest.mark.parametrize('rebuild', [False, True])
+def test_type_alias_metadata_does_not_modify_field(env, rebuild):
+    DoubledValues = TypeAliasType(
+        'DoubledValues',
+        Annotated[list[int], AfterValidator(lambda values: [value * 2 for value in values]), ForceDecode],
+    )
+
+    class Settings(BaseSettings):
+        values: DoubledValues
+        model_config = SettingsConfigDict(enable_decoding=False)
+
+    env.set('values', '[1]')
+    assert Settings().values == [2]
+
+    if rebuild:
+        Settings.model_rebuild(force=True)
+        derived_settings = Settings
+    else:
+
+        class DerivedSettings(Settings):
+            pass
+
+        derived_settings = DerivedSettings
+
+    assert derived_settings().values == [2]
+    assert Settings.model_fields['values'].metadata == []
 
 
 def test_annotated_with_type_no_decode(env):
