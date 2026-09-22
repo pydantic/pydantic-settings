@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import json
 import os
 import re
 import sys
@@ -1574,6 +1575,18 @@ def test_cli_nested_dict_arg():
     with pytest.raises(SettingsError, match='Parsing error encountered for check_dict: Missing end delimiter "}"'):
         args = ['--check_dict', '{"k1":{"a": 1}},{"k2":{"b": 2}']
         cfg = CliApp.run(Cfg, cli_args=args)
+
+
+@pytest.mark.parametrize('value', ['C:\\temp\\', '\\\\server\\share\\', '\\\\', 'a\\"b', 'a"}b', '{'])
+@pytest.mark.parametrize('nested', [False, True])
+def test_cli_dict_json_escaped_backslashes(value, nested):
+    class Cfg(BaseSettings):
+        check_dict: dict[str, Any]
+
+    expected = {'path': {'values': [value]} if nested else value}
+    args = ['--check_dict', f'{json.dumps(expected)},other=value']
+
+    assert CliApp.run(Cfg, cli_args=args).check_dict == {**expected, 'other': 'value'}
 
 
 def test_cli_subcommand_union(capsys, monkeypatch):

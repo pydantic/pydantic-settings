@@ -798,8 +798,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         count = 1
         close_delim = '}' if item.startswith('{') else ']'
         in_str = False
+        escaped = False
         for consumed in range(1, len(item)):
-            if item[consumed] == '"' and item[consumed - 1] != '\\':
+            if escaped:
+                escaped = False
+            elif in_str and item[consumed] == '\\':
+                escaped = True
+            elif item[consumed] == '"':
                 in_str = not in_str
             elif in_str:
                 continue
