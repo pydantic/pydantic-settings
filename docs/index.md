@@ -250,6 +250,78 @@ Check the [`Field` aliases documentation](fields.md#field-aliases) for more info
     del os.environ['SUB_VAR1']
     ```
 
+### Unknown environment variables
+
+Environment variables that do not match a settings field or its alias are ignored, even if they start
+with `env_prefix` and `extra='forbid'` is set. The `extra` setting validates inputs passed to the model;
+it does not check every name in `os.environ`. A misspelled field name can therefore leave a default
+value in use without raising an error:
+
+```py
+import os
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix='APP_', extra='forbid')
+    port: int = 5432
+
+
+os.environ['APP_PRT'] = '6543'  # (1)!
+print(Settings().port)
+#> 5432
+del os.environ['APP_PRT']
+```
+
+1. Misspelled, so it matches no field and is dropped before validation runs.
+
+The same applies to nested models: an incorrect `env_nested_delimiter` keeps the variable from matching
+a field. Once a variable *does* match a known field's nested prefix, however, its contents are passed to
+that field for validation, so an unknown key inside a nested model can raise a `ValidationError` if that
+nested model has `extra='forbid'`:
+
+```py
+import os
+
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Database(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    port: int = 5432
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix='APP_', env_nested_delimiter='__', extra='forbid'
+    )
+    database: Database = Database()
+
+
+# A single underscore does not match the database field's nested prefix.
+os.environ['APP_DATABASE_PORT'] = '6543'
+print(Settings().database.port)
+#> 5432
+del os.environ['APP_DATABASE_PORT']
+
+# The nested prefix matches, so the unknown key reaches Database's validation.
+os.environ['APP_DATABASE__PRT'] = '6543'
+try:
+    Settings()
+except ValidationError as exc:
+    print(exc.errors()[0]['type'])
+    #> extra_forbidden
+del os.environ['APP_DATABASE__PRT']
+```
+
+For extra variables loaded from `.env` files and the effect of `dotenv_filtering`, see
+[Dotenv (.env) support](#dotenv-env-support).
+
+### Environment variable prefix targets
+
 To apply `env_prefix` not only to variable names but also to aliases, set `env_prefix_target='all'`.
 To apply `env_prefix` only to aliases and not to variable names, set `env_prefix_target='alias'`.
 To apply `env_prefix` only to variable names (the default behavior), set `env_prefix_target='variable'`.
@@ -363,56 +435,6 @@ del os.environ['APP_SUB_VAR1']
 ```
 
 1. `env_prefix` will be ignored and the alias is looked up under `SUB_VAR1`, not `APP_SUB_VAR1`.
-
-### Unknown environment variables
-
-Environment variables that do not match a settings field or its alias are ignored, even if they start
-with `env_prefix` and `extra='forbid'` is set. The `extra` setting validates inputs passed to the model;
-it does not check every name in `os.environ`. A misspelled top-level field name or an incorrect nested
-delimiter can therefore leave a default value in use without raising an error.
-
-Once a variable matches a known field's nested prefix, its contents are passed to that field for
-validation. An unknown key inside a nested model can then raise a `ValidationError` if that nested
-model has `extra='forbid'`:
-
-```py
-import os
-
-from pydantic import BaseModel, ConfigDict, ValidationError
-
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class Database(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    port: int = 5432
-
-
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_prefix='APP_', env_nested_delimiter='__', extra='forbid'
-    )
-    database: Database = Database()
-
-
-# A single underscore does not match the database field's nested prefix.
-os.environ['APP_DATABASE_PORT'] = '6543'
-print(Settings().database.port)
-#> 5432
-del os.environ['APP_DATABASE_PORT']
-
-# The nested prefix matches, so the unknown key reaches Database's validation.
-os.environ['APP_DATABASE__PRT'] = '6543'
-try:
-    Settings()
-except ValidationError as exc:
-    print(exc.errors()[0]['type'])
-    #> extra_forbidden
-del os.environ['APP_DATABASE__PRT']
-```
-
-For extra variables loaded from `.env` files and the effect of `dotenv_filtering`, see
-[Dotenv (.env) support](#dotenv-env-support).
 
 ### Case-sensitivity
 
