@@ -448,7 +448,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         if v_alias:
             env_prefix = self.env_prefix if self.env_prefix_target in ('alias', 'all') else ''
             if isinstance(v_alias, list):  # AliasChoices, AliasPath
-                if v_alias and isinstance(v_alias[0], list):  # AliasChoices: one entry per choice
+                if isinstance(v_alias[0], list):  # AliasChoices: one entry per choice
                     for alias in v_alias:
                         first_arg = cast(str, alias[0])  # first item of an AliasChoices must be a str
                         field_info.append(

@@ -1210,6 +1210,21 @@ def test_validation_aliases_alias_path_short_head(env):
     assert Settings().foobar == 'val-from-a'
 
 
+def test_validation_aliases_alias_path_tail_is_not_an_env_var(env):
+    """An unrelated env var sharing a name with a non-head path segment must be ignored.
+
+    Regression test: the old per-segment loop registered 'tail' as its own complex candidate,
+    so with the head unset the source fell through to it and tried to JSON-decode an unrelated
+    env var, raising SettingsError instead of falling back to the default.
+    """
+
+    class Settings(BaseSettings):
+        foobar: str = Field('DEFAULT', validation_alias=AliasPath('head', 'tail'))
+
+    env.set('tail', 'not-json')
+    assert Settings().foobar == 'DEFAULT'
+
+
 def test_validation_aliases_alias_choices(env):
     class Settings(BaseSettings):
         foobar: str = Field(validation_alias=AliasChoices('foo', AliasPath('foo1', 'bar', 1), AliasPath('bar', 2)))
