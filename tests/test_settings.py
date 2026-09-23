@@ -1204,6 +1204,56 @@ def test_validation_aliases_alias_path(env):
     assert Settings().foobar == 'val1'
 
 
+def test_validation_aliases_alias_path_single_segment(env):
+    """A single-segment ``AliasPath`` is just a rename to a differently-named env var and
+    needs no JSON decoding, regardless of how long the env var name is.
+
+    Regression test: `_extract_field_info` used to derive complexity from the length of the
+    alias *string* (`len('foobar') > 1`) instead of the number of path segments
+    (`len(['foobar']) > 1`), so any single-segment `AliasPath` whose name was longer than one
+    character was wrongly treated as complex and crashed on a non-JSON value.
+    """
+
+    class Settings(BaseSettings):
+        foobar: str = Field(validation_alias=AliasPath('foobar_alias'))
+
+    env.set('foobar_alias', 'plain-string-value')
+    assert Settings().foobar == 'plain-string-value'
+
+
+def test_validation_aliases_alias_path_short_head(env):
+    """A multi-segment ``AliasPath`` whose head is a one-character env var name must still be
+    JSON-decoded and navigated, and must not also register 'bar' as its own candidate env var.
+
+    Regression test: the same length-based bug made `len(alias) > 1` evaluate the *head's*
+    name instead of the path length, so a one-character head (`len('a') > 1` is False) was
+    wrongly treated as non-complex and the raw JSON string leaked through unnavigated; the old
+    per-segment loop also added 'bar' itself as a second, independent env var candidate.
+    """
+
+    class Settings(BaseSettings):
+        foobar: str = Field(validation_alias=AliasPath('a', 'bar'))
+
+    env.set('a', '{"bar": "val-from-a"}')
+    env.set('bar', 'val-from-bar')
+    assert Settings().foobar == 'val-from-a'
+
+
+def test_validation_aliases_alias_path_tail_is_not_an_env_var(env):
+    """An unrelated env var sharing a name with a non-head path segment must be ignored.
+
+    Regression test: the old per-segment loop registered 'tail' as its own complex candidate,
+    so with the head unset the source fell through to it and tried to JSON-decode an unrelated
+    env var, raising SettingsError instead of falling back to the default.
+    """
+
+    class Settings(BaseSettings):
+        foobar: str = Field('DEFAULT', validation_alias=AliasPath('head', 'tail'))
+
+    env.set('tail', 'not-json')
+    assert Settings().foobar == 'DEFAULT'
+
+
 def test_validation_aliases_alias_choices(env):
     class Settings(BaseSettings):
         foobar: str = Field(validation_alias=AliasChoices('foo', AliasPath('foo1', 'bar', 1), AliasPath('bar', 2)))
