@@ -43,7 +43,7 @@ from pydantic._internal._repr import Representation
 from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
-from pydantic_core import PydanticUndefined
+from pydantic_core import PydanticUndefined, to_jsonable_python
 from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
 
@@ -1633,6 +1633,16 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         return values
 
     @staticmethod
+    def _serialize_value(value: Any) -> str:
+        # Write enum members by value, and convert container items such as enum members,
+        # dates or decimals to JSON-compatible values, so the CLI parser can read them back.
+        if isinstance(value, Enum):
+            value = value.value
+        if isinstance(value, (dict, list, set, tuple)):
+            return json.dumps(to_jsonable_python(value))
+        return str(value)
+
+    @staticmethod
     def _flatten_serialized_args(
         serialized_args: dict[str, list[str]],
         positionals_first: bool,
@@ -1688,9 +1698,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
             matched = re.match(r'(-*)(.+)', arg.preferred_arg_name)
             flag_chars, arg_name = matched.groups() if matched else ('', '')
-            value: str | list[Any] | dict[str, Any] = (
-                json.dumps(model_default) if isinstance(model_default, (dict, list, set)) else str(model_default)
-            )
+            value: str | list[Any] | dict[str, Any] = self._serialize_value(model_default)
 
             if arg.is_alias_path_only:
                 # For alias path only, we won't know the complete value until we've finished parsing the entire class. In
@@ -1700,8 +1708,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
             if _CliPositionalArg in field_info.metadata:
                 for value in model_default if isinstance(model_default, list) else [model_default]:
-                    value = json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
-                    positional_args.append(value)
+                    positional_args.append(self._serialize_value(value))
                 continue
 
             # Note: prepend 'no-' for boolean optional action flag if model_default value is False and flag is not a short option
