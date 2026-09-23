@@ -1117,6 +1117,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         )
 
                     subcommand_arg.parser = self._add_parser(subparsers, *subcommand_arg.args, **subcommand_arg.kwargs)
+                    if isinstance(subcommand_arg.parser, _CliInternalArgParser):
+                        subcommand_arg.parser._cli_exit_on_error = self.cli_exit_on_error
                     self._add_parser_args(
                         parser=subcommand_arg.parser,
                         model=sub_model,
@@ -1706,10 +1708,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if arg.kwargs.get('action') == BooleanOptionalAction and model_default is False and flag_chars == '--':
                 flag_chars += 'no-'
 
-            for coerced_value in self._coerce_value_styles(
-                model_default, value, list_style=list_style, dict_style=dict_style
+            for index, coerced_value in enumerate(
+                self._coerce_value_styles(model_default, value, list_style=list_style, dict_style=dict_style)
             ):
-                optional_args.append(f'{flag_chars}{arg_name}')
+                if index == 0 or arg.kwargs.get('nargs') not in ('*', '+'):
+                    optional_args.append(f'{flag_chars}{arg_name}')
 
                 # If implicit bool flag, do not add a value
                 if arg.kwargs.get('action') not in (BooleanOptionalAction, 'store_true', 'store_false'):

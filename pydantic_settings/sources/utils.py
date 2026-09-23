@@ -183,7 +183,10 @@ def _get_field_metadata(field: FieldInfo) -> list[Any]:
     origin = get_origin(annotation)
     if typing_objects.is_annotated(origin):
         _, *meta = get_args(annotation)
-        metadata += meta
+        # Build a new list rather than extending in place: `field.metadata` is shared
+        # across instantiations, subclasses and rebuilds, so mutating it would append
+        # the alias metadata again on every call.
+        metadata = [*metadata, *meta]
     return metadata
 
 
