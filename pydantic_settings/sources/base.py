@@ -448,10 +448,8 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         if v_alias:
             env_prefix = self.env_prefix if self.env_prefix_target in ('alias', 'all') else ''
             if isinstance(v_alias, list):  # AliasChoices, AliasPath
-                for alias in v_alias:
-                    if isinstance(alias, str):  # AliasPath
-                        field_info.append((alias, self._apply_case_sensitive(env_prefix + alias), len(alias) > 1))
-                    elif isinstance(alias, list):  # AliasChoices
+                if isinstance(v_alias[0], list):  # AliasChoices: one entry per choice
+                    for alias in v_alias:
                         first_arg = cast(str, alias[0])  # first item of an AliasChoices must be a str
                         field_info.append(
                             (
@@ -460,6 +458,14 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                                 len(alias) > 1,
                             )
                         )
+                else:  # bare AliasPath: a single flat path, e.g. ['a', 0, 'b']
+                    # Only the head names the env var to read; the remaining segments are
+                    # navigated in-memory once the value has been JSON-decoded, so they must
+                    # never be looked up as env vars of their own (previously each string
+                    # segment produced its own candidate). Complexity must reflect the number
+                    # of segments in the whole path, not the length of the head's name.
+                    head = cast(str, v_alias[0])  # first item of an AliasPath must be a str
+                    field_info.append((head, self._apply_case_sensitive(env_prefix + head), len(v_alias) > 1))
             else:  # string validation alias
                 field_info.append((v_alias, self._apply_case_sensitive(env_prefix + v_alias), False))
 
