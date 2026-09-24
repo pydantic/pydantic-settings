@@ -517,6 +517,31 @@ def test_cli_case_insensitive_arg():
         CliSettingsSource(Cfg, root_parser=CliDummyParser(), case_sensitive=False)
 
 
+@pytest.mark.parametrize('case_sensitive', [True, False])
+@pytest.mark.parametrize('alias', [None, 'Serve'])
+def test_cli_subcommand_preserves_case(case_sensitive, alias):
+    class Command(BaseModel):
+        value: CliPositionalArg[str]
+
+    class Settings(BaseSettings):
+        Run: CliSubCommand[Command] = Field(alias=alias)
+
+    command_name = alias or 'Run'
+    settings = Settings(
+        _case_sensitive=case_sensitive,
+        _cli_parse_args=[command_name, 'MiXeD'],
+        _cli_exit_on_error=False,
+    )
+    assert settings.Run.value == 'MiXeD'
+
+    with pytest.raises(SettingsError, match=f"invalid choice: '{command_name.lower()}'"):
+        Settings(
+            _case_sensitive=case_sensitive,
+            _cli_parse_args=[command_name.lower(), 'MiXeD'],
+            _cli_exit_on_error=False,
+        )
+
+
 def test_cli_help_differentiation(capsys, monkeypatch):
     class Cfg(BaseSettings, cli_prog_name='example.py'):
         foo: str
