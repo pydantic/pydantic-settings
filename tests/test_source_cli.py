@@ -7,6 +7,8 @@ import time
 import typing
 from collections import OrderedDict
 from collections.abc import MutableMapping, MutableSequence
+from datetime import date
+from decimal import Decimal
 from enum import Enum, IntEnum
 from pathlib import Path, PureWindowsPath
 from string import ascii_letters
@@ -3951,6 +3953,48 @@ def test_cli_serialize_non_default_values():
     assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
 
 
+@pytest.mark.parametrize(
+    'config, expected_none_str',
+    [
+        ({}, 'null'),
+        ({'cli_avoid_json': True}, 'None'),
+        ({'cli_parse_none_str': 'void'}, 'void'),
+        ({'cli_avoid_json': True, 'cli_parse_none_str': 'void'}, 'void'),
+        ({'env_parse_none_str': 'unset', 'cli_parse_none_str': 'void'}, 'unset'),
+    ],
+)
+def test_cli_serialize_none(config, expected_none_str):
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(**config)
+        timeout: int | None = 30
+        label: str | None = 'default'
+        positional: CliPositionalArg[int | None]
+        omitted: int | None = None
+
+    cfg = Cfg(timeout=None, label=None, positional=None)
+    serialized_cli_args = CliApp.serialize(cfg)
+
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+    assert serialized_cli_args == ['--timeout', expected_none_str, '--label', expected_none_str, expected_none_str]
+
+
+@pytest.mark.parametrize(
+    'config, expected_none_str',
+    [
+        ({}, 'null'),
+        ({'cli_avoid_json': True}, 'None'),
+        ({'cli_parse_none_str': 'void'}, 'void'),
+        ({'env_parse_none_str': 'unset', 'cli_parse_none_str': 'void'}, 'unset'),
+    ],
+)
+def test_cli_format_help_none_str(config, expected_none_str):
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(**config)
+        timeout: int | None = None
+
+    assert f'(default: {expected_none_str})' in CliApp.format_help(Cfg)
+
+
 def test_cli_serialize_ordering():
     class NestedCfg(BaseSettings):
         positional: CliPositionalArg[str]
@@ -4035,6 +4079,46 @@ def test_cli_serialize_variadic_styles(list_style, dict_style):
         my_dict: CliVariadicArg[dict[str, int]]
 
     cfg = Cfg(my_list=['a', 'b'], my_dict={'a': 1, 'b': 2})
+    serialized_cli_args = CliApp.serialize(cfg, list_style=list_style, dict_style=dict_style)
+
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+
+
+def test_cli_serialize_enum_values():
+    class Color(Enum):
+        RED = 'red'
+        BLUE = 'blue'
+
+    class Cfg(BaseSettings):
+        pos: CliPositionalArg[Color]
+        color: Color = Color.RED
+        colors: list[Color] = []
+        palette: dict[str, Color] = {}
+
+    cfg = Cfg(pos=Color.BLUE, color=Color.BLUE, colors=[Color.RED, Color.BLUE], palette={'bg': Color.RED})
+
+    serialized_cli_args = CliApp.serialize(cfg)
+    assert serialized_cli_args == [
+        '--color',
+        'blue',
+        '--colors',
+        '["red", "blue"]',
+        '--palette',
+        '{"bg": "red"}',
+        'blue',
+    ]
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+
+
+@pytest.mark.parametrize('list_style', ['json', 'lazy', 'argparse'])
+@pytest.mark.parametrize('dict_style', ['json', 'env'])
+def test_cli_serialize_container_values(list_style, dict_style):
+    class Cfg(BaseModel):
+        dates: list[date]
+        amounts: dict[str, Decimal]
+        pair: tuple[int, int]
+
+    cfg = Cfg(dates=[date(2020, 1, 2), date(2021, 3, 4)], amounts={'a': Decimal('1.5')}, pair=(1, 2))
     serialized_cli_args = CliApp.serialize(cfg, list_style=list_style, dict_style=dict_style)
 
     assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
