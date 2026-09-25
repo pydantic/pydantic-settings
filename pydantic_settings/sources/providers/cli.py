@@ -43,7 +43,7 @@ from pydantic._internal._repr import Representation
 from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
-from pydantic_core import PydanticUndefined
+from pydantic_core import PydanticUndefined, to_jsonable_python
 from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
 
@@ -1621,7 +1621,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _serialize_value(self, value: Any) -> str:
         if value is None:
             return self.cli_parse_none_str
-        return json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
+        # Write enum members by value, and convert container items such as enum members,
+        # dates or decimals to JSON-compatible values, so the CLI parser can read them back.
+        if isinstance(value, Enum):
+            value = value.value
+        if isinstance(value, (dict, list, set, tuple)):
+            return json.dumps(to_jsonable_python(value))
+        return str(value)
 
     def _coerce_value_styles(
         self,
