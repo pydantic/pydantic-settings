@@ -3926,6 +3926,48 @@ def test_cli_serialize_non_default_values():
     assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
 
 
+@pytest.mark.parametrize(
+    'config, expected_none_str',
+    [
+        ({}, 'null'),
+        ({'cli_avoid_json': True}, 'None'),
+        ({'cli_parse_none_str': 'void'}, 'void'),
+        ({'cli_avoid_json': True, 'cli_parse_none_str': 'void'}, 'void'),
+        ({'env_parse_none_str': 'unset', 'cli_parse_none_str': 'void'}, 'unset'),
+    ],
+)
+def test_cli_serialize_none(config, expected_none_str):
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(**config)
+        timeout: int | None = 30
+        label: str | None = 'default'
+        positional: CliPositionalArg[int | None]
+        omitted: int | None = None
+
+    cfg = Cfg(timeout=None, label=None, positional=None)
+    serialized_cli_args = CliApp.serialize(cfg)
+
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+    assert serialized_cli_args == ['--timeout', expected_none_str, '--label', expected_none_str, expected_none_str]
+
+
+@pytest.mark.parametrize(
+    'config, expected_none_str',
+    [
+        ({}, 'null'),
+        ({'cli_avoid_json': True}, 'None'),
+        ({'cli_parse_none_str': 'void'}, 'void'),
+        ({'env_parse_none_str': 'unset', 'cli_parse_none_str': 'void'}, 'unset'),
+    ],
+)
+def test_cli_format_help_none_str(config, expected_none_str):
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(**config)
+        timeout: int | None = None
+
+    assert f'(default: {expected_none_str})' in CliApp.format_help(Cfg)
+
+
 def test_cli_serialize_ordering():
     class NestedCfg(BaseSettings):
         positional: CliPositionalArg[str]
