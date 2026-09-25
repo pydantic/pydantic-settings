@@ -1006,12 +1006,7 @@ class CliApp:
         """
 
         base_settings_cls = CliApp._get_base_settings_cls(type(model))
-        cli_parse_none_str = base_settings_cls.model_config.get(
-            'env_parse_none_str'
-        ) or base_settings_cls.model_config.get('cli_parse_none_str')
-        serialized_args = CliSettingsSource[Any](
-            base_settings_cls, cli_parse_none_str=cli_parse_none_str
-        )._serialized_args(
+        serialized_args = CliSettingsSource[Any](base_settings_cls)._serialized_args(
             model,
             list_style=list_style,
             dict_style=dict_style,

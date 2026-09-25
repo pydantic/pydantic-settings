@@ -3951,6 +3951,23 @@ def test_cli_serialize_none(config, expected_none_str):
     assert serialized_cli_args == ['--timeout', expected_none_str, '--label', expected_none_str, expected_none_str]
 
 
+@pytest.mark.parametrize(
+    'config, expected_none_str',
+    [
+        ({}, 'null'),
+        ({'cli_avoid_json': True}, 'None'),
+        ({'cli_parse_none_str': 'void'}, 'void'),
+        ({'env_parse_none_str': 'unset', 'cli_parse_none_str': 'void'}, 'unset'),
+    ],
+)
+def test_cli_format_help_none_str(config, expected_none_str):
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(**config)
+        timeout: int | None = None
+
+    assert f'(default: {expected_none_str})' in CliApp.format_help(Cfg)
+
+
 def test_cli_serialize_ordering():
     class NestedCfg(BaseSettings):
         positional: CliPositionalArg[str]

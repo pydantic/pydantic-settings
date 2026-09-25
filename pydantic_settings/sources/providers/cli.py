@@ -402,6 +402,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             cli_avoid_json if cli_avoid_json is not None else settings_cls.model_config.get('cli_avoid_json', False)
         )
         if not cli_parse_none_str:
+            cli_parse_none_str = settings_cls.model_config.get('env_parse_none_str') or settings_cls.model_config.get(
+                'cli_parse_none_str'
+            )
+        if not cli_parse_none_str:
             cli_parse_none_str = 'None' if self.cli_avoid_json is True else 'null'
         self.cli_parse_none_str = cli_parse_none_str
         self.cli_enforce_required = (
