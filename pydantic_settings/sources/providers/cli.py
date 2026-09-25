@@ -402,6 +402,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             cli_avoid_json if cli_avoid_json is not None else settings_cls.model_config.get('cli_avoid_json', False)
         )
         if not cli_parse_none_str:
+            cli_parse_none_str = settings_cls.model_config.get('env_parse_none_str') or settings_cls.model_config.get(
+                'cli_parse_none_str'
+            )
+        if not cli_parse_none_str:
             cli_parse_none_str = 'None' if self.cli_avoid_json is True else 'null'
         self.cli_parse_none_str = cli_parse_none_str
         self.cli_enforce_required = (
@@ -1613,6 +1617,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         alias_default.extend([''] * max(alias_path_index + 1 - len(alias_default), 0))
         alias_default[alias_path_index] = value
         return alias_path_only_defaults[arg_name]
+
+    def _serialize_value(self, value: Any) -> str:
+        if value is None:
+            return self.cli_parse_none_str
+        return json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
 
     def _coerce_value_styles(
         self,
