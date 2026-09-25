@@ -1621,7 +1621,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _serialize_value(self, value: Any) -> str:
         if value is None:
             return self.cli_parse_none_str
-        return json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
+        # Write enum members by value, and convert container items such as enum members,
+        # dates or decimals to JSON-compatible values, so the CLI parser can read them back.
+        if isinstance(value, Enum):
+            value = value.value
+        if isinstance(value, (dict, list, set, tuple)):
+            return json.dumps(to_jsonable_python(value))
+        return str(value)
 
     def _coerce_value_styles(
         self,
@@ -1640,16 +1646,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             elif isinstance(model_default, dict) and dict_style == 'env':
                 values = [f'{k}={v}' for k, v in json.loads(value).items()]
         return values
-
-    @staticmethod
-    def _serialize_value(value: Any) -> str:
-        # Write enum members by value, and convert container items such as enum members,
-        # dates or decimals to JSON-compatible values, so the CLI parser can read them back.
-        if isinstance(value, Enum):
-            value = value.value
-        if isinstance(value, (dict, list, set, tuple)):
-            return json.dumps(to_jsonable_python(value))
-        return str(value)
 
     @staticmethod
     def _flatten_serialized_args(
