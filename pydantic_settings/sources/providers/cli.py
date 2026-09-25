@@ -204,10 +204,9 @@ class _CliArg(BaseModel):
         return enum_names
 
     def subcommand_alias(self, sub_model: type[BaseModel]) -> str:
-        name = (
-            sub_model.__name__ if len(self.sub_models) > 1 else _get_alias_names(self.field_name, self.field_info)[0][0]
+        return self.get_kebab_case(
+            sub_model.__name__ if len(self.sub_models) > 1 else self.case_sensitive_alias, self.kebab_case
         )
-        return self.get_kebab_case(name, self.kebab_case)
 
     @cached_property
     def field_info(self) -> FieldInfo:
@@ -272,6 +271,11 @@ class _CliArg(BaseModel):
     @cached_property
     def preferred_alias(self) -> str:
         return self._alias_names[0]
+
+    @cached_property
+    def case_sensitive_alias(self) -> str:
+        # Subcommands are always case sensitive, so use the declared alias rather than the lowercased one.
+        return _get_alias_names(self.field_name, self.field_info)[0][0]
 
     @cached_property
     def is_alias_path_only(self) -> bool:
