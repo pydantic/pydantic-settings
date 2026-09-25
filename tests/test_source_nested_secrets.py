@@ -501,6 +501,52 @@ def test_multiple_secrets_dirs(conf: SettingsConfigDict, secrets, dirs, expected
         raise AssertionError('unreachable')
 
 
+@pytest.mark.parametrize(
+    ('case_sensitive', 'expected'),
+    (
+        (False, 'third'),
+        (True, 'second'),
+    ),
+)
+def test_last_directory_wins_when_secret_filenames_differ_by_case(tmp_files, monkeypatch, case_sensitive, expected):
+    """Last secrets_dir wins even when filenames differ only by case (#960).
+
+    NestedSecretsSettingsSource inherits EnvSettingsSource._load_env_vars, which
+    force-disables case_sensitive on Windows. Disable that probe so the True
+    control tests secret-file matching, not os.environ.
+    """
+    monkeypatch.setattr(
+        'pydantic_settings.sources.providers.env._environ_is_case_insensitive',
+        lambda: False,
+    )
+    tmp_files.write(
+        {
+            'dir1/TOKEN': 'first',
+            'dir2/token': 'second',
+            'dir3/TOKEN': 'third',
+        }
+    )
+    secrets_dirs = [tmp_files.basedir / name for name in ('dir1', 'dir2', 'dir3')]
+
+    class Settings(BaseSettings):
+        token: str
+
+        model_config = SettingsConfigDict(secrets_dir=secrets_dirs, secrets_case_sensitive=case_sensitive)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls,
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+        ):
+            return (NestedSecretsSettingsSource(file_secret_settings),)
+
+    assert Settings().token == expected
+
+
 def test_strip_whitespace(env, tmp_files):
     env.set('DB__USER', 'user')
     tmp_files.write(

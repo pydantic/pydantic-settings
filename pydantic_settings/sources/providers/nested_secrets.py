@@ -1,7 +1,6 @@
 import os
 import warnings
 from collections.abc import Iterator
-from functools import reduce
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
@@ -119,20 +118,21 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
         )
         self.env_parse_none_str = None  # update manually because of None
 
-        # update parent members
-        if not len(self.secrets_paths):
-            self.env_vars = {}
-        else:
-            secrets = reduce(
-                lambda d1, d2: dict((*d1.items(), *d2.items())),
-                (self.load_secrets(p) for p in self.secrets_paths),
+        # Normalize each directory before merging. Merging raw names first keeps
+        # the earlier key's insertion position, so a later `TOKEN` cannot displace
+        # an earlier `token` during case-insensitive parse_env_vars (#960).
+        # Same order as DotEnvSettingsSource._read_env_files: parse, then update.
+        secrets: dict[str, str | None] = {}
+        for path in self.secrets_paths:
+            secrets.update(
+                parse_env_vars(
+                    self.load_secrets(path),
+                    self.case_sensitive,
+                    self.env_ignore_empty,
+                    self.env_parse_none_str,
+                )
             )
-            self.env_vars = parse_env_vars(
-                secrets,
-                self.case_sensitive,
-                self.env_ignore_empty,
-                self.env_parse_none_str,
-            )
+        self.env_vars = secrets
 
     def validate_secrets_path(self, path: Path) -> None:
         if not path.exists():
