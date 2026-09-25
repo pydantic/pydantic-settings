@@ -501,6 +501,34 @@ def test_multiple_secrets_dirs(conf: SettingsConfigDict, secrets, dirs, expected
         raise AssertionError('unreachable')
 
 
+def test_multiple_secrets_dirs_case_insensitive_precedence(tmp_files):
+    secrets_dirs = [tmp_files.basedir / str(i) for i in range(3)]
+    tmp_files.write(
+        {
+            '0/TOKEN': 'first',
+            '1/token': 'second',
+            '2/TOKEN': 'third',
+        }
+    )
+
+    class Settings(BaseSettings):
+        token: str
+        model_config = SettingsConfigDict(secrets_dir=secrets_dirs)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls,
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+        ):
+            return (NestedSecretsSettingsSource(file_secret_settings),)
+
+    assert Settings().token == 'third'
+
+
 def test_strip_whitespace(env, tmp_files):
     env.set('DB__USER', 'user')
     tmp_files.write(
