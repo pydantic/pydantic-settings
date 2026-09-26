@@ -4613,3 +4613,27 @@ Subcommand schema description.
   -x int      (default: 1)
 """
     )
+
+
+def test_serialize_cli_unknown_args():
+    class Cfg(BaseSettings, cli_ignore_unknown_args=True):
+        flag: str = 'hello'
+        unknown_args: CliUnknownArgs
+
+    cfg = CliApp.run(Cfg, cli_args=['--flag=world', '--unk-opt=1', 'unk-pos'])
+    serialized = CliApp.serialize(cfg)
+    assert serialized == ['--flag', 'world', '--unk-opt=1', 'unk-pos']
+    assert CliApp.run(Cfg, cli_args=serialized) == cfg
+
+    class SubCmd(BaseSettings, cli_ignore_unknown_args=True):
+        v0: int = 0
+        unknown_args: CliUnknownArgs
+
+    class Root(BaseSettings):
+        flag: str = 'hello'
+        sub_cmd: CliSubCommand[SubCmd]
+
+    root = CliApp.run(Root, cli_args=['--flag=world', 'sub_cmd', '--v0=2', '--unk-sub=3', 'pos-sub'])
+    serialized_root = CliApp.serialize(root)
+    assert serialized_root == ['--flag', 'world', 'sub_cmd', '--v0', '2', '--unk-sub=3', 'pos-sub']
+    assert CliApp.run(Root, cli_args=serialized_root) == root
