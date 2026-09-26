@@ -1681,6 +1681,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 continue
             if _CliSubCommand in field_info.metadata and model_default is None:
                 continue
+            if _CliUnknownArgs in field_info.metadata:
+                optional_args += model_default
+                continue
             arg = next(iter(self._parser_map[field_info].values()))
             if arg.subcommand_dest:
                 subcommand_args.append(arg.subcommand_alias(type(model_default)))
