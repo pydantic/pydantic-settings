@@ -123,15 +123,17 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
         if not len(self.secrets_paths):
             self.env_vars = {}
         else:
-            secrets = reduce(
+            self.env_vars = reduce(
                 lambda d1, d2: dict((*d1.items(), *d2.items())),
-                (self.load_secrets(p) for p in self.secrets_paths),
-            )
-            self.env_vars = parse_env_vars(
-                secrets,
-                self.case_sensitive,
-                self.env_ignore_empty,
-                self.env_parse_none_str,
+                (
+                    parse_env_vars(
+                        self.load_secrets(p),
+                        self.case_sensitive,
+                        self.env_ignore_empty,
+                        self.env_parse_none_str,
+                    )
+                    for p in self.secrets_paths
+                ),
             )
 
     def validate_secrets_path(self, path: Path) -> None:

@@ -601,3 +601,32 @@ def test_load_secrets_utf8_under_non_utf8_locale(tmp_path, non_utf8_default_enco
     (tmp_path / 'token').write_bytes('café-pässwörd'.encode())
 
     assert NestedSecretsSettingsSource.load_secrets(tmp_path) == {'token': 'café-pässwörd'}
+
+
+def test_multiple_dirs_case_insensitive_precedence(tmp_path):
+    first = tmp_path / 'first'
+    second = tmp_path / 'second'
+    third = tmp_path / 'third'
+    first.mkdir()
+    second.mkdir()
+    third.mkdir()
+    (first / 'TOKEN').write_text('first', encoding='utf-8')
+    (second / 'token').write_text('second', encoding='utf-8')
+    (third / 'TOKEN').write_text('third', encoding='utf-8')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(secrets_dir=[first, second, third])
+        token: str
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls,
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+        ):
+            return (NestedSecretsSettingsSource(file_secret_settings),)
+
+    assert Settings().token == 'third'
