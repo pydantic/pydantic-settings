@@ -1271,6 +1271,73 @@ def test_cli_list_arg(prefix, arg_spaces):
     check_answer(cfg, prefix, expected)
 
 
+@pytest.mark.parametrize('empty_array', ['[]', ' [ \t ] '])
+@pytest.mark.parametrize(
+    'field_type,expected',
+    [
+        (list[str], []),
+        (list[int], []),
+        (list[str] | None, []),
+        (list[str] | dict[str, str], []),
+        (tuple[str, ...], ()),
+        (set[str], set()),
+    ],
+)
+def test_cli_empty_json_list(empty_array, field_type, expected):
+    class Cfg(BaseSettings, cli_kebab_case=True):
+        include_roles: field_type
+
+    assert Cfg(_cli_parse_args=[f'--include-roles={empty_array}']).include_roles == expected
+
+
+@pytest.mark.parametrize(
+    'values,expected',
+    [
+        (['[]', '[]'], []),
+        (['[]', 'first,second'], ['first', 'second']),
+        (['first,second', '[]'], ['first', 'second']),
+        (['[]', '["first"]', '[]', 'second'], ['first', 'second']),
+        (['[""]'], ['']),
+        ([''], ['']),
+        (['[,]'], ['', '']),
+        (['["[]"]'], ['[]']),
+    ],
+)
+def test_cli_empty_json_list_merging(values, expected):
+    class Cfg(BaseSettings):
+        values: list[str]
+
+    args = [arg for value in values for arg in ('--values', value)]
+    assert CliApp.run(Cfg, cli_args=args).values == expected
+
+
+def test_cli_empty_json_list_overrides_other_sources(env):
+    class Cfg(BaseSettings):
+        values: list[str] = ['default']
+
+    env.set('VALUES', '["environment"]')
+    assert Cfg(_cli_parse_args=['--values', '[]'], values=['init']).values == []
+
+
+def test_cli_empty_json_list_nested():
+    class Child(BaseModel):
+        values: list[list[int]]
+
+    class Cfg(BaseSettings):
+        child: Child
+
+    assert CliApp.run(Cfg, cli_args=['--child.values', '[]']).child.values == []
+    assert CliApp.run(Cfg, cli_args=['--child.values', '[[]]']).child.values == [[]]
+
+
+def test_cli_empty_json_list_serialize_roundtrip():
+    class Cfg(BaseSettings):
+        values: list[str] = ['default']
+
+    cfg = Cfg(values=[])
+    assert CliApp.run(Cfg, cli_args=CliApp.serialize(cfg, list_style='json')) == cfg
+
+
 class _MQTTVersion(IntEnum):
     v31 = 3
     v311 = 4

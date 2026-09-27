@@ -765,8 +765,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     # list.
                     break
                 val = val.strip()
+                is_empty_array = False
                 if val.startswith('[') and val.endswith(']'):
                     val = val[1:-1].strip()
+                    is_empty_array = not val
+                    # An explicit empty array selects the list branch of a dictionary union.
+                    merge_type = list if is_empty_array and merge_type is not inferred_type else merge_type
                 while val:
                     val = val.strip()
                     if val.startswith(','):
@@ -784,7 +788,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                                 merge_type = inferred_type
                                 val = self._consume_string_or_number(val, merged_list, merge_type)
                         is_last_consumed_a_value = True
-                if not is_last_consumed_a_value:
+                if not is_last_consumed_a_value and not is_empty_array:
                     val = self._consume_comma(val, merged_list, is_last_consumed_a_value)
 
             if merge_type is str:
