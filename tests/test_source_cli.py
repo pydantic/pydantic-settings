@@ -1290,6 +1290,16 @@ def test_cli_empty_json_list(empty_array, field_type, expected):
     assert Cfg(_cli_parse_args=[f'--include-roles={empty_array}']).include_roles == expected
 
 
+@pytest.mark.parametrize('field_type', [dict[str, str], dict[str, str] | None, MutableMapping[str, str]])
+@pytest.mark.parametrize('value', ['[]', ' [ \t ] ', '', '{}'])
+def test_cli_empty_json_list_preserves_mapping_behavior(field_type, value):
+    class Cfg(BaseSettings):
+        values: field_type
+
+    # Preserve the existing mapping parser behavior; empty-list handling is list-specific.
+    assert CliApp.run(Cfg, cli_args=['--values', value]).values == {}
+
+
 @pytest.mark.parametrize(
     'values,expected',
     [
