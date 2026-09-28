@@ -6,7 +6,7 @@ import os
 import warnings
 import xml.etree.ElementTree as ET
 from collections import deque
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import is_dataclass
 from enum import Enum
@@ -353,13 +353,20 @@ def _xml_to_dict(
     strip_namespaces: bool = True,
     strip_whitespace: bool = True,
     empty_as_none: bool = True,
-    force_list: str | None = None,
+    force_list: str | Collection[str] | None = None,
 ) -> dict[str, Any]:
     """Convert an XML element into a mapping suitable for a settings model."""
 
+    # Normalize to a set of whole tag names, so that a plain string is not matched by substring.
+    if not isinstance(force_list, frozenset):
+        force_list = frozenset((force_list,) if isinstance(force_list, str) else force_list or ())
+
     data: dict[str, Any] = {}
     for name, value in node.attrib.items():
-        data[attr_prefix + (name.rpartition('}')[2] if strip_namespaces else name)] = value
+        key = attr_prefix + (name.rpartition('}')[2] if strip_namespaces else name)
+        if key in data:
+            raise SettingsError(f'Error: {key} is defined by multiple attributes in different namespaces')
+        data[key] = value
 
     children: dict[str, list[Any]] = {}
     for child in node:
@@ -380,11 +387,16 @@ def _xml_to_dict(
     for name, values in children.items():
         if name in data:
             raise SettingsError(f'Error: {name} is defined both as an attribute and as a child element')
-        data[name] = values if len(values) > 1 or (force_list and name in force_list) else values[0]
+        data[name] = values if len(values) > 1 or name in force_list else values[0]
 
-    raw = node.text or ''
+    # Text following a child element is stored in the child's `tail`, so include it for mixed content.
+    raw = (node.text or '') + ''.join(child.tail or '' for child in node)
     text = raw.strip() if strip_whitespace else raw
     if text.strip():
+        if text_key in data:
+            raise SettingsError(
+                f'Error: {text_key} is defined both as text content and as an attribute or child element'
+            )
         data[text_key] = text
     elif not empty_as_none and not data:
         data[text_key] = ''

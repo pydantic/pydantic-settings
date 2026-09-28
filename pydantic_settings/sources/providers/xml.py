@@ -13,6 +13,7 @@ from ..types import DEFAULT_PATH, ConfigFileSourceType
 from ..utils import InitState, _xml_to_dict
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
     from pathlib import Path
 
     from pydantic_settings.main import BaseSettings
@@ -35,7 +36,7 @@ class XmlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         xml_strip_namespaces: bool | None = None,
         xml_strip_whitespace: bool | None = None,
         xml_empty_as_none: bool | None = None,
-        xml_force_list: str | None = None,
+        xml_force_list: str | Collection[str] | None = None,
         deep_merge: bool = False,
         _init_state: InitState | None = None,
     ):
@@ -73,8 +74,12 @@ class XmlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         super().__init__(settings_cls, self.xml_data, _init_state=_init_state)
 
     def _read_file(self, path: Path | Traversable) -> dict[str, Any]:
-        with path.open(encoding=self.xml_file_encoding) as xml_file:
-            content = xml_file.read()
+        content: str | bytes
+        if self.xml_file_encoding is None:
+            # Pass raw bytes, so the parser honors the encoding declared in the XML file (UTF-8 by default).
+            content = path.read_bytes()
+        else:
+            content = path.read_text(encoding=self.xml_file_encoding)
 
         root = ET.fromstring(content)
         return _xml_to_dict(

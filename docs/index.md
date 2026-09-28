@@ -3447,7 +3447,9 @@ Note that attributes (like `app_name` and `debug` above) and child elements (lik
 - `xml_strip_namespaces`: whether to strip XML namespaces from tag and attribute names (default `True`).
 - `xml_strip_whitespace`: whether to strip leading/trailing whitespace from text content (default `True`).
 - `xml_empty_as_none`: whether an empty element with no attributes or children is treated as `None` rather than an empty string (default `True`).
-- `xml_force_list`: an iterable of tag names that should always be parsed as a list, even when they occur only once (default `None`).
+- `xml_force_list`: a tag name, or a collection of tag names, that should always be parsed as a list, even when they occur only once (default `None`).
+
+Text content that is split by child elements (mixed content) is concatenated. If the same key would be populated from more than one place, for example an attribute and a child element of the same name, text content and an attribute named like `xml_text_key`, or two attributes with the same local name in different namespaces, a `SettingsError` is raised instead of silently discarding one of the values.
 
 ```python
 from pydantic_settings import (

@@ -7,7 +7,7 @@ import re
 import threading
 import warnings
 from argparse import Namespace
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from types import SimpleNamespace
 from typing import Any, ClassVar, Literal, TextIO, TypeVar, cast
 from weakref import WeakKeyDictionary
@@ -98,7 +98,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     xml_strip_namespaces: bool
     xml_strip_whitespace: bool
     xml_empty_as_none: bool
-    xml_force_list: str | None
+    xml_force_list: str | Collection[str] | None
     yaml_file: ConfigFileSourceType | None
     yaml_file_encoding: str | None
     yaml_config_section: str | None
