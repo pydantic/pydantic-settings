@@ -2956,6 +2956,7 @@ Other settings sources are available for common configuration files:
 - `PyprojectTomlConfigSettingsSource` using *(optional)* `pyproject_toml_depth` and *(optional)* `pyproject_toml_table_header` arguments
 - `TomlConfigSettingsSource` using `toml_file` argument and *(optional)* `toml_table_header` argument
 - `YamlConfigSettingsSource` using `yaml_file` and yaml_file_encoding arguments
+- `XmlConfigSettingsSource` using `xml_file` and `xml_file_encoding` arguments
 
 To use them, you can use the same mechanism described [here](#customise-settings-sources).
 
@@ -3068,7 +3069,7 @@ The files are merged shallowly in increasing order of priority. To enable deep m
     The `deep_merge` option is **not available** through the `SettingsConfigDict`.
 
 !!! note
-    In addition to `str` and `pathlib.Path`, the `json_file`, `toml_file`, and `yaml_file` options also accept a
+    In addition to `str` and `pathlib.Path`, the `json_file`, `toml_file`, `yaml_file`, and `xml_file` options also accept a
     [`Traversable`][importlib.resources.abc.Traversable], such as the result of `importlib.resources.files(...).joinpath(...)`.
     This makes it possible to load a configuration file that is packaged inside your distribution, including cases where the
     resource does not live on the filesystem (e.g. inside a zip/wheel).
@@ -3289,6 +3290,106 @@ class ExplicitFilePathSettings(BaseSettings):
             ),
         )
 ```
+
+### XML file
+
+`XmlConfigSettingsSource` loads variables from an XML file, converting elements and attributes into a mapping that is then used to populate your settings model.
+
+```python
+from pydantic import BaseModel
+
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    XmlConfigSettingsSource,
+)
+
+
+class Database(BaseModel):
+    user: str
+    host: str
+    port: int
+
+
+class Settings(BaseSettings):
+    app_name: str
+    debug: bool
+    database: Database
+    model_config = SettingsConfigDict(xml_file='config.xml')
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (XmlConfigSettingsSource(settings_cls),)
+```
+
+This will be able to read the following "config.xml" file, located in your working directory:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<settings app_name="myapp" debug="true">
+    <database user="admin">
+        <host>db.local</host>
+        <port>5432</port>
+    </database>
+</settings>
+```
+
+Note that attributes (like `app_name` and `debug` above) and child elements (like `database`) are merged into the same mapping, so they can populate fields interchangeably. An element repeated more than once, such as `<host>` appearing multiple times under a parent, is collected into a list.
+
+`XmlConfigSettingsSource` also accepts the following optional arguments, which can be set either on the source directly or via `SettingsConfigDict`, to control how the XML is converted:
+
+- `xml_attr_prefix`: a prefix prepended to keys derived from XML attributes, to distinguish them from child elements of the same name (default `''`).
+- `xml_text_key`: the key used to hold an element's text content when the element also has attributes or children (default `'value'`).
+- `xml_strip_namespaces`: whether to strip XML namespaces from tag and attribute names (default `True`).
+- `xml_strip_whitespace`: whether to strip leading/trailing whitespace from text content (default `True`).
+- `xml_empty_as_none`: whether an empty element with no attributes or children is treated as `None` rather than an empty string (default `True`).
+- `xml_force_list`: an iterable of tag names that should always be parsed as a list, even when they occur only once (default `None`).
+
+```python
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    XmlConfigSettingsSource,
+)
+
+
+class Settings(BaseSettings):
+    id: str
+    tags: list[str]
+
+    model_config = SettingsConfigDict(xml_file='config.xml')
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (XmlConfigSettingsSource(settings_cls, xml_force_list=('tags',)),)
+```
+
+This will be able to read the following "config.xml" file, resulting in `Settings(id='42', tags=['a'])`:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<settings id="42">
+    <tags>a</tags>
+</settings>
+```
+
+Just like the other file-based sources, you can provide multiple files by passing a list of paths to `xml_file`, and enable deep merging with `deep_merge=True` on the source.
 
 ## Field value priority
 
