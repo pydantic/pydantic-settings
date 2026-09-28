@@ -18,6 +18,7 @@ from argparse import (
 )
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from enum import Enum
 from functools import cached_property
 from itertools import chain
@@ -42,7 +43,7 @@ from pydantic._internal._repr import Representation
 from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
-from pydantic_core import PydanticUndefined
+from pydantic_core import PydanticUndefined, to_jsonable_python
 from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
 
@@ -59,6 +60,7 @@ from ..types import (
     _CliSubCommand,
     _CliToggleFlag,
     _CliUnknownArgs,
+    _CliVariadicArg,
 )
 from ..utils import (
     InitState,
@@ -113,7 +115,9 @@ def _get_model_description(model_cls: type[Any]) -> str | None:
             desc = None
             if is_model_class(model_cls):
                 desc = model_cls.model_json_schema().get('description')
-            elif is_pydantic_dataclass(model_cls):
+            # Only models and pydantic dataclasses carry a config, so reaching here with a
+            # callable `json_schema_extra` means `model_cls` is a pydantic dataclass.
+            elif is_pydantic_dataclass(model_cls):  # pragma: no branch
                 desc = TypeAdapter(model_cls).json_schema().get('description')
             if desc is not None:
                 return desc
@@ -201,7 +205,7 @@ class _CliArg(BaseModel):
 
     def subcommand_alias(self, sub_model: type[BaseModel]) -> str:
         return self.get_kebab_case(
-            sub_model.__name__ if len(self.sub_models) > 1 else self.preferred_alias, self.kebab_case
+            sub_model.__name__ if len(self.sub_models) > 1 else self.case_sensitive_alias, self.kebab_case
         )
 
     @cached_property
@@ -249,6 +253,10 @@ class _CliArg(BaseModel):
                 raise SettingsError(
                     f'CliPositionalArg is not outermost annotation for {self.model.__name__}.{self.field_name}'
                 )
+            if _annotation_contains_types(type_, (_CliVariadicArg,), is_include_origin=False):
+                raise SettingsError(
+                    f'CliVariadicArg is not outermost annotation for {self.model.__name__}.{self.field_name}'
+                )
             _collect_sub_models(type_, sub_models)
         return sub_models
 
@@ -265,13 +273,18 @@ class _CliArg(BaseModel):
         return self._alias_names[0]
 
     @cached_property
+    def case_sensitive_alias(self) -> str:
+        # Subcommands are always case sensitive, so use the declared alias rather than the lowercased one.
+        return _get_alias_names(self.field_name, self.field_info)[0][0]
+
+    @cached_property
     def is_alias_path_only(self) -> bool:
         return self._is_alias_path_only
 
     @cached_property
     def is_append_action(self) -> bool:
         return not self.subcommand_dest and _annotation_contains_types(
-            self.field_info.annotation, (list, set, dict, Sequence, Mapping), is_strip_annotated=True
+            self.field_info.annotation, (Sequence, AbstractSet, Mapping), is_strip_annotated=True, is_subtype=True
         )
 
     @cached_property
@@ -289,6 +302,7 @@ class _CliArg(BaseModel):
 T = TypeVar('T')
 CliSubCommand = Annotated[T | None, _CliSubCommand]
 CliPositionalArg = Annotated[T, _CliPositionalArg]
+CliVariadicArg = Annotated[T, _CliVariadicArg]
 _CliBoolFlag = TypeVar('_CliBoolFlag', bound=bool)
 CliImplicitFlag = Annotated[_CliBoolFlag, _CliImplicitFlag]
 CliExplicitFlag = Annotated[_CliBoolFlag, _CliExplicitFlag]
@@ -392,6 +406,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self.cli_avoid_json = (
             cli_avoid_json if cli_avoid_json is not None else settings_cls.model_config.get('cli_avoid_json', False)
         )
+        if not cli_parse_none_str:
+            cli_parse_none_str = settings_cls.model_config.get('env_parse_none_str') or settings_cls.model_config.get(
+                'cli_parse_none_str'
+            )
         if not cli_parse_none_str:
             cli_parse_none_str = 'None' if self.cli_avoid_json is True else 'null'
         self.cli_parse_none_str = cli_parse_none_str
@@ -639,7 +657,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
                 cli_arg = self._parser_map.get(field_name, {}).get(None)
                 if cli_arg and cli_arg.is_no_decode:
-                    parsed_args[field_name] = ','.join(val)
+                    # `nargs='*'` accepts the option with no values. Joining to '' would make the arg
+                    # indistinguishable from unset (and dropped entirely under env_ignore_empty), so keep
+                    # the empty list intact. A NoDecode value is never JSON decoded, so '[]' is not usable.
+                    parsed_args[field_name] = ','.join(val) if val else val
                     continue
 
                 parsed_args[field_name] = self._merge_parsed_list(val, field_name)
@@ -690,7 +711,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             or not any(
                 type_
                 for type_ in get_args(merge_type)
-                if type_ is not type(None) and get_origin(type_) not in (dict, Mapping)
+                if type_ is not type(None) and not _annotation_contains_types(type_, (Mapping,), is_subtype=True)
             )
         ):
             inferred_type = merge_type
@@ -700,6 +721,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         return merge_type, inferred_type
 
     def _merged_list_to_str(self, merged_list: list[str], field_name: str) -> str:
+        if not merged_list:
+            # `nargs='*'` accepts the option with no values, which consumes nothing.
+            # There is no cli_arg left to infer decoding from, and '' is not decodable.
+            return '[]'
         decode_list: list[str] = []
         is_use_decode: bool | None = None
         cli_arg_map = self._parser_map.get(field_name, {})
@@ -866,7 +891,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 if len(alias_names) > 1:
                     raise SettingsError(f'positional argument {model.__name__}.{field_name} has multiple aliases')
                 is_append_action = _annotation_contains_types(
-                    field_info.annotation, (list, set, dict, Sequence, Mapping), is_strip_annotated=True
+                    field_info.annotation, (Sequence, AbstractSet, Mapping), is_strip_annotated=True, is_subtype=True
                 )
                 if not is_append_action:
                     positional_args.append((field_name, field_info))
@@ -1038,7 +1063,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     ) -> ArgumentParser:
         if discriminator_vals is None:
             discriminator_vals = {}
-        if model_path is None:
+        if model_path is None:  # pragma: no cover
             model_path = set()
         model_path = model_path | {model}
         subparsers: Any = None
@@ -1101,6 +1126,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         )
 
                     subcommand_arg.parser = self._add_parser(subparsers, *subcommand_arg.args, **subcommand_arg.kwargs)
+                    if isinstance(subcommand_arg.parser, _CliInternalArgParser):
+                        subcommand_arg.parser._cli_exit_on_error = self.cli_exit_on_error
                     self._add_parser_args(
                         parser=subcommand_arg.parser,
                         model=sub_model,
@@ -1179,7 +1206,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 elif _CliUnknownArgs in field_info.metadata:
                     self._cli_unknown_args[arg.kwargs['dest']] = []
                 elif not arg.is_alias_path_only:
-                    if isinstance(group, dict):
+                    if isinstance(group, dict):  # pragma: no cover
                         group = self._add_group(parser, **group)
                     context = parser if group is None else group
                     if arg.kwargs.get('action') == 'store_false':
@@ -1193,9 +1220,16 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         return parser
 
     def _convert_append_action(self, kwargs: dict[str, Any], field_info: FieldInfo, is_append_action: bool) -> None:
+        if _CliVariadicArg in field_info.metadata and not is_append_action:
+            raise SettingsError(f'CliVariadicArg requires a Sequence, Set, or Mapping type for {kwargs["dest"]}')
         if is_append_action:
-            kwargs['action'] = 'append'
-            if _annotation_contains_types(field_info.annotation, (dict, Mapping), is_strip_annotated=True):
+            if _CliVariadicArg in field_info.metadata:
+                # A required variadic option must consume at least one value, otherwise a bare flag would
+                # satisfy argparse and silently resolve to an empty list.
+                kwargs['nargs'] = '+' if kwargs.get('required') else '*'
+            else:
+                kwargs['action'] = 'append'
+            if _annotation_contains_types(field_info.annotation, (Mapping,), is_strip_annotated=True, is_subtype=True):
                 self._cli_dict_args[kwargs['dest']] = field_info.annotation
 
     def _convert_bool_flag(self, kwargs: dict[str, Any], field_info: FieldInfo, model_default: Any) -> None:
@@ -1233,8 +1267,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         # Note: CLI positional args are always strictly required at the CLI. Therefore, use field_info.is_required in
         # conjunction with model_default instead of the derived kwargs['required'].
         is_required = field_info.is_required() and model_default is PydanticUndefined
-        if kwargs.get('action') == 'append':
-            del kwargs['action']
+        is_variadic = (
+            kwargs.get('action') == 'append' or kwargs.get('nargs') == '*' or _CliVariadicArg in field_info.metadata
+        )
+        if is_variadic:
+            kwargs.pop('action', None)
             kwargs['nargs'] = '+' if is_required else '*'
         elif not is_required:
             kwargs['nargs'] = '?'
@@ -1586,6 +1623,17 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         alias_default[alias_path_index] = value
         return alias_path_only_defaults[arg_name]
 
+    def _serialize_value(self, value: Any) -> str:
+        if value is None:
+            return self.cli_parse_none_str
+        # Write enum members by value, and convert container items such as enum members,
+        # dates or decimals to JSON-compatible values, so the CLI parser can read them back.
+        if isinstance(value, Enum):
+            value = value.value
+        if isinstance(value, (dict, list, set, tuple)):
+            return json.dumps(to_jsonable_python(value))
+        return str(value)
+
     def _coerce_value_styles(
         self,
         model_default: Any,
@@ -1660,9 +1708,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
             matched = re.match(r'(-*)(.+)', arg.preferred_arg_name)
             flag_chars, arg_name = matched.groups() if matched else ('', '')
-            value: str | list[Any] | dict[str, Any] = (
-                json.dumps(model_default) if isinstance(model_default, (dict, list, set)) else str(model_default)
-            )
+            value: str | list[Any] | dict[str, Any] = self._serialize_value(model_default)
 
             if arg.is_alias_path_only:
                 # For alias path only, we won't know the complete value until we've finished parsing the entire class. In
@@ -1672,18 +1718,18 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
             if _CliPositionalArg in field_info.metadata:
                 for value in model_default if isinstance(model_default, list) else [model_default]:
-                    value = json.dumps(value) if isinstance(value, (dict, list, set)) else str(value)
-                    positional_args.append(value)
+                    positional_args.append(self._serialize_value(value))
                 continue
 
             # Note: prepend 'no-' for boolean optional action flag if model_default value is False and flag is not a short option
             if arg.kwargs.get('action') == BooleanOptionalAction and model_default is False and flag_chars == '--':
                 flag_chars += 'no-'
 
-            for coerced_value in self._coerce_value_styles(
-                model_default, value, list_style=list_style, dict_style=dict_style
+            for index, coerced_value in enumerate(
+                self._coerce_value_styles(model_default, value, list_style=list_style, dict_style=dict_style)
             ):
-                optional_args.append(f'{flag_chars}{arg_name}')
+                if index == 0 or arg.kwargs.get('nargs') not in ('*', '+'):
+                    optional_args.append(f'{flag_chars}{arg_name}')
 
                 # If implicit bool flag, do not add a value
                 if arg.kwargs.get('action') not in (BooleanOptionalAction, 'store_true', 'store_false'):

@@ -33,6 +33,7 @@ from .sources import (
     EnvSettingsSource,
     InitSettingsSource,
     JsonConfigSettingsSource,
+    NestedSecretsSettingsSource,
     PathType,
     PydanticBaseSettingsSource,
     PydanticModel,
@@ -82,6 +83,12 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_kebab_case: bool | Literal['all', 'no_enums'] | None
     cli_shortcuts: Mapping[str, str | list[str]] | None
     secrets_dir: PathType | None
+    secrets_dir_missing: Literal['ok', 'warn', 'error'] | None
+    secrets_dir_max_size: int | None
+    secrets_case_sensitive: bool | None
+    secrets_prefix: str | None
+    secrets_nested_delimiter: str | None
+    secrets_nested_subdir: bool | None
     json_file: ConfigFileSourceType | None
     json_file_encoding: str | None
     xml_file: ConfigFileSourceType | None
@@ -638,13 +645,11 @@ class BaseSettings(BaseModel):
                     # Source key: prefer the alias (first in alias_names) if present in state,
                     # as InitSettingsSource normalizes to the preferred alias.
                     # This ensures we get the highest-priority value for this field.
-                    source_key = None
-                    for alias in alias_names:
-                        if alias in state_kwarg_name:
-                            source_key = alias
-                            break
-                    if source_key is None:
-                        # Fall back to field_name if no alias found in state
+                    source_key = next((alias for alias in alias_names if alias in state_kwarg_name), None)
+                    if source_key is None:  # pragma: no cover
+                        # Unreachable in practice: `InitSettingsSource` normalizes every matched
+                        # init kwarg to the preferred alias, so when `init_kwarg_name` is non-empty
+                        # that alias is always present in the state. Kept as a defensive fallback.
                         source_key = field_name if field_name in state_kwarg_name else next(iter(state_kwarg_name))
                     # Get the value from the source key and remove all matching keys
                     value = state.pop(source_key)
@@ -657,7 +662,7 @@ class BaseSettings(BaseModel):
         """
         Warns if any values in model_config were set but the corresponding settings source has not been initialised.
 
-        The list alternative sources and their config keys can be found here:
+        The list of alternative sources and their config keys can be found here:
         https://docs.pydantic.dev/latest/concepts/pydantic_settings/#other-settings-source
 
         Args:
@@ -683,6 +688,17 @@ class BaseSettings(BaseModel):
         warn_if_not_used(TomlConfigSettingsSource, ('toml_file', 'toml_table_header'))
         warn_if_not_used(YamlConfigSettingsSource, ('yaml_file', 'yaml_file_encoding', 'yaml_config_section'))
         warn_if_not_used(XmlConfigSettingsSource, ('xml_file', 'xml_file_encoding'))
+        warn_if_not_used(
+            NestedSecretsSettingsSource,
+            (
+                'secrets_dir_missing',
+                'secrets_dir_max_size',
+                'secrets_case_sensitive',
+                'secrets_prefix',
+                'secrets_nested_delimiter',
+                'secrets_nested_subdir',
+            ),
+        )
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         extra='forbid',
@@ -730,6 +746,12 @@ class BaseSettings(BaseModel):
         yaml_config_section=None,
         toml_file=None,
         secrets_dir=None,
+        secrets_dir_missing=None,
+        secrets_dir_max_size=None,
+        secrets_case_sensitive=None,
+        secrets_prefix=None,
+        secrets_nested_delimiter=None,
+        secrets_nested_subdir=None,
         protected_namespaces=(
             'model_validate',
             'model_dump',
@@ -945,7 +967,9 @@ class CliApp:
             if err.__context__ is None and err.__cause__ is None and cli_settings_source._format_help is not None:
                 error_message = f'{err}\n{cli_settings_source._format_help(parser)}'
                 raise type(err)(error_message) from None
-            raise err
+            # Unreachable in practice: `get_subcommand` raises a freshly constructed error (no
+            # context/cause) and `_format_help` is never None. Kept as a defensive fallback.
+            raise err  # pragma: no cover
 
         subcommand_cls = cast(type[BaseModel], type(subcommand))
         subcommand_arg = cli_settings_source._parser_map[subcommand_dest][subcommand_cls]

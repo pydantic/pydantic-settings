@@ -9,8 +9,10 @@ import sys
 import threading
 import time
 import uuid
+import warnings
 import weakref
 from collections.abc import Callable, Hashable
+from collections.abc import Set as AbstractSet
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from enum import Enum, IntEnum
@@ -21,6 +23,7 @@ from unittest import mock
 import pytest
 from annotated_types import Len, MinLen
 from pydantic import (
+    AfterValidator,
     AliasChoices,
     AliasGenerator,
     AliasPath,
@@ -56,6 +59,7 @@ from pydantic_settings import (
     IncompleteFieldDefinitionWarning,
     InitSettingsSource,
     JsonConfigSettingsSource,
+    NestedSecretsSettingsSource,
     NoDecode,
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
@@ -64,6 +68,7 @@ from pydantic_settings import (
 )
 from pydantic_settings.main import _settings_cache
 from pydantic_settings.sources import DefaultSettingsSource, read_env_file
+from pydantic_settings.sources.providers import env as env_provider
 
 try:
     import dotenv
@@ -697,6 +702,34 @@ def test_annotated_with_parameterized_type_alias(env):
         MySettingsD()
 
 
+@pytest.mark.parametrize('rebuild', [False, True])
+def test_type_alias_metadata_does_not_modify_field(env, rebuild):
+    DoubledValues = TypeAliasType(
+        'DoubledValues',
+        Annotated[list[int], AfterValidator(lambda values: [value * 2 for value in values]), ForceDecode],
+    )
+
+    class Settings(BaseSettings):
+        values: DoubledValues
+        model_config = SettingsConfigDict(enable_decoding=False)
+
+    env.set('values', '[1]')
+    assert Settings().values == [2]
+
+    if rebuild:
+        Settings.model_rebuild(force=True)
+        derived_settings = Settings
+    else:
+
+        class DerivedSettings(Settings):
+            pass
+
+        derived_settings = DerivedSettings
+
+    assert derived_settings().values == [2]
+    assert Settings.model_fields['values'].metadata == []
+
+
 def test_annotated_with_type_no_decode(env):
     A = TypeAliasType('A', Annotated[list[str], NoDecode])
 
@@ -713,6 +746,15 @@ def test_annotated_with_type_no_decode(env):
 
     s = Settings()
     assert s.model_dump() == {'a': ['one', 'two']}
+
+
+def test_abstract_set_env_var(env):
+    env.set('fruits', '["empire", "honeycrisp"]')
+
+    class Settings(BaseSettings):
+        fruits: AbstractSet[str] = frozenset()
+
+    assert Settings().fruits == frozenset({'empire', 'honeycrisp'})
 
 
 def test_set_dict_model(env):
@@ -1162,6 +1204,56 @@ def test_validation_aliases_alias_path(env):
     assert Settings().foobar == 'val1'
 
 
+def test_validation_aliases_alias_path_single_segment(env):
+    """A single-segment ``AliasPath`` is just a rename to a differently-named env var and
+    needs no JSON decoding, regardless of how long the env var name is.
+
+    Regression test: `_extract_field_info` used to derive complexity from the length of the
+    alias *string* (`len('foobar') > 1`) instead of the number of path segments
+    (`len(['foobar']) > 1`), so any single-segment `AliasPath` whose name was longer than one
+    character was wrongly treated as complex and crashed on a non-JSON value.
+    """
+
+    class Settings(BaseSettings):
+        foobar: str = Field(validation_alias=AliasPath('foobar_alias'))
+
+    env.set('foobar_alias', 'plain-string-value')
+    assert Settings().foobar == 'plain-string-value'
+
+
+def test_validation_aliases_alias_path_short_head(env):
+    """A multi-segment ``AliasPath`` whose head is a one-character env var name must still be
+    JSON-decoded and navigated, and must not also register 'bar' as its own candidate env var.
+
+    Regression test: the same length-based bug made `len(alias) > 1` evaluate the *head's*
+    name instead of the path length, so a one-character head (`len('a') > 1` is False) was
+    wrongly treated as non-complex and the raw JSON string leaked through unnavigated; the old
+    per-segment loop also added 'bar' itself as a second, independent env var candidate.
+    """
+
+    class Settings(BaseSettings):
+        foobar: str = Field(validation_alias=AliasPath('a', 'bar'))
+
+    env.set('a', '{"bar": "val-from-a"}')
+    env.set('bar', 'val-from-bar')
+    assert Settings().foobar == 'val-from-a'
+
+
+def test_validation_aliases_alias_path_tail_is_not_an_env_var(env):
+    """An unrelated env var sharing a name with a non-head path segment must be ignored.
+
+    Regression test: the old per-segment loop registered 'tail' as its own complex candidate,
+    so with the head unset the source fell through to it and tried to JSON-decode an unrelated
+    env var, raising SettingsError instead of falling back to the default.
+    """
+
+    class Settings(BaseSettings):
+        foobar: str = Field('DEFAULT', validation_alias=AliasPath('head', 'tail'))
+
+    env.set('tail', 'not-json')
+    assert Settings().foobar == 'DEFAULT'
+
+
 def test_validation_aliases_alias_choices(env):
     class Settings(BaseSettings):
         foobar: str = Field(validation_alias=AliasChoices('foo', AliasPath('foo1', 'bar', 1), AliasPath('bar', 2)))
@@ -1354,6 +1446,21 @@ def test_case_sensitive_windows_env_fallback(env):
     assert Settings().model_dump() == {'redis': {'host': 'localhost', 'port': 6379}}
 
 
+def test_case_sensitive_downgraded_when_environ_is_case_insensitive():
+    """The Windows fallback from #295, exercised on any platform by patching the probe."""
+
+    class Settings(BaseSettings):
+        foo: str = 'default'
+
+    with mock.patch.object(env_provider, '_environ_is_case_insensitive', return_value=True):
+        source = EnvSettingsSource(Settings, case_sensitive=True)
+    assert source.case_sensitive is False
+
+    with mock.patch.object(env_provider, '_environ_is_case_insensitive', return_value=False):
+        source = EnvSettingsSource(Settings, case_sensitive=True)
+    assert source.case_sensitive is True
+
+
 def test_init_source_case_insensitive():
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(case_sensitive=False, extra='allow')
@@ -1405,6 +1512,32 @@ def test_config_file_source_case_insensitive(tmp_path):
             return (JsonConfigSettingsSource(settings_cls),)
 
     assert Settings().model_dump() == {'api_key': 'secret'}
+
+
+def test_init_and_default_sources_get_field_value_stubs():
+    """`get_field_value` is unused by these sources; it exists to satisfy the abstract API."""
+
+    class Settings(BaseSettings):
+        foo: str = 'default'
+
+    field = Settings.model_fields['foo']
+
+    assert InitSettingsSource(Settings, {}).get_field_value(field, 'foo') == (None, '', False)
+    assert DefaultSettingsSource(Settings).get_field_value(field, 'foo') == (None, '', False)
+
+
+def test_settings_customise_sources_returning_no_sources():
+    """With no sources at all, no values are built and field defaults apply."""
+
+    class Settings(BaseSettings):
+        foo: str = 'default'
+
+        @classmethod
+        def settings_customise_sources(cls, settings_cls, **_kwargs):
+            return ()
+
+    assert Settings._settings_build_values((), {}) == {}
+    assert Settings().model_dump() == {'foo': 'default'}
 
 
 def test_nested_dataclass(env):
@@ -3458,6 +3591,19 @@ def test_dotenv_with_extra_and_env_prefix(tmp_path):
     assert s.model_dump() == {'foo': '1', 'extra_var': 'extra_value'}
 
 
+def test_dotenv_with_extra_and_uppercase_env_prefix(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('XXX__FOO=1\nXXX__EXTRA_VAR=extra_value')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(extra='allow', env_file=p, env_prefix='XXX__')
+
+        foo: str = ''
+
+    s = Settings()
+    assert s.model_dump() == {'foo': '1', 'extra_var': 'extra_value'}
+
+
 def test_nested_field_with_alias_init_source():
     class NestedSettings(BaseModel):
         foo: str = Field(alias='fooAlias')
@@ -4035,6 +4181,23 @@ def test_dotenv_match_prefix(tmp_path, prefix, case_sensitive):
         assert s.model_dump() == v
 
 
+def test_dotenv_match_prefix_case_normalization_changes_length(tmp_path):
+    # `'İ'.lower()` is two code points, so slicing with the raw `env_prefix` length
+    # would under-strip and leave a partial prefix behind.
+    p = tmp_path / '.env'
+    p.write_text('İX_FOO=1\nİX_BAR=2', encoding='utf-8')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=p,
+            env_prefix='İX_',
+            dotenv_filtering='match_prefix',
+            extra='allow',
+        )
+
+    assert Settings().model_dump() == {'foo': '1', 'bar': '2'}
+
+
 @pytest.mark.parametrize('filtering', ['match_prefix', None])
 def test_dotenv_match_prefix_nested_delimiter(tmp_path, filtering):
     p = tmp_path / '.env'
@@ -4225,6 +4388,68 @@ def test_warns_if_config_keys_are_set_but_source_is_missing():
         assert warning.message.args[0] == expected_message
 
 
+def test_warns_if_nested_secrets_config_keys_are_set_but_source_is_missing():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            secrets_dir_missing='error',
+            secrets_dir_max_size=1024,
+            secrets_case_sensitive=True,
+            secrets_prefix='app_',
+            secrets_nested_delimiter='__',
+            secrets_nested_subdir=True,
+        )
+
+    with pytest.warns() as record:
+        Settings()
+
+    keys = (
+        'secrets_dir_missing',
+        'secrets_dir_max_size',
+        'secrets_case_sensitive',
+        'secrets_prefix',
+        'secrets_nested_delimiter',
+        'secrets_nested_subdir',
+    )
+
+    def expected_message(key: str) -> str:
+        return (
+            f'Config key `{key}` is set in model_config but will be ignored because no '
+            'NestedSecretsSettingsSource source is configured. To use this config key, add a '
+            'NestedSecretsSettingsSource source to the settings sources via the settings_customise_sources hook.'
+        )
+
+    assert all(warning.category is UserWarning for warning in record)
+    # Compare as sets so the test does not depend on the order the keys are checked in.
+    assert {warning.message.args[0] for warning in record} == {expected_message(key) for key in keys}
+    assert len(record) == len(keys)
+
+
+@pytest.mark.parametrize(
+    'config',
+    [
+        {'secrets_dir_missing': 'error'},
+        {'secrets_dir_max_size': 1024},
+        {'secrets_case_sensitive': True},
+        {'secrets_prefix': 'app_'},
+        {'secrets_nested_delimiter': '__'},
+        {'secrets_nested_subdir': True},
+    ],
+)
+def test_does_not_warn_if_nested_secrets_config_keys_are_set_and_source_is_configured(config, tmp_path):
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(secrets_dir=tmp_path, **config)
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            return (init_settings, env_settings, dotenv_settings, NestedSecretsSettingsSource(file_secret_settings))
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        Settings()
+
+
 def test_env_strict_coercion(env):
     class SubModel(BaseModel):
         my_str: str
@@ -4325,6 +4550,58 @@ def test_env_strict_coercion_non_json_value(env):
             'input': 'not-a-number',
         }
     ]
+
+
+def test_env_strict_coercion_none_str_passthrough(env):
+    """`env_parse_none_str` matches are left alone rather than strict-coerced."""
+
+    class Settings(BaseSettings, strict=True, env_parse_none_str='null'):
+        my_int: StrictInt | None = None
+
+    env.set('MY_INT', 'null')
+    assert Settings().my_int is None
+
+
+def test_env_strict_coercion_skips_json_annotation(env):
+    """`Json`-annotated fields keep their raw string so the Json parser handles them."""
+
+    # The strict-annotated union member enables coercion, but the `Json` marker opts out of it.
+    class Settings(BaseSettings):
+        my_json: Json[StrictInt] | None = None
+
+    env.set('MY_JSON', '42')
+    assert Settings().my_json == 42
+
+
+def test_env_strict_coercion_json_decodes_to_str(env):
+    """A JSON string that decodes to another string re-raises the original validation error."""
+
+    class Settings(BaseSettings, strict=True):
+        my_int: StrictInt = 0
+
+    env.set('MY_INT', '"hello"')
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert exc_info.value.errors(include_url=False) == [
+        {
+            'type': 'int_type',
+            'loc': ('my_int',),
+            'msg': 'Input should be a valid integer',
+            'input': '"hello"',
+        }
+    ]
+
+
+def test_matches_alias_path_head_non_field_info():
+    """The alias-path check only applies to `FieldInfo`; anything else is not a path head."""
+
+    class Settings(BaseSettings):
+        foo: str = 'x'
+
+    source = EnvSettingsSource(Settings)
+
+    assert source._matches_alias_path_head(None, 'foo') is False
+    assert source._matches_alias_path_head(int, 'foo') is False
 
 
 def test_env_source_when_load_multi_nested_config(env):

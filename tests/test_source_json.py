@@ -243,3 +243,52 @@ class TestTraversableSupport:
         s = Settings()
         # "test" value in file
         assert s.foobar == 'test'
+
+
+def test_json_file_is_read_as_utf8_by_default(tmp_path: Path, non_utf8_default_encoding: str) -> None:
+    p = tmp_path / 'config.json'
+    p.write_text('{"name": "Álvaro", "city": "café"}', encoding='utf-8')
+
+    class Settings(BaseSettings):
+        name: str
+        city: str
+
+        model_config = SettingsConfigDict(json_file=p)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (JsonConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.name == 'Álvaro'
+    assert s.city == 'café'
+
+
+def test_json_file_encoding_overrides_the_utf8_default(tmp_path: Path) -> None:
+    p = tmp_path / 'config.json'
+    p.write_bytes('{"city": "café"}'.encode('latin-1'))
+
+    class Settings(BaseSettings):
+        city: str
+
+        model_config = SettingsConfigDict(json_file=p, json_file_encoding='latin-1')
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (JsonConfigSettingsSource(settings_cls),)
+
+    assert Settings().city == 'café'

@@ -12,6 +12,7 @@ from .cli import (
     CliSubCommand,
     CliSuppress,
     CliToggleFlag,
+    CliVariadicArg,
 )
 from .dotenv import DotEnvSettingsSource
 from .env import EnvSettingsSource
@@ -36,6 +37,7 @@ __all__ = [
     'CliSubCommand',
     'CliSuppress',
     'CliToggleFlag',
+    'CliVariadicArg',
     'DotEnvSettingsSource',
     'EnvSettingsSource',
     'GoogleSecretManagerSettingsSource',

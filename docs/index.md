@@ -250,6 +250,78 @@ Check the [`Field` aliases documentation](fields.md#field-aliases) for more info
     del os.environ['SUB_VAR1']
     ```
 
+### Unknown environment variables
+
+Environment variables that do not match a settings field or its alias are ignored, even if they start
+with `env_prefix` and `extra='forbid'` is set. The `extra` setting validates inputs passed to the model;
+it does not check every name in `os.environ`. A misspelled field name can therefore leave a default
+value in use without raising an error:
+
+```py
+import os
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix='APP_', extra='forbid')
+    port: int = 5432
+
+
+os.environ['APP_PRT'] = '6543'  # (1)!
+print(Settings().port)
+#> 5432
+del os.environ['APP_PRT']
+```
+
+1. Misspelled, so it matches no field and is dropped before validation runs.
+
+The same applies to nested models: an incorrect `env_nested_delimiter` keeps the variable from matching
+a field. Once a variable *does* match a known field's nested prefix, however, its contents are passed to
+that field for validation, so an unknown key inside a nested model can raise a `ValidationError` if that
+nested model has `extra='forbid'`:
+
+```py
+import os
+
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Database(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    port: int = 5432
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix='APP_', env_nested_delimiter='__', extra='forbid'
+    )
+    database: Database = Database()
+
+
+# A single underscore does not match the database field's nested prefix.
+os.environ['APP_DATABASE_PORT'] = '6543'
+print(Settings().database.port)
+#> 5432
+del os.environ['APP_DATABASE_PORT']
+
+# The nested prefix matches, so the unknown key reaches Database's validation.
+os.environ['APP_DATABASE__PRT'] = '6543'
+try:
+    Settings()
+except ValidationError as exc:
+    print(exc.errors()[0]['type'])
+    #> extra_forbidden
+del os.environ['APP_DATABASE__PRT']
+```
+
+For extra variables loaded from `.env` files and the effect of `dotenv_filtering`, see
+[Dotenv (.env) support](#dotenv-env-support).
+
+### Environment variable prefix targets
+
 To apply `env_prefix` not only to variable names but also to aliases, set `env_prefix_target='all'`.
 To apply `env_prefix` only to aliases and not to variable names, set `env_prefix_target='alias'`.
 To apply `env_prefix` only to variable names (the default behavior), set `env_prefix_target='variable'`.
@@ -463,8 +535,9 @@ If you have multiple variables with the same structure they will be merged.
     collects values for sub model fields separately, and you may get unexpected results.
 
 !!! note
-    The `env_nested_delimiter` option applies only to variables that point to declared fields.
-    If a variable points to an unknown field no conversion will take place.
+    The `env_nested_delimiter` option applies to variables that match a declared top-level field's
+    name or alias. Unknown keys within that field's nested value are still subject to the nested
+    model's validation. See [Unknown environment variables](#unknown-environment-variables).
 
 As an example, given the following environment variables:
 ```bash
@@ -1163,6 +1236,20 @@ sys.argv = ['example.py', '--fullname', 'John', '--lname', 'Doe']
 print(User().model_dump())
 #> {'first_name': 'John', 'last_name': 'Doe'}
 ```
+
+### Variadic named options
+
+Collection fields are repeated options by default (`--param a --param b`). This covers any
+`Sequence`, `Set`, or `Mapping` type, including subclasses such as `tuple`, `frozenset`,
+`deque`, and `OrderedDict`. `str`, `bytes`, and `bytearray` are sequences too, but they take
+a single value. Wrap a collection field in `CliVariadicArg` to accept remaining values after
+a single option (`--param a b c`).
+
+Repeating the option **replaces** the previous values (`--param a b --param c` becomes
+`['c']`), which is the opposite of `action=append`. `nargs='*'` is greedy: it consumes
+values until the next option flag, so a following subcommand name can be swallowed.
+
+`CliVariadicArg` is ignored on `AliasPath` fields; those still use `action=append`.
 
 ### Subcommands and Positional Arguments
 
@@ -2304,9 +2391,11 @@ The default secrets implementation, `SecretsSettingsSource`, has behaviour that 
 For example, the default implementation does not support secret fields in nested submodels.
 
 `NestedSecretsSettingsSource` can be used as a drop-in replacement to `SecretsSettingsSource` to adjust the default behaviour.
+It is opt-in: you have to configure it explicitly via the `settings_customise_sources` hook (see the examples below),
+otherwise `BaseSettings` keeps using the default `SecretsSettingsSource`.
 All differences are summarized in the table below.
 
-| `SecretsSettingsSource`                                                                                                                                         | `NestedSecretsSettingsSourcee`                                                                                                    |
+| `SecretsSettingsSource`                                                                                                                                         | `NestedSecretsSettingsSource`                                                                                                    |
 |-----------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
 | Secret fields must belong to a top level model.                                                                                                                 | Secrets can be fields of nested models.                                                                                           |
 | Secret files can be placed in `secrets_dir`s only.                                                                                                              | Secret files can be placed in subdirectories for nested models.                                                                   |
@@ -2490,6 +2579,13 @@ class Settings(BaseSettings):
 ```
 
 ### Configuration Options
+
+!!! note
+    Apart from `secrets_dir`, which is shared with `SecretsSettingsSource`, all of the options below are read
+    only by `NestedSecretsSettingsSource`. They have no effect unless you add that source to your settings
+    sources via the `settings_customise_sources` hook, as shown in the examples above — the default
+    `SecretsSettingsSource` ignores them. Setting one of them without configuring the source raises a
+    `UserWarning` telling you it will be ignored.
 
 #### secrets_dir
 

@@ -142,7 +142,7 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
                 warnings.warn(f'directory "{path}" does not exist', stacklevel=2)
             elif self.secrets_dir_missing == 'error':
                 raise SettingsError(f'directory "{path}" does not exist')
-            else:
+            else:  # pragma: no cover
                 raise ValueError  # unreachable, checked before
         else:
             if not path.is_dir():

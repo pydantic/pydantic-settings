@@ -8,6 +8,7 @@ import pytest
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from typing import IO, Any
 
 
 class SetEnv:
@@ -77,20 +78,29 @@ def non_utf8_default_encoding(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
 
     The real lever is the platform locale, which a test cannot portably change: on
     CPython the default encoding for ``open()`` is resolved in C and ignores a patched
-    ``locale.getpreferredencoding``. So instead this makes ``Path.read_text()`` fall back
-    to cp1252 (a stand-in for any non-UTF-8 Windows code page) when the caller does not
-    pass an encoding, which is exactly the bug's precondition.
+    ``locale.getpreferredencoding``. So instead this makes ``Path.read_text()`` and
+    ``Path.open()`` fall back to cp1252 (a stand-in for any non-UTF-8 Windows code page)
+    when the caller does not pass an encoding, which is exactly the bug's precondition.
 
     Reads that pass an explicit encoding are untouched, so a source that names its
     encoding is unaffected and one that relies on the default is caught on any platform.
     """
     fallback = 'cp1252'
     real_read_text = Path.read_text
+    real_open = Path.open
 
     def read_text(self: Path, encoding: str | None = None, *args: object, **kwargs: object) -> str:
         return real_read_text(self, encoding or fallback, *args, **kwargs)
 
+    def open_(
+        self: Path, mode: str = 'r', buffering: int = -1, encoding: str | None = None, *args: object, **kwargs: object
+    ) -> IO[Any]:
+        if 'b' not in mode:
+            encoding = encoding or fallback
+        return real_open(self, mode, buffering, encoding, *args, **kwargs)
+
     monkeypatch.setattr(Path, 'read_text', read_text)
+    monkeypatch.setattr(Path, 'open', open_)
     yield fallback
 
 

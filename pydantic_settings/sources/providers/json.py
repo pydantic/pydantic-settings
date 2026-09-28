@@ -43,7 +43,11 @@ class JsonConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         super().__init__(settings_cls, self.json_data, _init_state=_init_state)
 
     def _read_file(self, file_path: Path | Traversable) -> dict[str, Any]:
-        with file_path.open(encoding=self.json_file_encoding) as json_file:
+        # Default to UTF-8 rather than the locale encoding, matching `DotEnvSettingsSource`
+        # and `SecretsSettingsSource`: RFC 8259 mandates UTF-8 for interchanged JSON, and
+        # the locale default corrupts (or fails to decode) it on a non-UTF-8 Windows code page.
+        encoding = self.json_file_encoding if self.json_file_encoding is not None else 'utf-8'
+        with file_path.open(encoding=encoding) as json_file:
             content = json_file.read()
         # An empty (or whitespace-only) file is not valid JSON; treat it as an empty
         # mapping so it falls back to defaults, mirroring `YamlConfigSettingsSource`'s

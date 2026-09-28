@@ -709,6 +709,48 @@ class TestGoogleSecretManagerSettingsSource:
         assert val2 == 'secret-value'
         assert client.access_secret_version.call_count == 1
 
+    def test_secret_version_annotation_case_insensitive_unknown_secret(self, mock_secret_client_factory):
+        """A versioned alias missing from the secret map is skipped, leaving the default in place."""
+        client = mock_secret_client_factory([{'name': 'other-secret', 'value': 'other-value'}])
+
+        class Settings(BaseSettings):
+            model_config = SettingsConfigDict(populate_by_name=True, case_sensitive=False)
+            v1: Annotated[str, Field(alias='missing-secret'), SecretVersion('1')] = 'fallback'
+
+            @classmethod
+            def settings_customise_sources(
+                cls,
+                settings_cls: type[BaseSettings],
+                init_settings: PydanticBaseSettingsSource,
+                env_settings: PydanticBaseSettingsSource,
+                dotenv_settings: PydanticBaseSettingsSource,
+                file_secret_settings: PydanticBaseSettingsSource,
+            ) -> tuple[PydanticBaseSettingsSource, ...]:
+                return (GoogleSecretManagerSettingsSource(settings_cls, secret_client=client, case_sensitive=False),)
+
+        assert Settings().v1 == 'fallback'
+
+    def test_project_resolved_once(self, mock_secret_client_factory, mocker):
+        """A resolved project_id is cached, so a second call does not re-run auth resolution."""
+        client = mock_secret_client_factory([{'name': 'test-secret', 'value': 'secret-value'}])
+
+        class Settings(BaseSettings):
+            test_secret: str = Field(..., alias='test-secret')
+
+        source = GoogleSecretManagerSettingsSource(
+            Settings, secret_client=client, project_id='test-project', case_sensitive=True
+        )
+
+        # The first call resolves the project and builds the mapping.
+        assert source()['test-secret'] == 'secret-value'
+        assert source._project_id == 'test-project'
+
+        auth_default = mocker.patch('pydantic_settings.sources.providers.gcp.google_auth_default')
+
+        # The second call takes the cached-project early return in _resolve_gcp_project.
+        assert source()['test-secret'] == 'secret-value'
+        auth_default.assert_not_called()
+
     def test_init_triggers_import(self, mocker, test_settings):
         """Test that initializing the source triggers the import if globals are None."""
         mocker.patch('pydantic_settings.sources.providers.gcp.SecretManagerServiceClient', None)

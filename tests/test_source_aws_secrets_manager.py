@@ -89,6 +89,27 @@ class TestAWSSecretsManagerSettingsSource:
         assert settings['SqlServer']['Password'] == 'test-password'
 
     @mock_aws
+    def test_version_id(self) -> None:
+        """A pinned `version_id` reads that version instead of the latest one."""
+
+        class AWSSecretsManagerSettings(BaseSettings):
+            """AWSSecretsManager settings."""
+
+            user: str
+
+        client = boto3.client('secretsmanager')
+        created = client.create_secret(Name='test-secret', SecretString=json.dumps({'user': 'v1-user'}))
+        client.put_secret_value(SecretId='test-secret', SecretString=json.dumps({'user': 'v2-user'}))
+
+        pinned = AWSSecretsManagerSettingsSource(
+            AWSSecretsManagerSettings, 'test-secret', version_id=created['VersionId']
+        )
+        assert pinned()['user'] == 'v1-user'
+
+        latest = AWSSecretsManagerSettingsSource(AWSSecretsManagerSettings, 'test-secret')
+        assert latest()['user'] == 'v2-user'
+
+    @mock_aws
     def test_secret_manager_case_insensitive_success(self) -> None:
         """Test secret manager getitem case insensitive success."""
 
