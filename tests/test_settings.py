@@ -1033,7 +1033,7 @@ def test_alias_nested_model_default_partial_update():
 
 
 def test_nested_model_default_partial_update_with_discriminated_union():
-    """Test that nested_model_default_partial_update skips discriminated union fields.
+    """Test that nested_model_default_partial_update skips discriminated union fields selecting a different type.
 
     When a field uses a discriminated union, the default model's fields should not bleed
     into the incoming value when the discriminator selects a different type.
@@ -1073,6 +1073,70 @@ def test_nested_model_default_partial_update_with_discriminated_union():
     # Test that the default is used when no value is provided
     result = SettingsAnnotated.model_validate_json('{}')
     assert result.root_field == SubModel1()
+
+
+def test_nested_model_default_partial_update_with_discriminated_union_same_type(env):
+    """Test that nested_model_default_partial_update applies to discriminated union fields.
+
+    The default model's fields should be kept when the incoming value doesn't select a different type.
+    See: https://github.com/pydantic/pydantic-settings/issues/996
+    """
+
+    class SubModel1(BaseModel):
+        discriminator: Literal['submodel1'] = 'submodel1'
+        submodel1_field: str = 'foo'
+        other_field: str = 'foo'
+
+    class SubModel2(BaseModel):
+        model_config = ConfigDict(extra='forbid')
+        discriminator: Literal['submodel2'] = 'submodel2'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', nested_model_default_partial_update=True)
+        root_field: Annotated[SubModel1 | SubModel2, Discriminator('discriminator')] = SubModel1(submodel1_field='bar')
+
+    env.set('ROOT_FIELD__OTHER_FIELD', 'baz')
+    assert Settings().root_field == SubModel1(submodel1_field='bar', other_field='baz')
+
+    # Test that selecting the same type as the default keeps the default's fields
+    env.set('ROOT_FIELD__DISCRIMINATOR', 'submodel1')
+    assert Settings().root_field == SubModel1(submodel1_field='bar', other_field='baz')
+
+    # Test that selecting another type doesn't keep the default's fields
+    env.pop('ROOT_FIELD__OTHER_FIELD')
+    env.set('ROOT_FIELD__DISCRIMINATOR', 'submodel2')
+    assert Settings().root_field == SubModel2()
+
+    # Test that the discriminator value is also looked up by its alias
+    class AliasSubModel1(BaseModel):
+        kind: Literal['submodel1'] = Field('submodel1', alias='type')
+        submodel1_field: str = 'foo'
+
+    class AliasSubModel2(BaseModel):
+        model_config = ConfigDict(extra='forbid')
+        kind: Literal['submodel2'] = Field('submodel2', alias='type')
+
+    class SettingsAlias(BaseSettings):
+        model_config = SettingsConfigDict(nested_model_default_partial_update=True)
+        root_field: Annotated[AliasSubModel1 | AliasSubModel2, Discriminator('kind')] = AliasSubModel1(
+            submodel1_field='bar'
+        )
+
+    assert SettingsAlias(root_field={'type': 'submodel1'}).root_field == AliasSubModel1(submodel1_field='bar')
+    assert SettingsAlias(root_field={'type': 'submodel2'}).root_field == AliasSubModel2()
+
+    # Test that a callable discriminator skips partial updates, as the selected type can't be looked up
+    def get_discriminator_value(v: Any) -> Hashable:
+        return v.get('discriminator') if isinstance(v, dict) else v.discriminator
+
+    class SettingsCallable(BaseSettings):
+        model_config = SettingsConfigDict(nested_model_default_partial_update=True)
+        root_field: Annotated[
+            Annotated[SubModel1, Tag('submodel1')] | Annotated[SubModel2, Tag('submodel2')],
+            Discriminator(get_discriminator_value),
+        ] = SubModel1(submodel1_field='bar')
+
+    assert SettingsCallable(root_field={'discriminator': 'submodel2'}).root_field == SubModel2()
 
 
 def test_env_str(env):
