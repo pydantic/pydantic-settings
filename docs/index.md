@@ -2618,6 +2618,11 @@ If multiple `secrets_dir` passed, the limit applies to each directory independen
 
 Same as `case_sensitive`, but works for secrets only. If not specified, defaults to `case_sensitive`.
 
+Unlike `case_sensitive` for environment variables, this option is honored on every platform.
+`os.environ` is case-insensitive on Windows, so `EnvSettingsSource` falls back to
+case-insensitive matching there; secrets are files and keep their case, so no such fallback
+applies.
+
 #### secrets_nested_delimiter
 
 Same as `env_nested_delimiter`, but works for secrets only. If not specified, defaults to `env_nested_delimiter`.
