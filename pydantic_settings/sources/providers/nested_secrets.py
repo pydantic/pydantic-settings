@@ -1,7 +1,6 @@
 import os
 import warnings
-from collections.abc import Iterator
-from functools import reduce
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
@@ -119,20 +118,28 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
         )
         self.env_parse_none_str = None  # update manually because of None
 
-        # update parent members
-        if not len(self.secrets_paths):
-            self.env_vars = {}
-        else:
-            secrets = reduce(
-                lambda d1, d2: dict((*d1.items(), *d2.items())),
-                (self.load_secrets(p) for p in self.secrets_paths),
+    def _load_env_vars(self) -> Mapping[str, str | None]:
+        # Overridden so that the base implementation never runs: secrets come from files,
+        # not ``os.environ``, so the case-insensitivity of the Windows environment must not
+        # be applied here. NTFS preserves filename case, and the downgrade would silently
+        # ignore ``secrets_case_sensitive=True``. ``DotEnvSettingsSource`` overrides this
+        # method for the same reason.
+        self.env_parse_none_str = None  # match SecretsSettingsSource behaviour
+
+        # Normalize each directory before merging so that the last directory wins. Merging
+        # raw filenames first would keep the earlier key's insertion position, so a later
+        # ``TOKEN`` could not displace an earlier ``token`` once names are case-folded.
+        secrets: dict[str, str | None] = {}
+        for path in self.secrets_paths:
+            secrets.update(
+                parse_env_vars(
+                    self.load_secrets(path),
+                    self.case_sensitive,
+                    self.env_ignore_empty,
+                    self.env_parse_none_str,
+                )
             )
-            self.env_vars = parse_env_vars(
-                secrets,
-                self.case_sensitive,
-                self.env_ignore_empty,
-                self.env_parse_none_str,
-            )
+        return secrets
 
     def validate_secrets_path(self, path: Path) -> None:
         if not path.exists():
