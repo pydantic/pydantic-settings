@@ -4,13 +4,7 @@ Test pydantic_settings.JsonConfigSettingsSource.
 
 import importlib.resources
 import json
-import sys
-
-if sys.version_info < (3, 11):
-    from importlib.abc import Traversable
-else:
-    from importlib.resources.abc import Traversable
-
+from importlib.resources.abc import Traversable
 from pathlib import Path
 
 import pytest
