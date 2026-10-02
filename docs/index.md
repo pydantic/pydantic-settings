@@ -1141,6 +1141,28 @@ print(Settings().model_dump())
 #> {'my_list': [1, 2]}
 ```
 
+Use the JSON style `--field='[]'` to set an empty list. An empty array contributes no
+items, so it is ignored when intermixed with other list arguments:
+
+```py
+import sys
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings, cli_parse_args=True):
+    my_list: list[int] = [1, 2]
+
+
+sys.argv = ['example.py', '--my_list', '[]']
+print(Settings().model_dump())
+#> {'my_list': []}
+
+sys.argv = ['example.py', '--my_list', '[]', '--my_list', '3']
+print(Settings().model_dump())
+#> {'my_list': [3]}
+```
+
 #### Dictionaries
 
 CLI argument parsing of dictionaries supports intermixing of any of the below two styles:

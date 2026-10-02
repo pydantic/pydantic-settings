@@ -1373,6 +1373,53 @@ def test_cli_list_json_value_parsing(arg_spaces):
 
 
 @pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
+def test_cli_empty_list_arg(arg_spaces):
+    class Child(BaseModel):
+        nested_list: list[list[int]]
+
+    class Cfg(BaseSettings):
+        str_list: list[str] = ['default']
+        int_list: list[int] = [1]
+        str_set: set[str] = {'default'}
+        str_tuple: tuple[str, ...] = ('default',)
+        child: Child | None = None
+
+    assert CliApp.run(Cfg, cli_args=['--str_list', arg_spaces('[]')]).str_list == []
+    assert CliApp.run(Cfg, cli_args=['--int_list', arg_spaces('[]')]).int_list == []
+    assert CliApp.run(Cfg, cli_args=['--str_set', arg_spaces('[]')]).str_set == set()
+    assert CliApp.run(Cfg, cli_args=['--str_tuple', arg_spaces('[]')]).str_tuple == ()
+
+    # An empty array nested in a list of lists is an item, but an outer empty array is not.
+    assert CliApp.run(Cfg, cli_args=['--child.nested_list', arg_spaces('[]')]).child.nested_list == []
+    assert CliApp.run(Cfg, cli_args=['--child.nested_list', arg_spaces('[[]]')]).child.nested_list == [[]]
+
+    # An empty array contributes no items when intermixed with other list styles.
+    assert CliApp.run(Cfg, cli_args=['--str_list', '[]', '--str_list', '[]']).str_list == []
+    assert CliApp.run(Cfg, cli_args=['--str_list', '[]', '--str_list', 'a,b']).str_list == ['a', 'b']
+    assert CliApp.run(Cfg, cli_args=['--str_list', 'a,b', '--str_list', '[]']).str_list == ['a', 'b']
+    assert CliApp.run(Cfg, cli_args=['--str_list', '[]', '--str_list', '["a"]']).str_list == ['a']
+
+    # An explicitly empty string is still a value, and so is a quoted or nested "[]".
+    assert CliApp.run(Cfg, cli_args=['--str_list', '[""]']).str_list == ['']
+    assert CliApp.run(Cfg, cli_args=['--str_list', '']).str_list == ['']
+    assert CliApp.run(Cfg, cli_args=['--str_list', '[,]']).str_list == ['', '']
+    assert CliApp.run(Cfg, cli_args=['--str_list', '["[]"]']).str_list == ['[]']
+
+
+@pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
+def test_cli_empty_list_arg_preserves_mapping_union(arg_spaces):
+    class Cfg(BaseSettings):
+        check_union: dict[str, str] | list[str] = {}
+
+    # An empty array must not flip a mapping union over to its list branch.
+    assert CliApp.run(Cfg, cli_args=['--check_union', arg_spaces('[]')]).check_union == {}
+    assert CliApp.run(Cfg, cli_args=['--check_union', '[]', '--check_union', 'k1=a']).check_union == {'k1': 'a'}
+    assert CliApp.run(Cfg, cli_args=['--check_union', 'k1=a', '--check_union', '[]']).check_union == {'k1': 'a'}
+    assert CliApp.run(Cfg, cli_args=['--check_union', '{"k1":"a"}', '--check_union', '[]']).check_union == {'k1': 'a'}
+    assert CliApp.run(Cfg, cli_args=['--check_union', '["a"]', '--check_union', '[]']).check_union == ['a']
+
+
+@pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
 @pytest.mark.parametrize('prefix', ['', 'child.'])
 def test_cli_dict_arg(prefix, arg_spaces):
     class Child(BaseModel):
