@@ -765,8 +765,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     # list.
                     break
                 val = val.strip()
+                is_empty_array = False
                 if val.startswith('[') and val.endswith(']'):
                     val = val[1:-1].strip()
+                    is_empty_array = not val
                 while val:
                     val = val.strip()
                     if val.startswith(','):
@@ -784,7 +786,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                                 merge_type = inferred_type
                                 val = self._consume_string_or_number(val, merged_list, merge_type)
                         is_last_consumed_a_value = True
-                if not is_last_consumed_a_value:
+                if not is_last_consumed_a_value and not is_empty_array:
+                    # An explicitly empty array contributes no items, unlike a missing value.
                     val = self._consume_comma(val, merged_list, is_last_consumed_a_value)
 
             if merge_type is str:
