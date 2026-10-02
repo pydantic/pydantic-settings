@@ -1682,7 +1682,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if _CliSubCommand in field_info.metadata and model_default is None:
                 continue
             if _CliUnknownArgs in field_info.metadata:
-                optional_args += model_default
+                # Unknown args are registered without option names or positional metadata, so there is no parser map
+                # entry to serialize from. Append the captured args verbatim, after any known positionals, to preserve
+                # the relative order of positionals when round-tripping.
+                positional_args += model_default
                 continue
             arg = next(iter(self._parser_map[field_info].values()))
             if arg.subcommand_dest:

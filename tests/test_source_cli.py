@@ -4637,3 +4637,26 @@ def test_serialize_cli_unknown_args():
     serialized_root = CliApp.serialize(root)
     assert serialized_root == ['--flag', 'world', 'sub_cmd', '--v0', '2', '--unk-sub=3', 'pos-sub']
     assert CliApp.run(Root, cli_args=serialized_root) == root
+
+
+def test_serialize_cli_unknown_args_with_positional():
+    class Cfg(BaseSettings, cli_ignore_unknown_args=True):
+        pos: CliPositionalArg[str]
+        flag: str = 'hello'
+        unknown_args: CliUnknownArgs
+
+    # Unknown args must be serialized after the known positional, otherwise an unknown positional would be
+    # consumed as `pos` when round-tripping.
+    cfg = CliApp.run(Cfg, cli_args=['known-pos', 'unk-pos'])
+    serialized = CliApp.serialize(cfg)
+    assert serialized == ['known-pos', 'unk-pos']
+    assert CliApp.run(Cfg, cli_args=serialized) == cfg
+
+    cfg = CliApp.run(Cfg, cli_args=['known-pos', '--flag=world', '--unk-opt=1', 'unk-pos'])
+    serialized = CliApp.serialize(cfg)
+    assert serialized == ['--flag', 'world', 'known-pos', '--unk-opt=1', 'unk-pos']
+    assert CliApp.run(Cfg, cli_args=serialized) == cfg
+
+    serialized = CliApp.serialize(cfg, positionals_first=True)
+    assert serialized == ['known-pos', '--unk-opt=1', 'unk-pos', '--flag', 'world']
+    assert CliApp.run(Cfg, cli_args=serialized) == cfg
