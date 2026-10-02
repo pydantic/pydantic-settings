@@ -13,6 +13,7 @@ from pydantic_settings import (
     SettingsConfigDict,
     SettingsError,
 )
+from pydantic_settings.sources.providers import env as env_provider
 from pydantic_settings.sources.providers.nested_secrets import SECRETS_DIR_MAX_SIZE
 
 
@@ -499,6 +500,77 @@ def test_multiple_secrets_dirs(conf: SettingsConfigDict, secrets, dirs, expected
     # unexpected
     else:
         raise AssertionError('unreachable')
+
+
+@pytest.mark.parametrize(
+    ('case_sensitive', 'expected'),
+    (
+        (False, 'third'),
+        (True, 'second'),
+    ),
+)
+@pytest.mark.parametrize('environ_is_case_insensitive', (False, True), ids=('posix', 'windows'))
+def test_last_directory_wins_when_secret_filenames_differ_by_case(
+    tmp_files, case_sensitive, expected, environ_is_case_insensitive
+):
+    """Last secrets_dir wins when filenames differ only by case (#960).
+
+    Parametrized over the ``os.environ`` case-insensitivity probe to pin that secret files
+    are matched on their own terms: the Windows environment rule must not leak in here.
+    """
+    tmp_files.write(
+        {
+            'dir1/TOKEN': 'first',
+            'dir2/token': 'second',
+            'dir3/TOKEN': 'third',
+        }
+    )
+    secrets_dirs = [tmp_files.basedir / name for name in ('dir1', 'dir2', 'dir3')]
+
+    class Settings(BaseSettings):
+        token: str
+
+        model_config = SettingsConfigDict(secrets_dir=secrets_dirs, secrets_case_sensitive=case_sensitive)
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls,
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+        ):
+            return (NestedSecretsSettingsSource(file_secret_settings),)
+
+    with patch.object(env_provider, '_environ_is_case_insensitive', return_value=environ_is_case_insensitive):
+        assert Settings().token == expected
+
+
+@pytest.mark.parametrize('environ_is_case_insensitive', (False, True), ids=('posix', 'windows'))
+def test_secrets_case_sensitive_is_not_downgraded_for_files(tmp_files, environ_is_case_insensitive):
+    """``secrets_case_sensitive`` is honored regardless of ``os.environ`` case-insensitivity.
+
+    ``EnvSettingsSource._load_env_vars`` downgrades ``case_sensitive`` on Windows because
+    ``os.environ`` cannot be matched case-sensitively (#295). Secrets are files, and NTFS
+    preserves filename case, so that downgrade must not reach this source.
+
+    The two names live in separate directories so the fixture works on case-insensitive
+    filesystems, where ``TOKEN`` and ``token`` cannot coexist in one directory.
+    """
+    tmp_files.write({'upper/TOKEN': 'upper', 'lower/token': 'lower'})
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            secrets_dir=[tmp_files.basedir / 'upper', tmp_files.basedir / 'lower'],
+            secrets_case_sensitive=True,
+        )
+
+    with patch.object(env_provider, '_environ_is_case_insensitive', return_value=environ_is_case_insensitive):
+        source = NestedSecretsSettingsSource(Settings)
+
+    assert source.case_sensitive is True
+    assert dict(source.env_vars) == {'TOKEN': 'upper', 'token': 'lower'}
 
 
 def test_strip_whitespace(env, tmp_files):
