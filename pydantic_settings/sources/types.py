@@ -2,15 +2,10 @@
 
 from __future__ import annotations as _annotations
 
-import sys
 from collections.abc import Sequence
+from importlib.resources.abc import Traversable as Traversable  # noqa: PLC0414  (explicit re-export)
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
-
-if sys.version_info >= (3, 11):
-    from importlib.resources.abc import Traversable as Traversable  # noqa: PLC0414  (explicit re-export)
-else:
-    from importlib.abc import Traversable as Traversable  # noqa: PLC0414  (explicit re-export)
 
 if TYPE_CHECKING:
     from pydantic._internal._dataclasses import PydanticDataclass

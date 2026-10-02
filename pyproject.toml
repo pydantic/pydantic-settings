@@ -20,7 +20,6 @@ classifiers = [
     'Programming Language :: Python',
     'Programming Language :: Python :: 3',
     'Programming Language :: Python :: 3 :: Only',
-    'Programming Language :: Python :: 3.10',
     'Programming Language :: Python :: 3.11',
     'Programming Language :: Python :: 3.12',
     'Programming Language :: Python :: 3.13',
@@ -38,7 +37,7 @@ classifiers = [
     'Topic :: Software Development :: Libraries :: Python Modules',
     'Topic :: Internet',
 ]
-requires-python = '>=3.10'
+requires-python = '>=3.11'
 dependencies = [
     'pydantic>=2.7.0',
     'python-dotenv>=1.2.2',
@@ -49,7 +48,8 @@ dynamic = ['version']
 
 [project.optional-dependencies]
 yaml = ["pyyaml>=6.0.1"]
-toml = ["tomli>=2.0.1"]
+# kept for backwards compatibility, `tomllib` is part of the standard library since Python 3.11
+toml = []
 azure-key-vault = ["azure-keyvault-secrets>=4.8.0", "azure-identity>=1.16.0"]
 aws-secrets-manager = ["boto3>=1.35.0"]
 aws-systems-manager = ["boto3>=1.35.0"]
@@ -135,7 +135,7 @@ source = [
 
 [tool.ruff]
 line-length = 120
-target-version = 'py310'
+target-version = 'py311'
 
 [tool.ruff.lint.pyupgrade]
 keep-runtime-typing = true
@@ -154,7 +154,7 @@ ignore = [
     'BLE001',
     'S110',
     # `pytest-examples` lints the docs snippets with its own (broader) rule set, which
-    # selects `FA`. We target 3.10+ and use PEP 604/585 syntax without `from __future__
+    # selects `FA`. We target 3.11+ and use PEP 604/585 syntax without `from __future__
     # import annotations`, so these would fail every example in docs/index.md.
     'FA100',
     'FA102',
@@ -173,7 +173,7 @@ pydocstyle = { convention = 'google' }
 quote-style = 'single'
 
 [tool.mypy]
-python_version = '3.10'
+python_version = '3.11'
 show_error_codes = true
 follow_imports = 'silent'
 strict_optional = true
