@@ -4658,5 +4658,51 @@ def test_serialize_cli_unknown_args_with_positional():
     assert CliApp.run(Cfg, cli_args=serialized) == cfg
 
     serialized = CliApp.serialize(cfg, positionals_first=True)
-    assert serialized == ['known-pos', '--unk-opt=1', 'unk-pos', '--flag', 'world']
+    assert serialized == ['known-pos', '--flag', 'world', '--unk-opt=1', 'unk-pos']
     assert CliApp.run(Cfg, cli_args=serialized) == cfg
+
+
+def test_serialize_cli_unknown_args_end_of_options():
+    class Cfg(BaseSettings, cli_ignore_unknown_args=True):
+        pos: CliPositionalArg[str]
+        flag: str = 'hello'
+        unknown_args: CliUnknownArgs
+
+    # An end-of-options marker captured in the unknown args would consume any known args emitted after it, so the
+    # unknown args are always serialized last, even when positionals_first is set.
+    cfg = CliApp.run(Cfg, cli_args=['known-pos', '--flag=world', '--', '--unk-opt=1', 'unk-pos'])
+    assert cfg.unknown_args == ['--', '--unk-opt=1', 'unk-pos']
+
+    serialized = CliApp.serialize(cfg, positionals_first=True)
+    assert serialized == ['known-pos', '--flag', 'world', '--', '--unk-opt=1', 'unk-pos']
+    assert CliApp.run(Cfg, cli_args=serialized) == cfg
+
+    serialized = CliApp.serialize(cfg)
+    assert serialized == ['--flag', 'world', 'known-pos', '--', '--unk-opt=1', 'unk-pos']
+
+    # The known positional is emitted before the marker here, so argparse consumes the marker while looking for it.
+    # The known args and the remaining unknown args are preserved, and serialization is stable from here on.
+    reparsed = CliApp.run(Cfg, cli_args=serialized)
+    assert (reparsed.pos, reparsed.flag) == (cfg.pos, cfg.flag)
+    assert reparsed.unknown_args == ['--unk-opt=1', 'unk-pos']
+    assert CliApp.serialize(reparsed) == ['--flag', 'world', 'known-pos', '--unk-opt=1', 'unk-pos']
+
+
+def test_serialize_cli_unknown_args_subcommand_end_of_options():
+    class SubCmd(BaseSettings, cli_ignore_unknown_args=True):
+        v0: int = 0
+        unknown_args: CliUnknownArgs
+
+    class Root(BaseSettings):
+        flag: str = 'hello'
+        sub_cmd: CliSubCommand[SubCmd]
+
+    # A subcommand's unknown args are hoisted into the trailing segment too, since a subcommand name may not follow
+    # an end-of-options marker.
+    root = CliApp.run(Root, cli_args=['--flag=world', 'sub_cmd', '--v0=2', '--', '--unk=3'])
+    assert root.sub_cmd is not None and root.sub_cmd.unknown_args == ['--', '--unk=3']
+
+    for positionals_first in (False, True):
+        serialized = CliApp.serialize(root, positionals_first=positionals_first)
+        assert serialized == ['--flag', 'world', 'sub_cmd', '--v0', '2', '--', '--unk=3']
+        assert CliApp.run(Root, cli_args=serialized) == root
