@@ -1145,6 +1145,10 @@ print(Settings().model_dump())
 sys.argv = ['example.py', '--my_list', '[]']
 print(Settings().model_dump())
 #> {'my_list': []}
+
+sys.argv = ['example.py', '--my_list', '[]', '--my_list', '3']
+print(Settings().model_dump())
+#> {'my_list': [3]}
 ```
 
 #### Dictionaries

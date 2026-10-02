@@ -1278,7 +1278,6 @@ def test_cli_list_arg(prefix, arg_spaces):
         (list[str], []),
         (list[int], []),
         (list[str] | None, []),
-        (list[str] | dict[str, str], []),
         (tuple[str, ...], ()),
         (set[str], set()),
     ],
@@ -1298,6 +1297,20 @@ def test_cli_empty_json_list_preserves_mapping_behavior(field_type, value):
 
     # Preserve the existing mapping parser behavior; empty-list handling is list-specific.
     assert CliApp.run(Cfg, cli_args=['--values', value]).values == {}
+
+
+@pytest.mark.parametrize('empty_array', ['[]', ' [ \t ] '])
+def test_cli_empty_json_list_preserves_mapping_union(empty_array):
+    class Cfg(BaseSettings):
+        values: dict[str, str] | list[str] = {}
+
+    # An empty array must not flip a mapping union over to its list branch, since that would
+    # reinterpret every other argument for the field.
+    assert CliApp.run(Cfg, cli_args=['--values', empty_array]).values == {}
+    assert CliApp.run(Cfg, cli_args=['--values', empty_array, '--values', 'k1=a']).values == {'k1': 'a'}
+    assert CliApp.run(Cfg, cli_args=['--values', 'k1=a', '--values', empty_array]).values == {'k1': 'a'}
+    assert CliApp.run(Cfg, cli_args=['--values', '{"k1":"a"}', '--values', empty_array]).values == {'k1': 'a'}
+    assert CliApp.run(Cfg, cli_args=['--values', '["a"]', '--values', empty_array]).values == ['a']
 
 
 @pytest.mark.parametrize(
