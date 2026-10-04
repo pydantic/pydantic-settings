@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from enum import Enum, IntEnum
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Dict, Generic, Literal, TypeVar
+from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar
 from unittest import mock
 
 import pytest
@@ -570,7 +570,7 @@ def test_nested_env_delimiter_aliases(env):
 
 def test_nested_env_delimiter_bare_dict(env):
     class Cfg(BaseSettings):
-        dvals: Dict
+        dvals: dict
 
         model_config = SettingsConfigDict(env_nested_delimiter='__')
 
