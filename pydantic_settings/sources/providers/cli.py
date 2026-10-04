@@ -624,16 +624,16 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         # When using parse_known_args due to a subcommand's CliUnknownArgs, reject
         # unknown args if the selected subcommand does not accept them.
         if not self.cli_ignore_unknown_args and self._cli_unknown_args:
-            has_unknown = any(args for args in self._cli_unknown_args.values())
-            if has_unknown:
-                selected_accepts_unknown = any(
-                    dest.rsplit('.', 1)[0] in last_selected_subcommand for dest in self._cli_unknown_args
-                )
-                if not selected_accepts_unknown:
-                    unknown = next(args for args in self._cli_unknown_args.values() if args)
-                    if isinstance(self.root_parser, ArgumentParser):
-                        self.root_parser.error(f'unrecognized arguments: {" ".join(unknown)}')
-                    raise SystemExit(2)
+            selected_accepts_unknown = bool(last_selected_subcommand) and any(
+                dest.rsplit('.', 1)[0] in last_selected_subcommand for dest in self._cli_unknown_args
+            )
+            pending = self._unclaimed_unknown_args or next(
+                (args for args in self._cli_unknown_args.values() if args), []
+            )
+            if pending and not selected_accepts_unknown:
+                if isinstance(self.root_parser, ArgumentParser):
+                    self.root_parser.error(f'unrecognized arguments: {" ".join(pending)}')
+                raise SystemExit(2)
 
         parsed_args.update(self._cli_unknown_args)
 
@@ -989,12 +989,16 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         formatter_class: Any = RawDescriptionHelpFormatter,
     ) -> None:
         self._cli_unknown_args: dict[str, list[str]] = {}
+        self._unknown_dests_by_parser: dict[int, list[str]] = {}
+        self._unclaimed_unknown_args: list[str] = []
 
         def _parse_known_args(*args: Any, **kwargs: Any) -> Namespace:
-            args, unknown_args = ArgumentParser.parse_known_args(*args, **kwargs)
-            for dest in self._cli_unknown_args:
-                self._cli_unknown_args[dest] = unknown_args
-            return cast(Namespace, args)
+            parsed, unknown_args = ArgumentParser.parse_known_args(*args, **kwargs)
+            parser = args[0] if args else None
+            self._store_unknown_args(parser, unknown_args)
+            if parser is self._root_parser:
+                self._unclaimed_unknown_args = list(unknown_args)
+            return cast(Namespace, parsed)
 
         self._root_parser = root_parser
         _is_default_parse_args = parse_args_method is None
@@ -1048,6 +1052,29 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 help='show this help message and exit',
             )
 
+    def _store_unknown_args(self, parser: Any, unknown_args: list[str]) -> None:
+        for dest in self._unknown_dests_by_parser.get(id(parser), ()):
+            self._cli_unknown_args[dest] = list(unknown_args)
+
+    def _install_unknown_args_capture(self, parser: Any) -> None:
+        if getattr(parser, '_cli_unknown_args_capture', False) or not hasattr(parser, 'parse_known_args'):
+            return
+        parser._cli_unknown_args_capture = True
+        original = parser.parse_known_args
+
+        def parse_known_args(
+            args: list[str] | None = None, namespace: Namespace | None = None
+        ) -> tuple[Namespace, list[str]]:
+            parsed, unknown = original(args, namespace)
+            self._store_unknown_args(parser, unknown)
+            # Keep leftovers on the subparser that failed to recognize them.
+            # Returning them to the parent copies one list onto every field.
+            if parser is not self._root_parser and id(parser) in self._unknown_dests_by_parser:
+                unknown = []
+            return parsed, unknown
+
+        parser.parse_known_args = parse_known_args
+
     def _add_parser_args(  # noqa: C901
         self,
         parser: Any,
@@ -1064,6 +1091,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         model_path: set[type[BaseModel]] | None = None,
         env_prefixes: tuple[tuple[str, bool], ...] = (),
     ) -> ArgumentParser:
+        self._install_unknown_args_capture(parser)
         if discriminator_vals is None:
             discriminator_vals = {}
         if model_path is None:  # pragma: no cover
@@ -1207,7 +1235,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         env_var_names=env_var_names,
                     )
                 elif _CliUnknownArgs in field_info.metadata:
-                    self._cli_unknown_args[arg.kwargs['dest']] = []
+                    dest = arg.kwargs['dest']
+                    self._cli_unknown_args[dest] = []
+                    self._unknown_dests_by_parser.setdefault(id(parser), []).append(dest)
                 elif not arg.is_alias_path_only:
                     if isinstance(group, dict):  # pragma: no cover
                         group = self._add_group(parser, **group)

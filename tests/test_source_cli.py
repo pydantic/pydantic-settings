@@ -2805,6 +2805,27 @@ def test_cli_ignore_unknown_args():
     }
 
 
+def test_cli_unknown_args_are_not_shared_across_depths():
+    class SubCmd(BaseSettings, cli_ignore_unknown_args=True):
+        v0: int = 0
+        unknown_args: CliUnknownArgs
+
+    class Root(BaseSettings, cli_ignore_unknown_args=True):
+        flag: str = 'hello'
+        unknown_args: CliUnknownArgs
+        sub_cmd: CliSubCommand[SubCmd]
+
+    root = CliApp.run(Root, cli_args=['--flag=world', 'sub_cmd', '--v0=2', '--unk=3'])
+    assert root.unknown_args == []
+    assert root.sub_cmd is not None
+    assert root.sub_cmd.unknown_args == ['--unk=3']
+    serialized = CliApp.serialize(root)
+    assert serialized.count('--unk=3') == 1
+    again = CliApp.run(Root, cli_args=serialized)
+    assert again.unknown_args == []
+    assert again.sub_cmd is not None and again.sub_cmd.unknown_args == ['--unk=3']
+
+
 def test_cli_ignore_unknown_args_subcommand():
     class SubA(BaseSettings):
         a: CliPositionalArg[str]
