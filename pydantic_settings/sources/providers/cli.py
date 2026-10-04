@@ -67,6 +67,7 @@ from ..utils import (
     _annotation_contains_types,
     _annotation_enum_val_to_name,
     _get_alias_names,
+    _get_field_metadata,
     _get_model_fields,
     _is_function,
     _strip_annotated,
@@ -1643,9 +1644,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         value: str | list[Any] | dict[str, Any],
         list_style: Literal['json', 'argparse', 'lazy'] = 'json',
         dict_style: Literal['json', 'env'] = 'json',
+        is_no_decode: bool = False,
     ) -> list[str | list[Any] | dict[str, Any]]:
         values = [value]
         if isinstance(value, str):
+            if not is_no_decode and isinstance(model_default, (list, dict)) and not model_default:
+                return values
             if isinstance(model_default, list):
                 if list_style == 'lazy':
                     values = [','.join(f'{v}' for v in json.loads(value))]
@@ -1746,8 +1750,14 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if arg.kwargs.get('action') == BooleanOptionalAction and model_default is False and flag_chars == '--':
                 flag_chars += 'no-'
 
+            field_metadata = _get_field_metadata(field_info)
+            is_no_decode = NoDecode in field_metadata or (
+                self.config.get('enable_decoding') is False and ForceDecode not in field_metadata
+            )
             for index, coerced_value in enumerate(
-                self._coerce_value_styles(model_default, value, list_style=list_style, dict_style=dict_style)
+                self._coerce_value_styles(
+                    model_default, value, list_style=list_style, dict_style=dict_style, is_no_decode=is_no_decode
+                )
             ):
                 if index == 0 or arg.kwargs.get('nargs') not in ('*', '+'):
                     optional_args.append(f'{flag_chars}{arg_name}')

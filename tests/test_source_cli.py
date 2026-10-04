@@ -4163,6 +4163,129 @@ def test_cli_serialize_styles():
 
 @pytest.mark.parametrize('list_style', ['json', 'lazy', 'argparse'])
 @pytest.mark.parametrize('dict_style', ['json', 'env'])
+@pytest.mark.parametrize('variadic', [False, True])
+def test_cli_serialize_empty_containers(list_style, dict_style, variadic):
+    class Cfg(BaseSettings):
+        my_list: CliVariadicArg[list[str]] if variadic else list[str] = ['default']
+        my_dict: CliVariadicArg[dict[str, int]] if variadic else dict[str, int] = {'default': 1}
+
+    cfg = Cfg(my_list=[], my_dict={})
+    serialized_cli_args = CliApp.serialize(cfg, list_style=list_style, dict_style=dict_style)
+
+    assert serialized_cli_args == ['--my_list', '[]', '--my_dict', '{}']
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
+@pytest.mark.parametrize('list_style', ['json', 'lazy', 'argparse'])
+@pytest.mark.parametrize('dict_style', ['json', 'env'])
+def test_cli_serialize_empty_required_containers(list_style, dict_style):
+    class Cfg(BaseModel):
+        my_list: list[str]
+        my_dict: dict[str, int]
+
+    cfg = Cfg(my_list=[], my_dict={})
+    serialized_cli_args = CliApp.serialize(cfg, list_style=list_style, dict_style=dict_style)
+
+    assert serialized_cli_args == ['--my-list', '[]', '--my-dict', '{}']
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
+@pytest.mark.parametrize('list_style', ['json', 'lazy', 'argparse'])
+@pytest.mark.parametrize('dict_style', ['json', 'env'])
+def test_cli_serialize_empty_nested_containers(list_style, dict_style):
+    class Child(BaseModel):
+        my_list: list[str] | None = None
+        my_dict: dict[str, int] | None = None
+
+    class Cfg(BaseSettings):
+        child: Child
+
+    cfg = Cfg(child=Child(my_list=[], my_dict={}))
+    serialized_cli_args = CliApp.serialize(cfg, list_style=list_style, dict_style=dict_style)
+
+    assert serialized_cli_args == ['--child.my_list', '[]', '--child.my_dict', '{}']
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
+@pytest.mark.parametrize('enable_decoding', [False, True])
+def test_cli_serialize_empty_list_no_decode(enable_decoding):
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(enable_decoding=enable_decoding)
+        values: Annotated[list[str], NoDecode] if enable_decoding else list[str] = ['default']
+
+        @field_validator('values', mode='before')
+        @classmethod
+        def parse_values(cls, value):
+            if isinstance(value, str):
+                return value.split(',') if value else []
+            return value
+
+    cfg = Cfg(values=[])
+    serialized_cli_args = CliApp.serialize(cfg, list_style='lazy')
+
+    assert serialized_cli_args == ['--values', '']
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
+@pytest.mark.parametrize('enable_decoding', [False, True])
+def test_cli_serialize_empty_variadic_containers_no_decode(enable_decoding):
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(enable_decoding=enable_decoding)
+        my_list: Annotated[CliVariadicArg[list[str]], NoDecode] if enable_decoding else CliVariadicArg[list[str]] = (
+            Field(default_factory=list)
+        )
+        my_dict: (
+            Annotated[CliVariadicArg[dict[str, int]], NoDecode] if enable_decoding else CliVariadicArg[dict[str, int]]
+        ) = Field(default_factory=dict)
+
+    cfg = Cfg()
+    serialized_cli_args = CliApp.serialize(cfg, list_style='argparse', dict_style='env')
+
+    assert serialized_cli_args == []
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
+@pytest.mark.parametrize('list_style', ['json', 'lazy', 'argparse'])
+@pytest.mark.parametrize('dict_style', ['json', 'env'])
+@pytest.mark.parametrize('use_alias', [False, True])
+def test_cli_serialize_empty_containers_force_decode(list_style, dict_style, use_alias):
+    list_type = Annotated[list[str], ForceDecode]
+    dict_type = Annotated[dict[str, int], ForceDecode]
+    if use_alias:
+        list_type = typing_extensions.TypeAliasType('ListAlias', list_type)
+        dict_type = typing_extensions.TypeAliasType('DictAlias', dict_type)
+
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(enable_decoding=False)
+        my_list: list_type = ['default']
+        my_dict: dict_type = {'default': 1}
+
+    cfg = Cfg(my_list=[], my_dict={})
+    serialized_cli_args = CliApp.serialize(cfg, list_style=list_style, dict_style=dict_style)
+
+    assert serialized_cli_args == ['--my_list', '[]', '--my_dict', '{}']
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
+@pytest.mark.parametrize('enable_decoding', [False, True])
+def test_cli_serialize_empty_aliased_containers_no_decode(enable_decoding):
+    ListAlias = typing_extensions.TypeAliasType('ListAlias', Annotated[list[str], NoDecode])
+    DictAlias = typing_extensions.TypeAliasType('DictAlias', Annotated[dict[str, int], NoDecode])
+
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(enable_decoding=enable_decoding)
+        my_list: ListAlias = Field(default_factory=list)
+        my_dict: DictAlias = Field(default_factory=dict)
+
+    cfg = Cfg()
+    serialized_cli_args = CliApp.serialize(cfg, list_style='argparse', dict_style='env')
+
+    assert serialized_cli_args == []
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
+@pytest.mark.parametrize('list_style', ['json', 'lazy', 'argparse'])
+@pytest.mark.parametrize('dict_style', ['json', 'env'])
 def test_cli_serialize_variadic_styles(list_style, dict_style):
     class Cfg(BaseModel):
         my_list: CliVariadicArg[list[str]]
