@@ -996,6 +996,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self._cli_unknown_args: dict[str, list[str]] = {}
         self._unknown_dests_by_parser: dict[int, list[str]] = {}
         self._unclaimed_unknown_args: list[str] = []
+        self._captured_parsers: set[int] = set()
 
         def _parse_known_args(*args: Any, **kwargs: Any) -> Namespace:
             parsed, unknown_args = ArgumentParser.parse_known_args(*args, **kwargs)
@@ -1062,9 +1063,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             self._cli_unknown_args[dest] = list(unknown_args)
 
     def _install_unknown_args_capture(self, parser: Any) -> None:
-        if getattr(parser, '_cli_unknown_args_capture', False) or not hasattr(parser, 'parse_known_args'):
+        if id(parser) in self._captured_parsers or not hasattr(parser, 'parse_known_args'):
             return
-        parser._cli_unknown_args_capture = True
+        self._captured_parsers.add(id(parser))
         original = parser.parse_known_args
 
         def parse_known_args(
@@ -1078,7 +1079,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 unknown = []
             return parsed, unknown
 
-        parser.parse_known_args = parse_known_args
+        try:
+            parser.parse_known_args = parse_known_args
+        except AttributeError:
+            # Slotted or read-only parsers keep returning leftovers to their parent.
+            pass
 
     def _add_parser_args(  # noqa: C901
         self,

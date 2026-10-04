@@ -2958,6 +2958,41 @@ def test_cli_unknown_args_rejected_with_non_argparse_root_parser():
     assert exc_info.value.code == 2
 
 
+def test_cli_slotted_root_parser():
+    class SlottedParser:
+        __slots__ = ('parser',)
+
+        def __init__(self) -> None:
+            self.parser = argparse.ArgumentParser()
+
+        def add_argument(self, *args: Any, **kwargs: Any) -> None:
+            self.parser.add_argument(*args, **kwargs)
+
+        def add_argument_group(self, *args: Any, **kwargs: Any) -> argparse._ArgumentGroup:
+            return self.parser.add_argument_group(*args, **kwargs)
+
+        def parse_known_args(self, *args: Any, **kwargs: Any) -> tuple[argparse.Namespace, list[str]]:
+            return self.parser.parse_known_args(*args, **kwargs)
+
+        def parse_args(self, *args: Any, **kwargs: Any) -> argparse.Namespace:
+            return self.parser.parse_args(*args, **kwargs)
+
+    class Cfg(BaseSettings):
+        pet: str = 'bird'
+
+    cli_settings = CliSettingsSource(
+        Cfg,
+        root_parser=SlottedParser(),
+        parse_args_method=SlottedParser.parse_args,
+        add_argument_method=SlottedParser.add_argument,
+        add_argument_group_method=SlottedParser.add_argument_group,
+        add_parser_method=None,
+        add_subparsers_method=None,
+    )
+
+    assert Cfg(_cli_settings_source=cli_settings(args=['--pet', 'cat'])).pet == 'cat'
+
+
 def test_cli_ignore_unknown_args_nested_subcommand_higher_in_hierarchy():
     class SubB(BaseModel):
         my_feature: bool = False
