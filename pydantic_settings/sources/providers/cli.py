@@ -621,16 +621,21 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         else:
             last_selected_subcommand = ''
 
-        # When using parse_known_args due to a subcommand's CliUnknownArgs, reject
-        # unknown args if the selected subcommand does not accept them.
+        # parse_known_args lets a subcommand record leftovers. A root token that was
+        # not stored on a root CliUnknownArgs field is still an error, including when
+        # the selected subcommand accepts unknowns of its own.
         if not self.cli_ignore_unknown_args and self._cli_unknown_args:
+            root_accepts_unknown = id(self._root_parser) in self._unknown_dests_by_parser
             selected_accepts_unknown = bool(last_selected_subcommand) and any(
                 dest.rsplit('.', 1)[0] in last_selected_subcommand for dest in self._cli_unknown_args
             )
-            pending = self._unclaimed_unknown_args or next(
-                (args for args in self._cli_unknown_args.values() if args), []
-            )
-            if pending and not selected_accepts_unknown:
+            if self._unclaimed_unknown_args and not root_accepts_unknown:
+                pending = self._unclaimed_unknown_args
+            elif not selected_accepts_unknown:
+                pending = next((args for args in self._cli_unknown_args.values() if args), [])
+            else:
+                pending = []
+            if pending:
                 if isinstance(self.root_parser, ArgumentParser):
                     self.root_parser.error(f'unrecognized arguments: {" ".join(pending)}')
                 raise SystemExit(2)
@@ -996,8 +1001,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             parsed, unknown_args = ArgumentParser.parse_known_args(*args, **kwargs)
             parser = args[0] if args else None
             self._store_unknown_args(parser, unknown_args)
-            if parser is self._root_parser:
-                self._unclaimed_unknown_args = list(unknown_args)
+            # This method is only connected as the root parser's parse method.
+            self._unclaimed_unknown_args = list(unknown_args)
             return cast(Namespace, parsed)
 
         self._root_parser = root_parser

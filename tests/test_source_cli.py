@@ -2826,6 +2826,32 @@ def test_cli_unknown_args_are_not_shared_across_depths():
     assert again.sub_cmd is not None and again.sub_cmd.unknown_args == ['--unk=3']
 
 
+def test_cli_root_typo_rejected_when_subcommand_accepts_unknown_args():
+    class Sub(BaseSettings, cli_ignore_unknown_args=True):
+        ignored_args: CliUnknownArgs
+
+    class Root(BaseSettings):
+        sub: CliSubCommand[Sub]
+
+    with pytest.raises(SystemExit):
+        CliApp.run(Root, cli_args=['--typo', 'sub'])
+
+    cmd = CliApp.run(Root, cli_args=['sub', '--typo'])
+    assert cmd.model_dump() == {'sub': {'ignored_args': ['--typo']}}
+
+
+def test_cli_root_unknown_field_keeps_its_own_leftovers():
+    class Sub(BaseSettings, cli_ignore_unknown_args=True):
+        ignored_args: CliUnknownArgs
+
+    class Root(BaseSettings):
+        unknown_args: CliUnknownArgs
+        sub: CliSubCommand[Sub]
+
+    cmd = CliApp.run(Root, cli_args=['--typo', 'sub', '--other'])
+    assert cmd.model_dump() == {'unknown_args': ['--typo'], 'sub': {'ignored_args': ['--other']}}
+
+
 def test_cli_ignore_unknown_args_subcommand():
     class SubA(BaseSettings):
         a: CliPositionalArg[str]
