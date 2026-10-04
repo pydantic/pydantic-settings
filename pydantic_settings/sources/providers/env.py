@@ -24,8 +24,11 @@ from ..utils import (
     _annotation_contains_types,
     _annotation_enum_name_to_val,
     _annotation_is_complex,
+    _get_field_metadata,
     _get_model_fields,
     _literal_has_numeric_enum,
+    _resolve_type_alias,
+    _strip_annotated,
     _union_has_strict_types,
     _union_is_complex,
     parse_env_vars,
@@ -198,10 +201,11 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         """
         Find out if a field is complex, and if so whether JSON errors should be ignored
         """
+        annotation = _strip_annotated(_resolve_type_alias(field.annotation))
         if self.field_is_complex(field):
             allow_parse_failure = False
-        elif is_union_origin(get_origin(field.annotation)) and _union_is_complex(
-            field.annotation, field.metadata, self._init_state
+        elif is_union_origin(get_origin(annotation)) and _union_is_complex(
+            annotation, _get_field_metadata(field), self._init_state
         ):
             allow_parse_failure = True
         else:

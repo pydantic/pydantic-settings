@@ -678,6 +678,66 @@ def test_annotated_list(env):
     ]
 
 
+@pytest.mark.parametrize('alias_kind', ['plain', 'annotated', 'generic'])
+@pytest.mark.parametrize('validation_alias', [None, 'custom_value'])
+@pytest.mark.parametrize('source', ['env', 'dotenv', 'nested'])
+def test_named_union_type_alias_parsing(env, tmp_path, alias_kind, validation_alias, source):
+    if alias_kind == 'plain':
+        Value = TypeAliasType('Value', list[int] | str)
+    elif alias_kind == 'annotated':
+        Value = TypeAliasType('Value', Annotated[list[int] | str, MinLen(1)])
+    else:
+        T = TypeVar('T')
+        Value = TypeAliasType('Value', list[T] | str, type_params=(T,))[int]
+
+    class Nested(BaseModel):
+        value: Value = Field(validation_alias=validation_alias)
+
+    class Settings(BaseSettings):
+        value: Value = Field(validation_alias=validation_alias)
+
+    class NestedSettings(BaseSettings):
+        nested: Nested
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env_name = validation_alias or 'value'
+    for raw_value, expected in [('plain-string', 'plain-string'), ('[1, 2]', [1, 2])]:
+        if source == 'nested':
+            env.set(f'nested__{env_name}', raw_value)
+            actual = NestedSettings().nested.value
+        elif source == 'dotenv':
+            env_file = tmp_path / '.env'
+            env_file.write_text(f"{env_name}='{raw_value}'")
+            actual = Settings(_env_file=env_file).value
+        else:
+            env.set(env_name, raw_value)
+            actual = Settings().value
+        assert actual == expected
+
+
+@pytest.mark.parametrize('decode_annotation', [NoDecode, ForceDecode])
+@pytest.mark.parametrize('validation_alias', [None, 'custom_value'])
+def test_named_union_type_alias_decoding_control(env, decode_annotation, validation_alias):
+    Value = TypeAliasType('Value', Annotated[list[int] | str, decode_annotation])
+
+    class Settings(BaseSettings):
+        value: Value = Field(validation_alias=validation_alias)
+        model_config = SettingsConfigDict(enable_decoding=decode_annotation is NoDecode)
+
+    env.set(validation_alias or 'value', '[1, 2]')
+    assert Settings().value == ('[1, 2]' if decode_annotation is NoDecode else [1, 2])
+
+
+def test_named_union_type_alias_json_validation(env):
+    Value = TypeAliasType('Value', Json[list[int] | str])
+
+    class Settings(BaseSettings):
+        value: Value = Field(validation_alias='custom_value')
+
+    env.set('custom_value', '[1, 2]')
+    assert Settings().value == [1, 2]
+
+
 def test_annotated_with_type(env):
     """https://github.com/pydantic/pydantic-settings/issues/536.
 
