@@ -1075,39 +1075,64 @@ def test_nested_model_default_partial_update_with_discriminated_union():
     assert result.root_field == SubModel1()
 
 
-def test_nested_model_default_partial_update_with_discriminated_union_same_type(env):
+class _PartialUpdateSubModel1(BaseModel):
+    discriminator: Literal['submodel1'] = 'submodel1'
+    submodel1_field: str = 'foo'
+    other_field: str = 'foo'
+
+
+class _PartialUpdateSubModel2(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    discriminator: Literal['submodel2'] = 'submodel2'
+
+
+@pytest.mark.parametrize(
+    'env_vars,expected',
+    [
+        # The issue's case: no discriminator in the env, so the default's member is partially updated
+        pytest.param(
+            {'ROOT_FIELD__OTHER_FIELD': 'baz'},
+            _PartialUpdateSubModel1(submodel1_field='bar', other_field='baz'),
+            id='no-discriminator',
+        ),
+        # Selecting the same member as the default keeps the default's fields
+        pytest.param(
+            {'ROOT_FIELD__OTHER_FIELD': 'baz', 'ROOT_FIELD__DISCRIMINATOR': 'submodel1'},
+            _PartialUpdateSubModel1(submodel1_field='bar', other_field='baz'),
+            id='same-member',
+        ),
+        # Selecting another member doesn't keep the default's fields
+        pytest.param(
+            {'ROOT_FIELD__DISCRIMINATOR': 'submodel2'},
+            _PartialUpdateSubModel2(),
+            id='other-member',
+        ),
+    ],
+)
+def test_nested_model_default_partial_update_with_discriminated_union_same_type(env, env_vars, expected):
     """Test that nested_model_default_partial_update applies to discriminated union fields.
 
     The default model's fields should be kept when the incoming value doesn't select a different type.
     See: https://github.com/pydantic/pydantic-settings/issues/996
     """
 
-    class SubModel1(BaseModel):
-        discriminator: Literal['submodel1'] = 'submodel1'
-        submodel1_field: str = 'foo'
-        other_field: str = 'foo'
-
-    class SubModel2(BaseModel):
-        model_config = ConfigDict(extra='forbid')
-        discriminator: Literal['submodel2'] = 'submodel2'
-
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(env_nested_delimiter='__', nested_model_default_partial_update=True)
-        root_field: Annotated[SubModel1 | SubModel2, Discriminator('discriminator')] = SubModel1(submodel1_field='bar')
+        root_field: Annotated[_PartialUpdateSubModel1 | _PartialUpdateSubModel2, Discriminator('discriminator')] = (
+            _PartialUpdateSubModel1(submodel1_field='bar')
+        )
 
-    env.set('ROOT_FIELD__OTHER_FIELD', 'baz')
-    assert Settings().root_field == SubModel1(submodel1_field='bar', other_field='baz')
+    for name, value in env_vars.items():
+        env.set(name, value)
+    assert Settings().root_field == expected
 
-    # Test that selecting the same type as the default keeps the default's fields
-    env.set('ROOT_FIELD__DISCRIMINATOR', 'submodel1')
-    assert Settings().root_field == SubModel1(submodel1_field='bar', other_field='baz')
 
-    # Test that selecting another type doesn't keep the default's fields
-    env.pop('ROOT_FIELD__OTHER_FIELD')
-    env.set('ROOT_FIELD__DISCRIMINATOR', 'submodel2')
-    assert Settings().root_field == SubModel2()
+def test_nested_model_default_partial_update_with_aliased_discriminator():
+    """Test that the discriminator value is also looked up by the discriminator field's alias.
 
-    # Test that the discriminator value is also looked up by its alias
+    Pydantic reads the tag from either key, so both have to be checked.
+    """
+
     class AliasSubModel1(BaseModel):
         kind: Literal['submodel1'] = Field('submodel1', alias='type')
         submodel1_field: str = 'foo'
@@ -1116,27 +1141,30 @@ def test_nested_model_default_partial_update_with_discriminated_union_same_type(
         model_config = ConfigDict(extra='forbid')
         kind: Literal['submodel2'] = Field('submodel2', alias='type')
 
-    class SettingsAlias(BaseSettings):
+    class Settings(BaseSettings):
         model_config = SettingsConfigDict(nested_model_default_partial_update=True)
         root_field: Annotated[AliasSubModel1 | AliasSubModel2, Discriminator('kind')] = AliasSubModel1(
             submodel1_field='bar'
         )
 
-    assert SettingsAlias(root_field={'type': 'submodel1'}).root_field == AliasSubModel1(submodel1_field='bar')
-    assert SettingsAlias(root_field={'type': 'submodel2'}).root_field == AliasSubModel2()
+    assert Settings(root_field={'type': 'submodel1'}).root_field == AliasSubModel1(submodel1_field='bar')
+    assert Settings(root_field={'type': 'submodel2'}).root_field == AliasSubModel2()
 
-    # Test that a callable discriminator skips partial updates, as the selected type can't be looked up
+
+def test_nested_model_default_partial_update_with_callable_discriminator():
+    """Test that a callable discriminator skips partial updates, as the selected member can't be looked up."""
+
     def get_discriminator_value(v: Any) -> Hashable:
         return v.get('discriminator') if isinstance(v, dict) else v.discriminator
 
-    class SettingsCallable(BaseSettings):
+    class Settings(BaseSettings):
         model_config = SettingsConfigDict(nested_model_default_partial_update=True)
         root_field: Annotated[
-            Annotated[SubModel1, Tag('submodel1')] | Annotated[SubModel2, Tag('submodel2')],
+            Annotated[_PartialUpdateSubModel1, Tag('submodel1')] | Annotated[_PartialUpdateSubModel2, Tag('submodel2')],
             Discriminator(get_discriminator_value),
-        ] = SubModel1(submodel1_field='bar')
+        ] = _PartialUpdateSubModel1(submodel1_field='bar')
 
-    assert SettingsCallable(root_field={'discriminator': 'submodel2'}).root_field == SubModel2()
+    assert Settings(root_field={'discriminator': 'submodel2'}).root_field == _PartialUpdateSubModel2()
 
 
 def test_env_str(env):

@@ -320,8 +320,13 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
         defaults = self.defaults.copy()
         for alias, (keys, default_tag) in self._discriminator_tags.items():
             value = self.current_state.get(alias)
+            if not isinstance(value, dict):
+                continue
+            # Pydantic reads the tag from the discriminator field's name or its alias, so a value under any of
+            # those keys selects a member. A key that is absent leaves the default's member in place.
+            tags = [value[key] for key in keys if key in value]
             # The default's fields don't apply when the value selects another member of the discriminated union
-            if isinstance(value, dict) and any(value.get(key, default_tag) != default_tag for key in keys):
+            if any(tag != default_tag for tag in tags):
                 del defaults[alias]
         return defaults
 
