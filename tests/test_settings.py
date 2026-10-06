@@ -4032,6 +4032,50 @@ def test_case_insensitive_deeply_nested_optional(env):
     assert s.model_dump() == {'config': {'nested': {'Name': 'value'}}}
 
 
+def test_case_insensitive_nested_dataclass(env):
+    @pydantic_dataclasses.dataclass
+    class NestedDataclass:
+        FOO: str
+        BaR: int
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', case_sensitive=False)
+
+        nested: NestedDataclass
+
+    env.set('nested__FoO', 'string')
+    env.set('nested__bar', '123')
+    s = Settings()
+    assert s.nested == NestedDataclass(FOO='string', BaR=123)
+
+
+def test_case_insensitive_deeply_nested_dataclass(env):
+    class DeepModel(BaseModel):
+        Name: str
+
+    @pydantic_dataclasses.dataclass
+    class DeepDataclass:
+        Name: str
+        Model: DeepModel
+
+    @pydantic_dataclasses.dataclass
+    class NestedDataclass:
+        Deep: DeepDataclass | None = None
+
+    class ConfigModel(BaseModel):
+        nested: NestedDataclass
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', case_sensitive=False)
+
+        config: ConfigModel
+
+    env.set('config__nested__deep__name', 'value')
+    env.set('config__nested__deep__model__name', 'model value')
+    s = Settings()
+    assert s.config.nested == NestedDataclass(Deep=DeepDataclass(Name='value', Model=DeepModel(Name='model value')))
+
+
 def test_case_insensitive_nested_alias(env):
     """Ensure case-insensitive environment lookup works with nested aliases."""
 
