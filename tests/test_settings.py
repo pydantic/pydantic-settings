@@ -1167,6 +1167,168 @@ def test_nested_model_default_partial_update_with_callable_discriminator():
     assert Settings(root_field={'discriminator': 'submodel2'}).root_field == _PartialUpdateSubModel2()
 
 
+def test_nested_model_default_partial_update_with_stdlib_dataclass_aliased_discriminator():
+    """Test that the discriminator alias of a standard-library dataclass member is also looked up.
+
+    Pydantic doesn't attach ``__pydantic_fields__`` to stdlib dataclasses, so the alias has to be read from
+    the dataclass fields themselves. Only selecting another member is asserted here: a same-member partial
+    update would merge the default dumped by field name next to the value's alias key, which the dataclass
+    can't take both of.
+    """
+
+    @dataclasses.dataclass
+    class AnnotatedField:
+        kind: Annotated[Literal['submodel1'], Field(validation_alias='type')] = 'submodel1'
+        submodel1_field: str = 'foo'
+
+    @dataclasses.dataclass
+    class AnnotatedField2:
+        kind: Annotated[Literal['submodel2'], Field(validation_alias='type')] = 'submodel2'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(nested_model_default_partial_update=True)
+        root_field: Annotated[AnnotatedField | AnnotatedField2, Discriminator('kind')] = AnnotatedField(
+            submodel1_field='bar'
+        )
+
+    assert Settings(root_field={'type': 'submodel2'}).root_field == AnnotatedField2()
+
+    # The alias can also come from a `Field()` kept as the dataclass field's default
+    @dataclasses.dataclass
+    class DefaultField:
+        kind: Literal['submodel1'] = Field('submodel1', validation_alias='type')  # type: ignore[assignment]
+        submodel1_field: str = 'foo'
+
+    @dataclasses.dataclass
+    class DefaultField2:
+        kind: Literal['submodel2'] = Field('submodel2', validation_alias='type')  # type: ignore[assignment]
+
+    class SettingsDefault(BaseSettings):
+        model_config = SettingsConfigDict(nested_model_default_partial_update=True)
+        root_field: Annotated[DefaultField | DefaultField2, Discriminator('kind')] = DefaultField(
+            kind='submodel1', submodel1_field='bar'
+        )
+
+    assert SettingsDefault(root_field={'type': 'submodel2'}).root_field == DefaultField2(kind='submodel2')
+
+
+class _BlackCat(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    pet_type: Literal['cat'] = 'cat'
+    color: Literal['black'] = 'black'
+    black_name: str = 'blackie'
+
+
+class _WhiteCat(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    pet_type: Literal['cat'] = 'cat'
+    color: Literal['white'] = 'white'
+    white_name: str = 'whitie'
+
+
+class _Dog(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    pet_type: Literal['dog'] = 'dog'
+    dog_name: str = 'rex'
+
+
+@pytest.mark.parametrize(
+    'value,expected',
+    [
+        # The outer tag is unchanged but a nested discriminator selects another member, so the default's
+        # fields must not be merged in
+        pytest.param({'pet_type': 'cat', 'color': 'white'}, _WhiteCat(), id='nested-other-member'),
+        # The outer tag selects another member
+        pytest.param({'pet_type': 'dog'}, _Dog(), id='outer-other-member'),
+        # Both tags still select the default's member, so it is partially updated
+        pytest.param({'black_name': 'x'}, _BlackCat(black_name='x'), id='same-member'),
+        pytest.param(
+            {'pet_type': 'cat', 'color': 'black'}, _BlackCat(black_name='custom'), id='same-member-explicit-tags'
+        ),
+    ],
+)
+def test_nested_model_default_partial_update_with_nested_discriminated_union(value, expected):
+    """Test that every discriminator guarding the default's member is checked, not just the outermost one."""
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(nested_model_default_partial_update=True)
+        pet: Annotated[
+            Annotated[_BlackCat | _WhiteCat, Discriminator('color')] | _Dog,
+            Discriminator('pet_type'),
+        ] = _BlackCat(black_name='custom')
+
+    assert Settings(pet=value).pet == expected
+
+
+def test_nested_model_default_partial_update_nested_discriminator_without_outer_tag():
+    """Test that dropping the default also drops the outer tag it provided.
+
+    Discarding the default removes the ``pet_type`` it would have contributed, so the outer tag has to come
+    from the value itself. This matches the behaviour before the partial-update change.
+    """
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(nested_model_default_partial_update=True)
+        pet: Annotated[
+            Annotated[_BlackCat | _WhiteCat, Discriminator('color')] | _Dog,
+            Discriminator('pet_type'),
+        ] = _BlackCat(black_name='custom')
+
+    with pytest.raises(ValidationError, match="Unable to extract tag using discriminator 'pet_type'"):
+        Settings(pet={'color': 'white'})
+
+
+def test_nested_model_default_partial_update_with_nested_callable_discriminator():
+    """Test that a nested callable discriminator skips partial updates, like an outer one."""
+
+    def get_color(v: Any) -> Hashable:
+        return v.get('color') if isinstance(v, dict) else v.color
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(nested_model_default_partial_update=True)
+        pet: Annotated[
+            Annotated[Annotated[_BlackCat, Tag('black')] | Annotated[_WhiteCat, Tag('white')], Discriminator(get_color)]
+            | _Dog,
+            Discriminator('pet_type'),
+        ] = _BlackCat(black_name='custom')
+
+    assert Settings(pet={'pet_type': 'cat', 'color': 'white'}).pet == _WhiteCat()
+
+
+def test_nested_model_default_partial_update_with_deeply_nested_callable_discriminator():
+    """Test that a callable discriminator is detected at any nesting depth."""
+
+    def get_color(v: Any) -> Hashable:
+        return v.get('color') if isinstance(v, dict) else v.color
+
+    Cat = Annotated[
+        Annotated[Annotated[_BlackCat, Tag('black')] | Annotated[_WhiteCat, Tag('white')], Discriminator(get_color)]
+        | _Dog,
+        Discriminator('pet_type'),
+    ]
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(nested_model_default_partial_update=True)
+        pet: Cat | None = Field(default=_BlackCat(black_name='custom'), discriminator='pet_type')
+
+    assert Settings(pet={'pet_type': 'cat', 'color': 'white'}).pet == _WhiteCat()
+
+
+def test_nested_model_default_partial_update_with_optional_nested_discriminated_union():
+    """Test that the ``None`` member of an ``Optional`` union is skipped when collecting discriminators."""
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(nested_model_default_partial_update=True)
+        pet: Annotated[
+            Annotated[_BlackCat | _WhiteCat, Discriminator('color')] | _Dog | None,
+            Discriminator('pet_type'),
+        ] = _BlackCat(black_name='custom')
+
+    assert Settings(pet={'pet_type': 'cat', 'color': 'white'}).pet == _WhiteCat()
+    assert Settings(pet={'pet_type': 'cat', 'color': 'black'}).pet == _BlackCat(black_name='custom')
+    assert Settings().pet == _BlackCat(black_name='custom')
+
+
 def test_env_str(env):
     class Settings(BaseSettings):
         apple: str = Field(None, validation_alias='BOOM')
