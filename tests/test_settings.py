@@ -4767,6 +4767,54 @@ def test_model_validate_extra_ignore_still_loads_env(env):
     assert s.name == 'from_env'
 
 
+@pytest.mark.skipif(not _MODEL_VALIDATE_HAS_EXTRA, reason='pydantic.model_validate extra= requires pydantic>=2.12')
+@pytest.mark.parametrize('method', ['model_validate', 'model_validate_json', 'model_validate_strings'])
+@pytest.mark.parametrize('extra', ['ignore', 'allow', 'forbid'])
+@pytest.mark.parametrize('source_phase', ['factory', 'call'])
+def test_model_validate_extra_is_not_consumed_by_nested_source_settings(method, extra, source_phase):
+    class NestedSettings(BaseSettings):
+        value: str = 'from-source'
+
+    def source():
+        # An unrelated constructor must keep its own extra='forbid' policy.
+        with pytest.raises(ValidationError) as nested_error:
+            NestedSettings(unexpected='nested')
+        assert nested_error.value.errors(include_url=False)[0]['type'] == 'extra_forbidden'
+        # An explicit nested validation has its own override as well.
+        nested = NestedSettings.model_validate({'unexpected': 'nested'}, extra='allow')
+        assert nested.__pydantic_extra__ == {'unexpected': 'nested'}
+        return {'value': NestedSettings().value}
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(extra='allow')
+        value: str
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            if source_phase == 'factory':
+                source_values = source()
+                return init_settings, lambda: source_values
+            return init_settings, source
+
+    data = {'unexpected': 'outer'}
+    validation_input = json.dumps(data) if method == 'model_validate_json' else data
+    validate = getattr(Settings, method)
+    if extra == 'forbid':
+        with pytest.raises(ValidationError) as outer_error:
+            validate(validation_input, extra=extra)
+        assert outer_error.value.errors(include_url=False)[0]['loc'] == ('unexpected',)
+    else:
+        settings = validate(validation_input, extra=extra)
+        assert settings.value == 'from-source'
+        assert settings.__pydantic_extra__ == ({'unexpected': 'outer'} if extra == 'allow' else None)
+
+    # Neither successful nor rejected validation may leak its override.
+    with pytest.raises(ValidationError):
+        NestedSettings(unexpected='after-validation')
+
+
 def test_model_validate_without_extra_still_forbids():
     class Settings(BaseSettings):
         pass

@@ -251,6 +251,9 @@ class BaseSettings(BaseModel):
         _build_sources: tuple[tuple[PydanticBaseSettingsSource, ...], dict[str, Any]] | None = None,
         **values: Any,
     ) -> None:
+        # Consume the override before custom sources can construct unrelated settings.
+        extra = _validation_extra.get()
+        _validation_extra.set(None)
         sources, init_kwargs = (
             _build_sources
             if _build_sources is not None
@@ -289,11 +292,9 @@ class BaseSettings(BaseModel):
         )
 
         init_values = __pydantic_self__.__class__._settings_build_values(sources, init_kwargs)
-        extra = _validation_extra.get()
         if extra is None:
             super().__init__(**init_values)
             return
-        _validation_extra.set(None)
         __pydantic_self__.__pydantic_validator__.validate_python(
             init_values, extra=extra, self_instance=__pydantic_self__
         )
