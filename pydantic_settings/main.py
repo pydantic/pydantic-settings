@@ -8,6 +8,7 @@ import threading
 import warnings
 from argparse import Namespace
 from collections.abc import Mapping
+from contextvars import ContextVar
 from types import SimpleNamespace
 from typing import Any, ClassVar, Literal, TextIO, TypeVar, cast
 from weakref import WeakKeyDictionary
@@ -47,10 +48,14 @@ from .sources.utils import InitState, _get_alias_names, _warn_if_field_info_inco
 from .utils import _settings_debug_enabled, logger
 
 T = TypeVar('T')
+_ExtraValues = Literal['allow', 'forbid', 'ignore']
 
 _settings_cache: WeakKeyDictionary[type[BaseSettings], BaseSettings] = WeakKeyDictionary()
 _settings_cache_locks: WeakKeyDictionary[type[BaseSettings], threading.Lock] = WeakKeyDictionary()
 _settings_cache_guard = threading.Lock()
+# `model_validate(..., extra=)` is dropped by pydantic-core when `custom_init=True`.
+# Stash it here so `BaseSettings.__init__` can forward it to the inner validator.
+_validation_extra: ContextVar[_ExtraValues | None] = ContextVar('_pydantic_settings_validation_extra', default=None)
 
 
 class SettingsConfigDict(ConfigDict, total=False):
@@ -283,7 +288,39 @@ class BaseSettings(BaseModel):
             )
         )
 
-        super().__init__(**__pydantic_self__.__class__._settings_build_values(sources, init_kwargs))
+        init_values = __pydantic_self__.__class__._settings_build_values(sources, init_kwargs)
+        extra = _validation_extra.get()
+        if extra is None:
+            super().__init__(**init_values)
+            return
+        _validation_extra.set(None)
+        __pydantic_self__.__pydantic_validator__.validate_python(
+            init_values, extra=extra, self_instance=__pydantic_self__
+        )
+
+    @classmethod
+    def model_validate(cls, obj: Any, **kwargs: Any) -> Self:
+        token = _validation_extra.set(cast(_ExtraValues | None, kwargs.get('extra')))
+        try:
+            return super().model_validate(obj, **kwargs)
+        finally:
+            _validation_extra.reset(token)
+
+    @classmethod
+    def model_validate_json(cls, json_data: str | bytes | bytearray, **kwargs: Any) -> Self:
+        token = _validation_extra.set(cast(_ExtraValues | None, kwargs.get('extra')))
+        try:
+            return super().model_validate_json(json_data, **kwargs)
+        finally:
+            _validation_extra.reset(token)
+
+    @classmethod
+    def model_validate_strings(cls, obj: Any, **kwargs: Any) -> Self:
+        token = _validation_extra.set(cast(_ExtraValues | None, kwargs.get('extra')))
+        try:
+            return super().model_validate_strings(obj, **kwargs)
+        finally:
+            _validation_extra.reset(token)
 
     @classmethod
     def settings_cached(cls) -> Self:

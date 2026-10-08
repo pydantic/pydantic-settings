@@ -1,5 +1,6 @@
 import dataclasses
 import gc
+import inspect
 import json
 import logging
 import os
@@ -4693,6 +4694,90 @@ def test_field_named_cls():
 
     s = Settings.model_validate({'cls': 'Foo'})
     assert s.cls == 'Foo'
+
+
+_MODEL_VALIDATE_HAS_EXTRA = 'extra' in inspect.signature(BaseModel.model_validate).parameters
+
+
+@pytest.mark.skipif(not _MODEL_VALIDATE_HAS_EXTRA, reason='pydantic.model_validate extra= requires pydantic>=2.12')
+def test_model_validate_extra_ignore():
+    """Runtime extra= must override BaseSettings extra='forbid' (GH-1011)."""
+
+    class Settings(BaseSettings):
+        name: str = 'default'
+
+    s = Settings.model_validate({'name': 'kept', 'field': 'value'}, extra='ignore')
+    assert s.name == 'kept'
+    assert s.model_dump() == {'name': 'kept'}
+    assert s.__pydantic_extra__ is None
+
+
+@pytest.mark.skipif(not _MODEL_VALIDATE_HAS_EXTRA, reason='pydantic.model_validate extra= requires pydantic>=2.12')
+def test_model_validate_extra_allow():
+    class Settings(BaseSettings):
+        name: str = 'default'
+
+    s = Settings.model_validate({'name': 'kept', 'field': 'value'}, extra='allow')
+    assert s.name == 'kept'
+    assert s.__pydantic_extra__ == {'field': 'value'}
+
+
+@pytest.mark.skipif(not _MODEL_VALIDATE_HAS_EXTRA, reason='pydantic.model_validate extra= requires pydantic>=2.12')
+def test_model_validate_extra_forbid():
+    class Settings(BaseSettings):
+        pass
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings.model_validate({'field': 'value'}, extra='forbid')
+    assert exc_info.value.errors(include_url=False) == [
+        {'type': 'extra_forbidden', 'loc': ('field',), 'msg': 'Extra inputs are not permitted', 'input': 'value'}
+    ]
+
+
+@pytest.mark.skipif(not _MODEL_VALIDATE_HAS_EXTRA, reason='pydantic.model_validate extra= requires pydantic>=2.12')
+def test_model_validate_json_and_strings_extra_ignore():
+    class Settings(BaseSettings):
+        pass
+
+    json_settings = Settings.model_validate_json('{"field": "value"}', extra='ignore')
+    assert json_settings.model_dump() == {}
+
+    strings_settings = Settings.model_validate_strings({'field': 'value'}, extra='ignore')
+    assert strings_settings.model_dump() == {}
+
+
+@pytest.mark.skipif(not _MODEL_VALIDATE_HAS_EXTRA, reason='pydantic.model_validate extra= requires pydantic>=2.12')
+def test_model_validate_extra_forbid_overrides_allow():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(extra='allow')
+        name: str = 'n'
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings.model_validate({'name': 'n', 'x': 1}, extra='forbid')
+    assert exc_info.value.errors(include_url=False)[0]['type'] == 'extra_forbidden'
+
+
+@pytest.mark.skipif(not _MODEL_VALIDATE_HAS_EXTRA, reason='pydantic.model_validate extra= requires pydantic>=2.12')
+def test_model_validate_extra_ignore_still_loads_env(env):
+    class Settings(BaseSettings):
+        name: str = 'default'
+
+    env.set('NAME', 'from_env')
+    s = Settings.model_validate({'unknown': 1}, extra='ignore')
+    assert s.name == 'from_env'
+
+
+def test_model_validate_without_extra_still_forbids():
+    class Settings(BaseSettings):
+        pass
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings.model_validate({'field': 'value'})
+    assert exc_info.value.errors(include_url=False)[0]['type'] == 'extra_forbidden'
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(field='value')
+    assert exc_info.value.errors(include_url=False)[0]['type'] == 'extra_forbidden'
 
 
 def test_warn_on_incomplete_field_info():
