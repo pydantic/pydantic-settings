@@ -4933,6 +4933,49 @@ def test_env_strict_coercion_skips_json_annotation(env):
     assert Settings().my_json == 42
 
 
+@pytest.mark.parametrize('strict', [True, False])
+@pytest.mark.parametrize('source', ['env', 'dotenv', 'nested_env'])
+@pytest.mark.parametrize(
+    'value_type,raw_value,expected',
+    [
+        (int, '42', 42),
+        (StrictInt, '42', 42),
+        (bool, 'true', True),
+        (list[int], '[1, 2]', [1, 2]),
+        (dict[str, int], '{"count": 3}', {'count': 3}),
+        (str, '"hello"', 'hello'),
+    ],
+)
+def test_env_json_metadata_preserves_raw_value(strict, source, value_type, raw_value, expected, env, tmp_path):
+    """2026-10-09: Json fields must receive encoded text before Pydantic parses their contents."""
+    if source == 'nested_env':
+
+        class SubModel(BaseModel):
+            value: Json[value_type]
+
+        class NestedSettings(BaseSettings):
+            sub: SubModel
+            model_config = SettingsConfigDict(strict=strict, env_nested_delimiter='__')
+
+        env.set('SUB__VALUE', raw_value)
+        assert NestedSettings().sub.value == expected
+    else:
+
+        class Settings(BaseSettings):
+            value: Json[value_type]
+            model_config = SettingsConfigDict(strict=strict)
+
+        if source == 'dotenv':
+            dotenv = tmp_path / '.env'
+            dotenv.write_text(f"VALUE='{raw_value}'", encoding='utf-8')
+            settings = Settings(_env_file=dotenv)
+        else:
+            env.set('VALUE', raw_value)
+            settings = Settings()
+
+        assert settings.value == expected
+
+
 def test_env_strict_coercion_json_decodes_to_str(env):
     """A JSON string that decodes to another string re-raises the original validation error."""
 

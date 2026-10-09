@@ -363,7 +363,11 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             if should_coerce and isinstance(value, str) and isinstance(field, FieldInfo):
                 if value == self.env_parse_none_str:
                     return value
-                if not _annotation_contains_types(field.annotation, (Json,), is_instance=True):
+                # 2026-10-09: A direct Json[T] marker is stored in metadata, outside field.annotation.
+                if not (
+                    any(isinstance(md, Json) for md in field.metadata)  # type: ignore[misc]
+                    or _annotation_contains_types(field.annotation, (Json,), is_instance=True)
+                ):
                     try:
                         return TypeAdapter(field.annotation).validate_python(value)
                     except ValidationError:
