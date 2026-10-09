@@ -70,6 +70,7 @@ from ..utils import (
     _get_model_fields,
     _is_function,
     _strip_annotated,
+    _validate_by_name_enabled,
     parse_env_vars,
 )
 from .env import EnvSettingsSource
@@ -1089,8 +1090,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 field_name=field_name,
                 arg_prefix=arg_prefix,
                 case_sensitive=self.case_sensitive,
-                populate_by_name=self.config.get('populate_by_name', False)
-                or self.config.get('validate_by_name', False),
+                populate_by_name=_validate_by_name_enabled(self.config),
                 hide_none_type=self.cli_hide_none_type,
                 kebab_case=self.cli_kebab_case,
                 enable_decoding=self.config.get('enable_decoding'),

@@ -420,6 +420,30 @@ def test_populate_by_name_with_dotenv_when_using_both(tmp_path):
     assert s.apple == 'bongusta', 'Expected alias value to be prioritized.'
 
 
+class SettingWithValidateByAliasFalse(BaseSettings):
+    apple: str = Field('default', alias='pomo')
+
+    model_config = SettingsConfigDict(validate_by_alias=False)
+
+
+def test_validate_by_alias_false_when_using_name(env):
+    env.set('apple', 'honeycrisp')
+    s = SettingWithValidateByAliasFalse()
+    assert s.apple == 'honeycrisp'
+
+
+def test_validate_by_alias_false_with_secrets_when_using_name(tmp_path):
+    (tmp_path / 'apple').write_text('honeycrisp')
+    s = SettingWithValidateByAliasFalse(_secrets_dir=tmp_path)
+    assert s.apple == 'honeycrisp'
+
+
+def test_validate_by_alias_false_init_kwarg_takes_priority_over_env(env):
+    env.set('apple', 'honeycrisp')
+    s = SettingWithValidateByAliasFalse(apple='bongusta')
+    assert s.apple == 'bongusta'
+
+
 def test_with_prefix(env):
     class Settings(BaseSettings):
         apple: str
