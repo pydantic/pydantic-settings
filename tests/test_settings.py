@@ -4076,6 +4076,32 @@ def test_case_insensitive_deeply_nested_dataclass(env):
     assert s.config.nested == NestedDataclass(Deep=DeepDataclass(Name='value', Model=DeepModel(Name='model value')))
 
 
+def test_case_insensitive_optional_annotated_nested(env):
+    class DeepModel(BaseModel):
+        Name: str
+
+    @pydantic_dataclasses.dataclass
+    class NestedDataclass:
+        ApiKey: str
+        Deep: Annotated[DeepModel, Field(description='deep')] | None = None
+
+    class NestedModel(BaseModel):
+        ApiKey: str
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', case_sensitive=False)
+
+        model: Annotated[NestedModel, Field(description='model')] | None = None
+        dc: Annotated[NestedDataclass, Field(description='dataclass')] | None = None
+
+    env.set('model__apikey', 'model key')
+    env.set('dc__apikey', 'dc key')
+    env.set('dc__deep__name', 'deep name')
+    s = Settings()
+    assert s.model == NestedModel(ApiKey='model key')
+    assert s.dc == NestedDataclass(ApiKey='dc key', Deep=DeepModel(Name='deep name'))
+
+
 def test_case_insensitive_nested_alias(env):
     """Ensure case-insensitive environment lookup works with nested aliases."""
 
