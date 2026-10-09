@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from pydantic.alias_generators import to_snake
 from pydantic.fields import FieldInfo
 
-from ..utils import InitState
+from ..utils import InitState, _parse_env_none_str  # 2026-10-08
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
@@ -49,12 +49,14 @@ class AzureKeyVaultMapping(Mapping[str, str | None]):
         case_sensitive: bool,
         snake_case_conversion: bool,
         env_prefix: str | None,
+        env_parse_none_str: str | None = None,  # 2026-10-08
     ) -> None:
         self._loaded_secrets = {}
         self._secret_client = secret_client
         self._case_sensitive = case_sensitive
         self._snake_case_conversion = snake_case_conversion
         self._env_prefix = env_prefix or ''
+        self._env_parse_none_str = env_parse_none_str  # 2026-10-08
         self._secret_map: dict[str, str] = self._load_remote()
 
     def _load_remote(self) -> dict[str, str]:
@@ -94,7 +96,8 @@ class AzureKeyVaultMapping(Mapping[str, str | None]):
             else:
                 raise KeyError(key)
 
-        return self._loaded_secrets[new_key]
+        # 2026-10-08: Decode null markers without eagerly loading unrelated secrets.
+        return _parse_env_none_str(self._loaded_secrets[new_key], self._env_parse_none_str)
 
     def __len__(self) -> int:
         return len(self._secret_map)
@@ -143,6 +146,7 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
             case_sensitive=self.case_sensitive,
             snake_case_conversion=self._snake_case_conversion,
             env_prefix=self.env_prefix,
+            env_parse_none_str=self.env_parse_none_str,  # 2026-10-08
         )
 
     def _extract_field_info(self, field: FieldInfo, field_name: str) -> list[tuple[str, str, bool]]:

@@ -77,6 +77,52 @@ class TestAzureKeyVaultSettingsSource:
         assert settings['SqlServerUser'] == expected_secret_value
         assert settings['SqlServer']['Password'] == expected_secret_value
 
+    # 2026-10-08: Null markers must be resolved for both direct and nested secrets.
+    @pytest.mark.parametrize('from_config', [False, True])
+    @pytest.mark.parametrize(
+        ('parse_none_str', 'secret_value', 'expected'),
+        [(None, 'null', 'null'), ('null', 'null', None), ('VOID', 'VOID', None), ('null', 'ordinary', 'ordinary')],
+    )
+    def test_parse_none_str(
+        self,
+        mocker: MockerFixture,
+        from_config: bool,
+        parse_none_str: str | None,
+        secret_value: str,
+        expected: str | None,
+    ) -> None:
+        class NestedModel(BaseModel):
+            value: str | None = 'default'
+
+        class AzureKeyVaultSettings(BaseSettings):
+            model_config = {'env_parse_none_str': parse_none_str if from_config else None}
+            direct: str | None = 'default'
+            nested: NestedModel
+
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.list_properties_of_secrets.__qualname__}',
+            return_value=[
+                type('', (), {'name': 'direct', 'enabled': True}),
+                type('', (), {'name': 'nested--value', 'enabled': True}),
+            ],
+        )
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.get_secret.__qualname__}',
+            return_value=KeyVaultSecret(SecretProperties(), secret_value),
+        )
+        source = AzureKeyVaultSettingsSource(
+            AzureKeyVaultSettings,
+            'https://my-resource.vault.azure.net/',
+            DefaultAzureCredential(),
+            env_parse_none_str=None if from_config else parse_none_str,
+        )
+
+        values = source()
+        assert values == {'direct': expected, 'nested': {'value': expected}}
+        settings = AzureKeyVaultSettings(**values)
+        assert settings.direct == expected
+        assert settings.nested.value == expected
+
     def test_repr(self, mocker: MockerFixture) -> None:
         class AzureKeyVaultSettings(BaseSettings):
             """AzureKeyVault settings."""
