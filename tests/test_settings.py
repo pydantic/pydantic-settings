@@ -15,7 +15,7 @@ import weakref
 from collections.abc import Callable, Hashable
 from collections.abc import Set as AbstractSet
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from enum import Enum, IntEnum
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar
@@ -2088,7 +2088,7 @@ def test_env_union_with_complex_subfields_parses_plain_if_json_fails(env):
 
     env.set('content', '2020-07-05T00:00:00Z')
     s = Settings()
-    assert s.content == datetime(2020, 7, 5, 0, 0, tzinfo=timezone.utc)
+    assert s.content == datetime(2020, 7, 5, 0, 0, tzinfo=UTC)
 
 
 def test_env_union_without_complex_subfields_does_not_parse_json(env):
