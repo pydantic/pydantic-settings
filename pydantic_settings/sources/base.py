@@ -33,9 +33,9 @@ from .utils import (
     InitState,
     _annotation_is_complex,
     _get_alias_names,
+    _get_field_annotation_and_metadata,
     _get_field_metadata,
     _get_model_fields,
-    _resolve_type_alias,
     _strip_annotated,
     _union_is_complex,
     _warn_if_field_info_incomplete,
@@ -556,11 +556,9 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                 field_info.append((v_alias, self._apply_case_sensitive(env_prefix + v_alias), False))
 
         if not v_alias or self.config.get('populate_by_name', False) or self.config.get('validate_by_name', False):
-            annotation = _strip_annotated(_resolve_type_alias(field.annotation))
+            annotation, metadata = _get_field_annotation_and_metadata(field)
             env_prefix = self.env_prefix if self.env_prefix_target in ('variable', 'all') else ''
-            if is_union_origin(get_origin(annotation)) and _union_is_complex(
-                annotation, field.metadata, self._init_state
-            ):
+            if is_union_origin(get_origin(annotation)) and _union_is_complex(annotation, metadata, self._init_state):
                 field_info.append((field_name, self._apply_case_sensitive(env_prefix + field_name), True))
             else:
                 field_info.append((field_name, self._apply_case_sensitive(env_prefix + field_name), False))

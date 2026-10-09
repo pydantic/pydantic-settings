@@ -177,17 +177,23 @@ def _annotation_is_complex(annotation: Any, metadata: list[Any], init_state: Ini
     )
 
 
-def _get_field_metadata(field: FieldInfo) -> list[Any]:
+def _get_field_annotation_and_metadata(field: FieldInfo) -> tuple[Any, list[Any]]:
+    """Resolve a field's type alias and collect its outer Annotated metadata."""
     annotation = _resolve_type_alias(field.annotation)
     metadata = field.metadata
     origin = get_origin(annotation)
     if typing_objects.is_annotated(origin):
-        _, *meta = get_args(annotation)
+        annotation, *meta = get_args(annotation)
         # Build a new list rather than extending in place: `field.metadata` is shared
         # across instantiations, subclasses and rebuilds, so mutating it would append
         # the alias metadata again on every call.
         metadata = [*metadata, *meta]
-    return metadata
+    return annotation, metadata
+
+
+def _get_field_metadata(field: FieldInfo) -> list[Any]:
+    """Collect a field's metadata, including the outer Annotated metadata of its type alias."""
+    return _get_field_annotation_and_metadata(field)[1]
 
 
 def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:

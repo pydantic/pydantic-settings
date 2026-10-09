@@ -17,7 +17,14 @@ from typing_inspection.introspection import is_union_origin
 
 from ...utils import _settings_debug_enabled, logger
 from ..types import ENV_FILE_SENTINEL, DotenvFiltering, DotenvType, EnvPrefixTarget
-from ..utils import InitState, _annotation_is_complex, _resolve_config_file, _union_is_complex, parse_env_vars
+from ..utils import (
+    InitState,
+    _annotation_is_complex,
+    _get_field_annotation_and_metadata,
+    _resolve_config_file,
+    _union_is_complex,
+    parse_env_vars,
+)
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
@@ -155,13 +162,14 @@ class DotEnvSettingsSource(EnvSettingsSource):
                 continue
             env_used = False
             for field_name, field in self.settings_cls.model_fields.items():
+                annotation, metadata = _get_field_annotation_and_metadata(field)
                 for _, field_env_name, _ in self._extract_field_info(field, field_name):
                     if env_name == field_env_name or (
                         (
-                            _annotation_is_complex(field.annotation, field.metadata, self._init_state)
+                            _annotation_is_complex(annotation, metadata, self._init_state)
                             or (
-                                is_union_origin(get_origin(field.annotation))
-                                and _union_is_complex(field.annotation, field.metadata, self._init_state)
+                                is_union_origin(get_origin(annotation))
+                                and _union_is_complex(annotation, metadata, self._init_state)
                             )
                         )
                         # A var only belongs to a complex field when it sits at the nested
