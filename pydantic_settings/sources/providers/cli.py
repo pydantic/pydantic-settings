@@ -568,7 +568,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             # 2026-10-09: Unknown arguments belong to this parse, including unselected commands.
             for dest in self._cli_unknown_args:
                 self._cli_unknown_args[dest] = []
-            self._unclaimed_unknown_args = []
+            self._unclaimed_unknown_args.clear()
             if args is False:
                 return self._load_env_vars(parsed_args={})
             if args is True:

@@ -2892,6 +2892,23 @@ def test_cli_unknown_args_capture_forwards_custom_parameters():
     assert unknown == ['--unknown']
 
 
+# 2026-10-09: Root capture still works with a read-only parser method.
+def test_cli_readonly_root_parser_keeps_unknown_args():
+    # 2026-10-09: A read-only method remains usable when root capture cannot be installed.
+    class Root(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+
+    class ReadonlyParser(argparse.ArgumentParser):
+        @property
+        def parse_known_args(self):
+            return super().parse_known_args
+
+    parser = ReadonlyParser()
+    source = CliSettingsSource(Root, root_parser=parser)
+    result = Root(_cli_settings_source=source(args=['--unknown']))
+    assert result.unknown_args == ['--unknown']
+
+
 # 2026-10-09: An unselected command must not authorize a similarly named command.
 def test_cli_unknown_args_do_not_match_similarly_named_subcommand():
     class A(BaseSettings, cli_ignore_unknown_args=True):
