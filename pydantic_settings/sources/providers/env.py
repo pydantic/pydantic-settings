@@ -24,11 +24,9 @@ from ..utils import (
     _annotation_contains_types,
     _annotation_enum_name_to_val,
     _annotation_is_complex,
-    _get_field_metadata,
+    _get_field_annotation_and_metadata,
     _get_model_fields,
     _literal_has_numeric_enum,
-    _resolve_type_alias,
-    _strip_annotated,
     _union_has_strict_types,
     _union_is_complex,
     parse_env_vars,
@@ -201,12 +199,10 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         """
         Find out if a field is complex, and if so whether JSON errors should be ignored
         """
-        annotation = _strip_annotated(_resolve_type_alias(field.annotation))
+        annotation, metadata = _get_field_annotation_and_metadata(field)
         if self.field_is_complex(field):
             allow_parse_failure = False
-        elif is_union_origin(get_origin(annotation)) and _union_is_complex(
-            annotation, _get_field_metadata(field), self._init_state
-        ):
+        elif is_union_origin(get_origin(annotation)) and _union_is_complex(annotation, metadata, self._init_state):
             allow_parse_failure = True
         else:
             return False, False
@@ -360,14 +356,18 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         """
         try:
             should_coerce = self.config.get('strict')
-            if not should_coerce and isinstance(field, FieldInfo):
-                should_coerce = (
-                    is_union_origin(get_origin(field.annotation)) and _union_has_strict_types(field.annotation)
-                ) or _literal_has_numeric_enum(field.annotation)
+            if isinstance(field, FieldInfo):
+                annotation, metadata = _get_field_annotation_and_metadata(field)
+                if not should_coerce:
+                    should_coerce = (
+                        is_union_origin(get_origin(annotation)) and _union_has_strict_types(annotation)
+                    ) or _literal_has_numeric_enum(annotation)
             if should_coerce and isinstance(value, str) and isinstance(field, FieldInfo):
                 if value == self.env_parse_none_str:
                     return value
-                if not _annotation_contains_types(field.annotation, (Json,), is_instance=True):
+                if not any(isinstance(md, Json) for md in metadata) and not _annotation_contains_types(  # type: ignore[misc]
+                    annotation, (Json,), is_instance=True
+                ):
                     try:
                         return TypeAdapter(field.annotation).validate_python(value)
                     except ValidationError:

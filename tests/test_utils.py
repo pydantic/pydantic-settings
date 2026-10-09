@@ -1,8 +1,9 @@
 from collections.abc import MutableSet
 from collections.abc import Set as AbstractSet
-from typing import Any, Literal, TypeVar
+from typing import Annotated, Any, Literal, TypeVar
 
 from pydantic import Json, RootModel
+from pydantic.fields import FieldInfo
 from typing_extensions import TypeAliasType
 
 from pydantic_settings.sources.base import _unwrap_optional_annotation
@@ -10,6 +11,7 @@ from pydantic_settings.sources.types import SecretVersion
 from pydantic_settings.sources.utils import (
     _annotation_contains_types,
     _annotation_is_complex,
+    _get_field_annotation_and_metadata,
     _resolve_type_alias,
     _substitute_typevars,
 )
@@ -135,3 +137,19 @@ def test_annotation_is_complex_abstract_set():
     """`collections.abc.Set` is complex, like `set` and `frozenset`."""
     assert _annotation_is_complex(AbstractSet[str], []) is True
     assert _annotation_is_complex(MutableSet[str], []) is True
+
+
+def test_get_field_annotation_and_metadata():
+    inner_metadata = object()
+    outer_metadata = object()
+    Value = TypeAliasType('Value', Annotated[list[int] | str, inner_metadata])
+    field = FieldInfo(annotation=Value)
+    field.metadata = [outer_metadata]
+
+    for _ in range(2):
+        annotation, metadata = _get_field_annotation_and_metadata(field)
+        assert annotation == list[int] | str
+        assert metadata == [outer_metadata, inner_metadata]
+        assert field.metadata == [outer_metadata]
+
+    assert _get_field_annotation_and_metadata(FieldInfo(annotation=int)) == (int, [])
