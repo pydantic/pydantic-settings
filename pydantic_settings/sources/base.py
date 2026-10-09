@@ -10,7 +10,7 @@ from dataclasses import fields as dataclass_fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast, get_args, get_type_hints
 
-from pydantic import AliasChoices, AliasPath, BaseModel, TypeAdapter
+from pydantic import AliasChoices, AliasPath, TypeAdapter
 from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
     get_origin,
 )
@@ -20,7 +20,6 @@ from pydantic.fields import FieldInfo
 from typing_inspection.introspection import is_union_origin
 
 from ..exceptions import SettingsError
-from ..utils import _lenient_issubclass
 from .types import (
     ConfigFileSourceType,
     EnvNoneType,
@@ -252,6 +251,11 @@ def _unwrap_optional_annotation(annotation: Any) -> Any:
     return annotation
 
 
+def _is_model_or_dataclass(annotation: Any) -> bool:
+    """Whether the annotation is a pydantic model or a pydantic dataclass, i.e. a type with nested fields."""
+    return is_model_class(annotation) or is_pydantic_dataclass(annotation)
+
+
 def _get_discriminator(field_info: FieldInfo) -> str | Callable[[Any], Hashable] | None:
     """Get the discriminator of a field using a discriminated union (via Annotated or Field(discriminator=...))."""
     from pydantic import Discriminator
@@ -264,7 +268,7 @@ def _get_discriminator(field_info: FieldInfo) -> str | Callable[[Any], Hashable]
 
 def _get_member_fields(model_cls: type[Any]) -> dict[str, FieldInfo]:
     """Get the fields of a discriminated union member: a model, a pydantic dataclass or a stdlib dataclass."""
-    if is_model_class(model_cls) or is_pydantic_dataclass(model_cls):
+    if _is_model_or_dataclass(model_cls):
         return _get_model_fields(model_cls)
     # Pydantic doesn't attach `__pydantic_fields__` to a stdlib dataclass, so collect the `FieldInfo`s itself:
     # `Field()` is kept as the dataclass field's default, or in its `Annotated` metadata.
@@ -599,14 +603,12 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         for name, value in field_values.items():
             sub_model_field: FieldInfo | None = None
 
-            annotation = _unwrap_optional_annotation(field.annotation)
+            annotation = _strip_annotated(_unwrap_optional_annotation(field.annotation))
 
-            # This is here to make mypy happy
-            # Item "None" of "Optional[Type[Any]]" has no attribute "model_fields"
-            if not annotation or not hasattr(annotation, 'model_fields'):
+            if not _is_model_or_dataclass(annotation):
                 values[name] = value
                 continue
-            model_fields: dict[str, FieldInfo] = annotation.model_fields
+            model_fields = _get_model_fields(annotation)
 
             # Find field in sub model by looking in fields case insensitively
             field_key: str | None = None
@@ -623,7 +625,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
             if (
                 sub_model_field is not None
-                and _lenient_issubclass(_unwrap_optional_annotation(sub_model_field.annotation), BaseModel)
+                and _is_model_or_dataclass(_strip_annotated(_unwrap_optional_annotation(sub_model_field.annotation)))
                 and isinstance(value, dict)
             ):
                 values[field_key] = self._replace_field_names_case_insensitively(sub_model_field, value)
