@@ -4,16 +4,18 @@ from __future__ import annotations as _annotations
 
 import json
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Callable, Hashable, Sequence
 from dataclasses import asdict, is_dataclass
+from dataclasses import fields as dataclass_fields
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast, get_args
+from typing import TYPE_CHECKING, Any, cast, get_args, get_type_hints
 
 from pydantic import AliasChoices, AliasPath, BaseModel, TypeAdapter
 from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
     get_origin,
 )
 from pydantic._internal._utils import deep_update, is_model_class
+from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
 from typing_inspection.introspection import is_union_origin
 
@@ -250,13 +252,68 @@ def _unwrap_optional_annotation(annotation: Any) -> Any:
     return annotation
 
 
-def _has_discriminator(field_info: FieldInfo) -> bool:
-    """Check if a field uses a discriminated union (via Annotated or Field(discriminator=...))."""
-    if field_info.discriminator is not None:
-        return True
+def _get_discriminator(field_info: FieldInfo) -> str | Callable[[Any], Hashable] | None:
+    """Get the discriminator of a field using a discriminated union (via Annotated or Field(discriminator=...))."""
     from pydantic import Discriminator
 
-    return any(isinstance(m, Discriminator) for m in field_info.metadata)
+    discriminator = field_info.discriminator
+    if discriminator is None:
+        discriminator = next((m for m in field_info.metadata if isinstance(m, Discriminator)), None)
+    return discriminator.discriminator if isinstance(discriminator, Discriminator) else discriminator
+
+
+def _get_member_fields(model_cls: type[Any]) -> dict[str, FieldInfo]:
+    """Get the fields of a discriminated union member: a model, a pydantic dataclass or a stdlib dataclass."""
+    if is_model_class(model_cls) or is_pydantic_dataclass(model_cls):
+        return _get_model_fields(model_cls)
+    # Pydantic doesn't attach `__pydantic_fields__` to a stdlib dataclass, so collect the `FieldInfo`s itself:
+    # `Field()` is kept as the dataclass field's default, or in its `Annotated` metadata.
+    fields: dict[str, FieldInfo] = {}
+    hints = get_type_hints(model_cls, include_extras=True)
+    for dc_field in dataclass_fields(model_cls):
+        if isinstance(dc_field.default, FieldInfo):
+            fields[dc_field.name] = dc_field.default
+        else:
+            metadata = get_args(hints.get(dc_field.name))[1:]
+            field_info = next((m for m in metadata if isinstance(m, FieldInfo)), None)
+            if field_info is not None:
+                fields[dc_field.name] = field_info
+    return fields
+
+
+def _get_discriminator_keys(model_cls: type[Any], discriminator: str) -> tuple[str, ...]:
+    """Get the keys that can hold the discriminator value of a discriminated union member: its name and alias."""
+    alias = getattr(_get_member_fields(model_cls).get(discriminator), 'validation_alias', None)
+    return (discriminator, alias) if isinstance(alias, str) else (discriminator,)
+
+
+def _get_nested_discriminators(annotation: Any) -> list[str] | None:
+    """Get the discriminators nested inside a discriminated union's annotation.
+
+    A member can be guarded by more than one discriminator, e.g. in
+    ``Annotated[Annotated[BlackCat | WhiteCat, Discriminator('color')] | Dog, Discriminator('pet_type')]``
+    reaching ``BlackCat`` requires both ``pet_type='cat'`` and ``color='black'``. Each one has to keep the
+    default's value for its default to still apply.
+
+    Returns ``None`` if a nested discriminator can't be resolved to a field name (i.e. it is callable), as
+    the member it selects can't be looked up in the incoming value.
+    """
+    from pydantic import Discriminator
+
+    discriminators: list[str] = []
+    for arg in get_args(annotation):
+        if arg is type(None):
+            continue
+        for metadata in get_args(arg)[1:]:
+            if isinstance(metadata, Discriminator):
+                if not isinstance(metadata.discriminator, str):
+                    return None
+                discriminators.append(metadata.discriminator)
+        nested = _get_nested_discriminators(arg)
+        if nested is None:
+            return None
+        discriminators.extend(nested)
+    return discriminators
 
 
 class DefaultSettingsSource(PydanticBaseSettingsSource):
@@ -277,6 +334,9 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
     ):
         super().__init__(settings_cls, _init_state)
         self.defaults: dict[str, Any] = {}
+        # Discriminated union fields: per discriminator guarding the default's member, the keys that can hold
+        # its value, and the default's value
+        self._discriminator_tags: dict[str, list[tuple[tuple[str, ...], Any]]] = {}
         self.nested_model_default_partial_update = (
             nested_model_default_partial_update
             if nested_model_default_partial_update is not None
@@ -285,7 +345,13 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
         if self.nested_model_default_partial_update:
             for field_name, field_info in settings_cls.model_fields.items():
                 _warn_if_field_info_incomplete(field_info, field_name, self._init_state)
-                if _has_discriminator(field_info):
+                discriminator = _get_discriminator(field_info)
+                if callable(discriminator):
+                    # The member selected by a callable discriminator can't be looked up in the incoming value
+                    continue
+                nested = _get_nested_discriminators(field_info.annotation) if discriminator is not None else []
+                if nested is None:
+                    # Same for a nested callable discriminator
                     continue
                 alias_names, *_ = _get_alias_names(field_name, field_info)
                 preferred_alias = alias_names[0]
@@ -293,13 +359,29 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
                     self.defaults[preferred_alias] = asdict(field_info.default)
                 elif is_model_class(type(field_info.default)):
                     self.defaults[preferred_alias] = field_info.default.model_dump()
+                if discriminator is not None and preferred_alias in self.defaults:
+                    default_cls = type(field_info.default)
+                    self._discriminator_tags[preferred_alias] = [
+                        (_get_discriminator_keys(default_cls, name), getattr(field_info.default, name, None))
+                        for name in (discriminator, *nested)
+                    ]
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         # Nothing to do here. Only implement the return statement to make mypy happy
         return None, '', False
 
     def __call__(self) -> dict[str, Any]:
-        return self.defaults
+        defaults = self.defaults.copy()
+        for alias, discriminators in self._discriminator_tags.items():
+            value = self.current_state.get(alias)
+            if not isinstance(value, dict):
+                continue
+            # Pydantic reads each tag from the discriminator field's name or its alias, so a value under any of
+            # those keys selects a member. A key that is absent leaves the default's member in place.
+            # The default's fields don't apply when any discriminator selects another member.
+            if any(value[key] != default_tag for keys, default_tag in discriminators for key in keys if key in value):
+                del defaults[alias]
+        return defaults
 
     def __repr__(self) -> str:
         return (
