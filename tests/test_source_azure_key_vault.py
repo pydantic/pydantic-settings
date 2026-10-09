@@ -287,6 +287,7 @@ class TestAzureKeyVaultSettingsSource:
             api_key: str = Field(alias='api-key')
             connection_pool: ConnectionPool
             metadata: dict[str, str]
+            optional_note: str = 'default'
 
         class AzureKeyVaultSettings(BaseSettings):
             database: Database
@@ -330,6 +331,7 @@ class TestAzureKeyVaultSettingsSource:
         assert settings.database.api_key == 'api-secret'
         assert settings.database.connection_pool.max_size == 10
         assert settings.database.metadata == {'keep-dash': 'value'}
+        assert settings.database.optional_note == 'default'
 
     @pytest.mark.parametrize(
         'env_prefix', (None, 'singlewordprefix', 'prefix-kebab-case-', 'PrefixPascalCaseprefixCamelCaseSeparator-')
