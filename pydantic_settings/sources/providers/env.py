@@ -254,7 +254,8 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                 return type_has_key
         if _lenient_issubclass(get_origin(annotation), dict):
             # get value type if it's a dict
-            return get_args(annotation)[-1]
+            args = get_args(annotation)
+            return args[-1] if args else None
         if is_model_class(annotation) or is_pydantic_dataclass(annotation):  # type: ignore[arg-type]
             fields = _get_model_fields(annotation)
             # `case_sensitive is None` is here to be compatible with the old behavior.

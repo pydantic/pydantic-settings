@@ -8,6 +8,7 @@ import re
 import sys
 import threading
 import time
+import typing
 import uuid
 import warnings
 import weakref
@@ -566,6 +567,41 @@ def test_nested_env_delimiter_aliases(env):
     env.set('foo__v1', '-1-')
     env.set('bar__v2', '-2-')
     assert Cfg().model_dump() == {'sub_model': {'v1': '-1-', 'v2': '-2-'}}
+
+
+@pytest.mark.parametrize(
+    'annotation',
+    [
+        typing.Dict,  # noqa: UP006
+        typing.Dict | None,  # noqa: UP006
+        Annotated[typing.Dict, 'meta'],  # noqa: UP006
+        typing.OrderedDict,
+        dict,
+    ],
+)
+def test_nested_env_delimiter_bare_dict(env, annotation):
+    class Cfg(BaseSettings):
+        dvals: annotation
+
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set('dvals__k1', 'v1')
+    env.set('dvals__k2', 'v2')
+    assert Cfg().model_dump() == {'dvals': {'k1': 'v1', 'k2': 'v2'}}
+
+
+def test_nested_env_delimiter_bare_typing_dict_in_sub_model(env):
+    class SubModel(BaseModel):
+        dvals: typing.Dict  # noqa: UP006
+
+    class Cfg(BaseSettings):
+        sub_model: SubModel
+
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set('sub_model__dvals__k1', 'v1')
+    env.set('sub_model__dvals__k2', 'v2')
+    assert Cfg().model_dump() == {'sub_model': {'dvals': {'k1': 'v1', 'k2': 'v2'}}}
 
 
 @pytest.mark.parametrize('env_prefix', [None, 'prefix_', 'prefix__'])
