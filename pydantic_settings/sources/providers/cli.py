@@ -575,14 +575,16 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 args = sys.argv[1:]
             return self._load_env_vars(parsed_args=self._parse_args(self.root_parser, args))
         if parsed_args is not None:
-            return self._load_env_vars(parsed_args=copy.copy(parsed_args))
+            return self._load_env_vars(parsed_args=copy.copy(parsed_args), reset_unselected=True)
         return super().__call__()
 
     @overload
     def _load_env_vars(self) -> Mapping[str, str | None]: ...
 
     @overload
-    def _load_env_vars(self, *, parsed_args: Namespace | SimpleNamespace | dict[str, Any]) -> CliSettingsSource[T]:
+    def _load_env_vars(
+        self, *, parsed_args: Namespace | SimpleNamespace | dict[str, Any], reset_unselected: bool = False
+    ) -> CliSettingsSource[T]:
         """
         Loads the parsed command line arguments into the CLI environment settings variables.
 
@@ -598,7 +600,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         """
 
     def _load_env_vars(
-        self, *, parsed_args: Namespace | SimpleNamespace | dict[str, list[str] | str] | None = None
+        self,
+        *,
+        parsed_args: Namespace | SimpleNamespace | dict[str, list[str] | str] | None = None,
+        reset_unselected: bool = False,
     ) -> Mapping[str, str | None] | CliSettingsSource[T]:
         if parsed_args is None:
             return {}
@@ -612,6 +617,14 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 for subcommand_dest in [arg.dest for arg in arg_map.values()]:
                     if subcommand_dest not in selected_subcommands:
                         parsed_args[subcommand_dest] = self.cli_parse_none_str
+                        # 2026-10-09: External parser calls can leave captures from an unselected command.
+                        self._cli_unknown_args.update(
+                            {
+                                dest: []
+                                for dest in self._cli_unknown_args
+                                if reset_unselected and dest.startswith(f'{subcommand_dest}.')
+                            }
+                        )
 
         parsed_args = {
             key: val

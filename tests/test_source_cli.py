@@ -2856,6 +2856,26 @@ def test_cli_parser_without_unknown_field_is_not_patched():
     assert parser.parse_known_args == original
 
 
+# 2026-10-09: Externally parsed namespaces cannot retain an unselected command's capture.
+def test_cli_unknown_args_reset_when_external_parser_is_reused():
+    class A(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+
+    class C(BaseModel):
+        v: int = 0
+
+    class Root(BaseSettings):
+        a: CliSubCommand[A]
+        c: CliSubCommand[C]
+
+    parser = argparse.ArgumentParser()
+    source = CliSettingsSource(Root, root_parser=parser)
+    first = Root(_cli_settings_source=source(parsed_args=parser.parse_args(['a', '--x'])))
+    assert first.a is not None and first.a.unknown_args == ['--x']
+    second = Root(_cli_settings_source=source(parsed_args=parser.parse_args(['c'])))
+    assert second.model_dump() == {'a': None, 'c': {'v': 0}}
+
+
 # 2026-10-09: Capture wrappers preserve custom parser call signatures.
 def test_cli_unknown_args_capture_forwards_custom_parameters():
     class Root(BaseSettings, cli_ignore_unknown_args=True):
