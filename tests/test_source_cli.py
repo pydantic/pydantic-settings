@@ -2876,6 +2876,25 @@ def test_cli_unknown_args_reset_when_external_parser_is_reused():
     assert second.model_dump() == {'a': None, 'c': {'v': 0}}
 
 
+# 2026-10-09: A rejected root typo must not leak into a later external parse.
+@pytest.mark.parametrize('as_dict', [False, True])
+def test_cli_external_parse_after_rejected_root_unknown(as_dict):
+    class Sub(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+
+    class Root(BaseSettings, cli_exit_on_error=False):
+        sub: CliSubCommand[Sub]
+
+    source = CliSettingsSource(Root)
+    with pytest.raises(SettingsError, match='unrecognized arguments: --typo'):
+        source(args=['--typo', 'sub'])
+    clean = source.root_parser.parse_args(['sub'])
+    result = Root(_cli_settings_source=source(parsed_args=vars(clean) if as_dict else clean))
+    assert result.sub is not None and result.sub.unknown_args == []
+    with pytest.raises(SettingsError, match='unrecognized arguments: --another-typo'):
+        source(args=['--another-typo', 'sub'])
+
+
 # 2026-10-09: Capture wrappers preserve custom parser call signatures.
 def test_cli_unknown_args_capture_forwards_custom_parameters():
     class Root(BaseSettings, cli_ignore_unknown_args=True):

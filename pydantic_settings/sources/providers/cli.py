@@ -650,12 +650,14 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 for dest in self._cli_unknown_args
             )
             if self._unclaimed_unknown_args and not root_accepts_unknown:
-                pending = self._unclaimed_unknown_args
+                pending = self._unclaimed_unknown_args.copy()
             elif not selected_accepts_unknown:
                 pending = next((args for args in self._cli_unknown_args.values() if args), [])
             else:
                 pending = []
             if pending:
+                # 2026-10-09: Consumed errors must not poison a later external parse.
+                self._unclaimed_unknown_args.clear()
                 if isinstance(self.root_parser, ArgumentParser):
                     self.root_parser.error(f'unrecognized arguments: {" ".join(pending)}')
                 raise SystemExit(2)
