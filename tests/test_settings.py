@@ -3115,6 +3115,43 @@ def test_dotenv_extra_forbid(tmp_path):
     ]
 
 
+@pytest.mark.parametrize('extra', ['allow', 'forbid'])
+@pytest.mark.parametrize('env_ignore_empty', [False, True])
+def test_dotenv_empty_extra_value(tmp_path, extra, env_ignore_empty):
+    p = tmp_path / '.env'
+    p.write_text('a=b\nx=\nno_value')
+
+    class Settings(BaseSettings):
+        a: str
+
+        model_config = SettingsConfigDict(env_file=p, extra=extra, env_ignore_empty=env_ignore_empty)
+
+    if extra == 'forbid' and not env_ignore_empty:
+        with pytest.raises(ValidationError) as exc_info:
+            Settings()
+        assert exc_info.value.errors(include_url=False) == [
+            {'type': 'extra_forbidden', 'loc': ('x',), 'msg': 'Extra inputs are not permitted', 'input': ''}
+        ]
+    else:
+        s = Settings()
+        assert s.a == 'b'
+        assert s.model_dump() == ({'a': 'b', 'x': ''} if extra == 'allow' and not env_ignore_empty else {'a': 'b'})
+
+
+def test_dotenv_empty_extra_value_with_prefix(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('APP_a=b\nAPP_x=')
+
+    class Settings(BaseSettings):
+        a: str
+
+        model_config = SettingsConfigDict(env_file=p, env_prefix='APP_', extra='allow')
+
+    s = Settings()
+    assert s.a == 'b'
+    assert s.model_extra == {'x': ''}
+
+
 def test_dotenv_extra_case_insensitive(tmp_path):
     p = tmp_path / '.env'
     p.write_text('a=b')
