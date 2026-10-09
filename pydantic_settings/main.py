@@ -14,9 +14,9 @@ from weakref import WeakKeyDictionary
 
 from pydantic import ConfigDict
 from pydantic._internal._config import config_keys
-from pydantic._internal._signature import _field_name_for_signature
-from pydantic._internal._utils import deep_update, is_model_class
+from pydantic._internal._utils import deep_update, is_model_class, is_valid_identifier
 from pydantic.dataclasses import is_pydantic_dataclass
+from pydantic.fields import FieldInfo
 from pydantic.main import BaseModel
 
 from .exceptions import SettingsError
@@ -744,6 +744,14 @@ class BaseSettings(BaseModel):
     )
 
 
+def _field_name_for_init(field_name: str, field_info: FieldInfo, validate_by_alias: bool) -> str:
+    if validate_by_alias:
+        for alias in (field_info.alias, field_info.validation_alias):
+            if isinstance(alias, str) and is_valid_identifier(alias):
+                return alias
+    return field_name
+
+
 class CliApp:
     """
     A utility class for running Pydantic `BaseSettings`, `BaseModel`, or `pydantic.dataclasses.dataclass` as
@@ -878,9 +886,11 @@ class CliApp:
                 _init_kwargs=model_init_data,
             )
             model = base_settings_cls(**base_settings_cls._settings_build_values(sources, init_kwargs))
+            validate_by_alias = base_settings_cls.model_config.get('validate_by_alias', True)
             model_init_data = {}
             for field_name, field_info in base_settings_cls.model_fields.items():
-                model_init_data[_field_name_for_signature(field_name, field_info)] = getattr(model, field_name)
+                init_name = _field_name_for_init(field_name, field_info, validate_by_alias)
+                model_init_data[init_name] = getattr(model, field_name)
             command = model_cls(**model_init_data)
         else:
             sources, init_kwargs = model_cls._settings_init_sources(

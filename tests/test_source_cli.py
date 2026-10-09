@@ -4442,6 +4442,20 @@ def test_cli_app_run_subcommand_underscore_field_name():
     }
 
 
+@pytest.mark.parametrize('validate_by_alias', [True, False])
+def test_cli_app_run_base_model_alias_respects_validate_by_alias(validate_by_alias):
+    class Cmd(BaseModel):
+        model_config = ConfigDict(validate_by_alias=validate_by_alias, validate_by_name=not validate_by_alias)
+
+        name: str = Field('default', alias='cmdName')
+
+        def cli_cmd(self) -> None:
+            pass
+
+    init_kwargs = {'cmdName' if validate_by_alias else 'name': 'from init'}
+    assert CliApp.run(Cmd, cli_args=[], **init_kwargs).name == 'from init'
+
+
 def test_get_model_description_returns_docstring():
     class MyModel(BaseModel):
         """My docstring."""
