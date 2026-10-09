@@ -166,11 +166,12 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
     def _translate_nested_keys(self, values: dict[str, Any], annotation: Any) -> None:
         candidates = get_args(annotation) if is_union_origin(get_origin(annotation)) else (annotation,)
         models = tuple(model for model in candidates if is_model_class(model) or is_pydantic_dataclass(model))
+        # The parent prefix has already been removed from the keys in values.
         fields = [
-            (field_key, env_name, field)
+            (field_key, self._apply_case_sensitive(field_key).replace('_', '-'), field)
             for model in models
             for field_name, field in _get_model_fields(model).items()
-            for field_key, env_name, _ in self._extract_field_info(field, field_name)
+            for field_key, _, _ in self._extract_field_info(field, field_name)
         ]
         unmodified_keys = {env_name for field_key, env_name, _ in fields if field_key == env_name}
         for field_key, env_name, field in fields:

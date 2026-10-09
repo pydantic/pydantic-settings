@@ -280,13 +280,15 @@ class TestAzureKeyVaultSettingsSource:
         assert settings.my_field == expected_secret_value
         assert settings.alias_field == expected_secret_value
 
-    def test_dash_to_underscore_translation_nested(self, mocker: MockerFixture) -> None:
+    @pytest.mark.parametrize('env_prefix', (None, 'APP-'))
+    def test_dash_to_underscore_translation_nested(self, mocker: MockerFixture, env_prefix: str | None) -> None:
         class ConnectionPool(BaseModel):
             max_size: int
 
         class Database(BaseModel):
             sql_password: str
             api_key: str = Field(alias='api-key')
+            app_token: str = Field(alias='app-token')
             connection_pool: ConnectionPool
             metadata: dict[str, str]
             optional_note: str = 'default'
@@ -309,14 +311,16 @@ class TestAzureKeyVaultSettingsSource:
                         'https://my-resource.vault.azure.net/',
                         DefaultAzureCredential(),
                         dash_to_underscore=True,
+                        env_prefix=env_prefix,
                     ),
                 )
 
         secrets = {
-            'database--sql-password': 'password',
-            'database--api-key': 'api-secret',
-            'database--connection-pool--max-size': '10',
-            'database--metadata--keep-dash': 'value',
+            f'{env_prefix or ""}database--sql-password': 'password',
+            f'{env_prefix or ""}database--api-key': 'api-secret',
+            f'{env_prefix or ""}database--app-token': 'app-secret',
+            f'{env_prefix or ""}database--connection-pool--max-size': '10',
+            f'{env_prefix or ""}database--metadata--keep-dash': 'value',
         }
         mocker.patch(
             f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.list_properties_of_secrets.__qualname__}',
@@ -331,6 +335,7 @@ class TestAzureKeyVaultSettingsSource:
 
         assert settings.database.sql_password == 'password'
         assert settings.database.api_key == 'api-secret'
+        assert settings.database.app_token == 'app-secret'
         assert settings.database.connection_pool.max_size == 10
         assert settings.database.metadata == {'keep-dash': 'value'}
         assert settings.database.optional_note == 'default'
