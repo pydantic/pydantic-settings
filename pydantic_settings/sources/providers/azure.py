@@ -164,18 +164,25 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
         return values
 
     def _translate_nested_keys(self, values: dict[str, Any], annotation: Any) -> None:
-        models = get_args(annotation) if is_union_origin(get_origin(annotation)) else (annotation,)
-        for model in models:
-            if not (is_model_class(model) or is_pydantic_dataclass(model)):
+        candidates = get_args(annotation) if is_union_origin(get_origin(annotation)) else (annotation,)
+        models = tuple(model for model in candidates if is_model_class(model) or is_pydantic_dataclass(model))
+        fields = [
+            (field_key, env_name, field)
+            for model in models
+            for field_name, field in _get_model_fields(model).items()
+            for field_key, env_name, _ in self._extract_field_info(field, field_name)
+        ]
+        unmodified_keys = {env_name for field_key, env_name, _ in fields if field_key == env_name}
+        for field_key, env_name, field in fields:
+            if env_name not in values:
                 continue
-            for field_name, field in _get_model_fields(model).items():
-                for field_key, env_name, _ in self._extract_field_info(field, field_name):
-                    if env_name not in values:
-                        continue
-                    if env_name != field_key:
-                        values.setdefault(field_key, values.pop(env_name))
-                    if isinstance(values[field_key], dict):
-                        self._translate_nested_keys(values[field_key], field.annotation)
+            if env_name != field_key:
+                if env_name in unmodified_keys:
+                    values.setdefault(field_key, values[env_name])
+                else:
+                    values.setdefault(field_key, values.pop(env_name))
+            if isinstance(values[field_key], dict):
+                self._translate_nested_keys(values[field_key], field.annotation)
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}(url={self._url!r}, env_nested_delimiter={self.env_nested_delimiter!r})'

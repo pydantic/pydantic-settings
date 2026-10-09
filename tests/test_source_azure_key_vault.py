@@ -2,6 +2,8 @@
 Test pydantic_settings.AzureKeyVaultSettingsSource.
 """
 
+from typing import Literal
+
 import pytest
 from pydantic import BaseModel, Field, ValidationError
 from pytest_mock import MockerFixture
@@ -332,6 +334,55 @@ class TestAzureKeyVaultSettingsSource:
         assert settings.database.connection_pool.max_size == 10
         assert settings.database.metadata == {'keep-dash': 'value'}
         assert settings.database.optional_note == 'default'
+
+    def test_dash_to_underscore_translation_union_alias(self, mocker: MockerFixture) -> None:
+        class FirstDatabase(BaseModel):
+            api_key: str
+            kind: Literal['first']
+
+        class AliasedDatabase(BaseModel):
+            api_key: str = Field(alias='api-key')
+            kind: Literal['aliased']
+
+        class AzureKeyVaultSettings(BaseSettings):
+            database: FirstDatabase | AliasedDatabase
+
+            @classmethod
+            def settings_customise_sources(
+                cls,
+                settings_cls: type[BaseSettings],
+                init_settings: PydanticBaseSettingsSource,
+                env_settings: PydanticBaseSettingsSource,
+                dotenv_settings: PydanticBaseSettingsSource,
+                file_secret_settings: PydanticBaseSettingsSource,
+            ) -> tuple[PydanticBaseSettingsSource, ...]:
+                return (
+                    AzureKeyVaultSettingsSource(
+                        settings_cls,
+                        'https://my-resource.vault.azure.net/',
+                        DefaultAzureCredential(),
+                        dash_to_underscore=True,
+                    ),
+                )
+
+        secrets = {'database--api-key': 'secret', 'database--kind': 'aliased'}
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.list_properties_of_secrets.__qualname__}',
+            return_value=[type('', (), {'name': name, 'enabled': True}) for name in secrets],
+        )
+        mocker.patch(
+            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.get_secret.__qualname__}',
+            side_effect=lambda name: KeyVaultSecret(SecretProperties(), secrets[name]),
+        )
+
+        aliased_settings = AzureKeyVaultSettings()
+        assert isinstance(aliased_settings.database, AliasedDatabase)
+        assert aliased_settings.database.api_key == 'secret'
+
+        secrets['database--kind'] = 'first'
+        first_settings = AzureKeyVaultSettings()
+        assert isinstance(first_settings.database, FirstDatabase)
+        assert first_settings.database.api_key == 'secret'
 
     @pytest.mark.parametrize(
         'env_prefix', (None, 'singlewordprefix', 'prefix-kebab-case-', 'PrefixPascalCaseprefixCamelCaseSeparator-')
