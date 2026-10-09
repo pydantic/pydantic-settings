@@ -1845,6 +1845,14 @@ print(Settings().model_dump())
 #> {'good_arg': 'hello world', 'ignored_args': ['--bad-arg=bad', 'ANOTHER_BAD_ARG']}
 ```
 
+With subcommands, unknown arguments are captured by the innermost parser that declares a `CliUnknownArgs` field.
+Arguments appearing before a subcommand remain with the parent parser. If a child parser has no capture field,
+its leftovers are passed back to its parent. Captured lists are reset when a `CliSettingsSource` parses new arguments.
+
+Ordinary nested models share their parent's parser. Declaring multiple `CliUnknownArgs` fields on that same parser
+still duplicates its leftovers; this case is not covered by the subcommand behavior above. Custom parsers whose
+`parse_known_args` method cannot be replaced also cannot capture subcommand leftovers independently.
+
 #### CLI Kebab Case for Arguments
 
 Change whether CLI arguments should use kebab case by enabling `cli_kebab_case`. By default, `cli_kebab_case=True` will

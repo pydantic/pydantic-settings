@@ -2826,6 +2826,70 @@ def test_cli_unknown_args_are_not_shared_across_depths():
     assert again.sub_cmd is not None and again.sub_cmd.unknown_args == ['--unk=3']
 
 
+# 2026-10-09: Reusing a source must not retain an unselected command's leftovers.
+def test_cli_unknown_args_reset_when_source_is_reused():
+    class A(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+
+    class C(BaseModel):
+        v: int = 0
+
+    class Root(BaseSettings):
+        a: CliSubCommand[A]
+        c: CliSubCommand[C]
+
+    source = CliSettingsSource(Root)
+    first = Root(_cli_settings_source=source(args=['a', '--x']))
+    assert first.a is not None and first.a.unknown_args == ['--x']
+    second = Root(_cli_settings_source=source(args=['c']))
+    assert second.model_dump() == {'a': None, 'c': {'v': 0}}
+
+
+# 2026-10-09: Models without a capture field leave custom parser methods intact.
+def test_cli_parser_without_unknown_field_is_not_patched():
+    class Root(BaseSettings):
+        v: int = 0
+
+    parser = argparse.ArgumentParser()
+    original = parser.parse_known_args
+    CliSettingsSource(Root, root_parser=parser)
+    assert parser.parse_known_args == original
+
+
+# 2026-10-09: Capture wrappers preserve custom parser call signatures.
+def test_cli_unknown_args_capture_forwards_custom_parameters():
+    class Root(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+
+    class CustomParser(argparse.ArgumentParser):
+        def parse_known_args(self, args=None, namespace=None, *, marker=None):
+            assert marker == 'custom'
+            return super().parse_known_args(args, namespace)
+
+    parser = CustomParser()
+    CliSettingsSource(Root, root_parser=parser)
+    _, unknown = parser.parse_known_args(['--unknown'], marker='custom')
+    assert unknown == ['--unknown']
+
+
+# 2026-10-09: An unselected command must not authorize a similarly named command.
+def test_cli_unknown_args_do_not_match_similarly_named_subcommand():
+    class A(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+
+    class BA(BaseModel):
+        v: int = 0
+
+    class Root(BaseSettings):
+        unknown_args: CliUnknownArgs
+        a: CliSubCommand[A]
+        ba: CliSubCommand[BA]
+
+    with pytest.raises(SystemExit):
+        Root(_cli_parse_args=['--typo', 'ba'])
+    assert Root(_cli_parse_args=['ba']).ba is not None
+
+
 def test_cli_root_typo_rejected_when_subcommand_accepts_unknown_args():
     class Sub(BaseSettings, cli_ignore_unknown_args=True):
         ignored_args: CliUnknownArgs
