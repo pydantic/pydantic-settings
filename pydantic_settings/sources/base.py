@@ -34,7 +34,9 @@ from .utils import (
     _annotation_is_complex,
     _get_alias_names,
     _get_field_annotation_and_metadata,
+    _get_field_metadata,
     _get_model_fields,
+    _strip_annotated,
     _union_is_complex,
     _warn_if_field_info_incomplete,
 )
@@ -198,7 +200,7 @@ class PydanticBaseSettingsSource(ABC):
         Returns:
             The decoded value for further preparation
         """
-        metadata = _get_field_annotation_and_metadata(field)[1] if field else []
+        metadata = _get_field_metadata(field) if field else []
         if field and (
             NoDecode in metadata or (self.config.get('enable_decoding') is False and ForceDecode not in metadata)
         ):

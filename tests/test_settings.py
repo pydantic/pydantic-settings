@@ -741,6 +741,28 @@ def test_named_union_type_alias_json_validation(env, validation_alias, strict):
     assert Settings().value == [1, 2]
 
 
+@pytest.mark.parametrize('annotation, raw_value, expected', [(Json[list[int]], '[1, 2]', [1, 2]), (Json[int], '5', 5)])
+@pytest.mark.parametrize('nested', [False, True])
+def test_inline_json_strict(env, annotation, raw_value, expected, nested):
+    class Nested(BaseModel):
+        value: annotation
+
+    class Settings(BaseSettings):
+        value: annotation
+        model_config = SettingsConfigDict(strict=True)
+
+    class NestedSettings(BaseSettings):
+        nested: Nested
+        model_config = SettingsConfigDict(strict=True, env_nested_delimiter='__')
+
+    if nested:
+        env.set('nested__value', raw_value)
+        assert NestedSettings().nested.value == expected
+    else:
+        env.set('value', raw_value)
+        assert Settings().value == expected
+
+
 @pytest.mark.parametrize('source', ['env', 'dotenv', 'nested'])
 @pytest.mark.parametrize('raw_value, expected', [('true', True), ('false', False)])
 def test_named_union_type_alias_strict_bool(env, tmp_path, source, raw_value, expected):

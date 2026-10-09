@@ -191,6 +191,11 @@ def _get_field_annotation_and_metadata(field: FieldInfo) -> tuple[Any, list[Any]
     return annotation, metadata
 
 
+def _get_field_metadata(field: FieldInfo) -> list[Any]:
+    """Collect a field's metadata, including the outer Annotated metadata of its type alias."""
+    return _get_field_annotation_and_metadata(field)[1]
+
+
 def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:
     if _lenient_issubclass(annotation, (str, bytes)):
         return False

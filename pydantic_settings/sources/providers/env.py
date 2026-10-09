@@ -365,9 +365,8 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             if should_coerce and isinstance(value, str) and isinstance(field, FieldInfo):
                 if value == self.env_parse_none_str:
                     return value
-                if not any(isinstance(md, Json) for md in metadata) and not _annotation_contains_types(  # type: ignore[misc]
-                    annotation, (Json,), is_instance=True
-                ):
+                has_json = any(isinstance(md, Json) for md in metadata)  # type: ignore[misc]
+                if not has_json and not _annotation_contains_types(annotation, (Json,), is_instance=True):
                     try:
                         return TypeAdapter(field.annotation).validate_python(value)
                     except ValidationError:
