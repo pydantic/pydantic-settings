@@ -3,12 +3,15 @@
 from __future__ import annotations as _annotations
 
 from collections.abc import Iterator, Mapping
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, get_args, get_origin
 
+from pydantic._internal._utils import is_model_class
 from pydantic.alias_generators import to_snake
+from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
+from typing_inspection.introspection import is_union_origin
 
-from ..utils import InitState
+from ..utils import InitState, _get_model_fields
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
@@ -153,6 +156,34 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
             return [(x[0], x[1].replace('_', '-'), x[2]) for x in super()._extract_field_info(field, field_name)]
 
         return super()._extract_field_info(field, field_name)
+
+    def explode_env_vars(self, field_name: str, field: FieldInfo, env_vars: Mapping[str, str | None]) -> dict[str, Any]:
+        values = super().explode_env_vars(field_name, field, env_vars)
+        if self._dash_to_underscore and not self._snake_case_conversion:
+            self._translate_nested_keys(values, field.annotation)
+        return values
+
+    def _translate_nested_keys(self, values: dict[str, Any], annotation: Any) -> None:
+        candidates = get_args(annotation) if is_union_origin(get_origin(annotation)) else (annotation,)
+        models = tuple(model for model in candidates if is_model_class(model) or is_pydantic_dataclass(model))
+        # The parent prefix has already been removed from the keys in values.
+        fields = [
+            (field_key, self._apply_case_sensitive(field_key).replace('_', '-'), field)
+            for model in models
+            for field_name, field in _get_model_fields(model).items()
+            for field_key, _, _ in self._extract_field_info(field, field_name)
+        ]
+        unmodified_keys = {env_name for field_key, env_name, _ in fields if field_key == env_name}
+        for field_key, env_name, field in fields:
+            if env_name not in values:
+                continue
+            if env_name != field_key:
+                if env_name in unmodified_keys:
+                    values.setdefault(field_key, values[env_name])
+                else:
+                    values.setdefault(field_key, values.pop(env_name))
+            if isinstance(values[field_key], dict):
+                self._translate_nested_keys(values[field_key], field.annotation)
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}(url={self._url!r}, env_nested_delimiter={self.env_nested_delimiter!r})'
