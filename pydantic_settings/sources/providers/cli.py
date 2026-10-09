@@ -765,8 +765,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     # list.
                     break
                 val = val.strip()
+                is_empty_array = False
                 if val.startswith('[') and val.endswith(']'):
                     val = val[1:-1].strip()
+                    is_empty_array = not val
                 while val:
                     val = val.strip()
                     if val.startswith(','):
@@ -784,7 +786,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                                 merge_type = inferred_type
                                 val = self._consume_string_or_number(val, merged_list, merge_type)
                         is_last_consumed_a_value = True
-                if not is_last_consumed_a_value:
+                if not is_last_consumed_a_value and not is_empty_array:
+                    # An explicitly empty array contributes no items, unlike a missing value.
                     val = self._consume_comma(val, merged_list, is_last_consumed_a_value)
 
             if merge_type is str:
@@ -1658,10 +1661,17 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         positionals_first: bool,
     ) -> list[str]:
         return (
-            serialized_args['optional'] + serialized_args['positional']
-            if not positionals_first
-            else serialized_args['positional'] + serialized_args['optional']
-        ) + serialized_args['subcommand']
+            (
+                serialized_args['optional'] + serialized_args['positional']
+                if not positionals_first
+                else serialized_args['positional'] + serialized_args['optional']
+            )
+            + serialized_args['subcommand']
+            # Unknown args are emitted last, regardless of positionals_first. They are replayed verbatim and may
+            # contain an end-of-options marker ('--') or an unknown option, either of which would capture known args
+            # that follow it.
+            + serialized_args['unknown']
+        )
 
     def _serialized_args(
         self,
@@ -1675,11 +1685,17 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         optional_args: list[str | list[Any] | dict[str, Any]] = []
         positional_args: list[str | list[Any] | dict[str, Any]] = []
         subcommand_args: list[str] = []
+        unknown_args: list[str] = []
         for field_name, field_info in _get_model_fields(type(model) if _is_submodel else self.settings_cls).items():
             model_default = getattr(model, field_name)
             if field_info.default == model_default:
                 continue
             if _CliSubCommand in field_info.metadata and model_default is None:
+                continue
+            if _CliUnknownArgs in field_info.metadata:
+                # Unknown args are registered without option names or positional metadata, so there is no parser map
+                # entry to serialize from. Replay the captured args verbatim in their own trailing segment.
+                unknown_args += model_default
                 continue
             arg = next(iter(self._parser_map[field_info].values()))
             if arg.subcommand_dest:
@@ -1691,6 +1707,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     positionals_first=positionals_first,
                     _is_submodel=True,
                 )
+                # Hoist the subcommand's unknown args into this model's trailing segment so that all unknown args,
+                # at any depth, stay at the very end of the serialized output.
+                unknown_args += sub_args['unknown']
+                sub_args['unknown'] = []
                 subcommand_args += self._flatten_serialized_args(sub_args, positionals_first)
                 continue
             if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
@@ -1704,6 +1724,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 optional_args += sub_args['optional']
                 positional_args += sub_args['positional']
                 subcommand_args += sub_args['subcommand']
+                unknown_args += sub_args['unknown']
                 continue
 
             matched = re.match(r'(-*)(.+)', arg.preferred_arg_name)
@@ -1739,4 +1760,5 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             'optional': [json.dumps(value) if not isinstance(value, str) else value for value in optional_args],
             'positional': [json.dumps(value) if not isinstance(value, str) else value for value in positional_args],
             'subcommand': subcommand_args,
+            'unknown': unknown_args,
         }

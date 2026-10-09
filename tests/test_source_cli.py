@@ -1271,6 +1271,96 @@ def test_cli_list_arg(prefix, arg_spaces):
     check_answer(cfg, prefix, expected)
 
 
+@pytest.mark.parametrize('empty_array', ['[]', ' [ \t ] '])
+@pytest.mark.parametrize(
+    'field_type,expected',
+    [
+        (list[str], []),
+        (list[int], []),
+        (list[str] | None, []),
+        (tuple[str, ...], ()),
+        (set[str], set()),
+    ],
+)
+def test_cli_empty_json_list(empty_array, field_type, expected):
+    class Cfg(BaseSettings, cli_kebab_case=True):
+        include_roles: field_type
+
+    assert Cfg(_cli_parse_args=[f'--include-roles={empty_array}']).include_roles == expected
+
+
+@pytest.mark.parametrize('field_type', [dict[str, str], dict[str, str] | None, MutableMapping[str, str]])
+@pytest.mark.parametrize('value', ['[]', ' [ \t ] ', '', '{}'])
+def test_cli_empty_json_list_preserves_mapping_behavior(field_type, value):
+    class Cfg(BaseSettings):
+        values: field_type
+
+    # Preserve the existing mapping parser behavior; empty-list handling is list-specific.
+    assert CliApp.run(Cfg, cli_args=['--values', value]).values == {}
+
+
+@pytest.mark.parametrize('empty_array', ['[]', ' [ \t ] '])
+def test_cli_empty_json_list_preserves_mapping_union(empty_array):
+    class Cfg(BaseSettings):
+        values: dict[str, str] | list[str] = {}
+
+    # An empty array must not flip a mapping union over to its list branch, since that would
+    # reinterpret every other argument for the field.
+    assert CliApp.run(Cfg, cli_args=['--values', empty_array]).values == {}
+    assert CliApp.run(Cfg, cli_args=['--values', empty_array, '--values', 'k1=a']).values == {'k1': 'a'}
+    assert CliApp.run(Cfg, cli_args=['--values', 'k1=a', '--values', empty_array]).values == {'k1': 'a'}
+    assert CliApp.run(Cfg, cli_args=['--values', '{"k1":"a"}', '--values', empty_array]).values == {'k1': 'a'}
+    assert CliApp.run(Cfg, cli_args=['--values', '["a"]', '--values', empty_array]).values == ['a']
+
+
+@pytest.mark.parametrize(
+    'values,expected',
+    [
+        (['[]', '[]'], []),
+        (['[]', 'first,second'], ['first', 'second']),
+        (['first,second', '[]'], ['first', 'second']),
+        (['[]', '["first"]', '[]', 'second'], ['first', 'second']),
+        (['[""]'], ['']),
+        ([''], ['']),
+        (['[,]'], ['', '']),
+        (['["[]"]'], ['[]']),
+    ],
+)
+def test_cli_empty_json_list_merging(values, expected):
+    class Cfg(BaseSettings):
+        values: list[str]
+
+    args = [arg for value in values for arg in ('--values', value)]
+    assert CliApp.run(Cfg, cli_args=args).values == expected
+
+
+def test_cli_empty_json_list_overrides_other_sources(env):
+    class Cfg(BaseSettings):
+        values: list[str] = ['default']
+
+    env.set('VALUES', '["environment"]')
+    assert Cfg(_cli_parse_args=['--values', '[]'], values=['init']).values == []
+
+
+def test_cli_empty_json_list_nested():
+    class Child(BaseModel):
+        values: list[list[int]]
+
+    class Cfg(BaseSettings):
+        child: Child
+
+    assert CliApp.run(Cfg, cli_args=['--child.values', '[]']).child.values == []
+    assert CliApp.run(Cfg, cli_args=['--child.values', '[[]]']).child.values == [[]]
+
+
+def test_cli_empty_json_list_serialize_roundtrip():
+    class Cfg(BaseSettings):
+        values: list[str] = ['default']
+
+    cfg = Cfg(values=[])
+    assert CliApp.run(Cfg, cli_args=CliApp.serialize(cfg, list_style='json')) == cfg
+
+
 class _MQTTVersion(IntEnum):
     v31 = 3
     v311 = 4
@@ -4613,3 +4703,96 @@ Subcommand schema description.
   -x int      (default: 1)
 """
     )
+
+
+def test_serialize_cli_unknown_args():
+    class Cfg(BaseSettings, cli_ignore_unknown_args=True):
+        flag: str = 'hello'
+        unknown_args: CliUnknownArgs
+
+    cfg = CliApp.run(Cfg, cli_args=['--flag=world', '--unk-opt=1', 'unk-pos'])
+    serialized = CliApp.serialize(cfg)
+    assert serialized == ['--flag', 'world', '--unk-opt=1', 'unk-pos']
+    assert CliApp.run(Cfg, cli_args=serialized) == cfg
+
+    class SubCmd(BaseSettings, cli_ignore_unknown_args=True):
+        v0: int = 0
+        unknown_args: CliUnknownArgs
+
+    class Root(BaseSettings):
+        flag: str = 'hello'
+        sub_cmd: CliSubCommand[SubCmd]
+
+    root = CliApp.run(Root, cli_args=['--flag=world', 'sub_cmd', '--v0=2', '--unk-sub=3', 'pos-sub'])
+    serialized_root = CliApp.serialize(root)
+    assert serialized_root == ['--flag', 'world', 'sub_cmd', '--v0', '2', '--unk-sub=3', 'pos-sub']
+    assert CliApp.run(Root, cli_args=serialized_root) == root
+
+
+def test_serialize_cli_unknown_args_with_positional():
+    class Cfg(BaseSettings, cli_ignore_unknown_args=True):
+        pos: CliPositionalArg[str]
+        flag: str = 'hello'
+        unknown_args: CliUnknownArgs
+
+    # Unknown args must be serialized after the known positional, otherwise an unknown positional would be
+    # consumed as `pos` when round-tripping.
+    cfg = CliApp.run(Cfg, cli_args=['known-pos', 'unk-pos'])
+    serialized = CliApp.serialize(cfg)
+    assert serialized == ['known-pos', 'unk-pos']
+    assert CliApp.run(Cfg, cli_args=serialized) == cfg
+
+    cfg = CliApp.run(Cfg, cli_args=['known-pos', '--flag=world', '--unk-opt=1', 'unk-pos'])
+    serialized = CliApp.serialize(cfg)
+    assert serialized == ['--flag', 'world', 'known-pos', '--unk-opt=1', 'unk-pos']
+    assert CliApp.run(Cfg, cli_args=serialized) == cfg
+
+    serialized = CliApp.serialize(cfg, positionals_first=True)
+    assert serialized == ['known-pos', '--flag', 'world', '--unk-opt=1', 'unk-pos']
+    assert CliApp.run(Cfg, cli_args=serialized) == cfg
+
+
+def test_serialize_cli_unknown_args_end_of_options():
+    class Cfg(BaseSettings, cli_ignore_unknown_args=True):
+        pos: CliPositionalArg[str]
+        flag: str = 'hello'
+        unknown_args: CliUnknownArgs
+
+    # An end-of-options marker captured in the unknown args would consume any known args emitted after it, so the
+    # unknown args are always serialized last, even when positionals_first is set.
+    cfg = CliApp.run(Cfg, cli_args=['known-pos', '--flag=world', '--', '--unk-opt=1', 'unk-pos'])
+    assert cfg.unknown_args == ['--', '--unk-opt=1', 'unk-pos']
+
+    serialized = CliApp.serialize(cfg, positionals_first=True)
+    assert serialized == ['known-pos', '--flag', 'world', '--', '--unk-opt=1', 'unk-pos']
+    assert CliApp.run(Cfg, cli_args=serialized) == cfg
+
+    serialized = CliApp.serialize(cfg)
+    assert serialized == ['--flag', 'world', 'known-pos', '--', '--unk-opt=1', 'unk-pos']
+
+    # The known positional is emitted before the marker here, so argparse consumes the marker while looking for it.
+    # The known args and the remaining unknown args are preserved, and serialization is stable from here on.
+    reparsed = CliApp.run(Cfg, cli_args=serialized)
+    assert (reparsed.pos, reparsed.flag) == (cfg.pos, cfg.flag)
+    assert reparsed.unknown_args == ['--unk-opt=1', 'unk-pos']
+    assert CliApp.serialize(reparsed) == ['--flag', 'world', 'known-pos', '--unk-opt=1', 'unk-pos']
+
+
+def test_serialize_cli_unknown_args_subcommand_end_of_options():
+    class SubCmd(BaseSettings, cli_ignore_unknown_args=True):
+        v0: int = 0
+        unknown_args: CliUnknownArgs
+
+    class Root(BaseSettings):
+        flag: str = 'hello'
+        sub_cmd: CliSubCommand[SubCmd]
+
+    # A subcommand's unknown args are hoisted into the trailing segment too, since a subcommand name may not follow
+    # an end-of-options marker.
+    root = CliApp.run(Root, cli_args=['--flag=world', 'sub_cmd', '--v0=2', '--', '--unk=3'])
+    assert root.sub_cmd is not None and root.sub_cmd.unknown_args == ['--', '--unk=3']
+
+    for positionals_first in (False, True):
+        serialized = CliApp.serialize(root, positionals_first=positionals_first)
+        assert serialized == ['--flag', 'world', 'sub_cmd', '--v0', '2', '--', '--unk=3']
+        assert CliApp.run(Root, cli_args=serialized) == root
