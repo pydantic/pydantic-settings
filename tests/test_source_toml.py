@@ -308,6 +308,30 @@ def test_toml_table_header_file_missing(tmp_path):
     assert s.model_dump() == {'hello': 'world'}
 
 
+@pytest.mark.parametrize('multiple_paths', [False, True])
+def test_toml_table_header_ignores_directories(tmp_path, multiple_paths):
+    directory = tmp_path / 'config.toml'
+    directory.mkdir()
+    paths = [directory, tmp_path / 'missing.toml'] if multiple_paths else directory
+
+    class Settings(BaseSettings):
+        foobar: str = 'default'
+        model_config = SettingsConfigDict(toml_file=paths, toml_table_header=('app',))
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls),)
+
+    assert Settings().foobar == 'default'
+
+
 def test_toml_table_header_file_multiple(tmp_path):
     """If multiple files are configured and at least one is available, the table header extraction should work"""
     p1 = tmp_path / 'test.toml'

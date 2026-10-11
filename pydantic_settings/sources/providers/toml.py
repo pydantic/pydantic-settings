@@ -70,7 +70,7 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
 
         def _exists(path: Path | str | Traversable) -> bool:
             if isinstance(path, (str, Path)):
-                return Path(path).exists()
+                return Path(path).is_file()
             # Non-`Path` `Traversable` (e.g. a resource inside a zip/wheel) is not
             # `os.PathLike`, so it can't be wrapped in `Path`; query it directly.
             return path.is_file()
