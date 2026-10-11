@@ -3285,6 +3285,8 @@ bar = 2
 
 If you want to load from a specific table in the file, you can provide `toml_table_header` as a tuple of header parts. For example, `toml_table_header=('my-table',)` will load variables from the `[my-table]` table.
 
+Passing `toml_table_header` directly to `TomlConfigSettingsSource` overrides the model configuration. Use `toml_table_header=()` to load from the root of the file, even when the model configures a table header. Omitting the argument or passing `None` uses the model configuration.
+
 ```python
 from pydantic_settings import (
     BaseSettings,
