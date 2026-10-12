@@ -294,8 +294,6 @@ class _CliArg(BaseModel):
 
     @cached_property
     def is_no_decode(self) -> bool:
-        if self.field_info is None:
-            return False
         metadata = _get_field_metadata(self.field_info)
         return NoDecode in metadata or (self.enable_decoding is False and ForceDecode not in metadata)
 
@@ -1812,8 +1810,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 value = self._update_alias_path_only_default(arg_name, value, field_info, alias_path_only_defaults)
 
             if _CliPositionalArg in field_info.metadata:
-                for value in model_default if isinstance(model_default, list) else [model_default]:
-                    positional_args.append(self._serialize_value(value))
+                if isinstance(model_default, list) and (model_default or arg.is_no_decode):
+                    positional_args += [self._serialize_value(value) for value in model_default]
+                else:
+                    # Keep an empty list as '[]' so it is not dropped and replaced by the default when parsed.
+                    positional_args.append(self._serialize_value(model_default))
                 continue
 
             # Note: prepend 'no-' for boolean optional action flag if model_default value is False and flag is not a short option

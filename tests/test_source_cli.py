@@ -4507,6 +4507,35 @@ def test_cli_serialize_aliased_list_no_decode(values):
     assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
 
 
+@pytest.mark.parametrize('required', [False, True])
+def test_cli_serialize_empty_positional_list(required):
+    if required:
+
+        class Cfg(BaseModel):
+            values: CliPositionalArg[list[str]]
+    else:
+
+        class Cfg(BaseSettings):
+            values: CliPositionalArg[list[str]] = ['default']
+
+    cfg = Cfg(values=[])
+    serialized_cli_args = CliApp.serialize(cfg)
+
+    assert serialized_cli_args == ['[]']
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
+def test_cli_serialize_empty_positional_list_no_decode():
+    class Cfg(BaseSettings):
+        values: CliPositionalArg[Annotated[list[str], NoDecode]] = Field(default_factory=list)
+
+    cfg = Cfg()
+    serialized_cli_args = CliApp.serialize(cfg)
+
+    assert serialized_cli_args == []
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
 @pytest.mark.parametrize('list_style', ['json', 'lazy', 'argparse'])
 @pytest.mark.parametrize('dict_style', ['json', 'env'])
 def test_cli_serialize_variadic_styles(list_style, dict_style):
