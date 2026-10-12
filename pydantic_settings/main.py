@@ -14,7 +14,7 @@ from weakref import WeakKeyDictionary
 
 from pydantic import ConfigDict
 from pydantic._internal._config import config_keys
-from pydantic._internal._utils import deep_update, is_model_class, is_valid_identifier
+from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
 from pydantic.main import BaseModel
@@ -774,12 +774,10 @@ class CliApp:
 
     @staticmethod
     def _init_kwarg_name(field_name: str, field_info: FieldInfo, validate_by_alias: bool) -> str:
-        # Mirrors `pydantic._internal._signature._field_name_for_signature`, whose signature changed in pydantic 2.14.
-        if validate_by_alias:
-            if isinstance(field_info.alias, str) and is_valid_identifier(field_info.alias):
-                return field_info.alias
-            if isinstance(field_info.validation_alias, str) and is_valid_identifier(field_info.validation_alias):
-                return field_info.validation_alias
+        # The kwargs are passed as a dict, so unlike pydantic's `_field_name_for_signature` the alias
+        # does not need to be a valid identifier. `validation_alias` defaults to `alias` when only that is set.
+        if validate_by_alias and isinstance(field_info.validation_alias, str):
+            return field_info.validation_alias
         return field_name
 
     @staticmethod
