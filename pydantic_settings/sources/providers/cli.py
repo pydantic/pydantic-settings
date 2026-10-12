@@ -192,9 +192,7 @@ class _CliArg(BaseModel):
         return name.replace('_', '-') if kebab_case not in (None, False) else name
 
     @classmethod
-    def get_enum_names(
-        cls, annotation: type[Any], kebab_case: bool | Literal['all', 'no_enums'] | None
-    ) -> tuple[str, ...]:
+    def get_enum_names(cls, annotation: Any, kebab_case: bool | Literal['all', 'no_enums'] | None) -> tuple[str, ...]:
         enum_names: tuple[str, ...] = ()
         annotation = _strip_annotated(annotation)
         for type_ in get_args(annotation):
@@ -747,7 +745,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         is_use_decode: bool | None = None
         cli_arg_map = self._parser_map.get(field_name, {})
         try:
-            list_adapter: Any = TypeAdapter(next(iter(cli_arg_map.values())).field_info.annotation)
+            list_adapter: Any = TypeAdapter(cast('Any', next(iter(cli_arg_map.values())).field_info.annotation))
             is_num_type_str = type(next(iter(list_adapter.validate_python(['1'])))) is str
         except Exception:
             is_num_type_str = None
@@ -1030,7 +1028,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self._add_subparsers = self._connect_parser_method(add_subparsers_method, 'add_subparsers_method')
         self._format_help = self._connect_parser_method(format_help_method, 'format_help_method')
         self._formatter_class = formatter_class
-        self._cli_dict_args: dict[str, type[Any] | None] = {}
+        self._cli_dict_args: dict[str, Any] = {}
         self._parser_map: defaultdict[str | FieldInfo, dict[int | str | type[BaseModel] | None, _CliArg]] = defaultdict(
             dict
         )

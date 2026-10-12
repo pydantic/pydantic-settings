@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import (
     TYPE_CHECKING,
     Any,
+    cast,
     get_args,
     get_origin,
 )
@@ -368,12 +369,12 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                 has_json = any(isinstance(md, Json) for md in metadata)  # type: ignore[misc]
                 if not has_json and not _annotation_contains_types(annotation, (Json,), is_instance=True):
                     try:
-                        return TypeAdapter(field.annotation).validate_python(value)
+                        return TypeAdapter(cast('Any', field.annotation)).validate_python(value)
                     except ValidationError:
                         # Try JSON decoding as fallback (e.g. 'true' -> True for StrictBool)
                         decoded = json.loads(value)
                         if not isinstance(decoded, str):
-                            return TypeAdapter(field.annotation).validate_python(decoded)
+                            return TypeAdapter(cast('Any', field.annotation)).validate_python(decoded)
                         raise
         except (ValidationError, json.JSONDecodeError):
             # Allow validation error to be raised at time of instantiation
