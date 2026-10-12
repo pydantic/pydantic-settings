@@ -65,7 +65,7 @@ from pydantic_settings.sources import (
 )
 from pydantic_settings.sources.providers.cli import _get_model_description
 
-ARGPARSE_OPTIONS_TEXT = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
+ARGPARSE_OPTIONS_TEXT = 'options'
 
 
 @pytest.fixture(autouse=True)

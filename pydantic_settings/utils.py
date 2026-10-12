@@ -2,7 +2,7 @@ import logging
 import os
 import types
 from pathlib import Path
-from typing import Any, _Final, _GenericAlias, get_origin  # type: ignore [attr-defined]
+from typing import Any, _Final, _GenericAlias  # type: ignore [attr-defined]
 
 logger = logging.getLogger('pydantic_settings')
 
@@ -38,17 +38,8 @@ def path_type_label(p: Path) -> str:
     return 'unknown'  # pragma: no cover
 
 
-# TODO remove and replace usage by `isinstance(cls, type) and issubclass(cls, class_or_tuple)`
-# once we drop support for Python 3.10.
-def _lenient_issubclass(cls: Any, class_or_tuple: Any) -> bool:  # pragma: no cover
-    try:
-        return isinstance(cls, type) and issubclass(cls, class_or_tuple)
-    except TypeError:
-        if get_origin(cls) is not None:
-            # Up until Python 3.10, isinstance(<generic_alias>, type) is True
-            # for generic aliases such as `list[int]`
-            return False
-        raise
+def _lenient_issubclass(cls: Any, class_or_tuple: Any) -> bool:
+    return isinstance(cls, type) and issubclass(cls, class_or_tuple)
 
 
 _WithArgsTypes = (_GenericAlias, types.GenericAlias, types.UnionType)
