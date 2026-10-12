@@ -294,10 +294,10 @@ class _CliArg(BaseModel):
 
     @cached_property
     def is_no_decode(self) -> bool:
-        return self.field_info is not None and (
-            NoDecode in self.field_info.metadata
-            or (self.enable_decoding is False and ForceDecode not in self.field_info.metadata)
-        )
+        if self.field_info is None:
+            return False
+        metadata = _get_field_metadata(self.field_info)
+        return NoDecode in metadata or (self.enable_decoding is False and ForceDecode not in metadata)
 
 
 T = TypeVar('T')
@@ -1820,13 +1820,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if arg.kwargs.get('action') == BooleanOptionalAction and model_default is False and flag_chars == '--':
                 flag_chars += 'no-'
 
-            field_metadata = _get_field_metadata(field_info)
-            is_no_decode = NoDecode in field_metadata or (
-                self.config.get('enable_decoding') is False and ForceDecode not in field_metadata
-            )
             for index, coerced_value in enumerate(
                 self._coerce_value_styles(
-                    model_default, value, list_style=list_style, dict_style=dict_style, is_no_decode=is_no_decode
+                    model_default, value, list_style=list_style, dict_style=dict_style, is_no_decode=arg.is_no_decode
                 )
             ):
                 if index == 0 or arg.kwargs.get('nargs') not in ('*', '+'):

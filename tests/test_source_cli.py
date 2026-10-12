@@ -4486,6 +4486,27 @@ def test_cli_serialize_empty_aliased_containers_no_decode(enable_decoding):
     assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
 
 
+@pytest.mark.parametrize('values', [[], ['x', 'y']])
+def test_cli_serialize_aliased_list_no_decode(values):
+    ListAlias = typing_extensions.TypeAliasType('ListAlias', Annotated[list[str], NoDecode])
+
+    class Cfg(BaseSettings):
+        values: ListAlias = ['default']
+
+        @field_validator('values', mode='before')
+        @classmethod
+        def parse_values(cls, value):
+            if isinstance(value, str):
+                return value.split(',') if value else []
+            return value
+
+    cfg = Cfg(values=values)
+    serialized_cli_args = CliApp.serialize(cfg, list_style='lazy')
+
+    assert serialized_cli_args == ['--values', ','.join(values)]
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
 @pytest.mark.parametrize('list_style', ['json', 'lazy', 'argparse'])
 @pytest.mark.parametrize('dict_style', ['json', 'env'])
 def test_cli_serialize_variadic_styles(list_style, dict_style):
