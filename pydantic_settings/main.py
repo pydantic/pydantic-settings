@@ -9,7 +9,7 @@ import warnings
 from argparse import Namespace
 from collections.abc import Mapping
 from types import SimpleNamespace
-from typing import Any, ClassVar, Literal, TextIO, TypeVar, cast
+from typing import Any, ClassVar, Literal, Self, TextIO, TypeVar, cast
 from weakref import WeakKeyDictionary
 
 from pydantic import ConfigDict
@@ -18,7 +18,6 @@ from pydantic._internal._signature import _field_name_for_signature
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.main import BaseModel
-from typing_extensions import Self
 
 from .exceptions import SettingsError
 from .sources import (

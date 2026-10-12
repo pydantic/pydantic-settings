@@ -138,6 +138,43 @@ print(Settings1())
 
 Check the [validation of default values](fields.md#validate-default-values) for more information.
 
+## Runtime validation arguments
+
+`BaseSettings` defines a custom `__init__` to load values from settings sources, so `model_validate()`,
+`model_validate_json()` and `model_validate_strings()` build the instance by calling that `__init__`.
+As a consequence:
+
+* Settings sources are still applied, so values from environment variables, dotenv files, etc. are loaded
+  just as when calling `Settings()`.
+* Runtime validation arguments such as `extra`, `strict` and `context` are **not** applied. Validation uses
+  the behaviour from `model_config` instead (for example, the default `extra='forbid'`).
+
+If you need different behaviour, set it in `model_config` or prepare the input data before validating.
+For example, to build a parent settings class from an instance of a subclass, keep only the parent's fields:
+
+```py
+from pydantic_settings import BaseSettings
+
+
+class BaseAppSettings(BaseSettings):
+    name: str = 'app'
+
+
+class AppSettings(BaseAppSettings):
+    debug: bool = False
+
+
+settings = AppSettings(debug=True)
+
+# `extra='ignore'` is not applied here, so `debug` is rejected as an extra input:
+# BaseAppSettings.model_validate(settings.model_dump(), extra='ignore')
+
+fields = BaseAppSettings.model_fields
+data = {k: v for k, v in settings.model_dump().items() if k in fields}
+print(BaseAppSettings.model_validate(data))
+#> name='app'
+```
+
 ## Environment variable names
 
 By default, the environment variable name is the same as the field name.
@@ -1844,6 +1881,14 @@ sys.argv = ['example.py', '--bad-arg=bad', 'ANOTHER_BAD_ARG', '--good_arg=hello 
 print(Settings().model_dump())
 #> {'good_arg': 'hello world', 'ignored_args': ['--bad-arg=bad', 'ANOTHER_BAD_ARG']}
 ```
+
+With subcommands, unknown arguments are captured by the innermost parser that declares a `CliUnknownArgs` field.
+Arguments appearing before a subcommand remain with the parent parser. If a child parser has no capture field,
+its leftovers are passed back to its parent. Captured lists are reset when a `CliSettingsSource` parses new arguments.
+
+Ordinary nested models share their parent's parser. Declaring multiple `CliUnknownArgs` fields on that same parser
+still duplicates its leftovers; this case is not covered by the subcommand behavior above. Custom parsers whose
+`parse_known_args` method cannot be replaced also cannot capture subcommand leftovers independently.
 
 #### CLI Kebab Case for Arguments
 

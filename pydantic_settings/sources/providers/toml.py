@@ -2,7 +2,6 @@
 
 from __future__ import annotations as _annotations
 
-import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import (
@@ -15,34 +14,20 @@ from ..types import DEFAULT_PATH, ConfigFileSourceType
 from ..utils import InitState
 
 if TYPE_CHECKING:
+    import tomllib
+
     from pydantic_settings.main import BaseSettings
 
     from ..types import Traversable
-
-    if sys.version_info >= (3, 11):
-        import tomllib
-    else:
-        tomllib = None
-    import tomli
 else:
     tomllib = None
-    tomli = None
 
 
 def import_toml() -> None:
-    global tomli
     global tomllib
-    if sys.version_info < (3, 11):
-        if tomli is not None:
-            return
-        try:
-            import tomli
-        except ImportError as e:  # pragma: no cover
-            raise ImportError('tomli is not installed, run `pip install pydantic-settings[toml]`') from e
-    else:
-        if tomllib is not None:
-            return
-        import tomllib
+    if tomllib is not None:
+        return
+    import tomllib
 
 
 class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
@@ -73,8 +58,6 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
     def _read_file(self, file_path: Path | Traversable) -> dict[str, Any]:
         import_toml()
         with file_path.open(mode='rb') as toml_file:
-            if sys.version_info < (3, 11):
-                return tomli.load(toml_file)
             return tomllib.load(toml_file)
 
     @staticmethod
