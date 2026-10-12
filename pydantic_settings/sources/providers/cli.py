@@ -565,7 +565,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         if args is not None and parsed_args is not None:
             raise SettingsError('`args` and `parsed_args` are mutually exclusive')
         if args is not None:
-            # 2026-10-09: Unknown arguments belong to this parse, including unselected commands.
+            # Unknown arguments belong to this parse, including unselected commands.
             for dest in self._cli_unknown_args:
                 self._cli_unknown_args[dest] = []
             self._unclaimed_unknown_args.clear()
@@ -612,19 +612,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             parsed_args = vars(parsed_args)
 
         selected_subcommands = self._resolve_parsed_args(parsed_args)
-        for arg_dest, arg_map in self._parser_map.items():
-            if isinstance(arg_dest, str) and arg_dest.endswith(':subcommand'):
-                for subcommand_dest in [arg.dest for arg in arg_map.values()]:
-                    if subcommand_dest not in selected_subcommands:
-                        parsed_args[subcommand_dest] = self.cli_parse_none_str
-                        # 2026-10-09: External parser calls can leave captures from an unselected command.
-                        self._cli_unknown_args.update(
-                            {
-                                dest: []
-                                for dest in self._cli_unknown_args
-                                if reset_unselected and dest.startswith(f'{subcommand_dest}.')
-                            }
-                        )
+        unselected_subcommands = self._unset_unselected_subcommands(parsed_args, selected_subcommands)
+        if reset_unselected:
+            # External parser calls can leave captures from an unselected command.
+            self._reset_unknown_args(tuple(f'{dest}.' for dest in unselected_subcommands))
 
         parsed_args = {
             key: val
@@ -643,7 +634,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         # the selected subcommand accepts unknowns of its own.
         if not self.cli_ignore_unknown_args and self._cli_unknown_args:
             root_accepts_unknown = id(self._root_parser) in self._unknown_dests_by_parser
-            # 2026-10-09: Match command path components, not substrings of other names.
+            # Match command path components, not substrings of other names.
             selected_accepts_unknown = any(
                 dest.rsplit('.', 1)[0] == last_selected_subcommand
                 or last_selected_subcommand.startswith(f'{dest.rsplit(".", 1)[0]}.')
@@ -656,7 +647,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             else:
                 pending = []
             if pending:
-                # 2026-10-09: Consumed errors must not poison a later external parse.
+                # Consumed errors must not poison a later external parse.
                 self._unclaimed_unknown_args.clear()
                 if isinstance(self.root_parser, ArgumentParser):
                     self.root_parser.error(f'unrecognized arguments: {" ".join(pending)}')
@@ -1080,6 +1071,23 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 help='show this help message and exit',
             )
 
+    def _unset_unselected_subcommands(
+        self, parsed_args: dict[str, list[str] | str], selected_subcommands: list[str]
+    ) -> list[str]:
+        unselected_subcommands: list[str] = []
+        for arg_dest, arg_map in self._parser_map.items():
+            if isinstance(arg_dest, str) and arg_dest.endswith(':subcommand'):
+                for subcommand_dest in [arg.dest for arg in arg_map.values()]:
+                    if subcommand_dest not in selected_subcommands:
+                        parsed_args[subcommand_dest] = self.cli_parse_none_str
+                        unselected_subcommands.append(subcommand_dest)
+        return unselected_subcommands
+
+    def _reset_unknown_args(self, prefixes: tuple[str, ...]) -> None:
+        for dest in self._cli_unknown_args:
+            if dest.startswith(prefixes):
+                self._cli_unknown_args[dest] = []
+
     def _store_unknown_args(self, parser: Any, unknown_args: list[str]) -> None:
         for dest in self._unknown_dests_by_parser.get(id(parser), ()):
             self._cli_unknown_args[dest] = list(unknown_args)
@@ -1090,7 +1098,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self._captured_parsers.add(id(parser))
         original = parser.parse_known_args
 
-        # 2026-10-09: Preserve custom parser positional and keyword parameters.
+        # Preserve custom parser positional and keyword parameters.
         def parse_known_args(*args: Any, **kwargs: Any) -> tuple[Namespace, list[str]]:
             parsed, unknown = original(*args, **kwargs)
             self._store_unknown_args(parser, unknown)
@@ -1265,7 +1273,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         env_var_names=env_var_names,
                     )
                 elif _CliUnknownArgs in field_info.metadata:
-                    # 2026-10-09: Only parsers owning an unknown-argument field need capture.
+                    # Only parsers owning an unknown-argument field need capture.
                     dest = arg.kwargs['dest']
                     self._cli_unknown_args[dest] = []
                     self._unknown_dests_by_parser.setdefault(id(parser), []).append(dest)

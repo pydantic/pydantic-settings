@@ -2826,7 +2826,7 @@ def test_cli_unknown_args_are_not_shared_across_depths():
     assert again.sub_cmd is not None and again.sub_cmd.unknown_args == ['--unk=3']
 
 
-# 2026-10-09: Reusing a source must not retain an unselected command's leftovers.
+# Reusing a source must not retain an unselected command's leftovers.
 def test_cli_unknown_args_reset_when_source_is_reused():
     class A(BaseSettings, cli_ignore_unknown_args=True):
         unknown_args: CliUnknownArgs
@@ -2845,7 +2845,7 @@ def test_cli_unknown_args_reset_when_source_is_reused():
     assert second.model_dump() == {'a': None, 'c': {'v': 0}}
 
 
-# 2026-10-09: Models without a capture field leave custom parser methods intact.
+# Models without a capture field leave custom parser methods intact.
 def test_cli_parser_without_unknown_field_is_not_patched():
     class Root(BaseSettings):
         v: int = 0
@@ -2856,7 +2856,7 @@ def test_cli_parser_without_unknown_field_is_not_patched():
     assert parser.parse_known_args == original
 
 
-# 2026-10-09: Externally parsed namespaces cannot retain an unselected command's capture.
+# Externally parsed namespaces cannot retain an unselected command's capture.
 def test_cli_unknown_args_reset_when_external_parser_is_reused():
     class A(BaseSettings, cli_ignore_unknown_args=True):
         unknown_args: CliUnknownArgs
@@ -2876,7 +2876,7 @@ def test_cli_unknown_args_reset_when_external_parser_is_reused():
     assert second.model_dump() == {'a': None, 'c': {'v': 0}}
 
 
-# 2026-10-09: A rejected root typo must not leak into a later external parse.
+# A rejected root typo must not leak into a later external parse.
 @pytest.mark.parametrize('as_dict', [False, True])
 def test_cli_external_parse_after_rejected_root_unknown(as_dict):
     class Sub(BaseSettings, cli_ignore_unknown_args=True):
@@ -2895,7 +2895,7 @@ def test_cli_external_parse_after_rejected_root_unknown(as_dict):
         source(args=['--another-typo', 'sub'])
 
 
-# 2026-10-09: Capture wrappers preserve custom parser call signatures.
+# Capture wrappers preserve custom parser call signatures.
 def test_cli_unknown_args_capture_forwards_custom_parameters():
     class Root(BaseSettings, cli_ignore_unknown_args=True):
         unknown_args: CliUnknownArgs
@@ -2911,9 +2911,9 @@ def test_cli_unknown_args_capture_forwards_custom_parameters():
     assert unknown == ['--unknown']
 
 
-# 2026-10-09: Root capture still works with a read-only parser method.
+# Root capture still works with a read-only parser method.
 def test_cli_readonly_root_parser_keeps_unknown_args():
-    # 2026-10-09: A read-only method remains usable when root capture cannot be installed.
+    # A read-only method remains usable when root capture cannot be installed.
     class Root(BaseSettings, cli_ignore_unknown_args=True):
         unknown_args: CliUnknownArgs
 
@@ -2928,7 +2928,7 @@ def test_cli_readonly_root_parser_keeps_unknown_args():
     assert result.unknown_args == ['--unknown']
 
 
-# 2026-10-09: An unselected command must not authorize a similarly named command.
+# An unselected command must not authorize a similarly named command.
 def test_cli_unknown_args_do_not_match_similarly_named_subcommand():
     class A(BaseSettings, cli_ignore_unknown_args=True):
         unknown_args: CliUnknownArgs
