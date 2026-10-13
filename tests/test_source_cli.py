@@ -65,7 +65,7 @@ from pydantic_settings.sources import (
 )
 from pydantic_settings.sources.providers.cli import _get_model_description
 
-ARGPARSE_OPTIONS_TEXT = 'options' if sys.version_info >= (3, 10) else 'optional arguments'
+ARGPARSE_OPTIONS_TEXT = 'options'
 
 
 @pytest.fixture(autouse=True)
@@ -2805,6 +2805,173 @@ def test_cli_ignore_unknown_args():
     }
 
 
+def test_cli_unknown_args_are_not_shared_across_depths():
+    class SubCmd(BaseSettings, cli_ignore_unknown_args=True):
+        v0: int = 0
+        unknown_args: CliUnknownArgs
+
+    class Root(BaseSettings, cli_ignore_unknown_args=True):
+        flag: str = 'hello'
+        unknown_args: CliUnknownArgs
+        sub_cmd: CliSubCommand[SubCmd]
+
+    root = CliApp.run(Root, cli_args=['--flag=world', 'sub_cmd', '--v0=2', '--unk=3'])
+    assert root.unknown_args == []
+    assert root.sub_cmd is not None
+    assert root.sub_cmd.unknown_args == ['--unk=3']
+    serialized = CliApp.serialize(root)
+    assert serialized.count('--unk=3') == 1
+    again = CliApp.run(Root, cli_args=serialized)
+    assert again.unknown_args == []
+    assert again.sub_cmd is not None and again.sub_cmd.unknown_args == ['--unk=3']
+
+
+# Reusing a source must not retain an unselected command's leftovers.
+def test_cli_unknown_args_reset_when_source_is_reused():
+    class A(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+
+    class C(BaseModel):
+        v: int = 0
+
+    class Root(BaseSettings):
+        a: CliSubCommand[A]
+        c: CliSubCommand[C]
+
+    source = CliSettingsSource(Root)
+    first = Root(_cli_settings_source=source(args=['a', '--x']))
+    assert first.a is not None and first.a.unknown_args == ['--x']
+    second = Root(_cli_settings_source=source(args=['c']))
+    assert second.model_dump() == {'a': None, 'c': {'v': 0}}
+
+
+# Models without a capture field leave custom parser methods intact.
+def test_cli_parser_without_unknown_field_is_not_patched():
+    class Root(BaseSettings):
+        v: int = 0
+
+    parser = argparse.ArgumentParser()
+    original = parser.parse_known_args
+    CliSettingsSource(Root, root_parser=parser)
+    assert parser.parse_known_args == original
+
+
+# Externally parsed namespaces cannot retain an unselected command's capture.
+def test_cli_unknown_args_reset_when_external_parser_is_reused():
+    class A(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+
+    class C(BaseModel):
+        v: int = 0
+
+    class Root(BaseSettings):
+        a: CliSubCommand[A]
+        c: CliSubCommand[C]
+
+    parser = argparse.ArgumentParser()
+    source = CliSettingsSource(Root, root_parser=parser)
+    first = Root(_cli_settings_source=source(parsed_args=parser.parse_args(['a', '--x'])))
+    assert first.a is not None and first.a.unknown_args == ['--x']
+    second = Root(_cli_settings_source=source(parsed_args=parser.parse_args(['c'])))
+    assert second.model_dump() == {'a': None, 'c': {'v': 0}}
+
+
+# A rejected root typo must not leak into a later external parse.
+@pytest.mark.parametrize('as_dict', [False, True])
+def test_cli_external_parse_after_rejected_root_unknown(as_dict):
+    class Sub(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+
+    class Root(BaseSettings, cli_exit_on_error=False):
+        sub: CliSubCommand[Sub]
+
+    source = CliSettingsSource(Root)
+    with pytest.raises(SettingsError, match='unrecognized arguments: --typo'):
+        source(args=['--typo', 'sub'])
+    clean = source.root_parser.parse_args(['sub'])
+    result = Root(_cli_settings_source=source(parsed_args=vars(clean) if as_dict else clean))
+    assert result.sub is not None and result.sub.unknown_args == []
+    with pytest.raises(SettingsError, match='unrecognized arguments: --another-typo'):
+        source(args=['--another-typo', 'sub'])
+
+
+# Capture wrappers preserve custom parser call signatures.
+def test_cli_unknown_args_capture_forwards_custom_parameters():
+    class Root(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+
+    class CustomParser(argparse.ArgumentParser):
+        def parse_known_args(self, args=None, namespace=None, *, marker=None):
+            assert marker == 'custom'
+            return super().parse_known_args(args, namespace)
+
+    parser = CustomParser()
+    CliSettingsSource(Root, root_parser=parser)
+    _, unknown = parser.parse_known_args(['--unknown'], marker='custom')
+    assert unknown == ['--unknown']
+
+
+# Root capture still works with a read-only parser method.
+def test_cli_readonly_root_parser_keeps_unknown_args():
+    # A read-only method remains usable when root capture cannot be installed.
+    class Root(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+
+    class ReadonlyParser(argparse.ArgumentParser):
+        @property
+        def parse_known_args(self):
+            return super().parse_known_args
+
+    parser = ReadonlyParser()
+    source = CliSettingsSource(Root, root_parser=parser)
+    result = Root(_cli_settings_source=source(args=['--unknown']))
+    assert result.unknown_args == ['--unknown']
+
+
+# An unselected command must not authorize a similarly named command.
+def test_cli_unknown_args_do_not_match_similarly_named_subcommand():
+    class A(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+
+    class BA(BaseModel):
+        v: int = 0
+
+    class Root(BaseSettings):
+        unknown_args: CliUnknownArgs
+        a: CliSubCommand[A]
+        ba: CliSubCommand[BA]
+
+    with pytest.raises(SystemExit):
+        Root(_cli_parse_args=['--typo', 'ba'])
+    assert Root(_cli_parse_args=['ba']).ba is not None
+
+
+def test_cli_root_typo_rejected_when_subcommand_accepts_unknown_args():
+    class Sub(BaseSettings, cli_ignore_unknown_args=True):
+        ignored_args: CliUnknownArgs
+
+    class Root(BaseSettings):
+        sub: CliSubCommand[Sub]
+
+    with pytest.raises(SystemExit):
+        CliApp.run(Root, cli_args=['--typo', 'sub'])
+
+    cmd = CliApp.run(Root, cli_args=['sub', '--typo'])
+    assert cmd.model_dump() == {'sub': {'ignored_args': ['--typo']}}
+
+
+def test_cli_root_unknown_field_keeps_its_own_leftovers():
+    class Sub(BaseSettings, cli_ignore_unknown_args=True):
+        ignored_args: CliUnknownArgs
+
+    class Root(BaseSettings):
+        unknown_args: CliUnknownArgs
+        sub: CliSubCommand[Sub]
+
+    cmd = CliApp.run(Root, cli_args=['--typo', 'sub', '--other'])
+    assert cmd.model_dump() == {'unknown_args': ['--typo'], 'sub': {'ignored_args': ['--other']}}
+
+
 def test_cli_ignore_unknown_args_subcommand():
     class SubA(BaseSettings):
         a: CliPositionalArg[str]
@@ -2909,6 +3076,41 @@ def test_cli_unknown_args_rejected_with_non_argparse_root_parser():
         Root(_cli_settings_source=cli_settings(args=['a', '--bad']))
 
     assert exc_info.value.code == 2
+
+
+def test_cli_slotted_root_parser():
+    class SlottedParser:
+        __slots__ = ('parser',)
+
+        def __init__(self) -> None:
+            self.parser = argparse.ArgumentParser()
+
+        def add_argument(self, *args: Any, **kwargs: Any) -> None:
+            self.parser.add_argument(*args, **kwargs)
+
+        def add_argument_group(self, *args: Any, **kwargs: Any) -> argparse._ArgumentGroup:
+            return self.parser.add_argument_group(*args, **kwargs)
+
+        def parse_known_args(self, *args: Any, **kwargs: Any) -> tuple[argparse.Namespace, list[str]]:
+            return self.parser.parse_known_args(*args, **kwargs)
+
+        def parse_args(self, *args: Any, **kwargs: Any) -> argparse.Namespace:
+            return self.parser.parse_args(*args, **kwargs)
+
+    class Cfg(BaseSettings):
+        pet: str = 'bird'
+
+    cli_settings = CliSettingsSource(
+        Cfg,
+        root_parser=SlottedParser(),
+        parse_args_method=SlottedParser.parse_args,
+        add_argument_method=SlottedParser.add_argument,
+        add_argument_group_method=SlottedParser.add_argument_group,
+        add_parser_method=None,
+        add_subparsers_method=None,
+    )
+
+    assert Cfg(_cli_settings_source=cli_settings(args=['--pet', 'cat'])).pet == 'cat'
 
 
 def test_cli_ignore_unknown_args_nested_subcommand_higher_in_hierarchy():
@@ -4159,6 +4361,179 @@ def test_cli_serialize_styles():
         '--my-dict',
         'c=3',
     ]
+
+
+@pytest.mark.parametrize('list_style', ['json', 'lazy', 'argparse'])
+@pytest.mark.parametrize('dict_style', ['json', 'env'])
+@pytest.mark.parametrize('variadic', [False, True])
+def test_cli_serialize_empty_containers(list_style, dict_style, variadic):
+    class Cfg(BaseSettings):
+        my_list: CliVariadicArg[list[str]] if variadic else list[str] = ['default']
+        my_dict: CliVariadicArg[dict[str, int]] if variadic else dict[str, int] = {'default': 1}
+
+    cfg = Cfg(my_list=[], my_dict={})
+    serialized_cli_args = CliApp.serialize(cfg, list_style=list_style, dict_style=dict_style)
+
+    assert serialized_cli_args == ['--my_list', '[]', '--my_dict', '{}']
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
+@pytest.mark.parametrize('list_style', ['json', 'lazy', 'argparse'])
+@pytest.mark.parametrize('dict_style', ['json', 'env'])
+def test_cli_serialize_empty_required_containers(list_style, dict_style):
+    class Cfg(BaseModel):
+        my_list: list[str]
+        my_dict: dict[str, int]
+
+    cfg = Cfg(my_list=[], my_dict={})
+    serialized_cli_args = CliApp.serialize(cfg, list_style=list_style, dict_style=dict_style)
+
+    assert serialized_cli_args == ['--my-list', '[]', '--my-dict', '{}']
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
+@pytest.mark.parametrize('list_style', ['json', 'lazy', 'argparse'])
+@pytest.mark.parametrize('dict_style', ['json', 'env'])
+def test_cli_serialize_empty_nested_containers(list_style, dict_style):
+    class Child(BaseModel):
+        my_list: list[str] | None = None
+        my_dict: dict[str, int] | None = None
+
+    class Cfg(BaseSettings):
+        child: Child
+
+    cfg = Cfg(child=Child(my_list=[], my_dict={}))
+    serialized_cli_args = CliApp.serialize(cfg, list_style=list_style, dict_style=dict_style)
+
+    assert serialized_cli_args == ['--child.my_list', '[]', '--child.my_dict', '{}']
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
+@pytest.mark.parametrize('enable_decoding', [False, True])
+def test_cli_serialize_empty_list_no_decode(enable_decoding):
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(enable_decoding=enable_decoding)
+        values: Annotated[list[str], NoDecode] if enable_decoding else list[str] = ['default']
+
+        @field_validator('values', mode='before')
+        @classmethod
+        def parse_values(cls, value):
+            if isinstance(value, str):
+                return value.split(',') if value else []
+            return value
+
+    cfg = Cfg(values=[])
+    serialized_cli_args = CliApp.serialize(cfg, list_style='lazy')
+
+    assert serialized_cli_args == ['--values', '']
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
+@pytest.mark.parametrize('enable_decoding', [False, True])
+def test_cli_serialize_empty_variadic_containers_no_decode(enable_decoding):
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(enable_decoding=enable_decoding)
+        my_list: Annotated[CliVariadicArg[list[str]], NoDecode] if enable_decoding else CliVariadicArg[list[str]] = (
+            Field(default_factory=list)
+        )
+        my_dict: (
+            Annotated[CliVariadicArg[dict[str, int]], NoDecode] if enable_decoding else CliVariadicArg[dict[str, int]]
+        ) = Field(default_factory=dict)
+
+    cfg = Cfg()
+    serialized_cli_args = CliApp.serialize(cfg, list_style='argparse', dict_style='env')
+
+    assert serialized_cli_args == []
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
+@pytest.mark.parametrize('list_style', ['json', 'lazy', 'argparse'])
+@pytest.mark.parametrize('dict_style', ['json', 'env'])
+@pytest.mark.parametrize('use_alias', [False, True])
+def test_cli_serialize_empty_containers_force_decode(list_style, dict_style, use_alias):
+    list_type = Annotated[list[str], ForceDecode]
+    dict_type = Annotated[dict[str, int], ForceDecode]
+    if use_alias:
+        list_type = typing_extensions.TypeAliasType('ListAlias', list_type)
+        dict_type = typing_extensions.TypeAliasType('DictAlias', dict_type)
+
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(enable_decoding=False)
+        my_list: list_type = ['default']
+        my_dict: dict_type = {'default': 1}
+
+    cfg = Cfg(my_list=[], my_dict={})
+    serialized_cli_args = CliApp.serialize(cfg, list_style=list_style, dict_style=dict_style)
+
+    assert serialized_cli_args == ['--my_list', '[]', '--my_dict', '{}']
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
+@pytest.mark.parametrize('enable_decoding', [False, True])
+def test_cli_serialize_empty_aliased_containers_no_decode(enable_decoding):
+    ListAlias = typing_extensions.TypeAliasType('ListAlias', Annotated[list[str], NoDecode])
+    DictAlias = typing_extensions.TypeAliasType('DictAlias', Annotated[dict[str, int], NoDecode])
+
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(enable_decoding=enable_decoding)
+        my_list: ListAlias = Field(default_factory=list)
+        my_dict: DictAlias = Field(default_factory=dict)
+
+    cfg = Cfg()
+    serialized_cli_args = CliApp.serialize(cfg, list_style='argparse', dict_style='env')
+
+    assert serialized_cli_args == []
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
+@pytest.mark.parametrize('values', [[], ['x', 'y']])
+def test_cli_serialize_aliased_list_no_decode(values):
+    ListAlias = typing_extensions.TypeAliasType('ListAlias', Annotated[list[str], NoDecode])
+
+    class Cfg(BaseSettings):
+        values: ListAlias = ['default']
+
+        @field_validator('values', mode='before')
+        @classmethod
+        def parse_values(cls, value):
+            if isinstance(value, str):
+                return value.split(',') if value else []
+            return value
+
+    cfg = Cfg(values=values)
+    serialized_cli_args = CliApp.serialize(cfg, list_style='lazy')
+
+    assert serialized_cli_args == ['--values', ','.join(values)]
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
+@pytest.mark.parametrize('required', [False, True])
+def test_cli_serialize_empty_positional_list(required):
+    if required:
+
+        class Cfg(BaseModel):
+            values: CliPositionalArg[list[str]]
+    else:
+
+        class Cfg(BaseSettings):
+            values: CliPositionalArg[list[str]] = ['default']
+
+    cfg = Cfg(values=[])
+    serialized_cli_args = CliApp.serialize(cfg)
+
+    assert serialized_cli_args == ['[]']
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
+def test_cli_serialize_empty_positional_list_no_decode():
+    class Cfg(BaseSettings):
+        values: CliPositionalArg[Annotated[list[str], NoDecode]] = Field(default_factory=list)
+
+    cfg = Cfg()
+    serialized_cli_args = CliApp.serialize(cfg)
+
+    assert serialized_cli_args == []
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
 
 
 @pytest.mark.parametrize('list_style', ['json', 'lazy', 'argparse'])

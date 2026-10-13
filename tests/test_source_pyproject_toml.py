@@ -2,7 +2,6 @@
 Test pydantic_settings.PyprojectTomlConfigSettingsSource.
 """
 
-import sys
 from pathlib import Path
 
 import pytest
@@ -15,12 +14,6 @@ from pydantic_settings import (
     PyprojectTomlConfigSettingsSource,
     SettingsConfigDict,
 )
-
-try:
-    import tomli
-except ImportError:
-    tomli = None
-
 
 MODULE = 'pydantic_settings.sources.providers.pyproject'
 
@@ -42,7 +35,6 @@ class SimpleSettings(BaseSettings):
     model_config = SettingsConfigDict(pyproject_toml_depth=1, pyproject_toml_table_header=('some', 'table'))
 
 
-@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
 class TestPyprojectTomlConfigSettingsSource:
     """Test PyprojectTomlConfigSettingsSource."""
 
@@ -100,7 +92,6 @@ class TestPyprojectTomlConfigSettingsSource:
         assert obj.toml_file_path == tmp_path / 'pyproject.toml'
 
 
-@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
 def test_pyproject_toml_file(cd_tmp_path: Path):
     pyproject = cd_tmp_path / 'pyproject.toml'
     pyproject.write_text(
@@ -132,7 +123,6 @@ def test_pyproject_toml_file(cd_tmp_path: Path):
     assert s.nested.nested_field == 'world!'
 
 
-@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
 def test_pyproject_toml_file_explicit(cd_tmp_path: Path):
     pyproject = cd_tmp_path / 'child' / 'grandchild' / 'pyproject.toml'
     pyproject.parent.mkdir(parents=True)
@@ -174,7 +164,6 @@ def test_pyproject_toml_file_explicit(cd_tmp_path: Path):
     assert s.nested.nested_field == 'world!'
 
 
-@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
 def test_pyproject_toml_file_parent(mocker: MockerFixture, tmp_path: Path):
     cwd = tmp_path / 'child' / 'grandchild' / 'cwd'
     cwd.mkdir(parents=True)
@@ -217,7 +206,6 @@ def test_pyproject_toml_file_parent(mocker: MockerFixture, tmp_path: Path):
     assert s.nested.nested_field == 'world!'
 
 
-@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
 def test_pyproject_toml_file_header(cd_tmp_path: Path):
     pyproject = cd_tmp_path / 'subdir' / 'pyproject.toml'
     pyproject.parent.mkdir()
@@ -248,7 +236,6 @@ def test_pyproject_toml_file_header(cd_tmp_path: Path):
     assert s.status == 'success'
 
 
-@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
 @pytest.mark.parametrize('depth', [0, 99])
 def test_pyproject_toml_no_file(cd_tmp_path: Path, depth: int):
     class Settings(BaseSettings):
@@ -264,7 +251,6 @@ def test_pyproject_toml_no_file(cd_tmp_path: Path, depth: int):
     assert s.model_dump() == {}
 
 
-@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
 def test_pyproject_toml_no_file_explicit(tmp_path: Path):
     pyproject = tmp_path / 'child' / 'pyproject.toml'
     (tmp_path / 'pyproject.toml').write_text('[tool.pydantic-settings]\nfield = "fail"')
@@ -284,7 +270,6 @@ def test_pyproject_toml_no_file_explicit(tmp_path: Path):
     assert s.model_dump() == {'field': None}
 
 
-@pytest.mark.skipif(sys.version_info <= (3, 11) and tomli is None, reason='tomli/tomllib is not installed')
 @pytest.mark.parametrize('depth', [0, 1, 2])
 def test_pyproject_toml_no_file_too_shallow(depth: int, mocker: MockerFixture, tmp_path: Path):
     cwd = tmp_path / 'child' / 'grandchild' / 'cwd'

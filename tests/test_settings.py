@@ -15,7 +15,7 @@ import weakref
 from collections.abc import Callable, Hashable
 from collections.abc import Set as AbstractSet
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from enum import Enum, IntEnum
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar
@@ -676,6 +676,137 @@ def test_annotated_list(env):
             'type': 'too_short',
         }
     ]
+
+
+@pytest.mark.parametrize('alias_kind', ['plain', 'annotated', 'generic'])
+@pytest.mark.parametrize('validation_alias', [None, 'custom_value'])
+@pytest.mark.parametrize('source', ['env', 'dotenv', 'nested'])
+@pytest.mark.parametrize('raw_value, expected', [('plain-string', 'plain-string'), ('[1,', '[1,'), ('[1, 2]', [1, 2])])
+def test_named_union_type_alias_parsing(env, tmp_path, alias_kind, validation_alias, source, raw_value, expected):
+    if alias_kind == 'plain':
+        Value = TypeAliasType('Value', list[int] | str)
+    elif alias_kind == 'annotated':
+        Value = TypeAliasType('Value', Annotated[list[int] | str, MinLen(1)])
+    else:
+        T = TypeVar('T')
+        Value = TypeAliasType('Value', list[T] | str, type_params=(T,))[int]
+
+    class Nested(BaseModel):
+        value: Value = Field(validation_alias=validation_alias)
+
+    class Settings(BaseSettings):
+        value: Value = Field(validation_alias=validation_alias)
+
+    class NestedSettings(BaseSettings):
+        nested: Nested
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env_name = validation_alias or 'value'
+    if source == 'nested':
+        env.set(f'nested__{env_name}', raw_value)
+        actual = NestedSettings().nested.value
+    elif source == 'dotenv':
+        env_file = tmp_path / '.env'
+        env_file.write_text(f"{env_name}='{raw_value}'")
+        actual = Settings(_env_file=env_file).value
+    else:
+        env.set(env_name, raw_value)
+        actual = Settings().value
+    assert actual == expected
+
+
+@pytest.mark.parametrize('decode_annotation', [NoDecode, ForceDecode])
+@pytest.mark.parametrize('validation_alias', [None, 'custom_value'])
+def test_named_union_type_alias_decoding_control(env, decode_annotation, validation_alias):
+    Value = TypeAliasType('Value', Annotated[list[int] | str, decode_annotation])
+
+    class Settings(BaseSettings):
+        value: Value = Field(validation_alias=validation_alias)
+        model_config = SettingsConfigDict(enable_decoding=decode_annotation is NoDecode)
+
+    env.set(validation_alias or 'value', '[1, 2]')
+    assert Settings().value == ('[1, 2]' if decode_annotation is NoDecode else [1, 2])
+
+
+@pytest.mark.parametrize('validation_alias', [None, 'custom_value'])
+@pytest.mark.parametrize('strict', [False, True])
+def test_named_union_type_alias_json_validation(env, validation_alias, strict):
+    Value = TypeAliasType('Value', Json[list[int] | str])
+
+    class Settings(BaseSettings):
+        value: Value = Field(validation_alias=validation_alias)
+        model_config = SettingsConfigDict(strict=strict)
+
+    env.set(validation_alias or 'value', '[1, 2]')
+    assert Settings().value == [1, 2]
+
+
+@pytest.mark.parametrize('annotation, raw_value, expected', [(Json[list[int]], '[1, 2]', [1, 2]), (Json[int], '5', 5)])
+@pytest.mark.parametrize('nested', [False, True])
+def test_inline_json_strict(env, annotation, raw_value, expected, nested):
+    class Nested(BaseModel):
+        value: annotation
+
+    class Settings(BaseSettings):
+        value: annotation
+        model_config = SettingsConfigDict(strict=True)
+
+    class NestedSettings(BaseSettings):
+        nested: Nested
+        model_config = SettingsConfigDict(strict=True, env_nested_delimiter='__')
+
+    if nested:
+        env.set('nested__value', raw_value)
+        assert NestedSettings().nested.value == expected
+    else:
+        env.set('value', raw_value)
+        assert Settings().value == expected
+
+
+@pytest.mark.parametrize('source', ['env', 'dotenv', 'nested'])
+@pytest.mark.parametrize('raw_value, expected', [('true', True), ('false', False)])
+def test_named_union_type_alias_strict_bool(env, tmp_path, source, raw_value, expected):
+    Value = TypeAliasType('Value', StrictBool | None)
+
+    class Nested(BaseModel):
+        value: Value
+
+    class Settings(BaseSettings):
+        value: Value
+
+    class NestedSettings(BaseSettings):
+        nested: Nested
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    if source == 'nested':
+        env.set('nested__value', raw_value)
+        actual = NestedSettings().nested.value
+    elif source == 'dotenv':
+        env_file = tmp_path / '.env'
+        env_file.write_text(f'value={raw_value}')
+        actual = Settings(_env_file=env_file).value
+    else:
+        env.set('value', raw_value)
+        actual = Settings().value
+    assert actual is expected
+
+
+@pytest.mark.parametrize('validation_alias', [None, 'custom_value'])
+@pytest.mark.parametrize('annotated', [False, True])
+def test_named_union_type_alias_dotenv_nested_extras(tmp_path, validation_alias, annotated):
+    class Nested(BaseModel):
+        a: int
+
+    annotation = Annotated[Nested | str, 'metadata'] if annotated else Nested | str
+    Value = TypeAliasType('Value', annotation)
+
+    class Settings(BaseSettings):
+        value: Value = Field(validation_alias=validation_alias)
+        model_config = SettingsConfigDict(env_nested_delimiter='__', extra='forbid')
+
+    env_file = tmp_path / '.env'
+    env_file.write_text(f'{validation_alias or "value"}__a=1')
+    assert Settings(_env_file=env_file).value == Nested(a=1)
 
 
 def test_annotated_with_type(env):
@@ -1957,7 +2088,7 @@ def test_env_union_with_complex_subfields_parses_plain_if_json_fails(env):
 
     env.set('content', '2020-07-05T00:00:00Z')
     s = Settings()
-    assert s.content == datetime(2020, 7, 5, 0, 0, tzinfo=timezone.utc)
+    assert s.content == datetime(2020, 7, 5, 0, 0, tzinfo=UTC)
 
 
 def test_env_union_without_complex_subfields_does_not_parse_json(env):

@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import StrEnum
 from os import sep
 from pathlib import Path
 from unittest.mock import patch
@@ -42,7 +42,7 @@ class AppSettings(BaseSettings):
         )
 
 
-class SampleEnum(str, Enum):
+class SampleEnum(StrEnum):
     TEST = 'test'
 
 
