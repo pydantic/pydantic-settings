@@ -4,7 +4,7 @@ from __future__ import annotations as _annotations
 
 import json
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Hashable, Sequence
+from collections.abc import Callable, Hashable, Mapping, Sequence
 from dataclasses import asdict, is_dataclass
 from dataclasses import fields as dataclass_fields
 from pathlib import Path
@@ -515,7 +515,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         return value.lower() if not self.case_sensitive else value
 
     def _extract_field_info(
-        self, field: FieldInfo, field_name: str, validate_by_alias: bool | None = None
+        self, field: FieldInfo, field_name: str, model_config: Mapping[str, Any] | None = None
     ) -> list[tuple[str, str, bool]]:
         """
         Extracts field info. This info is used to get the value of field from environment variables.
@@ -529,8 +529,9 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         Args:
             field (FieldInfo): The field.
             field_name (str): The field name.
-            validate_by_alias (bool | None): Whether the model owning the field validates by alias.
-                Defaults to the settings config, pass it for a field of a nested model.
+            model_config (Mapping[str, Any] | None): The config of the model owning the field, which decides
+                whether its alias and name are accepted. Defaults to the settings config, pass it for a field
+                of a nested model.
 
         Returns:
             list[tuple[str, str, bool]]: List of tuples, each tuple contains field_key, env_name, and value_is_complex.
@@ -538,9 +539,9 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         _warn_if_field_info_incomplete(field, field_name, self._init_state)
         field_info: list[tuple[str, str, bool]] = []
         v_alias: str | list[str | int] | list[list[str | int]] | None
-        if validate_by_alias is None:
-            validate_by_alias = _validate_by_alias_enabled(self.config)
-        if not validate_by_alias:
+        if model_config is None:
+            model_config = self.config
+        if not _validate_by_alias_enabled(model_config):
             # pydantic ignores the aliases, so only the field name can populate the field.
             v_alias = None
         elif isinstance(field.validation_alias, (AliasChoices, AliasPath)):
@@ -572,7 +573,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             else:  # string validation alias
                 field_info.append((v_alias, self._apply_case_sensitive(env_prefix + v_alias), False))
 
-        if not v_alias or _validate_by_name_enabled(self.config):
+        if not v_alias or _validate_by_name_enabled(model_config):
             annotation, metadata = _get_field_annotation_and_metadata(field)
             env_prefix = self.env_prefix if self.env_prefix_target in ('variable', 'all') else ''
             if is_union_origin(get_origin(annotation)) and _union_is_complex(annotation, metadata, self._init_state):

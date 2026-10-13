@@ -1152,7 +1152,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             )
             else model_default
         )
-        validate_by_alias = _validate_by_alias_enabled(_get_model_config(model))
+        model_config = _get_model_config(model)
+        validate_by_alias = _validate_by_alias_enabled(model_config)
         for field_name, field_info in self._sort_arg_fields(model):
             arg = _CliArg(
                 parser=parser,
@@ -1215,12 +1216,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         model_default=PydanticUndefined,
                         model_path=model_path,
                         env_prefixes=self._nested_env_prefixes(
-                            self._get_field_env_var_names(field_name, field_info, env_prefixes, validate_by_alias)
+                            self._get_field_env_var_names(field_name, field_info, env_prefixes, model_config)
                         ),
                     )
             else:
                 flag_prefix: str = self._cli_flag_prefix
-                env_var_names = self._get_field_env_var_names(field_name, field_info, env_prefixes, validate_by_alias)
+                env_var_names = self._get_field_env_var_names(field_name, field_info, env_prefixes, model_config)
                 arg.kwargs['dest'] = arg.dest
                 arg.kwargs['default'] = CLI_SUPPRESS
                 arg.kwargs['help'] = self._help_format(
@@ -1605,7 +1606,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         field_name: str,
         field_info: FieldInfo,
         env_prefixes: tuple[tuple[str, bool], ...],
-        validate_by_alias: bool,
+        model_config: Mapping[str, Any],
     ) -> tuple[str, ...]:
         if (
             self._env_settings_source is None
@@ -1620,7 +1621,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         for env_prefix, force_env_prefix in env_prefixes:
             env_settings_source.env_prefix = env_prefix
             normalized_env_prefix = env_settings_source._apply_case_sensitive(env_prefix)
-            for _, env_name, _ in env_settings_source._extract_field_info(field_info, field_name, validate_by_alias):
+            for _, env_name, _ in env_settings_source._extract_field_info(field_info, field_name, model_config):
                 if force_env_prefix and normalized_env_prefix and not env_name.startswith(normalized_env_prefix):
                     env_name = f'{normalized_env_prefix}{env_name}'
                 display_env_name = self._display_env_var_name(env_name)

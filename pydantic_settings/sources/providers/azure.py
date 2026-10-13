@@ -19,8 +19,6 @@ from ..utils import (
     _parse_env_none_str,
     _resolve_type_alias,
     _strip_annotated,
-    _validate_by_alias_enabled,
-    _validate_by_name_enabled,
 )
 from .env import EnvSettingsSource
 
@@ -177,9 +175,9 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
         )
 
     def _extract_field_info(
-        self, field: FieldInfo, field_name: str, validate_by_alias: bool | None = None
+        self, field: FieldInfo, field_name: str, model_config: Mapping[str, Any] | None = None
     ) -> list[tuple[str, str, bool]]:
-        field_info = super()._extract_field_info(field, field_name, validate_by_alias)
+        field_info = super()._extract_field_info(field, field_name, model_config)
         if self._dash_to_underscore and not self._snake_case_conversion:
             return [
                 (field_key, env_name.replace('_', '-'), is_complex) for field_key, env_name, is_complex in field_info
@@ -235,13 +233,8 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
         targets: dict[str, list[tuple[str, Any]]] = {}
         for model in models:
             config = _get_model_config(model)
-            by_name = _validate_by_name_enabled(config)
-            by_alias = _validate_by_alias_enabled(config)
             for field_name, field in _get_model_fields(model).items():
-                keys = [field_key for field_key, _, _ in self._extract_field_info(field, field_name, by_alias)]
-                if by_name and field_name not in keys:
-                    keys.append(field_name)
-                for field_key in keys:
+                for field_key, _, _ in self._extract_field_info(field, field_name, config):
                     env_name = self._apply_case_sensitive(field_key).replace('_', '-')
                     targets.setdefault(env_name, []).append((field_key, field.annotation))
         return targets

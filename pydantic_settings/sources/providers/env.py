@@ -31,7 +31,6 @@ from ..utils import (
     _literal_has_numeric_enum,
     _union_has_strict_types,
     _union_is_complex,
-    _validate_by_alias_enabled,
     parse_env_vars,
 )
 
@@ -261,11 +260,11 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             return args[-1] if args else None
         if is_model_class(annotation) or is_pydantic_dataclass(annotation):  # type: ignore[arg-type]
             fields = _get_model_fields(annotation)
-            validate_by_alias = _validate_by_alias_enabled(_get_model_config(annotation))
+            model_config = _get_model_config(annotation)
             # `case_sensitive is None` is here to be compatible with the old behavior.
             # Has to be removed in V3.
             for field_name, f in fields.items():
-                for _, env_name, _ in self._extract_field_info(f, field_name, validate_by_alias):
+                for _, env_name, _ in self._extract_field_info(f, field_name, model_config):
                     if case_sensitive is None or case_sensitive:
                         if field_name == key or env_name == key:
                             return f
