@@ -14,9 +14,9 @@ from weakref import WeakKeyDictionary
 
 from pydantic import ConfigDict
 from pydantic._internal._config import config_keys
-from pydantic._internal._signature import _field_name_for_signature
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
+from pydantic.fields import FieldInfo
 from pydantic.main import BaseModel
 
 from .exceptions import SettingsError
@@ -42,7 +42,7 @@ from .sources import (
     YamlConfigSettingsSource,
     get_subcommand,
 )
-from .sources.utils import InitState, _get_alias_names, _warn_if_field_info_incomplete
+from .sources.utils import InitState, _get_alias_names, _validate_by_name_enabled, _warn_if_field_info_incomplete
 from .utils import _settings_debug_enabled, logger
 
 T = TypeVar('T')
@@ -621,10 +621,7 @@ class BaseSettings(BaseModel):
                 _warn_if_field_info_incomplete(field_info, field_name, init_state)
                 alias_names, *_ = _get_alias_names(field_name, field_info)
                 matchable_names = set(alias_names)
-                include_name = settings_cls.model_config.get(
-                    'populate_by_name', False
-                ) or settings_cls.model_config.get('validate_by_name', False)
-                if include_name:
+                if _validate_by_name_enabled(settings_cls.model_config):
                     matchable_names.add(field_name)
                 init_kwarg_name = init_kwarg_names & matchable_names
                 state_kwarg_name = state_kwarg_names & matchable_names
@@ -773,6 +770,14 @@ class CliApp:
         return CliAppBaseSettings
 
     @staticmethod
+    def _init_kwarg_name(field_name: str, field_info: FieldInfo, validate_by_alias: bool) -> str:
+        # The kwargs are passed as a dict, so unlike pydantic's `_field_name_for_signature` the alias
+        # does not need to be a valid identifier. `validation_alias` defaults to `alias` when only that is set.
+        if validate_by_alias and isinstance(field_info.validation_alias, str):
+            return field_info.validation_alias
+        return field_name
+
+    @staticmethod
     def _run_cli_cmd(model: Any, cli_cmd_method_name: str, is_required: bool) -> Any:
         command = getattr(type(model), cli_cmd_method_name, None)
         if command is None:
@@ -879,8 +884,11 @@ class CliApp:
             )
             model = base_settings_cls(**base_settings_cls._settings_build_values(sources, init_kwargs))
             model_init_data = {}
+            validate_by_alias = base_settings_cls.model_config.get('validate_by_alias', True)
             for field_name, field_info in base_settings_cls.model_fields.items():
-                model_init_data[_field_name_for_signature(field_name, field_info)] = getattr(model, field_name)
+                model_init_data[CliApp._init_kwarg_name(field_name, field_info, validate_by_alias)] = getattr(
+                    model, field_name
+                )
             command = model_cls(**model_init_data)
         else:
             sources, init_kwargs = model_cls._settings_init_sources(

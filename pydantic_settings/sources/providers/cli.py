@@ -67,9 +67,11 @@ from ..utils import (
     _annotation_contains_types,
     _annotation_enum_val_to_name,
     _get_alias_names,
+    _get_field_metadata,
     _get_model_fields,
     _is_function,
     _strip_annotated,
+    _validate_by_name_enabled,
     parse_env_vars,
 )
 from .env import EnvSettingsSource
@@ -192,9 +194,7 @@ class _CliArg(BaseModel):
         return name.replace('_', '-') if kebab_case not in (None, False) else name
 
     @classmethod
-    def get_enum_names(
-        cls, annotation: type[Any], kebab_case: bool | Literal['all', 'no_enums'] | None
-    ) -> tuple[str, ...]:
+    def get_enum_names(cls, annotation: Any, kebab_case: bool | Literal['all', 'no_enums'] | None) -> tuple[str, ...]:
         enum_names: tuple[str, ...] = ()
         annotation = _strip_annotated(annotation)
         for type_ in get_args(annotation):
@@ -293,10 +293,8 @@ class _CliArg(BaseModel):
 
     @cached_property
     def is_no_decode(self) -> bool:
-        return self.field_info is not None and (
-            NoDecode in self.field_info.metadata
-            or (self.enable_decoding is False and ForceDecode not in self.field_info.metadata)
-        )
+        metadata = _get_field_metadata(self.field_info)
+        return NoDecode in metadata or (self.enable_decoding is False and ForceDecode not in metadata)
 
 
 T = TypeVar('T')
@@ -747,7 +745,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         is_use_decode: bool | None = None
         cli_arg_map = self._parser_map.get(field_name, {})
         try:
-            list_adapter: Any = TypeAdapter(next(iter(cli_arg_map.values())).field_info.annotation)
+            list_adapter: Any = TypeAdapter(cast('Any', next(iter(cli_arg_map.values())).field_info.annotation))
             is_num_type_str = type(next(iter(list_adapter.validate_python(['1'])))) is str
         except Exception:
             is_num_type_str = None
@@ -1030,7 +1028,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self._add_subparsers = self._connect_parser_method(add_subparsers_method, 'add_subparsers_method')
         self._format_help = self._connect_parser_method(format_help_method, 'format_help_method')
         self._formatter_class = formatter_class
-        self._cli_dict_args: dict[str, type[Any] | None] = {}
+        self._cli_dict_args: dict[str, Any] = {}
         self._parser_map: defaultdict[str | FieldInfo, dict[int | str | type[BaseModel] | None, _CliArg]] = defaultdict(
             dict
         )
@@ -1155,8 +1153,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 field_name=field_name,
                 arg_prefix=arg_prefix,
                 case_sensitive=self.case_sensitive,
-                populate_by_name=self.config.get('populate_by_name', False)
-                or self.config.get('validate_by_name', False),
+                populate_by_name=_validate_by_name_enabled(self.config),
                 hide_none_type=self.cli_hide_none_type,
                 kebab_case=self.cli_kebab_case,
                 enable_decoding=self.config.get('enable_decoding'),
@@ -1713,9 +1710,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         value: str | list[Any] | dict[str, Any],
         list_style: Literal['json', 'argparse', 'lazy'] = 'json',
         dict_style: Literal['json', 'env'] = 'json',
+        is_no_decode: bool = False,
     ) -> list[str | list[Any] | dict[str, Any]]:
         values = [value]
         if isinstance(value, str):
+            if not is_no_decode and isinstance(model_default, (list, dict)) and not model_default:
+                return values
             if isinstance(model_default, list):
                 if list_style == 'lazy':
                     values = [','.join(f'{v}' for v in json.loads(value))]
@@ -1808,8 +1808,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 value = self._update_alias_path_only_default(arg_name, value, field_info, alias_path_only_defaults)
 
             if _CliPositionalArg in field_info.metadata:
-                for value in model_default if isinstance(model_default, list) else [model_default]:
-                    positional_args.append(self._serialize_value(value))
+                if isinstance(model_default, list) and (model_default or arg.is_no_decode):
+                    positional_args += [self._serialize_value(value) for value in model_default]
+                else:
+                    # Keep an empty list as '[]' so it is not dropped and replaced by the default when parsed.
+                    positional_args.append(self._serialize_value(model_default))
                 continue
 
             # Note: prepend 'no-' for boolean optional action flag if model_default value is False and flag is not a short option
@@ -1817,7 +1820,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 flag_chars += 'no-'
 
             for index, coerced_value in enumerate(
-                self._coerce_value_styles(model_default, value, list_style=list_style, dict_style=dict_style)
+                self._coerce_value_styles(
+                    model_default, value, list_style=list_style, dict_style=dict_style, is_no_decode=arg.is_no_decode
+                )
             ):
                 if index == 0 or arg.kwargs.get('nargs') not in ('*', '+'):
                     optional_args.append(f'{flag_chars}{arg_name}')

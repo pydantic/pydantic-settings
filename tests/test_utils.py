@@ -4,7 +4,7 @@ from collections.abc import Set as AbstractSet
 from typing import Annotated, Any, Literal, TypeVar
 
 import pytest
-from pydantic import Json, RootModel
+from pydantic import BaseModel, ConfigDict, Field, Json, RootModel, ValidationError
 from pydantic.fields import FieldInfo
 from typing_extensions import TypeAliasType
 
@@ -17,6 +17,7 @@ from pydantic_settings.sources.utils import (
     _resolve_type_alias,
     _substitute_typevars,
     _union_is_complex,
+    _validate_by_name_enabled,
 )
 from pydantic_settings.utils import path_type_label
 
@@ -179,3 +180,34 @@ def test_union_is_complex_recursive_alias_distinct_parameters():
     exec('type Recursive[T, U] = Recursive[U, T] | T', namespace)
 
     assert _union_is_complex(namespace['Recursive'][int, list[int]] | None, []) is True
+
+
+@pytest.mark.parametrize(
+    'config, expected',
+    [
+        ({}, False),
+        ({'populate_by_name': True}, True),
+        ({'populate_by_name': False}, False),
+        ({'validate_by_name': True}, True),
+        ({'validate_by_alias': False}, True),
+        ({'validate_by_alias': False, 'validate_by_name': True}, True),
+        ({'validate_by_alias': False, 'populate_by_name': True}, True),
+        ({'validate_by_alias': False, 'populate_by_name': False}, False),
+        ({'validate_by_name': False, 'populate_by_name': True}, False),
+    ],
+)
+def test_validate_by_name_enabled_matches_pydantic(config: ConfigDict, expected: bool):
+    assert _validate_by_name_enabled(config) is expected
+
+    class Model(BaseModel):
+        model_config = ConfigDict(**config)
+
+        apple: str = Field(alias='pomo')
+
+    try:
+        Model.model_validate({'apple': 'honeycrisp'})
+    except ValidationError:
+        pydantic_validates_by_name = False
+    else:
+        pydantic_validates_by_name = True
+    assert pydantic_validates_by_name is expected
