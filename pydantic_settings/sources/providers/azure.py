@@ -12,7 +12,14 @@ from pydantic.fields import FieldInfo
 from typing_inspection.introspection import is_union_origin
 
 from ...utils import _lenient_issubclass
-from ..utils import InitState, _get_model_fields, _parse_env_none_str, _resolve_type_alias, _strip_annotated
+from ..utils import (
+    InitState,
+    _get_model_fields,
+    _parse_env_none_str,
+    _resolve_type_alias,
+    _strip_annotated,
+    _validate_by_name_enabled,
+)
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
@@ -225,7 +232,7 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
         targets: dict[str, list[tuple[str, Any]]] = {}
         for model in models:
             config = getattr(model, 'model_config', None) or getattr(model, '__pydantic_config__', {})
-            by_name = config.get('validate_by_name') or config.get('populate_by_name')
+            by_name = _validate_by_name_enabled(config)
             for field_name, field in _get_model_fields(model).items():
                 keys = [field_key for field_key, _, _ in self._extract_field_info(field, field_name)]
                 if by_name and field_name not in keys:

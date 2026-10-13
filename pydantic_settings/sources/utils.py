@@ -399,6 +399,22 @@ def _get_alias_names(
     return tuple(dict.fromkeys(alias_names)), is_alias_path_only
 
 
+def _validate_by_name_enabled(config: Mapping[str, Any]) -> bool:
+    """Whether fields can be populated by their name, resolved the same way pydantic resolves its config.
+
+    pydantic < 2.14 wrote the resolved `validate_by_name` back into `model_config`, but newer versions leave
+    `model_config` as declared, so the `populate_by_name` fallback and the `validate_by_alias=False` implication
+    have to be applied here.
+    """
+    validate_by_name = config.get('validate_by_name')
+    if validate_by_name is not None:
+        return validate_by_name
+    populate_by_name = config.get('populate_by_name')
+    if populate_by_name is not None:
+        return populate_by_name
+    return config.get('validate_by_alias') is False
+
+
 def _is_function(obj: Any) -> bool:
     """Check if an object is a function."""
     from types import BuiltinFunctionType, FunctionType

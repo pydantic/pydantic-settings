@@ -38,6 +38,7 @@ from .utils import (
     _get_model_fields,
     _strip_annotated,
     _union_is_complex,
+    _validate_by_name_enabled,
     _warn_if_field_info_incomplete,
 )
 
@@ -407,7 +408,7 @@ class InitSettingsSource(PydanticBaseSettingsSource):
     ):
         super().__init__(settings_cls, _init_state)
         case_sensitive = self.config.get('case_sensitive', False)
-        include_name = self.config.get('populate_by_name', False) or self.config.get('validate_by_name', False)
+        include_name = _validate_by_name_enabled(self.config)
 
         def normalize(name: str) -> str:
             # When case_sensitive is False, matching is done on lower-cased names.
@@ -555,7 +556,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             else:  # string validation alias
                 field_info.append((v_alias, self._apply_case_sensitive(env_prefix + v_alias), False))
 
-        if not v_alias or self.config.get('populate_by_name', False) or self.config.get('validate_by_name', False):
+        if not v_alias or _validate_by_name_enabled(self.config):
             annotation, metadata = _get_field_annotation_and_metadata(field)
             env_prefix = self.env_prefix if self.env_prefix_target in ('variable', 'all') else ''
             if is_union_origin(get_origin(annotation)) and _union_is_complex(annotation, metadata, self._init_state):
@@ -663,13 +664,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
             A tuple that contains the value, preferred key and a flag to determine whether value is complex.
         """
         field_value, field_key, value_is_complex = self.get_field_value(field, field_name)
-        if not (
-            value_is_complex
-            or (
-                (self.config.get('populate_by_name', False) or self.config.get('validate_by_name', False))
-                and (field_key == field_name)
-            )
-        ):
+        if not (value_is_complex or (_validate_by_name_enabled(self.config) and (field_key == field_name))):
             field_infos = self._extract_field_info(field, field_name)
             preferred_key, _, preferred_is_complex = field_infos[0]
             # Only normalize to preferred_key when it's a simple string alias.
