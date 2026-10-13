@@ -251,6 +251,7 @@ def _annotation_contains_types(
     is_instance: bool = False,
     collect: set[Any] | None = None,
     is_subtype: bool = False,
+    _seen_aliases: tuple[Any, ...] = (),
 ) -> bool:
     """Check if a type annotation contains any of the specified types.
 
@@ -259,6 +260,19 @@ def _annotation_contains_types(
     """
     if is_strip_annotated:
         annotation = _strip_annotated(annotation)
+    resolved = _resolve_type_alias(annotation)
+    if resolved is not annotation:
+        # Track aliases on this path so recursive aliases terminate without skipping sibling types.
+        return annotation not in _seen_aliases and _annotation_contains_types(
+            resolved,
+            types,
+            is_include_origin=is_include_origin,
+            is_strip_annotated=is_strip_annotated,
+            is_instance=is_instance,
+            collect=collect,
+            is_subtype=is_subtype,
+            _seen_aliases=(*_seen_aliases, annotation),
+        )
     if is_include_origin is True:
         origin = get_origin(annotation)
         if origin in types or (is_subtype and _is_subtype_of(origin, types)):
@@ -279,6 +293,7 @@ def _annotation_contains_types(
                 is_instance=is_instance,
                 collect=collect,
                 is_subtype=is_subtype,
+                _seen_aliases=_seen_aliases,
             )
             and collect is None
         ):

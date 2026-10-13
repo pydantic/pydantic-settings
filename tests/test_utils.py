@@ -1,7 +1,9 @@
+import sys
 from collections.abc import MutableSet
 from collections.abc import Set as AbstractSet
 from typing import Annotated, Any, Literal, TypeVar
 
+import pytest
 from pydantic import Json, RootModel
 from pydantic.fields import FieldInfo
 from typing_extensions import TypeAliasType
@@ -103,6 +105,39 @@ def test_annotation_contains_types_is_instance_origin_collect():
 def test_annotation_contains_types_is_instance_origin_short_circuits():
     """Without `collect`, an `is_instance` origin match returns True immediately."""
     assert _annotation_contains_types(list[int], (type,), is_instance=True) is True
+
+
+def test_annotation_contains_types_nested_aliases():
+    Values = TypeAliasType('Values', list[int])
+    Alias = TypeAliasType('Alias', Annotated[Values, 'metadata'])
+
+    assert _annotation_contains_types(Annotated[Alias, 'outer'], (list,), is_strip_annotated=True)
+    assert not _annotation_contains_types(Values, (list,), is_include_origin=False)
+    assert _annotation_contains_types(TypeAliasType('JsonAlias', Json), (type(Json),), is_instance=True)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason='requires python 3.12 or higher')
+def test_annotation_contains_types_recursive_alias():
+    namespace = {}
+    exec('type Recursive = list[Recursive]', namespace)
+    Recursive = namespace['Recursive']
+
+    assert _annotation_contains_types(Recursive, (list,))
+    assert not _annotation_contains_types(Recursive, (dict,))
+    collected = set()
+    _annotation_contains_types(Recursive, (list,), collect=collected)
+    assert collected == {list[Recursive]}
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason='requires python 3.12 or higher')
+def test_annotation_contains_types_recursive_generic_alias():
+    namespace = {}
+    exec('type Recursive[T] = list[Recursive[T] | T]', namespace)
+    Recursive = namespace['Recursive']
+
+    collected = set()
+    _annotation_contains_types(Recursive[int] | Recursive[str], (int, str), collect=collected)
+    assert collected == {int, str}
 
 
 def test_unwrap_optional_annotation():
