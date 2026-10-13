@@ -443,7 +443,7 @@ class TestAzureKeyVaultSettingsSource:
             sql_password: str
 
         class Settings(BaseSettings):
-            databases: dict[str, Database]
+            databases: dict[str, Database] | None = None
 
         secrets = {'databases--main-db--sql-password': 'main', 'databases--replica--sql-password': 'replica'}
         settings = self._load_dash_to_underscore_settings(mocker, Settings, secrets)

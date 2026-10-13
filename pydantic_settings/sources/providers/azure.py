@@ -50,9 +50,7 @@ def _collect_nested_types(annotation: Any, models: list[Any], dict_value_types: 
         for arg in get_args(annotation):
             _collect_nested_types(arg, models, dict_value_types)
     elif _lenient_issubclass(origin, dict):
-        args = get_args(annotation)
-        if args:
-            dict_value_types.append(args[-1])
+        dict_value_types.append(get_args(annotation)[-1])
     elif is_model_class(annotation) or is_pydantic_dataclass(annotation):
         models.append(annotation)
 
