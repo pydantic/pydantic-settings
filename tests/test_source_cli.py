@@ -4817,6 +4817,34 @@ def test_cli_app_run_subcommand_underscore_field_name():
     }
 
 
+def test_cli_app_run_base_model_aliases():
+    class Cmd(BaseModel):
+        plain: str
+        aliased: str = Field(alias='aliasedAlias')
+        validation_aliased: str = Field(validation_alias='validationAlias')
+        non_identifier_alias: str = Field(alias='non-identifier-alias')
+
+    result = CliApp.run(
+        Cmd,
+        cli_args=['--plain=a', '--aliasedAlias=b', '--validationAlias=c', '--non-identifier-alias=d'],
+    )
+    assert result.model_dump() == {
+        'plain': 'a',
+        'aliased': 'b',
+        'validation_aliased': 'c',
+        'non_identifier_alias': 'd',
+    }
+
+
+def test_cli_app_run_base_model_validate_by_name_only():
+    class Cmd(BaseModel):
+        model_config = ConfigDict(validate_by_name=True, validate_by_alias=False)
+
+        plain: str
+
+    assert CliApp.run(Cmd, cli_args=['--plain=a']).model_dump() == {'plain': 'a'}
+
+
 def test_get_model_description_returns_docstring():
     class MyModel(BaseModel):
         """My docstring."""

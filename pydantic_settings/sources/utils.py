@@ -244,7 +244,7 @@ def _is_subtype_of(annotation: Any, types: tuple[Any, ...]) -> bool:
 
 
 def _annotation_contains_types(
-    annotation: type[Any] | None,
+    annotation: Any,
     types: tuple[Any, ...],
     is_include_origin: bool = True,
     is_strip_annotated: bool = False,
@@ -300,7 +300,7 @@ def _strip_annotated(annotation: Any) -> Any:
     return annotation
 
 
-def _annotation_enum_val_to_name(annotation: type[Any] | None, value: Any) -> str | None:
+def _annotation_enum_val_to_name(annotation: Any, value: Any) -> str | None:
     for type_ in (annotation, get_origin(annotation)):
         if _lenient_issubclass(type_, Enum):
             enum_type = cast('type[Enum]', type_)
@@ -313,7 +313,7 @@ def _annotation_enum_val_to_name(annotation: type[Any] | None, value: Any) -> st
     return None
 
 
-def _annotation_enum_name_to_val(annotation: type[Any] | None, name: Any) -> Any:
+def _annotation_enum_name_to_val(annotation: Any, name: Any) -> Any:
     for type_ in (annotation, get_origin(annotation)):
         if _lenient_issubclass(type_, Enum):
             enum_type = cast('type[Enum]', type_)
