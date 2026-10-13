@@ -13,7 +13,7 @@ from itertools import islice
 from pathlib import Path
 from typing import Any, TypedDict, TypeVar, cast, get_args, get_origin
 
-from pydantic import BaseModel, ConfigDict, Json, RootModel, Secret
+from pydantic import BaseModel, Json, RootModel, Secret
 from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
@@ -399,7 +399,7 @@ def _get_alias_names(
     return tuple(dict.fromkeys(alias_names)), is_alias_path_only
 
 
-def _validate_by_name_enabled(config: ConfigDict) -> bool:
+def _validate_by_name_enabled(config: Mapping[str, Any]) -> bool:
     """Whether fields can be populated by their name, resolved the same way pydantic resolves its config.
 
     pydantic < 2.14 wrote the resolved `validate_by_name` back into `model_config`, but newer versions leave

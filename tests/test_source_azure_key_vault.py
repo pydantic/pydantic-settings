@@ -482,6 +482,26 @@ class TestAzureKeyVaultSettingsSource:
         assert settings.database.sql_password == 'password'
         assert settings.database.credentials.api_key == 'secret'
 
+    def test_dash_to_underscore_translation_nested_validate_by_alias_false(self, mocker: MockerFixture) -> None:
+        @pydantic_dataclass(config=ConfigDict(validate_by_alias=False))
+        class Credentials:
+            api_key: str = Field(validation_alias='apiKey')
+
+        class Database(BaseModel):
+            model_config = ConfigDict(validate_by_alias=False)
+
+            sql_password: str = Field(validation_alias='sqlPassword')
+            credentials: Credentials
+
+        class Settings(BaseSettings):
+            database: Database
+
+        secrets = {'database--sql-password': 'password', 'database--credentials--api-key': 'secret'}
+        settings = self._load_dash_to_underscore_settings(mocker, Settings, secrets)
+
+        assert settings.database.sql_password == 'password'
+        assert settings.database.credentials.api_key == 'secret'
+
     @pytest.mark.parametrize(
         'env_prefix', (None, 'singlewordprefix', 'prefix-kebab-case-', 'PrefixPascalCaseprefixCamelCaseSeparator-')
     )
