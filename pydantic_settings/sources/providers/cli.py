@@ -67,6 +67,7 @@ from ..utils import (
     _annotation_contains_types,
     _annotation_enum_val_to_name,
     _get_alias_names,
+    _get_field_metadata,
     _get_model_fields,
     _is_function,
     _strip_annotated,
@@ -291,10 +292,8 @@ class _CliArg(BaseModel):
 
     @cached_property
     def is_no_decode(self) -> bool:
-        return self.field_info is not None and (
-            NoDecode in self.field_info.metadata
-            or (self.enable_decoding is False and ForceDecode not in self.field_info.metadata)
-        )
+        metadata = _get_field_metadata(self.field_info)
+        return NoDecode in metadata or (self.enable_decoding is False and ForceDecode not in metadata)
 
 
 T = TypeVar('T')
@@ -1711,9 +1710,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         value: str | list[Any] | dict[str, Any],
         list_style: Literal['json', 'argparse', 'lazy'] = 'json',
         dict_style: Literal['json', 'env'] = 'json',
+        is_no_decode: bool = False,
     ) -> list[str | list[Any] | dict[str, Any]]:
         values = [value]
         if isinstance(value, str):
+            if not is_no_decode and isinstance(model_default, (list, dict)) and not model_default:
+                return values
             if isinstance(model_default, list):
                 if list_style == 'lazy':
                     values = [','.join(f'{v}' for v in json.loads(value))]
@@ -1806,8 +1808,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 value = self._update_alias_path_only_default(arg_name, value, field_info, alias_path_only_defaults)
 
             if _CliPositionalArg in field_info.metadata:
-                for value in model_default if isinstance(model_default, list) else [model_default]:
-                    positional_args.append(self._serialize_value(value))
+                if isinstance(model_default, list) and (model_default or arg.is_no_decode):
+                    positional_args += [self._serialize_value(value) for value in model_default]
+                else:
+                    # Keep an empty list as '[]' so it is not dropped and replaced by the default when parsed.
+                    positional_args.append(self._serialize_value(model_default))
                 continue
 
             # Note: prepend 'no-' for boolean optional action flag if model_default value is False and flag is not a short option
@@ -1815,7 +1820,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 flag_chars += 'no-'
 
             for index, coerced_value in enumerate(
-                self._coerce_value_styles(model_default, value, list_style=list_style, dict_style=dict_style)
+                self._coerce_value_styles(
+                    model_default, value, list_style=list_style, dict_style=dict_style, is_no_decode=arg.is_no_decode
+                )
             ):
                 if index == 0 or arg.kwargs.get('nargs') not in ('*', '+'):
                     optional_args.append(f'{flag_chars}{arg_name}')
