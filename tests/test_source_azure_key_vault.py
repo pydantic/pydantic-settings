@@ -2,10 +2,11 @@
 Test pydantic_settings.AzureKeyVaultSettingsSource.
 """
 
-from typing import Literal
+from typing import Annotated, Literal
 
 import pytest
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag, ValidationError
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 from pytest_mock import MockerFixture
 
 from pydantic_settings import (
@@ -325,22 +326,23 @@ class TestAzureKeyVaultSettingsSource:
         assert settings.my_field == expected_secret_value
         assert settings.alias_field == expected_secret_value
 
-    @pytest.mark.parametrize('env_prefix', (None, 'APP-'))
-    def test_dash_to_underscore_translation_nested(self, mocker: MockerFixture, env_prefix: str | None) -> None:
-        class ConnectionPool(BaseModel):
-            max_size: int
+    def _load_dash_to_underscore_settings(
+        self,
+        mocker: MockerFixture,
+        settings_cls: type[BaseSettings],
+        secrets: dict[str, str],
+        env_prefix: str | None = None,
+    ) -> BaseSettings:
+        mocker.patch.object(
+            SecretClient,
+            'list_properties_of_secrets',
+            return_value=[type('', (), {'name': name, 'enabled': True}) for name in secrets],
+        )
+        mocker.patch.object(
+            SecretClient, 'get_secret', side_effect=lambda name: KeyVaultSecret(SecretProperties(), secrets[name])
+        )
 
-        class Database(BaseModel):
-            sql_password: str
-            api_key: str = Field(alias='api-key')
-            app_token: str = Field(alias='app-token')
-            connection_pool: ConnectionPool
-            metadata: dict[str, str]
-            optional_note: str = 'default'
-
-        class AzureKeyVaultSettings(BaseSettings):
-            database: Database
-
+        class AzureKeyVaultSettings(settings_cls):  # type: ignore[valid-type,misc]
             @classmethod
             def settings_customise_sources(
                 cls,
@@ -360,23 +362,33 @@ class TestAzureKeyVaultSettingsSource:
                     ),
                 )
 
-        secrets = {
-            f'{env_prefix or ""}database--sql-password': 'password',
-            f'{env_prefix or ""}database--api-key': 'api-secret',
-            f'{env_prefix or ""}database--app-token': 'app-secret',
-            f'{env_prefix or ""}database--connection-pool--max-size': '10',
-            f'{env_prefix or ""}database--metadata--keep-dash': 'value',
-        }
-        mocker.patch(
-            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.list_properties_of_secrets.__qualname__}',
-            return_value=[type('', (), {'name': name, 'enabled': True}) for name in secrets],
-        )
-        mocker.patch(
-            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.get_secret.__qualname__}',
-            side_effect=lambda name: KeyVaultSecret(SecretProperties(), secrets[name]),
-        )
+        return AzureKeyVaultSettings()
 
-        settings = AzureKeyVaultSettings()
+    @pytest.mark.parametrize('env_prefix', (None, 'APP-'))
+    def test_dash_to_underscore_translation_nested(self, mocker: MockerFixture, env_prefix: str | None) -> None:
+        class ConnectionPool(BaseModel):
+            max_size: int
+
+        class Database(BaseModel):
+            sql_password: str
+            api_key: str = Field(alias='api-key')
+            app_token: str = Field(alias='app-token')
+            connection_pool: ConnectionPool
+            metadata: dict[str, str]
+            optional_note: str = 'default'
+
+        class Settings(BaseSettings):
+            database: Database
+
+        prefix = env_prefix or ''
+        secrets = {
+            f'{prefix}database--sql-password': 'password',
+            f'{prefix}database--api-key': 'api-secret',
+            f'{prefix}database--app-token': 'app-secret',
+            f'{prefix}database--connection-pool--max-size': '10',
+            f'{prefix}database--metadata--keep-dash': 'value',
+        }
+        settings = self._load_dash_to_underscore_settings(mocker, Settings, secrets, env_prefix)
 
         assert settings.database.sql_password == 'password'
         assert settings.database.api_key == 'api-secret'
@@ -394,45 +406,72 @@ class TestAzureKeyVaultSettingsSource:
             api_key: str = Field(alias='api-key')
             kind: Literal['aliased']
 
-        class AzureKeyVaultSettings(BaseSettings):
+        class Settings(BaseSettings):
             database: FirstDatabase | AliasedDatabase
 
-            @classmethod
-            def settings_customise_sources(
-                cls,
-                settings_cls: type[BaseSettings],
-                init_settings: PydanticBaseSettingsSource,
-                env_settings: PydanticBaseSettingsSource,
-                dotenv_settings: PydanticBaseSettingsSource,
-                file_secret_settings: PydanticBaseSettingsSource,
-            ) -> tuple[PydanticBaseSettingsSource, ...]:
-                return (
-                    AzureKeyVaultSettingsSource(
-                        settings_cls,
-                        'https://my-resource.vault.azure.net/',
-                        DefaultAzureCredential(),
-                        dash_to_underscore=True,
-                    ),
-                )
-
         secrets = {'database--api-key': 'secret', 'database--kind': 'aliased'}
-        mocker.patch(
-            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.list_properties_of_secrets.__qualname__}',
-            return_value=[type('', (), {'name': name, 'enabled': True}) for name in secrets],
-        )
-        mocker.patch(
-            f'{AzureKeyVaultSettingsSource.__module__}.{SecretClient.get_secret.__qualname__}',
-            side_effect=lambda name: KeyVaultSecret(SecretProperties(), secrets[name]),
-        )
-
-        aliased_settings = AzureKeyVaultSettings()
+        aliased_settings = self._load_dash_to_underscore_settings(mocker, Settings, secrets)
         assert isinstance(aliased_settings.database, AliasedDatabase)
         assert aliased_settings.database.api_key == 'secret'
 
         secrets['database--kind'] = 'first'
-        first_settings = AzureKeyVaultSettings()
+        first_settings = self._load_dash_to_underscore_settings(mocker, Settings, secrets)
         assert isinstance(first_settings.database, FirstDatabase)
         assert first_settings.database.api_key == 'secret'
+
+    def test_dash_to_underscore_translation_discriminated_union(self, mocker: MockerFixture) -> None:
+        class SqlDatabase(BaseModel):
+            kind: Literal['sql']
+            sql_password: str
+
+        class RedisDatabase(BaseModel):
+            kind: Literal['redis']
+            redis_url: str
+
+        class Settings(BaseSettings):
+            database: Annotated[
+                Annotated[SqlDatabase, Tag('sql')] | Annotated[RedisDatabase, Tag('redis')], Discriminator('kind')
+            ]
+
+        secrets = {'database--kind': 'sql', 'database--sql-password': 'password'}
+        settings = self._load_dash_to_underscore_settings(mocker, Settings, secrets)
+
+        assert settings.database == SqlDatabase(kind='sql', sql_password='password')
+
+    def test_dash_to_underscore_translation_dict_of_models(self, mocker: MockerFixture) -> None:
+        class Database(BaseModel):
+            sql_password: str
+
+        class Settings(BaseSettings):
+            databases: dict[str, Database]
+
+        secrets = {'databases--main-db--sql-password': 'main', 'databases--replica--sql-password': 'replica'}
+        settings = self._load_dash_to_underscore_settings(mocker, Settings, secrets)
+
+        assert settings.databases == {
+            'main-db': Database(sql_password='main'),
+            'replica': Database(sql_password='replica'),
+        }
+
+    def test_dash_to_underscore_translation_nested_validate_by_name(self, mocker: MockerFixture) -> None:
+        @pydantic_dataclass(config=ConfigDict(validate_by_name=True))
+        class Credentials:
+            api_key: str = Field(validation_alias='apiKey')
+
+        class Database(BaseModel):
+            model_config = ConfigDict(validate_by_name=True)
+
+            sql_password: str = Field(validation_alias='sqlPassword')
+            credentials: Credentials
+
+        class Settings(BaseSettings):
+            database: Database
+
+        secrets = {'database--sql-password': 'password', 'database--credentials--api-key': 'secret'}
+        settings = self._load_dash_to_underscore_settings(mocker, Settings, secrets)
+
+        assert settings.database.sql_password == 'password'
+        assert settings.database.credentials.api_key == 'secret'
 
     @pytest.mark.parametrize(
         'env_prefix', (None, 'singlewordprefix', 'prefix-kebab-case-', 'PrefixPascalCaseprefixCamelCaseSeparator-')

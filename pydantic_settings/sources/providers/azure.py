@@ -2,7 +2,7 @@
 
 from __future__ import annotations as _annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from typing import TYPE_CHECKING, Any, get_args, get_origin
 
 from pydantic._internal._utils import is_model_class
@@ -11,7 +11,8 @@ from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
 from typing_inspection.introspection import is_union_origin
 
-from ..utils import InitState, _get_model_fields, _parse_env_none_str
+from ...utils import _lenient_issubclass
+from ..utils import InitState, _get_model_fields, _parse_env_none_str, _resolve_type_alias, _strip_annotated
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
@@ -39,6 +40,21 @@ def import_azure_key_vault() -> None:
         raise ImportError(
             'Azure Key Vault dependencies are not installed, run `pip install pydantic-settings[azure-key-vault]`'
         ) from e
+
+
+def _collect_nested_types(annotation: Any, models: list[Any], dict_value_types: list[Any]) -> None:
+    """Collect the models and dict value types that nested keys of `annotation` can belong to."""
+    annotation = _strip_annotated(_resolve_type_alias(annotation))
+    origin = get_origin(annotation)
+    if is_union_origin(origin):
+        for arg in get_args(annotation):
+            _collect_nested_types(arg, models, dict_value_types)
+    elif _lenient_issubclass(origin, dict):
+        args = get_args(annotation)
+        if args:
+            dict_value_types.append(args[-1])
+    elif is_model_class(annotation) or is_pydantic_dataclass(annotation):
+        models.append(annotation)
 
 
 class AzureKeyVaultMapping(Mapping[str, str | None]):
@@ -163,30 +179,61 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
     def explode_env_vars(self, field_name: str, field: FieldInfo, env_vars: Mapping[str, str | None]) -> dict[str, Any]:
         values = super().explode_env_vars(field_name, field, env_vars)
         if self._dash_to_underscore and not self._snake_case_conversion:
-            self._translate_nested_keys(values, field.annotation)
+            self._translate_nested_keys(values, [field.annotation])
         return values
 
-    def _translate_nested_keys(self, values: dict[str, Any], annotation: Any) -> None:
-        candidates = get_args(annotation) if is_union_origin(get_origin(annotation)) else (annotation,)
-        models = tuple(model for model in candidates if is_model_class(model) or is_pydantic_dataclass(model))
-        # The parent prefix has already been removed from the keys in values.
-        fields = [
-            (field_key, self._apply_case_sensitive(field_key).replace('_', '-'), field)
-            for model in models
-            for field_name, field in _get_model_fields(model).items()
-            for field_key, _, _ in self._extract_field_info(field, field_name)
-        ]
-        unmodified_keys = {env_name for field_key, env_name, _ in fields if field_key == env_name}
-        for field_key, env_name, field in fields:
+    def _translate_nested_keys(self, values: dict[str, Any], annotations: Iterable[Any]) -> None:
+        """Rename the kebab-case keys of `values` to the keys of the nested model fields they belong to.
+
+        The parent prefix has already been removed from the keys in `values`.
+        """
+        models: list[Any] = []
+        dict_value_types: list[Any] = []
+        for annotation in annotations:
+            _collect_nested_types(annotation, models, dict_value_types)
+
+        targets = self._nested_field_targets(models)
+        field_keys = {field_key for field_targets in targets.values() for field_key, _ in field_targets}
+
+        # Translate each nested dict once, against every field it may belong to.
+        nested: dict[int, tuple[dict[str, Any], list[Any]]] = {}
+        for env_name, field_targets in targets.items():
             if env_name not in values:
                 continue
-            if env_name != field_key:
-                if env_name in unmodified_keys:
-                    values.setdefault(field_key, values[env_name])
-                else:
-                    values.setdefault(field_key, values.pop(env_name))
-            if isinstance(values[field_key], dict):
-                self._translate_nested_keys(values[field_key], field.annotation)
+            value = values[env_name]
+            for field_key, annotation in field_targets:
+                values.setdefault(field_key, value)
+                if isinstance(value, dict):
+                    nested.setdefault(id(value), (value, []))[1].append(annotation)
+            # Keep the dashed key when it is itself a field key, e.g. an alias of another union member.
+            if env_name not in field_keys:
+                del values[env_name]
+
+        for value, field_annotations in nested.values():
+            self._translate_nested_keys(value, field_annotations)
+
+        if dict_value_types:
+            for value in values.values():
+                if isinstance(value, dict):
+                    self._translate_nested_keys(value, dict_value_types)
+
+    def _nested_field_targets(self, models: list[Any]) -> dict[str, list[tuple[str, Any]]]:
+        """Map the dashed secret name segment of each field of `models` to its field keys and annotations.
+
+        A dashed name may belong to several fields, e.g. the same field in two union members.
+        """
+        targets: dict[str, list[tuple[str, Any]]] = {}
+        for model in models:
+            config = getattr(model, 'model_config', None) or getattr(model, '__pydantic_config__', {})
+            by_name = config.get('validate_by_name') or config.get('populate_by_name')
+            for field_name, field in _get_model_fields(model).items():
+                keys = [field_key for field_key, _, _ in self._extract_field_info(field, field_name)]
+                if by_name and field_name not in keys:
+                    keys.append(field_name)
+                for field_key in keys:
+                    env_name = self._apply_case_sensitive(field_key).replace('_', '-')
+                    targets.setdefault(env_name, []).append((field_key, field.annotation))
+        return targets
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}(url={self._url!r}, env_nested_delimiter={self.env_nested_delimiter!r})'

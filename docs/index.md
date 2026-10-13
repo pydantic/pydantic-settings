@@ -2909,13 +2909,13 @@ This setup will load Azure Key Vault secrets (e.g., `MySetting`, `mySetting`, `m
 
 The Azure Key Vault source accepts a `dash_to_underscore` option, disabled by default, to support Key Vault kebab-case secret names by mapping them to Python's snake_case field names. When enabled, dashes (`-`) in secret names are mapped to underscores (`_`) in field names during validation.
 
-This mapping applies only to *field names*, not to aliases.  Consider snake case conversion if you need aliases or nested fields.
+This mapping applies only to *field names*, not to aliases. Use `--` to separate nested model fields; dashes in their names are mapped the same way, while dictionary keys are kept as-is.
 
 ```py
 import os
 
 from azure.identity import DefaultAzureCredential
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from pydantic_settings import (
     AzureKeyVaultSettingsSource,
@@ -2924,9 +2924,14 @@ from pydantic_settings import (
 )
 
 
+class DatabaseSettings(BaseModel):
+    sql_password: str
+
+
 class AzureKeyVaultSettings(BaseSettings):
     field_with_underscore: str
     field_with_alias: str = Field(..., alias='Alias-With-Dashes')
+    database: DatabaseSettings
 
     @classmethod
     def settings_customise_sources(
@@ -2946,7 +2951,7 @@ class AzureKeyVaultSettings(BaseSettings):
         return (az_key_vault_settings,)
 ```
 
-This setup will load Azure Key Vault secrets named `field-with-underscore` and `Alias-With-Dashes`, mapping them to the `field_with_underscore` and `field_with_alias` fields, respectively.
+This setup will load Azure Key Vault secrets named `field-with-underscore`, `Alias-With-Dashes` and `database--sql-password`, mapping them to the `field_with_underscore`, `field_with_alias` and `database.sql_password` fields, respectively.
 
 !!! tip
     Alternatively, you can configure an [alias_generator](alias.md#using-alias-generators) to map PascalCase secrets.
