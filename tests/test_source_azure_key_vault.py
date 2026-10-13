@@ -77,7 +77,6 @@ class TestAzureKeyVaultSettingsSource:
         assert settings['SqlServerUser'] == expected_secret_value
         assert settings['SqlServer']['Password'] == expected_secret_value
 
-    # 2026-10-08: Null markers must be resolved for both direct and nested secrets.
     @pytest.mark.parametrize('from_config', [False, True])
     @pytest.mark.parametrize(
         ('parse_none_str', 'secret_value', 'expected'),
