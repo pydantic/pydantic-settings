@@ -2,7 +2,7 @@
 Test pydantic_settings.AzureKeyVaultSettingsSource.
 """
 
-from typing import Annotated, Literal
+from typing import Annotated, Dict, Literal  # noqa: UP035
 
 import pytest
 from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag, ValidationError
@@ -452,6 +452,15 @@ class TestAzureKeyVaultSettingsSource:
             'main-db': Database(sql_password='main'),
             'replica': Database(sql_password='replica'),
         }
+
+    def test_dash_to_underscore_translation_bare_dict(self, mocker: MockerFixture) -> None:
+        class Settings(BaseSettings):
+            metadata: Dict  # noqa: UP006
+
+        secrets = {'metadata--keep-dash': 'value'}
+        settings = self._load_dash_to_underscore_settings(mocker, Settings, secrets)
+
+        assert settings.metadata == {'keep-dash': 'value'}
 
     def test_dash_to_underscore_translation_nested_validate_by_name(self, mocker: MockerFixture) -> None:
         @pydantic_dataclass(config=ConfigDict(validate_by_name=True))
