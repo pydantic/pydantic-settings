@@ -35,9 +35,11 @@ from .utils import (
     _get_alias_names,
     _get_field_annotation_and_metadata,
     _get_field_metadata,
+    _get_model_config,
     _get_model_fields,
     _strip_annotated,
     _union_is_complex,
+    _validate_by_alias_enabled,
     _validate_by_name_enabled,
     _warn_if_field_info_incomplete,
 )
@@ -348,6 +350,7 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
             else self.config.get('nested_model_default_partial_update', False)
         )
         if self.nested_model_default_partial_update:
+            validate_by_alias = _validate_by_alias_enabled(self.config)
             for field_name, field_info in settings_cls.model_fields.items():
                 _warn_if_field_info_incomplete(field_info, field_name, self._init_state)
                 discriminator = _get_discriminator(field_info)
@@ -358,7 +361,7 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
                 if nested is None:
                     # Same for a nested callable discriminator
                     continue
-                alias_names, *_ = _get_alias_names(field_name, field_info)
+                alias_names, *_ = _get_alias_names(field_name, field_info, validate_by_alias=validate_by_alias)
                 preferred_alias = alias_names[0]
                 if is_dataclass(type(field_info.default)):
                     self.defaults[preferred_alias] = asdict(field_info.default)
@@ -409,6 +412,7 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         super().__init__(settings_cls, _init_state)
         case_sensitive = self.config.get('case_sensitive', False)
         include_name = _validate_by_name_enabled(self.config)
+        validate_by_alias = _validate_by_alias_enabled(self.config)
 
         def normalize(name: str) -> str:
             # When case_sensitive is False, matching is done on lower-cased names.
@@ -427,9 +431,11 @@ class InitSettingsSource(PydanticBaseSettingsSource):
             _warn_if_field_info_incomplete(field_info, field_name, self._init_state)
             # Canonical (case-preserving) alias names determine the output key, so the value
             # still matches pydantic's validation aliases, which are always case-sensitive.
-            canonical_alias_names, *_ = _get_alias_names(field_name, field_info)
+            canonical_alias_names, *_ = _get_alias_names(field_name, field_info, validate_by_alias=validate_by_alias)
             # Match alias names respect case_sensitive when matching against provided keys.
-            match_alias_names, *_ = _get_alias_names(field_name, field_info, case_sensitive=case_sensitive)
+            match_alias_names, *_ = _get_alias_names(
+                field_name, field_info, case_sensitive=case_sensitive, validate_by_alias=validate_by_alias
+            )
             # When populate_by_name is True, allow using the field name as an input key,
             # but normalize to the preferred alias to keep keys consistent across sources.
             matchable_names = list(match_alias_names)
@@ -508,7 +514,9 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
     def _apply_case_sensitive(self, value: str) -> str:
         return value.lower() if not self.case_sensitive else value
 
-    def _extract_field_info(self, field: FieldInfo, field_name: str) -> list[tuple[str, str, bool]]:
+    def _extract_field_info(
+        self, field: FieldInfo, field_name: str, validate_by_alias: bool | None = None
+    ) -> list[tuple[str, str, bool]]:
         """
         Extracts field info. This info is used to get the value of field from environment variables.
 
@@ -521,14 +529,22 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         Args:
             field (FieldInfo): The field.
             field_name (str): The field name.
+            validate_by_alias (bool | None): Whether the model owning the field validates by alias.
+                Defaults to the settings config, pass it for a field of a nested model.
 
         Returns:
             list[tuple[str, str, bool]]: List of tuples, each tuple contains field_key, env_name, and value_is_complex.
         """
         _warn_if_field_info_incomplete(field, field_name, self._init_state)
         field_info: list[tuple[str, str, bool]] = []
-        if isinstance(field.validation_alias, (AliasChoices, AliasPath)):
-            v_alias: str | list[str | int] | list[list[str | int]] | None = field.validation_alias.convert_to_aliases()
+        v_alias: str | list[str | int] | list[list[str | int]] | None
+        if validate_by_alias is None:
+            validate_by_alias = _validate_by_alias_enabled(self.config)
+        if not validate_by_alias:
+            # pydantic ignores the aliases, so only the field name can populate the field.
+            v_alias = None
+        elif isinstance(field.validation_alias, (AliasChoices, AliasPath)):
+            v_alias = field.validation_alias.convert_to_aliases()
         else:
             v_alias = field.validation_alias
 
@@ -608,12 +624,15 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                 values[name] = value
                 continue
             model_fields = _get_model_fields(annotation)
+            validate_by_alias = _validate_by_alias_enabled(_get_model_config(annotation))
 
             # Find field in sub model by looking in fields case insensitively
             field_key: str | None = None
             for sub_model_field_name, sub_model_field in model_fields.items():
                 _warn_if_field_info_incomplete(sub_model_field, sub_model_field_name, self._init_state)
-                aliases, _ = _get_alias_names(sub_model_field_name, sub_model_field)
+                aliases, _ = _get_alias_names(
+                    sub_model_field_name, sub_model_field, validate_by_alias=validate_by_alias
+                )
                 _search = (alias for alias in aliases if alias.lower() == name.lower())
                 if field_key := next(_search, None):
                     break
