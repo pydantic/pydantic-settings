@@ -9,7 +9,7 @@ from pydantic.fields import FieldInfo
 
 from ...exceptions import SettingsError
 from ..types import SecretVersion
-from ..utils import InitState
+from ..utils import InitState, _parse_env_none_str
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
@@ -55,11 +55,18 @@ class GoogleSecretManagerMapping(Mapping[str, str | None]):
     _loaded_secrets: dict[str, str | None]
     _secret_client: SecretManagerServiceClient
 
-    def __init__(self, secret_client: SecretManagerServiceClient, project_id: str, case_sensitive: bool) -> None:
+    def __init__(
+        self,
+        secret_client: SecretManagerServiceClient,
+        project_id: str,
+        case_sensitive: bool,
+        env_parse_none_str: str | None = None,
+    ) -> None:
         self._loaded_secrets = {}
         self._secret_client = secret_client
         self._project_id = project_id
         self._case_sensitive = case_sensitive
+        self._env_parse_none_str = env_parse_none_str
 
     @property
     def _gcp_project_path(self) -> str:
@@ -112,17 +119,19 @@ class GoogleSecretManagerMapping(Mapping[str, str | None]):
 
     def _get_secret_value(self, gcp_secret_name: str, version: str = 'latest') -> str | None:
         try:
-            return self._secret_client.access_secret_version(
+            value = self._secret_client.access_secret_version(
                 name=self._secret_version_path(gcp_secret_name, version)
             ).payload.data.decode('UTF-8')
+            return _parse_env_none_str(value, self._env_parse_none_str)
         except Exception:
             return None
 
     def _get_secret_value_or_raise(self, gcp_secret_name: str) -> str | None:
         try:
-            return self._secret_client.access_secret_version(
+            value = self._secret_client.access_secret_version(
                 name=self._secret_version_path(gcp_secret_name)
             ).payload.data.decode('UTF-8')
+            return _parse_env_none_str(value, self._env_parse_none_str)
         except Exception as e:
             if _is_not_found_error(e):
                 raise KeyError(gcp_secret_name) from e
@@ -331,7 +340,10 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
                 'Pass project_id explicitly or ensure it is available via application default credentials or a previous settings source.'
             )
         return GoogleSecretManagerMapping(
-            self._secret_client, project_id=self._project_id, case_sensitive=self.case_sensitive
+            self._secret_client,
+            project_id=self._project_id,
+            case_sensitive=self.case_sensitive,
+            env_parse_none_str=self.env_parse_none_str,
         )
 
     def __call__(self) -> dict[str, Any]:

@@ -709,6 +709,67 @@ class TestGoogleSecretManagerSettingsSource:
         assert val2 == 'secret-value'
         assert client.access_secret_version.call_count == 1
 
+    @pytest.mark.parametrize('case_sensitive', [True, False])
+    @pytest.mark.parametrize('configure_on_source', [True, False])
+    @pytest.mark.parametrize('parse_none_str', ['null', '<none>', None])
+    def test_env_parse_none_str(self, mock_secret_client_factory, case_sensitive, configure_on_source, parse_none_str):
+        marker = parse_none_str or 'null'
+        client = mock_secret_client_factory(
+            [
+                {
+                    'name': name if case_sensitive else name.upper(),
+                    'version': version,
+                    'value': value,
+                }
+                for name, version, value in [
+                    ('nullable', 'latest', marker),
+                    ('versioned_nullable', '1', marker),
+                    ('ordinary', 'latest', f'{marker}-value'),
+                ]
+            ]
+        )
+        sources = []
+
+        class Settings(BaseSettings):
+            model_config = SettingsConfigDict(env_parse_none_str=None if configure_on_source else parse_none_str)
+            nullable: str | None = 'fallback'
+            versioned_nullable: Annotated[str | None, SecretVersion('1')] = 'fallback'
+            ordinary: str = 'fallback'
+
+            @classmethod
+            def settings_customise_sources(
+                cls,
+                settings_cls: type[BaseSettings],
+                init_settings: PydanticBaseSettingsSource,
+                env_settings: PydanticBaseSettingsSource,
+                dotenv_settings: PydanticBaseSettingsSource,
+                file_secret_settings: PydanticBaseSettingsSource,
+            ) -> tuple[PydanticBaseSettingsSource, ...]:
+                source = GoogleSecretManagerSettingsSource(
+                    settings_cls,
+                    secret_client=client,
+                    project_id='test-project',
+                    case_sensitive=case_sensitive,
+                    env_parse_none_str=parse_none_str if configure_on_source else None,
+                )
+                sources.append(source)
+                return (source,)
+
+        settings = Settings()
+        expected = None if parse_none_str is not None else marker
+        assert settings.nullable == expected
+        assert settings.versioned_nullable == expected
+        assert settings.ordinary == f'{marker}-value'
+        assert client.access_secret_version.call_count == 3
+
+        # Looking up a loaded secret still uses the cache, including a null marker.
+        sources[0].env_vars['nullable']
+        assert client.access_secret_version.call_count == 3
+        if case_sensitive:
+            client.list_secrets.assert_not_called()
+        else:
+            client.list_secrets.assert_called_once()
+
     def test_secret_version_annotation_case_insensitive_unknown_secret(self, mock_secret_client_factory):
         """A versioned alias missing from the secret map is skipped, leaving the default in place."""
         client = mock_secret_client_factory([{'name': 'other-secret', 'value': 'other-value'}])
