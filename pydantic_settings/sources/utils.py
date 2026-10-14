@@ -124,22 +124,27 @@ def _substitute_typevars(tp: Any, param_map: dict[Any, Any]) -> Any:
 
 
 def _resolve_type_alias(annotation: Any) -> Any:
-    """Resolve a TypeAliasType to its underlying value, substituting type params if parameterized."""
-    if typing_objects.is_typealiastype(annotation):
-        return annotation.__value__
-    origin = get_origin(annotation)
-    if typing_objects.is_typealiastype(origin):
+    """Resolve a TypeAliasType to its underlying value, substituting type params if parameterized.
+
+    Aliases of aliases are followed until a non-alias annotation is reached. This terminates because
+    pydantic rejects aliases that circularly refer to themselves without going through another type.
+    """
+    while True:
+        if typing_objects.is_typealiastype(annotation):
+            annotation = annotation.__value__
+            continue
+        origin = get_origin(annotation)
+        if not typing_objects.is_typealiastype(origin):
+            return annotation
         type_params = getattr(origin, '__type_params__', ())
         type_args = get_args(annotation)
-        value = origin.__value__
-        if type_params and type_args:
+        annotation = origin.__value__
+        # Always true in practice: only a subscripted alias reaches here, and subscripting
+        # requires type params.
+        if type_params and type_args:  # pragma: no branch
             # Not `strict=True`: a parameterized alias may supply fewer args than
             # params (e.g. type params with defaults), which is valid.
-            return _substitute_typevars(value, dict(zip(type_params, type_args, strict=False)))
-        # Unreachable in practice: only a subscripted alias reaches here, and subscripting
-        # requires type params. Kept as a defensive fallback.
-        return value  # pragma: no cover
-    return annotation
+            annotation = _substitute_typevars(annotation, dict(zip(type_params, type_args, strict=False)))
 
 
 def _annotation_is_complex(annotation: Any, metadata: list[Any], init_state: InitState | None = None) -> bool:
@@ -205,23 +210,42 @@ def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:
     ) or is_dataclass(annotation)
 
 
-def _union_is_complex(annotation: type[Any] | None, metadata: list[Any], init_state: InitState | None = None) -> bool:
+def _union_is_complex(
+    annotation: type[Any] | None,
+    metadata: list[Any],
+    init_state: InitState | None = None,
+    _seen: tuple[Any, ...] = (),
+) -> bool:
     """Check if a union type contains any complex types."""
     for arg in get_args(annotation):
+        if arg in _seen:
+            continue
+        # Track the original member: resolving a generic alias rebuilds its union,
+        # but aliases with the same origin and arguments still compare equal.
+        seen = (*_seen, arg)
+        arg = _resolve_type_alias(arg)
         if _annotation_is_complex(arg, metadata, init_state):
             return True
-        # _annotation_is_complex doesn't handle bare Union types, so when an arg
-        # is Annotated[Union[X, Y], ...], stripping Annotated yields a bare Union
-        # that _annotation_is_complex can't evaluate.  Recurse into it, but only
-        # if the Annotated metadata doesn't suppress complexity (e.g. Json).
-        inner = _strip_annotated(arg)
-        if inner is not arg:
-            _, *inner_meta = get_args(arg)
-            if any(isinstance(md, Json) for md in inner_meta):  # type: ignore[misc]
-                continue
-        if is_union_origin(get_origin(inner)) and _union_is_complex(inner, metadata, init_state):
+        # _annotation_is_complex doesn't handle bare Union types, including those
+        # exposed by a type alias or Annotated[Union[X, Y], ...]. Recurse, but only
+        # if no Annotated metadata suppresses complexity (e.g. Json).
+        inner = _unwrap_union_member(arg)
+        if is_union_origin(get_origin(inner)) and _union_is_complex(inner, metadata, init_state, seen):
             return True
     return False
+
+
+def _unwrap_union_member(annotation: Any) -> Any:
+    """Strip Annotated layers and the type aliases they wrap from a union member.
+
+    Returns `None` if any layer's metadata suppresses complexity (e.g. Json).
+    """
+    while typing_objects.is_annotated(get_origin(annotation)):
+        annotation, *meta = get_args(annotation)
+        if any(isinstance(md, Json) for md in meta):  # type: ignore[misc]
+            return None
+        annotation = _resolve_type_alias(annotation)
+    return annotation
 
 
 def _union_has_strict_types(annotation: type[Any] | None) -> bool:
@@ -251,6 +275,7 @@ def _annotation_contains_types(
     is_instance: bool = False,
     collect: set[Any] | None = None,
     is_subtype: bool = False,
+    _seen_aliases: tuple[Any, ...] = (),
 ) -> bool:
     """Check if a type annotation contains any of the specified types.
 
@@ -259,6 +284,20 @@ def _annotation_contains_types(
     """
     if is_strip_annotated:
         annotation = _strip_annotated(annotation)
+    resolved = _resolve_type_alias(annotation)
+    if resolved is not annotation:
+        # An alias already on the current path is recursive, so stop there. Only the current path is
+        # tracked, so sibling specializations of the same alias are still inspected.
+        return annotation not in _seen_aliases and _annotation_contains_types(
+            resolved,
+            types,
+            is_include_origin=is_include_origin,
+            is_strip_annotated=is_strip_annotated,
+            is_instance=is_instance,
+            collect=collect,
+            is_subtype=is_subtype,
+            _seen_aliases=(*_seen_aliases, annotation),
+        )
     if is_include_origin is True:
         origin = get_origin(annotation)
         if origin in types or (is_subtype and _is_subtype_of(origin, types)):
@@ -279,6 +318,7 @@ def _annotation_contains_types(
                 is_instance=is_instance,
                 collect=collect,
                 is_subtype=is_subtype,
+                _seen_aliases=_seen_aliases,
             )
             and collect is None
         ):
@@ -292,6 +332,19 @@ def _annotation_contains_types(
             collect.add(annotation)
         return True
     return False
+
+
+def _get_union_members(annotation: Any) -> tuple[Any, ...]:
+    """Get the members of a union, flattening unions nested inside type aliases or `Annotated`.
+
+    A non-union annotation is returned as its only member.
+    """
+    resolved = _strip_annotated(_resolve_type_alias(_strip_annotated(annotation)))
+    if resolved is not annotation:
+        return _get_union_members(resolved)
+    if not is_union_origin(get_origin(annotation)):
+        return (annotation,)
+    return tuple(member for arg in get_args(annotation) for member in _get_union_members(arg))
 
 
 def _strip_annotated(annotation: Any) -> Any:
@@ -361,6 +414,8 @@ def _get_alias_names(
     """Get alias names for a field, handling alias paths and case sensitivity.
 
     With `validate_by_alias=False` pydantic ignores the aliases, so only the field name is returned.
+
+    The first name is the key that sources pass the value to pydantic under.
     """
     from pydantic import AliasChoices, AliasPath
 
@@ -371,21 +426,20 @@ def _get_alias_names(
         is_alias_path_only = False
     else:
         new_alias_paths: list[AliasPath] = []
-        for alias in (field_info.alias, field_info.validation_alias):
-            if alias is None:
-                continue
-            if isinstance(alias, str):
-                alias_names.append(alias)
-                is_alias_path_only = False
-            elif isinstance(alias, AliasChoices):
-                for name in alias.choices:
-                    if isinstance(name, str):
-                        alias_names.append(name)
-                        is_alias_path_only = False
-                    else:
-                        new_alias_paths.append(name)
-            else:
-                new_alias_paths.append(alias)
+        # Pydantic only validates input against `validation_alias` when it is set, so `alias` isn't an input name then
+        alias = field_info.validation_alias if field_info.validation_alias is not None else field_info.alias
+        if isinstance(alias, str):
+            alias_names.append(alias)
+            is_alias_path_only = False
+        elif isinstance(alias, AliasChoices):
+            for name in alias.choices:
+                if isinstance(name, str):
+                    alias_names.append(name)
+                    is_alias_path_only = False
+                else:
+                    new_alias_paths.append(name)
+        elif alias is not None:  # pragma: no branch
+            new_alias_paths.append(alias)
         for alias_path in new_alias_paths:
             name = cast(str, alias_path.path[0])
             name = name.lower() if not case_sensitive else name
@@ -446,6 +500,7 @@ __all__ = [
     '_get_alias_names',
     '_get_env_var_key',
     '_get_model_fields',
+    '_get_union_members',
     '_is_function',
     '_literal_has_numeric_enum',
     '_parse_env_none_str',

@@ -2,7 +2,6 @@
 
 from __future__ import annotations as _annotations
 
-from collections.abc import Sequence
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -39,12 +38,16 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         self,
         settings_cls: type[BaseSettings],
         toml_file: ConfigFileSourceType | None = DEFAULT_PATH,
-        toml_table_header: tuple[str, ...] = (),
+        toml_table_header: tuple[str, ...] | None = None,
         deep_merge: bool = False,
         _init_state: InitState | None = None,
     ):
         self.toml_file_path = toml_file if toml_file != DEFAULT_PATH else settings_cls.model_config.get('toml_file')
-        self.toml_table_header = toml_table_header or settings_cls.model_config.get('toml_table_header', ())
+        self.toml_table_header = (
+            toml_table_header
+            if toml_table_header is not None
+            else settings_cls.model_config.get('toml_table_header', ())
+        )
         self.toml_data = self._read_files(self.toml_file_path, deep_merge=deep_merge)
 
         if self._any_file_exists(self.toml_file_path):
@@ -60,22 +63,10 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         with file_path.open(mode='rb') as toml_file:
             return tomllib.load(toml_file)
 
-    @staticmethod
-    def _any_file_exists(paths: ConfigFileSourceType | None) -> bool:
-        """Check if any of the given file paths exist."""
-        if paths is None:
-            return False
-        if isinstance(paths, str) or not isinstance(paths, Sequence):
-            paths = [paths]
-
-        def _exists(path: Path | str | Traversable) -> bool:
-            if isinstance(path, (str, Path)):
-                return Path(path).exists()
-            # Non-`Path` `Traversable` (e.g. a resource inside a zip/wheel) is not
-            # `os.PathLike`, so it can't be wrapped in `Path`; query it directly.
-            return path.is_file()
-
-        return any(_exists(path) for path in paths)
+    @classmethod
+    def _any_file_exists(cls, paths: ConfigFileSourceType | None) -> bool:
+        """Check if any of the given file paths would be read by `_read_files`."""
+        return bool(cls._existing_files(paths))
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}(toml_file={self.toml_file_path}, toml_table_header={self.toml_table_header})'

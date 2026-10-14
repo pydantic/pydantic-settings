@@ -70,6 +70,7 @@ from ..utils import (
     _get_field_metadata,
     _get_model_config,
     _get_model_fields,
+    _get_union_members,
     _is_function,
     _strip_annotated,
     _validate_by_alias_enabled,
@@ -725,14 +726,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _get_merge_parsed_list_types(self, parsed_list: list[str], field_name: str) -> tuple[type | None, type | None]:
         merge_type = self._cli_dict_args.get(field_name, list)
-        if (
-            merge_type is list
-            or not is_union_origin(get_origin(merge_type))
-            or not any(
-                type_
-                for type_ in get_args(merge_type)
-                if type_ is not type(None) and not _annotation_contains_types(type_, (Mapping,), is_subtype=True)
-            )
+        if merge_type is list or not any(
+            type_
+            for type_ in _get_union_members(merge_type)
+            if type_ is not type(None) and not _annotation_contains_types(type_, (Mapping,), is_subtype=True)
         ):
             inferred_type = merge_type
         else:

@@ -24,6 +24,48 @@ def test_repr() -> None:
     assert repr(source) == 'TomlConfigSettingsSource(toml_file=config.toml, toml_table_header=())'
 
 
+@pytest.mark.parametrize('path_type', [str, Path])
+@pytest.mark.parametrize('multiple_files', [False, True])
+def test_toml_table_header_home_path(tmp_path, monkeypatch, path_type, multiple_files):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    monkeypatch.setenv('USERPROFILE', str(tmp_path))
+    (tmp_path / 'config.toml').write_text('[app]\nfoobar = "hello"\n', encoding='utf-8')
+    path = path_type('~/config.toml')
+    paths = [path_type('~/missing.toml'), path] if multiple_files else path
+
+    class Settings(BaseSettings):
+        foobar: str
+
+    source = TomlConfigSettingsSource(Settings, toml_file=paths, toml_table_header=('app',))
+    assert Settings.model_validate(source()).foobar == 'hello'
+
+
+def test_toml_table_header_missing_from_home_file(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    monkeypatch.setenv('USERPROFILE', str(tmp_path))
+    (tmp_path / 'config.toml').write_text('foobar = "hello"\n', encoding='utf-8')
+
+    with pytest.raises(KeyError, match='toml_table_header key "app" not found'):
+        TomlConfigSettingsSource(BaseSettings, toml_file='~/config.toml', toml_table_header=('app',))
+
+
+@pytest.mark.parametrize('home_path', [False, True])
+@pytest.mark.parametrize('multiple_files', [False, True])
+def test_toml_table_header_ignores_directories(tmp_path, monkeypatch, home_path, multiple_files):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    monkeypatch.setenv('USERPROFILE', str(tmp_path))
+    (tmp_path / 'config.toml').mkdir()
+    path = '~/config.toml' if home_path else tmp_path / 'config.toml'
+    paths = [path, tmp_path / 'missing.toml'] if multiple_files else path
+
+    class Settings(BaseSettings):
+        foobar: str = 'default'
+
+    source = TomlConfigSettingsSource(Settings, toml_file=paths, toml_table_header=('app',))
+    assert source() == {}
+    assert Settings.model_validate(source()).foobar == 'default'
+
+
 def test_toml_file(tmp_path):
     p = tmp_path / '.env'
     p.write_text(
@@ -229,6 +271,29 @@ def test_toml_table_header_from_model_config(tmp_path):
 
     s = Settings()
     assert s.model_dump() == {'hello': 'world'}
+
+
+@pytest.mark.parametrize('table_header, expected', [((), 'root'), (('app',), 'nested'), (None, 'nested')])
+def test_toml_table_header_override(tmp_path, table_header, expected):
+    p = tmp_path / 'test.toml'
+    p.write_text('hello = "root"\n[app]\nhello = "nested"\n')
+
+    class Settings(BaseSettings):
+        hello: str
+        model_config = SettingsConfigDict(toml_file=p, toml_table_header=('app',), extra='ignore')
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls, toml_table_header=table_header),)
+
+    assert Settings().hello == expected
 
 
 def test_toml_table_header_no_header(tmp_path):
