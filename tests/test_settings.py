@@ -444,6 +444,62 @@ def test_validate_by_alias_false_init_kwarg_takes_priority_over_env(env):
     assert s.apple == 'bongusta'
 
 
+def test_validate_by_alias_false_ignores_alias_env_var(env):
+    env.set('pomo', 'honeycrisp')
+    s = SettingWithValidateByAliasFalse()
+    assert s.apple == 'default'
+
+
+def test_validate_by_alias_false_ignores_alias_secret(tmp_path):
+    (tmp_path / 'pomo').write_text('honeycrisp')
+    s = SettingWithValidateByAliasFalse(_secrets_dir=tmp_path)
+    assert s.apple == 'default'
+
+
+def test_validate_by_alias_false_nested_model_default_partial_update(env):
+    class Sub(BaseModel):
+        a: int = 1
+        b: int = 2
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            validate_by_alias=False, env_nested_delimiter='__', nested_model_default_partial_update=True
+        )
+
+        sub: Sub = Field(Sub(a=5), alias='subAlias')
+
+    env.set('sub__b', '3')
+    assert Settings().sub == Sub(a=5, b=3)
+
+
+def test_nested_model_validate_by_alias_false(env):
+    class Sub(BaseModel):
+        model_config = ConfigDict(validate_by_alias=False)
+
+        Apple: str = Field('default', alias='pomo')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+        sub: Sub = Sub()
+
+    env.set('sub__apple', 'honeycrisp')
+    assert Settings().sub.Apple == 'honeycrisp'
+
+
+def test_validate_by_alias_false_nested_model_validates_by_alias(env):
+    class Sub(BaseModel):
+        counts: dict[str, int] = Field(alias='countsAlias')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(validate_by_alias=False, env_nested_delimiter='__')
+
+        sub: Sub
+
+    env.set('sub__countsAlias', '{"a": 1}')
+    assert Settings().sub.counts == {'a': 1}
+
+
 def test_with_prefix(env):
     class Settings(BaseSettings):
         apple: str
@@ -737,6 +793,16 @@ def test_named_union_type_alias_parsing(env, tmp_path, alias_kind, validation_al
         env.set(env_name, raw_value)
         actual = Settings().value
     assert actual == expected
+
+
+def test_nested_type_alias_parsing(env):
+    Values = TypeAliasType('Values', TypeAliasType('Inner', list[int]))
+
+    class Settings(BaseSettings):
+        value: Values
+
+    env.set('value', '[1, 2]')
+    assert Settings().value == [1, 2]
 
 
 @pytest.mark.parametrize('decode_annotation', [NoDecode, ForceDecode])

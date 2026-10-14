@@ -256,6 +256,29 @@ def test_toml_table_header_from_model_config(tmp_path):
     assert s.model_dump() == {'hello': 'world'}
 
 
+@pytest.mark.parametrize('table_header, expected', [((), 'root'), (('app',), 'nested'), (None, 'nested')])
+def test_toml_table_header_override(tmp_path, table_header, expected):
+    p = tmp_path / 'test.toml'
+    p.write_text('hello = "root"\n[app]\nhello = "nested"\n')
+
+    class Settings(BaseSettings):
+        hello: str
+        model_config = SettingsConfigDict(toml_file=p, toml_table_header=('app',), extra='ignore')
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (TomlConfigSettingsSource(settings_cls, toml_table_header=table_header),)
+
+    assert Settings().hello == expected
+
+
 def test_toml_table_header_no_header(tmp_path):
     """If a toml file is read, but the configured table header is missing from the result, raise an error"""
     p = tmp_path / 'test.toml'

@@ -13,6 +13,7 @@ from pydantic_settings import (
     AzureKeyVaultSettingsSource,
     BaseSettings,
     PydanticBaseSettingsSource,
+    SettingsConfigDict,
 )
 from pydantic_settings.sources.providers.azure import import_azure_key_vault
 
@@ -481,6 +482,20 @@ class TestAzureKeyVaultSettingsSource:
 
         assert settings.database.sql_password == 'password'
         assert settings.database.credentials.api_key == 'secret'
+
+    def test_dash_to_underscore_translation_nested_model_validates_by_alias(self, mocker: MockerFixture) -> None:
+        class Database(BaseModel):
+            sql_password: str = Field(validation_alias='sql_password_alias')
+
+        class Settings(BaseSettings):
+            model_config = SettingsConfigDict(validate_by_alias=False)
+
+            database: Database
+
+        secrets = {'database--sql-password-alias': 'password'}
+        settings = self._load_dash_to_underscore_settings(mocker, Settings, secrets)
+
+        assert settings.database.sql_password == 'password'
 
     def test_dash_to_underscore_translation_nested_validate_by_alias_false(self, mocker: MockerFixture) -> None:
         @pydantic_dataclass(config=ConfigDict(validate_by_alias=False))

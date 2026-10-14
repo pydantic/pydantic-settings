@@ -68,9 +68,12 @@ from ..utils import (
     _annotation_enum_val_to_name,
     _get_alias_names,
     _get_field_metadata,
+    _get_model_config,
     _get_model_fields,
+    _get_union_members,
     _is_function,
     _strip_annotated,
+    _validate_by_alias_enabled,
     _validate_by_name_enabled,
     parse_env_vars,
 )
@@ -147,6 +150,7 @@ class _CliArg(BaseModel):
     arg_prefix: str
     case_sensitive: bool
     populate_by_name: bool
+    validate_by_alias: bool = True
     hide_none_type: bool
     kebab_case: bool | Literal['all', 'no_enums'] | None
     enable_decoding: bool | None
@@ -173,6 +177,7 @@ class _CliArg(BaseModel):
             alias_path_args=self._alias_paths,
             case_sensitive=self.case_sensitive,
             populate_by_name=self.populate_by_name,
+            validate_by_alias=self.validate_by_alias,
         )
 
         alias_path_dests = {f'{self.arg_prefix}{name}': index for name, index in self._alias_paths.items()}
@@ -275,7 +280,7 @@ class _CliArg(BaseModel):
     @cached_property
     def case_sensitive_alias(self) -> str:
         # Subcommands are always case sensitive, so use the declared alias rather than the lowercased one.
-        return _get_alias_names(self.field_name, self.field_info)[0][0]
+        return _get_alias_names(self.field_name, self.field_info, validate_by_alias=self.validate_by_alias)[0][0]
 
     @cached_property
     def is_alias_path_only(self) -> bool:
@@ -721,14 +726,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _get_merge_parsed_list_types(self, parsed_list: list[str], field_name: str) -> tuple[type | None, type | None]:
         merge_type = self._cli_dict_args.get(field_name, list)
-        if (
-            merge_type is list
-            or not is_union_origin(get_origin(merge_type))
-            or not any(
-                type_
-                for type_ in get_args(merge_type)
-                if type_ is not type(None) and not _annotation_contains_types(type_, (Mapping,), is_subtype=True)
-            )
+        if merge_type is list or not any(
+            type_
+            for type_ in _get_union_members(merge_type)
+            if type_ is not type(None) and not _annotation_contains_types(type_, (Mapping,), is_subtype=True)
         ):
             inferred_type = merge_type
         else:
@@ -891,11 +892,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, FieldInfo]]:
         positional_variadic_arg: list[tuple[str, FieldInfo]] = []
         positional_args, subcommand_args, optional_args = [], [], []
+        validate_by_alias = _validate_by_alias_enabled(_get_model_config(model))
         for field_name, field_info in _get_model_fields(model).items():
             if _CliSubCommand in field_info.metadata:
                 if not field_info.is_required():
                     raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has a default value')
-                alias_names, *_ = _get_alias_names(field_name, field_info)
+                alias_names, *_ = _get_alias_names(field_name, field_info, validate_by_alias=validate_by_alias)
                 if len(alias_names) > 1:
                     raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has multiple aliases')
                 field_types = [type_ for type_ in get_args(field_info.annotation) if type_ is not type(None)]
@@ -906,7 +908,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         )
                 subcommand_args.append((field_name, field_info))
             elif _CliPositionalArg in field_info.metadata:
-                alias_names, *_ = _get_alias_names(field_name, field_info)
+                alias_names, *_ = _get_alias_names(field_name, field_info, validate_by_alias=validate_by_alias)
                 if len(alias_names) > 1:
                     raise SettingsError(f'positional argument {model.__name__}.{field_name} has multiple aliases')
                 is_append_action = _annotation_contains_types(
@@ -1055,8 +1057,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _add_default_help(self) -> None:
         if isinstance(self._root_parser, _CliInternalArgParser):
             if not self.cli_prefix:
+                validate_by_alias = _validate_by_alias_enabled(self.config)
                 for field_name, field_info in _get_model_fields(self.settings_cls).items():
-                    alias_names, *_ = _get_alias_names(field_name, field_info, case_sensitive=self.case_sensitive)
+                    alias_names, *_ = _get_alias_names(
+                        field_name, field_info, case_sensitive=self.case_sensitive, validate_by_alias=validate_by_alias
+                    )
                     if 'help' in alias_names:
                         return
 
@@ -1144,6 +1149,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             )
             else model_default
         )
+        model_config = _get_model_config(model)
+        validate_by_alias = _validate_by_alias_enabled(model_config)
         for field_name, field_info in self._sort_arg_fields(model):
             arg = _CliArg(
                 parser=parser,
@@ -1154,6 +1161,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 arg_prefix=arg_prefix,
                 case_sensitive=self.case_sensitive,
                 populate_by_name=_validate_by_name_enabled(self.config),
+                validate_by_alias=validate_by_alias,
                 hide_none_type=self.cli_hide_none_type,
                 kebab_case=self.cli_kebab_case,
                 enable_decoding=self.config.get('enable_decoding'),
@@ -1205,12 +1213,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         model_default=PydanticUndefined,
                         model_path=model_path,
                         env_prefixes=self._nested_env_prefixes(
-                            self._get_field_env_var_names(field_name, field_info, env_prefixes)
+                            self._get_field_env_var_names(field_name, field_info, env_prefixes, model_config)
                         ),
                     )
             else:
                 flag_prefix: str = self._cli_flag_prefix
-                env_var_names = self._get_field_env_var_names(field_name, field_info, env_prefixes)
+                env_var_names = self._get_field_env_var_names(field_name, field_info, env_prefixes, model_config)
                 arg.kwargs['dest'] = arg.dest
                 arg.kwargs['default'] = CLI_SUPPRESS
                 arg.kwargs['help'] = self._help_format(
@@ -1595,6 +1603,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         field_name: str,
         field_info: FieldInfo,
         env_prefixes: tuple[tuple[str, bool], ...],
+        model_config: Mapping[str, Any],
     ) -> tuple[str, ...]:
         if (
             self._env_settings_source is None
@@ -1609,7 +1618,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         for env_prefix, force_env_prefix in env_prefixes:
             env_settings_source.env_prefix = env_prefix
             normalized_env_prefix = env_settings_source._apply_case_sensitive(env_prefix)
-            for _, env_name, _ in env_settings_source._extract_field_info(field_info, field_name):
+            for _, env_name, _ in env_settings_source._extract_field_info(field_info, field_name, model_config):
                 if force_env_prefix and normalized_env_prefix and not env_name.startswith(normalized_env_prefix):
                     env_name = f'{normalized_env_prefix}{env_name}'
                 display_env_name = self._display_env_var_name(env_name)
