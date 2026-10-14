@@ -85,6 +85,9 @@ testing = [
     "diff-cover>=9.2.0",
     "chardet<6",
 ]
+build = [
+    "build>=1.6",
+]
 
 [tool.pytest.ini_options]
 testpaths = 'tests'
