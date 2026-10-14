@@ -1246,6 +1246,19 @@ def test_class_nested_model_default_partial_update(env):
     }
 
 
+def test_nested_model_default_partial_update_validation_alias_differs_from_alias(env):
+    class Nested(BaseModel):
+        v0: int = 0
+        v1: int = 0
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        nested: Nested = Field(Nested(v0=1), alias='nestedAlias', validation_alias='NESTED')
+
+    assert Settings().nested == Nested(v0=1, v1=0)
+    env.set('NESTED__V1', '2')
+    assert Settings().nested == Nested(v0=1, v1=2)
+
+
 def test_init_kwargs_nested_model_default_partial_update(env):
     class DeepSubModel(BaseModel):
         v4: str

@@ -83,6 +83,31 @@ def test_json_file_validation_alias_differs_from_alias(tmp_path):
     assert s.api_key == 'secret'
 
 
+def test_json_file_alias_ignored_when_validation_alias_set(tmp_path):
+    p = tmp_path / 'config.json'
+    p.write_text('{"dbAlias": "postgres://prod"}')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(json_file=p, extra='ignore')
+
+        database_url: str = Field('sqlite://', alias='dbAlias', validation_alias='DATABASE_URL')
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (JsonConfigSettingsSource(settings_cls),)
+
+    # Same as pydantic: `alias` isn't an input name when `validation_alias` is set
+    assert Settings().database_url == 'sqlite://'
+    assert Settings.model_validate({'dbAlias': 'postgres://prod'}).database_url == 'sqlite://'
+
+
 def test_json_no_file():
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(json_file=None)
