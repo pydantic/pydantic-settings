@@ -189,7 +189,7 @@ jobs:
 
       - name: Build library
         # Regenerate build constraints with `make build-constraints`:
-        run: uv run --no-sync python -m build --dependency-constraints-txt .github/build-constraints.txt
+        run: uv run --no-sync python -m build --installer uv --dependency-constraints-txt .github/build-constraints.txt
 
       - name: Upload package to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
