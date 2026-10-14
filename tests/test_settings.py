@@ -795,6 +795,16 @@ def test_named_union_type_alias_parsing(env, tmp_path, alias_kind, validation_al
     assert actual == expected
 
 
+def test_nested_type_alias_parsing(env):
+    Values = TypeAliasType('Values', TypeAliasType('Inner', list[int]))
+
+    class Settings(BaseSettings):
+        value: Values
+
+    env.set('value', '[1, 2]')
+    assert Settings().value == [1, 2]
+
+
 @pytest.mark.parametrize('decode_annotation', [NoDecode, ForceDecode])
 @pytest.mark.parametrize('validation_alias', [None, 'custom_value'])
 def test_named_union_type_alias_decoding_control(env, decode_annotation, validation_alias):

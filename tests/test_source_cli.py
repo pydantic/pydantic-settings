@@ -3512,6 +3512,33 @@ def test_cli_generic_collection_type_alias():
     assert CliApp.run(Settings, cli_args=['--value', '1', '--value', '2']).value == [1, 2]
 
 
+def test_cli_nested_collection_type_alias():
+    Values = typing_extensions.TypeAliasType('Values', typing_extensions.TypeAliasType('Inner', list[int]))
+
+    class Settings(BaseSettings):
+        value: Values
+
+    assert CliApp.run(Settings, cli_args=['--value', '1', '--value', '2']).value == [1, 2]
+
+
+@pytest.mark.parametrize(
+    'args,expected',
+    [
+        (['--value', '1', '--value', '2'], [1, 2]),
+        (['--value', 'one=1', '--value', 'two=2'], {'one': 1, 'two': 2}),
+        (['--value', '[1,2]'], [1, 2]),
+    ],
+    ids=['list', 'dict', 'json-list'],
+)
+def test_cli_mapping_or_sequence_union_type_alias(args, expected):
+    Value = typing_extensions.TypeAliasType('Value', dict[str, int] | list[int])
+
+    class Settings(BaseSettings):
+        value: Value
+
+    assert CliApp.run(Settings, cli_args=args).value == expected
+
+
 def test_cli_scalar_type_alias():
     Value = typing_extensions.TypeAliasType('Value', str)
 

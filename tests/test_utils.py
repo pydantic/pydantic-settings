@@ -14,6 +14,7 @@ from pydantic_settings.sources.utils import (
     _annotation_contains_types,
     _annotation_is_complex,
     _get_field_annotation_and_metadata,
+    _get_union_members,
     _resolve_type_alias,
     _substitute_typevars,
     _validate_by_name_enabled,
@@ -50,6 +51,17 @@ def test_resolve_type_alias_parameterized_without_type_args():
 
     assert _resolve_type_alias(IntOrT) == (int | T)
     assert _resolve_type_alias(IntOrT[str]) == (int | str)
+
+
+def test_resolve_type_alias_nested():
+    """Aliases of aliases resolve all the way down, substituting type params at each level."""
+    Inner = TypeAliasType('Inner', list[int])
+    Outer = TypeAliasType('Outer', Inner)
+    InnerT = TypeAliasType('InnerT', list[T], type_params=(T,))
+    OuterT = TypeAliasType('OuterT', InnerT[T], type_params=(T,))
+
+    assert _resolve_type_alias(Outer) == list[int]
+    assert _resolve_type_alias(OuterT[int]) == list[int]
 
 
 def test_resolve_type_alias_passthrough():
@@ -108,12 +120,22 @@ def test_annotation_contains_types_is_instance_origin_short_circuits():
     assert _annotation_contains_types(list[int], (type,), is_instance=True) is True
 
 
-def test_annotation_contains_types_nested_aliases():
+def test_annotation_contains_types_alias_in_annotated():
+    """Aliases are resolved through `Annotated` on both sides of the alias."""
     Values = TypeAliasType('Values', list[int])
     Alias = TypeAliasType('Alias', Annotated[Values, 'metadata'])
 
     assert _annotation_contains_types(Annotated[Alias, 'outer'], (list,), is_strip_annotated=True)
+
+
+def test_annotation_contains_types_alias_without_origin():
+    """`is_include_origin=False` still applies to the resolved value of an alias."""
+    Values = TypeAliasType('Values', list[int])
+
     assert not _annotation_contains_types(Values, (list,), is_include_origin=False)
+
+
+def test_annotation_contains_types_alias_is_instance():
     assert _annotation_contains_types(TypeAliasType('JsonAlias', Json), (type(Json),), is_instance=True)
 
 
@@ -139,6 +161,16 @@ def test_annotation_contains_types_recursive_generic_alias():
     collected = set()
     _annotation_contains_types(Recursive[int] | Recursive[str], (int, str), collect=collected)
     assert collected == {int, str}
+
+
+def test_get_union_members():
+    """Unions nested in aliases or `Annotated` are flattened, and a non-union is its only member."""
+    Values = TypeAliasType('Values', dict[str, int] | list[int])
+
+    assert _get_union_members(dict[str, int]) == (dict[str, int],)
+    assert _get_union_members(TypeAliasType('Mapping', dict[str, int])) == (dict[str, int],)
+    assert _get_union_members(Values | None) == (dict[str, int], list[int], type(None))
+    assert _get_union_members(Annotated[Values, 'metadata'] | str) == (dict[str, int], list[int], str)
 
 
 def test_unwrap_optional_annotation():
