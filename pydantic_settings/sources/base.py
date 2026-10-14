@@ -217,20 +217,25 @@ class PydanticBaseSettingsSource(ABC):
 
 
 class ConfigFileSourceMixin(ABC):
-    def _read_files(self, files: ConfigFileSourceType | None, deep_merge: bool = False) -> dict[str, Any]:
+    @staticmethod
+    def _existing_files(files: ConfigFileSourceType | None) -> list[Path | Traversable]:
+        """Return the given files that exist, with `~` expanded in native paths."""
         if files is None:
-            return {}
+            return []
         if not isinstance(files, Sequence) or isinstance(files, str):
             files = [files]
-        vars: dict[str, Any] = {}
+        existing: list[Path | Traversable] = []
         for file in files:
             file_path: Path | Traversable = Path(file) if isinstance(file, str) else file
             if isinstance(file_path, Path):
                 file_path = file_path.expanduser()
+            if file_path.is_file():
+                existing.append(file_path)
+        return existing
 
-            if not file_path.is_file():
-                continue
-
+    def _read_files(self, files: ConfigFileSourceType | None, deep_merge: bool = False) -> dict[str, Any]:
+        vars: dict[str, Any] = {}
+        for file_path in self._existing_files(files):
             updating_vars = self._read_file(file_path)
             if deep_merge:
                 vars = deep_update(vars, updating_vars)

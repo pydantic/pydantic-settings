@@ -24,6 +24,48 @@ def test_repr() -> None:
     assert repr(source) == 'TomlConfigSettingsSource(toml_file=config.toml, toml_table_header=())'
 
 
+@pytest.mark.parametrize('path_type', [str, Path])
+@pytest.mark.parametrize('multiple_files', [False, True])
+def test_toml_table_header_home_path(tmp_path, monkeypatch, path_type, multiple_files):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    monkeypatch.setenv('USERPROFILE', str(tmp_path))
+    (tmp_path / 'config.toml').write_text('[app]\nfoobar = "hello"\n', encoding='utf-8')
+    path = path_type('~/config.toml')
+    paths = [path_type('~/missing.toml'), path] if multiple_files else path
+
+    class Settings(BaseSettings):
+        foobar: str
+
+    source = TomlConfigSettingsSource(Settings, toml_file=paths, toml_table_header=('app',))
+    assert Settings.model_validate(source()).foobar == 'hello'
+
+
+def test_toml_table_header_missing_from_home_file(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    monkeypatch.setenv('USERPROFILE', str(tmp_path))
+    (tmp_path / 'config.toml').write_text('foobar = "hello"\n', encoding='utf-8')
+
+    with pytest.raises(KeyError, match='toml_table_header key "app" not found'):
+        TomlConfigSettingsSource(BaseSettings, toml_file='~/config.toml', toml_table_header=('app',))
+
+
+@pytest.mark.parametrize('home_path', [False, True])
+@pytest.mark.parametrize('multiple_files', [False, True])
+def test_toml_table_header_ignores_directories(tmp_path, monkeypatch, home_path, multiple_files):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    monkeypatch.setenv('USERPROFILE', str(tmp_path))
+    (tmp_path / 'config.toml').mkdir()
+    path = '~/config.toml' if home_path else tmp_path / 'config.toml'
+    paths = [path, tmp_path / 'missing.toml'] if multiple_files else path
+
+    class Settings(BaseSettings):
+        foobar: str = 'default'
+
+    source = TomlConfigSettingsSource(Settings, toml_file=paths, toml_table_header=('app',))
+    assert source() == {}
+    assert Settings.model_validate(source()).foobar == 'default'
+
+
 def test_toml_file(tmp_path):
     p = tmp_path / '.env'
     p.write_text(
