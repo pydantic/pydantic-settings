@@ -157,6 +157,23 @@ def test_cli_validation_alias_differs_from_alias():
     assert CliApp.run(Settings, cli_args=args).database_url == 'postgres://prod'
 
 
+def test_cli_validation_alias_choices_and_path_differ_from_alias():
+    class Settings(BaseSettings, cli_exit_on_error=False):
+        choices: str = Field('default', alias='choicesAlias', validation_alias=AliasChoices('CHOICE_A', 'CHOICE_B'))
+        path: str = Field('default', alias='pathAlias', validation_alias=AliasPath('PATH_LIST', 0))
+
+    s = CliApp.run(Settings, cli_args=['--CHOICE_B', 'b', '--PATH_LIST', '["p"]'])
+    assert s.choices == 'b'
+    assert s.path == 'p'
+    help_text = CliApp.format_help(Settings).lower()
+    assert '--choicesalias' not in help_text
+    assert '--pathalias' not in help_text
+    with pytest.raises(SettingsError, match=r'(?i)error parsing CLI: unrecognized arguments: --choicesalias x'):
+        CliApp.run(Settings, cli_args=['--choicesAlias', 'x'])
+    with pytest.raises(SettingsError, match=r'(?i)error parsing CLI: unrecognized arguments: --pathalias x'):
+        CliApp.run(Settings, cli_args=['--pathAlias', 'x'])
+
+
 @pytest.mark.parametrize(
     'alias_generator',
     [

@@ -438,8 +438,9 @@ def _get_alias_names(
                     is_alias_path_only = False
                 else:
                     new_alias_paths.append(name)
-        elif alias is not None:  # pragma: no branch
-            new_alias_paths.append(alias)
+        else:
+            # Can't be `None`, the check above ensures one of the aliases is set
+            new_alias_paths.append(cast(AliasPath, alias))
         for alias_path in new_alias_paths:
             name = cast(str, alias_path.path[0])
             name = name.lower() if not case_sensitive else name
