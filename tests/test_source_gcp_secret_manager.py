@@ -848,6 +848,34 @@ class TestGoogleSecretManagerSettingsSource:
         assert s.v1 == 'v1-val'
         assert s.v2 == 'v2-val'
 
+    def test_secret_version_annotation_duplicate_alias_validate_by_name(self, mock_secret_client_factory):
+        client = mock_secret_client_factory(
+            [
+                {'name': 'test-secret', 'version': '1', 'value': 'v1-val'},
+                {'name': 'test-secret', 'version': '2', 'value': 'v2-val'},
+            ]
+        )
+
+        class Settings(BaseSettings):
+            model_config = SettingsConfigDict(validate_by_name=True, case_sensitive=True)
+            v1: Annotated[str, Field(alias='test-secret'), SecretVersion('1')]
+            v2: Annotated[str, Field(alias='test-secret'), SecretVersion('2')]
+
+            @classmethod
+            def settings_customise_sources(
+                cls,
+                settings_cls: type[BaseSettings],
+                init_settings: PydanticBaseSettingsSource,
+                env_settings: PydanticBaseSettingsSource,
+                dotenv_settings: PydanticBaseSettingsSource,
+                file_secret_settings: PydanticBaseSettingsSource,
+            ) -> tuple[PydanticBaseSettingsSource, ...]:
+                return (GoogleSecretManagerSettingsSource(cls, secret_client=client, project_id='test-project'),)
+
+        s = Settings()
+        assert s.v1 == 'v1-val'
+        assert s.v2 == 'v2-val'
+
     def test_secret_version_annotation_duplicate_alias_fail(self, mock_secret_client_factory, mocker):
         """
         Test that duplicate aliases fail when populate_by_name is False.

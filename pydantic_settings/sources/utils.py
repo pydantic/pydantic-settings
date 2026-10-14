@@ -371,13 +371,17 @@ def _get_alias_names(
     alias_path_args: dict[str, int | None] | None = None,
     case_sensitive: bool = True,
     populate_by_name: bool = False,
+    validate_by_alias: bool = True,
 ) -> tuple[tuple[str, ...], bool]:
-    """Get alias names for a field, handling alias paths and case sensitivity."""
+    """Get alias names for a field, handling alias paths and case sensitivity.
+
+    With `validate_by_alias=False` pydantic ignores the aliases, so only the field name is returned.
+    """
     from pydantic import AliasChoices, AliasPath
 
     alias_names: list[str] = []
     is_alias_path_only: bool = True
-    if not any((field_info.alias, field_info.validation_alias)):
+    if not validate_by_alias or not any((field_info.alias, field_info.validation_alias)):
         alias_names += [field_name]
         is_alias_path_only = False
     else:
@@ -412,6 +416,32 @@ def _get_alias_names(
     if not case_sensitive:
         alias_names = [alias_name.lower() for alias_name in alias_names]
     return tuple(dict.fromkeys(alias_names)), is_alias_path_only
+
+
+def _get_model_config(model: Any) -> Mapping[str, Any]:
+    """Get the config of a pydantic model or pydantic dataclass."""
+    return getattr(model, 'model_config', None) or getattr(model, '__pydantic_config__', {})
+
+
+def _validate_by_alias_enabled(config: Mapping[str, Any]) -> bool:
+    """Whether fields can be populated by their aliases. pydantic defaults `validate_by_alias` to True."""
+    return config.get('validate_by_alias') is not False
+
+
+def _validate_by_name_enabled(config: Mapping[str, Any]) -> bool:
+    """Whether fields can be populated by their name, resolved the same way pydantic resolves its config.
+
+    pydantic < 2.14 wrote the resolved `validate_by_name` back into `model_config`, but newer versions leave
+    `model_config` as declared, so the `populate_by_name` fallback and the `validate_by_alias=False` implication
+    have to be applied here.
+    """
+    validate_by_name = config.get('validate_by_name')
+    if validate_by_name is not None:
+        return validate_by_name
+    populate_by_name = config.get('populate_by_name')
+    if populate_by_name is not None:
+        return populate_by_name
+    return config.get('validate_by_alias') is False
 
 
 def _is_function(obj: Any) -> bool:

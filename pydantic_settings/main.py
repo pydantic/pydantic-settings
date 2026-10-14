@@ -12,7 +12,7 @@ from types import SimpleNamespace
 from typing import Any, ClassVar, Literal, Self, TextIO, TypeVar, cast
 from weakref import WeakKeyDictionary
 
-from pydantic import ConfigDict
+from pydantic import AliasChoices, ConfigDict
 from pydantic._internal._config import config_keys
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
@@ -42,7 +42,14 @@ from .sources import (
     YamlConfigSettingsSource,
     get_subcommand,
 )
-from .sources.utils import InitState, _get_alias_names, _warn_if_field_info_incomplete
+from .sources.utils import (
+    InitState,
+    _get_alias_names,
+    _get_model_config,
+    _validate_by_alias_enabled,
+    _validate_by_name_enabled,
+    _warn_if_field_info_incomplete,
+)
 from .utils import _settings_debug_enabled, logger
 
 T = TypeVar('T')
@@ -617,14 +624,12 @@ class BaseSettings(BaseModel):
         if init_kwargs and state:
             state_kwarg_names = set(state.keys())
             init_kwarg_names = set(init_kwargs.keys())
+            validate_by_alias = _validate_by_alias_enabled(settings_cls.model_config)
             for field_name, field_info in settings_cls.model_fields.items():
                 _warn_if_field_info_incomplete(field_info, field_name, init_state)
-                alias_names, *_ = _get_alias_names(field_name, field_info)
+                alias_names, *_ = _get_alias_names(field_name, field_info, validate_by_alias=validate_by_alias)
                 matchable_names = set(alias_names)
-                include_name = settings_cls.model_config.get(
-                    'populate_by_name', False
-                ) or settings_cls.model_config.get('validate_by_name', False)
-                if include_name:
+                if _validate_by_name_enabled(settings_cls.model_config):
                     matchable_names.add(field_name)
                 init_kwarg_name = init_kwarg_names & matchable_names
                 state_kwarg_name = state_kwarg_names & matchable_names
@@ -758,9 +763,17 @@ class CliApp:
         if issubclass(model_cls, BaseSettings):
             return model_cls
 
+        # A pydantic dataclass's config is not inherited like a model's, so carry over how its fields are populated.
+        alias_config = {
+            key: value
+            for key, value in _get_model_config(model_cls).items()
+            if is_pydantic_dataclass(model_cls) and key in ('populate_by_name', 'validate_by_alias', 'validate_by_name')
+        }
+
         class CliAppBaseSettings(BaseSettings, model_cls):  # type: ignore
             __doc__ = model_cls.__doc__
             model_config = SettingsConfigDict(
+                **alias_config,  # type: ignore[typeddict-item]
                 nested_model_default_partial_update=True,
                 case_sensitive=True,
                 cli_hide_none_type=True,
@@ -776,8 +789,13 @@ class CliApp:
     def _init_kwarg_name(field_name: str, field_info: FieldInfo, validate_by_alias: bool) -> str:
         # The kwargs are passed as a dict, so unlike pydantic's `_field_name_for_signature` the alias
         # does not need to be a valid identifier. `validation_alias` defaults to `alias` when only that is set.
-        if validate_by_alias and isinstance(field_info.validation_alias, str):
-            return field_info.validation_alias
+        if validate_by_alias:
+            if isinstance(field_info.validation_alias, str):
+                return field_info.validation_alias
+            if isinstance(field_info.validation_alias, AliasChoices):
+                # Any string choice validates the field. An `AliasPath` choice can't be a single kwarg.
+                choices = field_info.validation_alias.choices
+                return next((choice for choice in choices if isinstance(choice, str)), field_name)
         return field_name
 
     @staticmethod
@@ -887,7 +905,7 @@ class CliApp:
             )
             model = base_settings_cls(**base_settings_cls._settings_build_values(sources, init_kwargs))
             model_init_data = {}
-            validate_by_alias = base_settings_cls.model_config.get('validate_by_alias', True)
+            validate_by_alias = _validate_by_alias_enabled(_get_model_config(model_cls))
             for field_name, field_info in base_settings_cls.model_fields.items():
                 model_init_data[CliApp._init_kwarg_name(field_name, field_info, validate_by_alias)] = getattr(
                     model, field_name

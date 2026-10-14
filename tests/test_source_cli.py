@@ -655,6 +655,41 @@ def test_cli_show_env_vars_with_env_prefix():
     assert 'Foo value (required) [env: MYAPP_FOO]' in help_text
 
 
+def test_cli_show_env_vars_nested_model_validates_by_alias():
+    class Sub(BaseModel):
+        foo: str = Field('bar', alias='fooAlias')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            cli_prog_name='example.py', cli_show_env_vars=True, env_nested_delimiter='__', validate_by_alias=False
+        )
+
+        sub: Sub = Sub()
+
+    help_text = CliApp.format_help(Settings, strip_ansi_color=True)
+
+    # `Sub` validates by alias only, so `SUB__FOO` would be ignored and must not be advertised
+    assert '[env: SUB__FOOALIAS]' in help_text
+
+
+def test_cli_show_env_vars_nested_model_validates_by_name(env):
+    class Sub(BaseModel):
+        model_config = ConfigDict(validate_by_name=True)
+
+        foo: str = Field('bar', alias='fooAlias')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_prog_name='example.py', cli_show_env_vars=True, env_nested_delimiter='__')
+
+        sub: Sub = Sub()
+
+    help_text = CliApp.format_help(Settings, strip_ansi_color=True)
+
+    assert '[env: SUB__FOOALIAS | SUB__FOO]' in help_text
+    env.set('SUB__FOO', 'baz')
+    assert Settings().sub.foo == 'baz'
+
+
 def test_cli_show_env_vars_mutually_exclusive_group():
     class Choice(CliMutuallyExclusiveGroup):
         api_token: str | None = None
@@ -4894,6 +4929,55 @@ def test_cli_app_run_base_model_validate_by_name_only():
         plain: str
 
     assert CliApp.run(Cmd, cli_args=['--plain=a']).model_dump() == {'plain': 'a'}
+
+
+def test_cli_validate_by_alias_false():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(validate_by_alias=False)
+
+        apple: str = Field('default', alias='pomo')
+
+    assert CliApp.run(Settings, cli_args=['--apple=honeycrisp']).apple == 'honeycrisp'
+    with pytest.raises(SettingsError, match='unrecognized arguments: --pomo'):
+        CliApp.run(Settings, cli_args=['--pomo=honeycrisp'], cli_exit_on_error=False)
+
+
+def test_cli_nested_model_validate_by_alias_false():
+    class Sub(BaseModel):
+        model_config = ConfigDict(validate_by_alias=False)
+
+        apple: str = Field('default', alias='pomo')
+
+    class Settings(BaseSettings):
+        sub: Sub = Sub()
+
+    assert CliApp.run(Settings, cli_args=['--sub.apple=honeycrisp']).sub.apple == 'honeycrisp'
+
+
+def test_cli_app_run_base_model_validate_by_alias_false():
+    class Cmd(BaseModel):
+        model_config = ConfigDict(validate_by_alias=False)
+
+        name: str = Field('default', alias='nameAlias')
+
+    assert CliApp.run(Cmd, cli_args=['--name=a']).name == 'a'
+    # init kwargs were passed back under the alias, which the model ignored, so the default won (#1023)
+    assert CliApp.run(Cmd, cli_args=[], name='b').name == 'b'
+
+
+def test_cli_app_run_dataclass_validate_by_alias_false():
+    @pydantic_dataclasses.dataclass(config=ConfigDict(validate_by_alias=False))
+    class Cmd:
+        name: str = Field(alias='nameAlias')
+
+    assert CliApp.run(Cmd, cli_args=['--name=a']).name == 'a'
+
+
+def test_cli_app_run_base_model_alias_choices():
+    class Cmd(BaseModel):
+        name: str = Field(validation_alias=AliasChoices(AliasPath('names', 0), 'firstAlias', 'secondAlias'))
+
+    assert CliApp.run(Cmd, cli_args=['--firstAlias=a']).name == 'a'
 
 
 def test_get_model_description_returns_docstring():

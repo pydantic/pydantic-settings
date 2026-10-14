@@ -12,7 +12,14 @@ from pydantic.fields import FieldInfo
 from typing_inspection.introspection import is_union_origin
 
 from ...utils import _lenient_issubclass
-from ..utils import InitState, _get_model_fields, _parse_env_none_str, _resolve_type_alias, _strip_annotated
+from ..utils import (
+    InitState,
+    _get_model_config,
+    _get_model_fields,
+    _parse_env_none_str,
+    _resolve_type_alias,
+    _strip_annotated,
+)
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
@@ -167,14 +174,15 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
             env_parse_none_str=self.env_parse_none_str,
         )
 
-    def _extract_field_info(self, field: FieldInfo, field_name: str) -> list[tuple[str, str, bool]]:
-        if self._snake_case_conversion:
-            return [(x[0], x[1], x[2]) for x in super()._extract_field_info(field, field_name)]
-
-        if self._dash_to_underscore:
-            return [(x[0], x[1].replace('_', '-'), x[2]) for x in super()._extract_field_info(field, field_name)]
-
-        return super()._extract_field_info(field, field_name)
+    def _extract_field_info(
+        self, field: FieldInfo, field_name: str, model_config: Mapping[str, Any] | None = None
+    ) -> list[tuple[str, str, bool]]:
+        field_info = super()._extract_field_info(field, field_name, model_config)
+        if self._dash_to_underscore and not self._snake_case_conversion:
+            return [
+                (field_key, env_name.replace('_', '-'), is_complex) for field_key, env_name, is_complex in field_info
+            ]
+        return field_info
 
     def explode_env_vars(self, field_name: str, field: FieldInfo, env_vars: Mapping[str, str | None]) -> dict[str, Any]:
         values = super().explode_env_vars(field_name, field, env_vars)
@@ -224,13 +232,9 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
         """
         targets: dict[str, list[tuple[str, Any]]] = {}
         for model in models:
-            config = getattr(model, 'model_config', None) or getattr(model, '__pydantic_config__', {})
-            by_name = config.get('validate_by_name') or config.get('populate_by_name')
+            config = _get_model_config(model)
             for field_name, field in _get_model_fields(model).items():
-                keys = [field_key for field_key, _, _ in self._extract_field_info(field, field_name)]
-                if by_name and field_name not in keys:
-                    keys.append(field_name)
-                for field_key in keys:
+                for field_key, _, _ in self._extract_field_info(field, field_name, config):
                     env_name = self._apply_case_sensitive(field_key).replace('_', '-')
                     targets.setdefault(env_name, []).append((field_key, field.annotation))
         return targets
