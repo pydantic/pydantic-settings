@@ -444,6 +444,62 @@ def test_validate_by_alias_false_init_kwarg_takes_priority_over_env(env):
     assert s.apple == 'bongusta'
 
 
+def test_validate_by_alias_false_ignores_alias_env_var(env):
+    env.set('pomo', 'honeycrisp')
+    s = SettingWithValidateByAliasFalse()
+    assert s.apple == 'default'
+
+
+def test_validate_by_alias_false_ignores_alias_secret(tmp_path):
+    (tmp_path / 'pomo').write_text('honeycrisp')
+    s = SettingWithValidateByAliasFalse(_secrets_dir=tmp_path)
+    assert s.apple == 'default'
+
+
+def test_validate_by_alias_false_nested_model_default_partial_update(env):
+    class Sub(BaseModel):
+        a: int = 1
+        b: int = 2
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            validate_by_alias=False, env_nested_delimiter='__', nested_model_default_partial_update=True
+        )
+
+        sub: Sub = Field(Sub(a=5), alias='subAlias')
+
+    env.set('sub__b', '3')
+    assert Settings().sub == Sub(a=5, b=3)
+
+
+def test_nested_model_validate_by_alias_false(env):
+    class Sub(BaseModel):
+        model_config = ConfigDict(validate_by_alias=False)
+
+        Apple: str = Field('default', alias='pomo')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+        sub: Sub = Sub()
+
+    env.set('sub__apple', 'honeycrisp')
+    assert Settings().sub.Apple == 'honeycrisp'
+
+
+def test_validate_by_alias_false_nested_model_validates_by_alias(env):
+    class Sub(BaseModel):
+        counts: dict[str, int] = Field(alias='countsAlias')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(validate_by_alias=False, env_nested_delimiter='__')
+
+        sub: Sub
+
+    env.set('sub__countsAlias', '{"a": 1}')
+    assert Settings().sub.counts == {'a': 1}
+
+
 def test_with_prefix(env):
     class Settings(BaseSettings):
         apple: str
@@ -702,11 +758,14 @@ def test_annotated_list(env):
     ]
 
 
+@pytest.mark.parametrize('optional', [False, True])
 @pytest.mark.parametrize('alias_kind', ['plain', 'annotated', 'generic'])
 @pytest.mark.parametrize('validation_alias', [None, 'custom_value'])
 @pytest.mark.parametrize('source', ['env', 'dotenv', 'nested'])
 @pytest.mark.parametrize('raw_value, expected', [('plain-string', 'plain-string'), ('[1,', '[1,'), ('[1, 2]', [1, 2])])
-def test_named_union_type_alias_parsing(env, tmp_path, alias_kind, validation_alias, source, raw_value, expected):
+def test_named_union_type_alias_parsing(
+    env, tmp_path, optional, alias_kind, validation_alias, source, raw_value, expected
+):
     if alias_kind == 'plain':
         Value = TypeAliasType('Value', list[int] | str)
     elif alias_kind == 'annotated':
@@ -714,6 +773,8 @@ def test_named_union_type_alias_parsing(env, tmp_path, alias_kind, validation_al
     else:
         T = TypeVar('T')
         Value = TypeAliasType('Value', list[T] | str, type_params=(T,))[int]
+    if optional:
+        Value = Value | None
 
     class Nested(BaseModel):
         value: Value = Field(validation_alias=validation_alias)
@@ -737,6 +798,16 @@ def test_named_union_type_alias_parsing(env, tmp_path, alias_kind, validation_al
         env.set(env_name, raw_value)
         actual = Settings().value
     assert actual == expected
+
+
+def test_nested_type_alias_parsing(env):
+    Values = TypeAliasType('Values', TypeAliasType('Inner', list[int]))
+
+    class Settings(BaseSettings):
+        value: Values
+
+    env.set('value', '[1, 2]')
+    assert Settings().value == [1, 2]
 
 
 @pytest.mark.parametrize('decode_annotation', [NoDecode, ForceDecode])
@@ -763,6 +834,55 @@ def test_named_union_type_alias_json_validation(env, validation_alias, strict):
 
     env.set(validation_alias or 'value', '[1, 2]')
     assert Settings().value == [1, 2]
+
+
+@pytest.mark.parametrize('raw_value, expected', [('plain-string', 'plain-string'), ('[1,', '[1,'), ('[1, 2]', [1, 2])])
+@pytest.mark.parametrize('alias_kind', ['plain', 'annotated'])
+def test_optional_annotated_named_union_type_alias(env, alias_kind, raw_value, expected):
+    if alias_kind == 'plain':
+        Value = TypeAliasType('Value', list[int] | str)
+    else:
+        Value = TypeAliasType('Value', Annotated[list[int] | str, MinLen(1)])
+
+    class Settings(BaseSettings):
+        value: Annotated[Value, MinLen(1)] | None
+
+    env.set('value', raw_value)
+    assert Settings().value == expected
+
+
+@pytest.mark.parametrize('annotated', [False, True])
+def test_optional_named_union_type_alias_json_validation(env, annotated):
+    Value = TypeAliasType('Value', Json[list[int] | str])
+
+    class Settings(BaseSettings):
+        value: (Annotated[Value, MinLen(1)] if annotated else Value) | None
+
+    env.set('value', '[1, 2]')
+    assert Settings().value == [1, 2]
+
+
+@pytest.mark.parametrize('decode_annotation', [NoDecode, ForceDecode])
+def test_optional_named_union_type_alias_decoding_control(env, decode_annotation):
+    Value = TypeAliasType('Value', list[int] | str)
+
+    class Settings(BaseSettings):
+        value: Annotated[Value | None, decode_annotation]
+        model_config = SettingsConfigDict(enable_decoding=decode_annotation is NoDecode)
+
+    env.set('value', '[1, 2]')
+    assert Settings().value == ('[1, 2]' if decode_annotation is NoDecode else [1, 2])
+
+
+@pytest.mark.parametrize('raw_value, expected', [('plain-string', 'plain-string'), ('[["a"], "b"]', [['a'], 'b'])])
+def test_optional_recursive_union_type_alias(env, raw_value, expected):
+    Value = TypeAliasType('Value', list['Value'] | str)
+
+    class Settings(BaseSettings):
+        value: Value | None
+
+    env.set('value', raw_value)
+    assert Settings().value == expected
 
 
 @pytest.mark.parametrize('annotation, raw_value, expected', [(Json[list[int]], '[1, 2]', [1, 2]), (Json[int], '5', 5)])

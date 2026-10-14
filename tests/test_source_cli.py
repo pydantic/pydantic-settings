@@ -26,6 +26,7 @@ from pydantic import (
     Discriminator,
     Field,
     GetCoreSchemaHandler,
+    IPvAnyAddress,
     RootModel,
     SecretStr,
     Tag,
@@ -659,6 +660,41 @@ def test_cli_show_env_vars_with_env_prefix():
     help_text = CliApp.format_help(Settings, strip_ansi_color=True)
 
     assert 'Foo value (required) [env: MYAPP_FOO]' in help_text
+
+
+def test_cli_show_env_vars_nested_model_validates_by_alias():
+    class Sub(BaseModel):
+        foo: str = Field('bar', alias='fooAlias')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            cli_prog_name='example.py', cli_show_env_vars=True, env_nested_delimiter='__', validate_by_alias=False
+        )
+
+        sub: Sub = Sub()
+
+    help_text = CliApp.format_help(Settings, strip_ansi_color=True)
+
+    # `Sub` validates by alias only, so `SUB__FOO` would be ignored and must not be advertised
+    assert '[env: SUB__FOOALIAS]' in help_text
+
+
+def test_cli_show_env_vars_nested_model_validates_by_name(env):
+    class Sub(BaseModel):
+        model_config = ConfigDict(validate_by_name=True)
+
+        foo: str = Field('bar', alias='fooAlias')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(cli_prog_name='example.py', cli_show_env_vars=True, env_nested_delimiter='__')
+
+        sub: Sub = Sub()
+
+    help_text = CliApp.format_help(Settings, strip_ansi_color=True)
+
+    assert '[env: SUB__FOOALIAS | SUB__FOO]' in help_text
+    env.set('SUB__FOO', 'baz')
+    assert Settings().sub.foo == 'baz'
 
 
 def test_cli_show_env_vars_mutually_exclusive_group():
@@ -3452,6 +3488,103 @@ assert CliSettingsSource(SimpleSettings)._metavar_format(TypeAliasInt) == 'TypeA
     )
 
 
+@pytest.mark.parametrize('use_alias', [False, True], ids=['plain', 'alias'])
+@pytest.mark.parametrize(
+    'annotation,args,expected',
+    [
+        (list[str], ['one', 'two'], ['one', 'two']),
+        (set[str], ['one', 'two'], {'one', 'two'}),
+        (tuple[str, ...], ['one', 'two'], ('one', 'two')),
+        (dict[str, int], ['one=1', 'two=2'], {'one': 1, 'two': 2}),
+        (Annotated[list[str], Field(min_length=2)], ['one', 'two'], ['one', 'two']),
+    ],
+    ids=['list', 'set', 'tuple', 'dict', 'annotated-list'],
+)
+def test_cli_collection_type_alias(use_alias, annotation, args, expected):
+    value_type = typing_extensions.TypeAliasType('Value', annotation) if use_alias else annotation
+
+    class Settings(BaseSettings):
+        value: value_type
+
+    cli_args = [arg for value in args for arg in ('--value', value)]
+    assert CliApp.run(Settings, cli_args=cli_args).value == expected
+
+
+def test_cli_generic_collection_type_alias():
+    Values = typing_extensions.TypeAliasType('Values', list[T], type_params=(T,))
+
+    class Settings(BaseSettings):
+        value: Values[int]
+
+    assert CliApp.run(Settings, cli_args=['--value', '1', '--value', '2']).value == [1, 2]
+
+
+def test_cli_nested_collection_type_alias():
+    Values = typing_extensions.TypeAliasType('Values', typing_extensions.TypeAliasType('Inner', list[int]))
+
+    class Settings(BaseSettings):
+        value: Values
+
+    assert CliApp.run(Settings, cli_args=['--value', '1', '--value', '2']).value == [1, 2]
+
+
+@pytest.mark.parametrize(
+    'args,expected',
+    [
+        (['--value', '1', '--value', '2'], [1, 2]),
+        (['--value', 'one=1', '--value', 'two=2'], {'one': 1, 'two': 2}),
+        (['--value', '[1,2]'], [1, 2]),
+    ],
+    ids=['list', 'dict', 'json-list'],
+)
+def test_cli_mapping_or_sequence_union_type_alias(args, expected):
+    Value = typing_extensions.TypeAliasType('Value', dict[str, int] | list[int])
+
+    class Settings(BaseSettings):
+        value: Value
+
+    assert CliApp.run(Settings, cli_args=args).value == expected
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason='requires python 3.12 or higher')
+@pytest.mark.parametrize(
+    'args,expected',
+    [
+        (['--value', '1', '--value', '2'], [1, 2]),
+        (['--value', '{"one": {}}', '--value', '{"two": {"three": {}}}'], {'one': {}, 'two': {'three': {}}}),
+    ],
+    ids=['list', 'dict'],
+)
+def test_cli_recursive_mapping_or_sequence_union_type_alias(args, expected):
+    namespace = {}
+    exec('type Value = dict[str, Value] | list[int]', namespace)
+    Value = namespace['Value']
+
+    class Settings(BaseSettings):
+        value: Value
+
+    assert CliApp.run(Settings, cli_args=args).value == expected
+
+
+def test_cli_scalar_type_alias():
+    Value = typing_extensions.TypeAliasType('Value', str)
+
+    class Settings(BaseSettings):
+        value: Value
+
+    assert CliApp.run(Settings, cli_args=['--value', 'one', '--value', 'two']).value == 'two'
+
+
+def test_cli_type_alias_ip_addresses():
+    IPAddresses = typing_extensions.TypeAliasType('IPAddresses', list[IPvAnyAddress])
+
+    class Settings(BaseModel):
+        addresses: IPAddresses = Field(default_factory=list)
+
+    settings = CliApp.run(Settings, cli_args=['--addresses', '1.2.3.4', '--addresses', '::1'])
+    assert [str(address) for address in settings.addresses] == ['1.2.3.4', '::1']
+
+
 def test_cli_app():
     class Init(BaseModel):
         directory: CliPositionalArg[str]
@@ -4850,6 +4983,55 @@ def test_cli_app_run_base_model_validate_by_name_only():
         plain: str
 
     assert CliApp.run(Cmd, cli_args=['--plain=a']).model_dump() == {'plain': 'a'}
+
+
+def test_cli_validate_by_alias_false():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(validate_by_alias=False)
+
+        apple: str = Field('default', alias='pomo')
+
+    assert CliApp.run(Settings, cli_args=['--apple=honeycrisp']).apple == 'honeycrisp'
+    with pytest.raises(SettingsError, match='unrecognized arguments: --pomo'):
+        CliApp.run(Settings, cli_args=['--pomo=honeycrisp'], cli_exit_on_error=False)
+
+
+def test_cli_nested_model_validate_by_alias_false():
+    class Sub(BaseModel):
+        model_config = ConfigDict(validate_by_alias=False)
+
+        apple: str = Field('default', alias='pomo')
+
+    class Settings(BaseSettings):
+        sub: Sub = Sub()
+
+    assert CliApp.run(Settings, cli_args=['--sub.apple=honeycrisp']).sub.apple == 'honeycrisp'
+
+
+def test_cli_app_run_base_model_validate_by_alias_false():
+    class Cmd(BaseModel):
+        model_config = ConfigDict(validate_by_alias=False)
+
+        name: str = Field('default', alias='nameAlias')
+
+    assert CliApp.run(Cmd, cli_args=['--name=a']).name == 'a'
+    # init kwargs were passed back under the alias, which the model ignored, so the default won (#1023)
+    assert CliApp.run(Cmd, cli_args=[], name='b').name == 'b'
+
+
+def test_cli_app_run_dataclass_validate_by_alias_false():
+    @pydantic_dataclasses.dataclass(config=ConfigDict(validate_by_alias=False))
+    class Cmd:
+        name: str = Field(alias='nameAlias')
+
+    assert CliApp.run(Cmd, cli_args=['--name=a']).name == 'a'
+
+
+def test_cli_app_run_base_model_alias_choices():
+    class Cmd(BaseModel):
+        name: str = Field(validation_alias=AliasChoices(AliasPath('names', 0), 'firstAlias', 'secondAlias'))
+
+    assert CliApp.run(Cmd, cli_args=['--firstAlias=a']).name == 'a'
 
 
 def test_get_model_description_returns_docstring():
