@@ -5,7 +5,7 @@ Test pydantic_settings.GoogleSecretSettingsSource
 from typing import Annotated
 
 import pytest
-from pydantic import Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from pytest_mock import MockerFixture
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
@@ -709,66 +709,69 @@ class TestGoogleSecretManagerSettingsSource:
         assert val2 == 'secret-value'
         assert client.access_secret_version.call_count == 1
 
+    @pytest.mark.parametrize('from_config', [False, True])
     @pytest.mark.parametrize('case_sensitive', [True, False])
-    @pytest.mark.parametrize('configure_on_source', [True, False])
-    @pytest.mark.parametrize('parse_none_str', ['null', '<none>', None])
-    def test_env_parse_none_str(self, mock_secret_client_factory, case_sensitive, configure_on_source, parse_none_str):
-        marker = parse_none_str or 'null'
-        client = mock_secret_client_factory(
-            [
-                {
-                    'name': name if case_sensitive else name.upper(),
-                    'version': version,
-                    'value': value,
-                }
-                for name, version, value in [
-                    ('nullable', 'latest', marker),
-                    ('versioned_nullable', '1', marker),
-                    ('ordinary', 'latest', f'{marker}-value'),
-                ]
-            ]
-        )
-        sources = []
+    @pytest.mark.parametrize(
+        ('parse_none_str', 'secret_value', 'expected'),
+        [(None, 'null', 'null'), ('null', 'null', None), ('VOID', 'VOID', None), ('null', 'ordinary', 'ordinary')],
+    )
+    def test_env_parse_none_str(
+        self,
+        mock_secret_client_factory,
+        from_config: bool,
+        case_sensitive: bool,
+        parse_none_str: str | None,
+        secret_value: str,
+        expected: str | None,
+    ) -> None:
+        class NestedModel(BaseModel):
+            value: str | None = 'default'
 
         class Settings(BaseSettings):
-            model_config = SettingsConfigDict(env_parse_none_str=None if configure_on_source else parse_none_str)
-            nullable: str | None = 'fallback'
-            versioned_nullable: Annotated[str | None, SecretVersion('1')] = 'fallback'
-            ordinary: str = 'fallback'
+            model_config = SettingsConfigDict(
+                env_nested_delimiter='__', env_parse_none_str=parse_none_str if from_config else None
+            )
+            direct: str | None = 'default'
+            versioned: Annotated[str | None, SecretVersion('1')] = 'default'
+            nested: NestedModel = NestedModel()
 
-            @classmethod
-            def settings_customise_sources(
-                cls,
-                settings_cls: type[BaseSettings],
-                init_settings: PydanticBaseSettingsSource,
-                env_settings: PydanticBaseSettingsSource,
-                dotenv_settings: PydanticBaseSettingsSource,
-                file_secret_settings: PydanticBaseSettingsSource,
-            ) -> tuple[PydanticBaseSettingsSource, ...]:
-                source = GoogleSecretManagerSettingsSource(
-                    settings_cls,
-                    secret_client=client,
-                    project_id='test-project',
-                    case_sensitive=case_sensitive,
-                    env_parse_none_str=parse_none_str if configure_on_source else None,
-                )
-                sources.append(source)
-                return (source,)
+        client = mock_secret_client_factory(
+            [
+                {'name': 'direct', 'value': secret_value},
+                {'name': 'versioned', 'value': 'latest-value'},
+                {'name': 'versioned', 'version': '1', 'value': secret_value},
+                {'name': 'nested__value', 'value': secret_value},
+            ]
+        )
+        source = GoogleSecretManagerSettingsSource(
+            Settings,
+            secret_client=client,
+            project_id='test-project',
+            case_sensitive=case_sensitive,
+            env_parse_none_str=None if from_config else parse_none_str,
+        )
 
-        settings = Settings()
-        expected = None if parse_none_str is not None else marker
-        assert settings.nullable == expected
-        assert settings.versioned_nullable == expected
-        assert settings.ordinary == f'{marker}-value'
-        assert client.access_secret_version.call_count == 3
+        values = source()
+        assert values == {'direct': expected, 'versioned': expected, 'nested': {'value': expected}}
+        settings = Settings(**values)
+        assert settings.direct == expected
+        assert settings.versioned == expected
+        assert settings.nested.value == expected
 
-        # Looking up a loaded secret still uses the cache, including a null marker.
-        sources[0].env_vars['nullable']
-        assert client.access_secret_version.call_count == 3
-        if case_sensitive:
-            client.list_secrets.assert_not_called()
-        else:
-            client.list_secrets.assert_called_once()
+    def test_env_parse_none_str_source_overrides_config(self, mock_secret_client_factory) -> None:
+        class Settings(BaseSettings):
+            model_config = SettingsConfigDict(env_parse_none_str='null')
+            marker: str | None = 'default'
+            config_marker: str | None = 'default'
+
+        client = mock_secret_client_factory(
+            [{'name': 'marker', 'value': 'VOID'}, {'name': 'config_marker', 'value': 'null'}]
+        )
+        source = GoogleSecretManagerSettingsSource(
+            Settings, secret_client=client, project_id='test-project', env_parse_none_str='VOID'
+        )
+
+        assert source() == {'marker': None, 'config_marker': 'null'}
 
     def test_secret_version_annotation_case_insensitive_unknown_secret(self, mock_secret_client_factory):
         """A versioned alias missing from the secret map is skipped, leaving the default in place."""

@@ -122,20 +122,20 @@ class GoogleSecretManagerMapping(Mapping[str, str | None]):
             value = self._secret_client.access_secret_version(
                 name=self._secret_version_path(gcp_secret_name, version)
             ).payload.data.decode('UTF-8')
-            return _parse_env_none_str(value, self._env_parse_none_str)
         except Exception:
             return None
+        return _parse_env_none_str(value, self._env_parse_none_str)
 
     def _get_secret_value_or_raise(self, gcp_secret_name: str) -> str | None:
         try:
             value = self._secret_client.access_secret_version(
                 name=self._secret_version_path(gcp_secret_name)
             ).payload.data.decode('UTF-8')
-            return _parse_env_none_str(value, self._env_parse_none_str)
         except Exception as e:
             if _is_not_found_error(e):
                 raise KeyError(gcp_secret_name) from e
             return None
+        return _parse_env_none_str(value, self._env_parse_none_str)
 
     def __getitem__(self, key: str) -> str | None:
         if key in self._loaded_secrets:
