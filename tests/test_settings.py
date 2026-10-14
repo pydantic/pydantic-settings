@@ -758,11 +758,14 @@ def test_annotated_list(env):
     ]
 
 
+@pytest.mark.parametrize('optional', [False, True])
 @pytest.mark.parametrize('alias_kind', ['plain', 'annotated', 'generic'])
 @pytest.mark.parametrize('validation_alias', [None, 'custom_value'])
 @pytest.mark.parametrize('source', ['env', 'dotenv', 'nested'])
 @pytest.mark.parametrize('raw_value, expected', [('plain-string', 'plain-string'), ('[1,', '[1,'), ('[1, 2]', [1, 2])])
-def test_named_union_type_alias_parsing(env, tmp_path, alias_kind, validation_alias, source, raw_value, expected):
+def test_named_union_type_alias_parsing(
+    env, tmp_path, optional, alias_kind, validation_alias, source, raw_value, expected
+):
     if alias_kind == 'plain':
         Value = TypeAliasType('Value', list[int] | str)
     elif alias_kind == 'annotated':
@@ -770,6 +773,8 @@ def test_named_union_type_alias_parsing(env, tmp_path, alias_kind, validation_al
     else:
         T = TypeVar('T')
         Value = TypeAliasType('Value', list[T] | str, type_params=(T,))[int]
+    if optional:
+        Value = Value | None
 
     class Nested(BaseModel):
         value: Value = Field(validation_alias=validation_alias)
@@ -829,6 +834,39 @@ def test_named_union_type_alias_json_validation(env, validation_alias, strict):
 
     env.set(validation_alias or 'value', '[1, 2]')
     assert Settings().value == [1, 2]
+
+
+def test_optional_named_union_type_alias_json_validation(env):
+    Value = TypeAliasType('Value', Json[list[int] | str])
+
+    class Settings(BaseSettings):
+        value: Value | None
+
+    env.set('value', '[1, 2]')
+    assert Settings().value == [1, 2]
+
+
+@pytest.mark.parametrize('decode_annotation', [NoDecode, ForceDecode])
+def test_optional_named_union_type_alias_decoding_control(env, decode_annotation):
+    Value = TypeAliasType('Value', list[int] | str)
+
+    class Settings(BaseSettings):
+        value: Annotated[Value | None, decode_annotation]
+        model_config = SettingsConfigDict(enable_decoding=decode_annotation is NoDecode)
+
+    env.set('value', '[1, 2]')
+    assert Settings().value == ('[1, 2]' if decode_annotation is NoDecode else [1, 2])
+
+
+@pytest.mark.parametrize('raw_value, expected', [('plain-string', 'plain-string'), ('[["a"], "b"]', [['a'], 'b'])])
+def test_optional_recursive_union_type_alias(env, raw_value, expected):
+    Value = TypeAliasType('Value', list['Value'] | str)
+
+    class Settings(BaseSettings):
+        value: Value | None
+
+    env.set('value', raw_value)
+    assert Settings().value == expected
 
 
 @pytest.mark.parametrize('annotation, raw_value, expected', [(Json[list[int]], '[1, 2]', [1, 2]), (Json[int], '5', 5)])
