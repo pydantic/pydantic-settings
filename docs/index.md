@@ -3096,7 +3096,7 @@ class Settings(BaseSettings):
 ```
 
 !!! note
-    If you have multiple fields pointing to the same secret (alias) but with different versions, you MUST enable `populate_by_name=True` in `SettingsConfigDict`.
+    If you have multiple fields pointing to the same secret (alias) but with different versions, you MUST enable `populate_by_name=True` (or `validate_by_name=True`) in `SettingsConfigDict`.
 
 
 ### Important Notes

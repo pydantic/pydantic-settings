@@ -9,7 +9,7 @@ from pydantic.fields import FieldInfo
 
 from ...exceptions import SettingsError
 from ..types import SecretVersion
-from ..utils import InitState, _parse_env_none_str
+from ..utils import InitState, _parse_env_none_str, _validate_by_name_enabled
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
@@ -263,9 +263,9 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
                 if gcp_secret_name:
                     env_val = self.env_vars._get_secret_value(gcp_secret_name, secret_version)
                     if env_val is not None:
-                        # If populate_by_name is enabled, return field_name to allow multiple fields
+                        # If validation by name is enabled, return field_name to allow multiple fields
                         # with the same alias but different versions to be distinguished
-                        if self.settings_cls.model_config.get('populate_by_name'):
+                        if _validate_by_name_enabled(self.config):
                             return env_val, field_name, value_is_complex
                         return env_val, field_key, value_is_complex
 
@@ -275,9 +275,9 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
 
         val, key, is_complex = super().get_field_value(field, field_name)
 
-        # If populate_by_name is enabled, we need to return the field_name as the key
+        # If validation by name is enabled, we need to return the field_name as the key
         # without this being enabled, you cannot load two secrets with the same name but different versions
-        if self.settings_cls.model_config.get('populate_by_name') and val is not None:
+        if _validate_by_name_enabled(self.config) and val is not None:
             return val, field_name, is_complex
         return val, key, is_complex
 
