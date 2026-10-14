@@ -143,6 +143,20 @@ def test_cli_validation_alias_with_cli_prefix():
     assert CliApp.run(Settings, cli_args=['--p.foo', 'bar']).foobar == 'bar'
 
 
+def test_cli_validation_alias_differs_from_alias():
+    class Settings(BaseSettings, cli_exit_on_error=False):
+        database_url: str = Field('sqlite://', alias='dbAlias', validation_alias='DATABASE_URL')
+
+    assert CliApp.run(Settings, cli_args=['--DATABASE_URL', 'postgres://prod']).database_url == 'postgres://prod'
+    # Pydantic doesn't validate input by `alias` when `validation_alias` is set, so it isn't a CLI flag either
+    with pytest.raises(SettingsError, match='error parsing CLI: unrecognized arguments: --dbalias postgres://prod'):
+        CliApp.run(Settings, cli_args=['--dbAlias', 'postgres://prod'])
+    assert '--dbalias' not in CliApp.format_help(Settings).lower()
+    args = CliApp.serialize(Settings(DATABASE_URL='postgres://prod'))
+    assert args == ['--DATABASE_URL', 'postgres://prod']
+    assert CliApp.run(Settings, cli_args=args).database_url == 'postgres://prod'
+
+
 @pytest.mark.parametrize(
     'alias_generator',
     [

@@ -414,6 +414,8 @@ def _get_alias_names(
     """Get alias names for a field, handling alias paths and case sensitivity.
 
     With `validate_by_alias=False` pydantic ignores the aliases, so only the field name is returned.
+
+    The first name is the key that sources pass the value to pydantic under.
     """
     from pydantic import AliasChoices, AliasPath
 
@@ -424,21 +426,20 @@ def _get_alias_names(
         is_alias_path_only = False
     else:
         new_alias_paths: list[AliasPath] = []
-        for alias in (field_info.alias, field_info.validation_alias):
-            if alias is None:
-                continue
-            if isinstance(alias, str):
-                alias_names.append(alias)
-                is_alias_path_only = False
-            elif isinstance(alias, AliasChoices):
-                for name in alias.choices:
-                    if isinstance(name, str):
-                        alias_names.append(name)
-                        is_alias_path_only = False
-                    else:
-                        new_alias_paths.append(name)
-            else:
-                new_alias_paths.append(alias)
+        # Pydantic only validates input against `validation_alias` when it is set, so `alias` isn't an input name then
+        alias = field_info.validation_alias if field_info.validation_alias is not None else field_info.alias
+        if isinstance(alias, str):
+            alias_names.append(alias)
+            is_alias_path_only = False
+        elif isinstance(alias, AliasChoices):
+            for name in alias.choices:
+                if isinstance(name, str):
+                    alias_names.append(name)
+                    is_alias_path_only = False
+                else:
+                    new_alias_paths.append(name)
+        elif alias is not None:  # pragma: no branch
+            new_alias_paths.append(alias)
         for alias_path in new_alias_paths:
             name = cast(str, alias_path.path[0])
             name = name.lower() if not case_sensitive else name
