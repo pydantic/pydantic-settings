@@ -228,15 +228,24 @@ def _union_is_complex(
             return True
         # _annotation_is_complex doesn't handle bare Union types, including those
         # exposed by a type alias or Annotated[Union[X, Y], ...]. Recurse, but only
-        # if the Annotated metadata doesn't suppress complexity (e.g. Json).
-        inner = _strip_annotated(arg)
-        if inner is not arg:
-            _, *inner_meta = get_args(arg)
-            if any(isinstance(md, Json) for md in inner_meta):  # type: ignore[misc]
-                continue
+        # if no Annotated metadata suppresses complexity (e.g. Json).
+        inner = _unwrap_union_member(arg)
         if is_union_origin(get_origin(inner)) and _union_is_complex(inner, metadata, init_state, seen):
             return True
     return False
+
+
+def _unwrap_union_member(annotation: Any) -> Any:
+    """Strip Annotated layers and the type aliases they wrap from a union member.
+
+    Returns `None` if any layer's metadata suppresses complexity (e.g. Json).
+    """
+    while typing_objects.is_annotated(get_origin(annotation)):
+        annotation, *meta = get_args(annotation)
+        if any(isinstance(md, Json) for md in meta):  # type: ignore[misc]
+            return None
+        annotation = _resolve_type_alias(annotation)
+    return annotation
 
 
 def _union_has_strict_types(annotation: type[Any] | None) -> bool:
