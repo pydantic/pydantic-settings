@@ -836,6 +836,17 @@ def test_named_union_type_alias_json_validation(env, validation_alias, strict):
     assert Settings().value == [1, 2]
 
 
+@pytest.mark.parametrize('raw_value, expected', [('plain-string', 'plain-string'), ('[1,', '[1,'), ('[1, 2]', [1, 2])])
+def test_optional_annotated_named_union_type_alias(env, raw_value, expected):
+    Value = TypeAliasType('Value', list[int] | str)
+
+    class Settings(BaseSettings):
+        value: Annotated[Value, MinLen(1)] | None
+
+    env.set('value', raw_value)
+    assert Settings().value == expected
+
+
 def test_optional_named_union_type_alias_json_validation(env):
     Value = TypeAliasType('Value', Json[list[int] | str])
 

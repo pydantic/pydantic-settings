@@ -234,6 +234,7 @@ def _union_is_complex(
             _, *inner_meta = get_args(arg)
             if any(isinstance(md, Json) for md in inner_meta):  # type: ignore[misc]
                 continue
+            inner = _resolve_type_alias(inner)
         if is_union_origin(get_origin(inner)) and _union_is_complex(inner, metadata, init_state, seen):
             return True
     return False
