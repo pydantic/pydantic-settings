@@ -1882,6 +1882,14 @@ print(Settings().model_dump())
 #> {'good_arg': 'hello world', 'ignored_args': ['--bad-arg=bad', 'ANOTHER_BAD_ARG']}
 ```
 
+With subcommands, unknown arguments are captured by the innermost parser that declares a `CliUnknownArgs` field.
+Arguments appearing before a subcommand remain with the parent parser. If a child parser has no capture field,
+its leftovers are passed back to its parent. Captured lists are reset when a `CliSettingsSource` parses new arguments.
+
+Ordinary nested models share their parent's parser. Declaring multiple `CliUnknownArgs` fields on that same parser
+still duplicates its leftovers; this case is not covered by the subcommand behavior above. Custom parsers whose
+`parse_known_args` method cannot be replaced also cannot capture subcommand leftovers independently.
+
 #### CLI Kebab Case for Arguments
 
 Change whether CLI arguments should use kebab case by enabling `cli_kebab_case`. By default, `cli_kebab_case=True` will
@@ -2901,13 +2909,13 @@ This setup will load Azure Key Vault secrets (e.g., `MySetting`, `mySetting`, `m
 
 The Azure Key Vault source accepts a `dash_to_underscore` option, disabled by default, to support Key Vault kebab-case secret names by mapping them to Python's snake_case field names. When enabled, dashes (`-`) in secret names are mapped to underscores (`_`) in field names during validation.
 
-This mapping applies only to *field names*, not to aliases.  Consider snake case conversion if you need aliases or nested fields.
+This mapping applies only to *field names*, not to aliases. Use `--` to separate nested model fields; dashes in their names are mapped the same way, while dictionary keys are kept as-is.
 
 ```py
 import os
 
 from azure.identity import DefaultAzureCredential
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from pydantic_settings import (
     AzureKeyVaultSettingsSource,
@@ -2916,9 +2924,14 @@ from pydantic_settings import (
 )
 
 
+class DatabaseSettings(BaseModel):
+    sql_password: str
+
+
 class AzureKeyVaultSettings(BaseSettings):
     field_with_underscore: str
     field_with_alias: str = Field(..., alias='Alias-With-Dashes')
+    database: DatabaseSettings
 
     @classmethod
     def settings_customise_sources(
@@ -2938,7 +2951,7 @@ class AzureKeyVaultSettings(BaseSettings):
         return (az_key_vault_settings,)
 ```
 
-This setup will load Azure Key Vault secrets named `field-with-underscore` and `Alias-With-Dashes`, mapping them to the `field_with_underscore` and `field_with_alias` fields, respectively.
+This setup will load Azure Key Vault secrets named `field-with-underscore`, `Alias-With-Dashes` and `database--sql-password`, mapping them to the `field_with_underscore`, `field_with_alias` and `database.sql_password` fields, respectively.
 
 !!! tip
     Alternatively, you can configure an [alias_generator](alias.md#using-alias-generators) to map PascalCase secrets.
@@ -3083,7 +3096,7 @@ class Settings(BaseSettings):
 ```
 
 !!! note
-    If you have multiple fields pointing to the same secret (alias) but with different versions, you MUST enable `populate_by_name=True` in `SettingsConfigDict`.
+    If you have multiple fields pointing to the same secret (alias) but with different versions, you MUST enable `populate_by_name=True` (or `validate_by_name=True`) in `SettingsConfigDict`.
 
 
 ### Important Notes

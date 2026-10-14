@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import (
     TYPE_CHECKING,
     Any,
+    cast,
     get_args,
     get_origin,
 )
@@ -25,6 +26,7 @@ from ..utils import (
     _annotation_enum_name_to_val,
     _annotation_is_complex,
     _get_field_annotation_and_metadata,
+    _get_model_config,
     _get_model_fields,
     _literal_has_numeric_enum,
     _union_has_strict_types,
@@ -258,10 +260,11 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             return args[-1] if args else None
         if is_model_class(annotation) or is_pydantic_dataclass(annotation):  # type: ignore[arg-type]
             fields = _get_model_fields(annotation)
+            model_config = _get_model_config(annotation)
             # `case_sensitive is None` is here to be compatible with the old behavior.
             # Has to be removed in V3.
             for field_name, f in fields.items():
-                for _, env_name, _ in self._extract_field_info(f, field_name):
+                for _, env_name, _ in self._extract_field_info(f, field_name, model_config):
                     if case_sensitive is None or case_sensitive:
                         if field_name == key or env_name == key:
                             return f
@@ -368,12 +371,12 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                 has_json = any(isinstance(md, Json) for md in metadata)  # type: ignore[misc]
                 if not has_json and not _annotation_contains_types(annotation, (Json,), is_instance=True):
                     try:
-                        return TypeAdapter(field.annotation).validate_python(value)
+                        return TypeAdapter(cast('Any', field.annotation)).validate_python(value)
                     except ValidationError:
                         # Try JSON decoding as fallback (e.g. 'true' -> True for StrictBool)
                         decoded = json.loads(value)
                         if not isinstance(decoded, str):
-                            return TypeAdapter(field.annotation).validate_python(decoded)
+                            return TypeAdapter(cast('Any', field.annotation)).validate_python(decoded)
                         raise
         except (ValidationError, json.JSONDecodeError):
             # Allow validation error to be raised at time of instantiation
