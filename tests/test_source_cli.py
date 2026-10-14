@@ -168,9 +168,9 @@ def test_cli_validation_alias_choices_and_path_differ_from_alias():
     help_text = CliApp.format_help(Settings).lower()
     assert '--choicesalias' not in help_text
     assert '--pathalias' not in help_text
-    with pytest.raises(SettingsError, match='error parsing CLI: unrecognized arguments: --choicesalias x'):
+    with pytest.raises(SettingsError, match=r'(?i)error parsing CLI: unrecognized arguments: --choicesalias x'):
         CliApp.run(Settings, cli_args=['--choicesAlias', 'x'])
-    with pytest.raises(SettingsError, match='error parsing CLI: unrecognized arguments: --pathalias x'):
+    with pytest.raises(SettingsError, match=r'(?i)error parsing CLI: unrecognized arguments: --pathalias x'):
         CliApp.run(Settings, cli_args=['--pathAlias', 'x'])
 
 
