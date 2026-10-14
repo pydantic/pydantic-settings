@@ -174,12 +174,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: '3.12'
+          enable-cache: false
 
-      - name: Install 'build' library
-        run: pip install -U 'build>=1.6'
+      - run: uv sync --only-group build
 
       - name: Check version
         id: check-tag
@@ -189,7 +189,7 @@ jobs:
 
       - name: Build library
         # Regenerate build constraints with `make build-constraints`:
-        run: python -m build --dependency-constraints-txt .github/build-constraints.txt
+        run: uv run --no-sync python -m build --dependency-constraints-txt .github/build-constraints.txt
 
       - name: Upload package to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
