@@ -179,7 +179,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install 'build' library
-        run: pip install -U build
+        run: pip install -U 'build>=1.6'
 
       - name: Check version
         id: check-tag
@@ -188,7 +188,8 @@ jobs:
           version_file_path: pydantic_settings/version.py
 
       - name: Build library
-        run: python -m build
+        # Regenerate build constraints with `make build-constraints`:
+        run: python -m build --dependency-constraints-txt .github/build-constraints.txt
 
       - name: Upload package to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
