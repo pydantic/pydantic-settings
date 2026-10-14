@@ -837,8 +837,12 @@ def test_named_union_type_alias_json_validation(env, validation_alias, strict):
 
 
 @pytest.mark.parametrize('raw_value, expected', [('plain-string', 'plain-string'), ('[1,', '[1,'), ('[1, 2]', [1, 2])])
-def test_optional_annotated_named_union_type_alias(env, raw_value, expected):
-    Value = TypeAliasType('Value', list[int] | str)
+@pytest.mark.parametrize('alias_kind', ['plain', 'annotated'])
+def test_optional_annotated_named_union_type_alias(env, alias_kind, raw_value, expected):
+    if alias_kind == 'plain':
+        Value = TypeAliasType('Value', list[int] | str)
+    else:
+        Value = TypeAliasType('Value', Annotated[list[int] | str, MinLen(1)])
 
     class Settings(BaseSettings):
         value: Annotated[Value, MinLen(1)] | None
@@ -847,11 +851,12 @@ def test_optional_annotated_named_union_type_alias(env, raw_value, expected):
     assert Settings().value == expected
 
 
-def test_optional_named_union_type_alias_json_validation(env):
+@pytest.mark.parametrize('annotated', [False, True])
+def test_optional_named_union_type_alias_json_validation(env, annotated):
     Value = TypeAliasType('Value', Json[list[int] | str])
 
     class Settings(BaseSettings):
-        value: Value | None
+        value: (Annotated[Value, MinLen(1)] if annotated else Value) | None
 
     env.set('value', '[1, 2]')
     assert Settings().value == [1, 2]
