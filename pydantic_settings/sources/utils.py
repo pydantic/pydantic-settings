@@ -210,21 +210,31 @@ def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:
     ) or is_dataclass(annotation)
 
 
-def _union_is_complex(annotation: type[Any] | None, metadata: list[Any], init_state: InitState | None = None) -> bool:
+def _union_is_complex(
+    annotation: type[Any] | None,
+    metadata: list[Any],
+    init_state: InitState | None = None,
+    _seen: tuple[Any, ...] = (),
+) -> bool:
     """Check if a union type contains any complex types."""
     for arg in get_args(annotation):
+        if arg in _seen:
+            continue
+        # Track the original member: resolving a generic alias rebuilds its union,
+        # but aliases with the same origin and arguments still compare equal.
+        seen = (*_seen, arg)
+        arg = _resolve_type_alias(arg)
         if _annotation_is_complex(arg, metadata, init_state):
             return True
-        # _annotation_is_complex doesn't handle bare Union types, so when an arg
-        # is Annotated[Union[X, Y], ...], stripping Annotated yields a bare Union
-        # that _annotation_is_complex can't evaluate.  Recurse into it, but only
+        # _annotation_is_complex doesn't handle bare Union types, including those
+        # exposed by a type alias or Annotated[Union[X, Y], ...]. Recurse, but only
         # if the Annotated metadata doesn't suppress complexity (e.g. Json).
         inner = _strip_annotated(arg)
         if inner is not arg:
             _, *inner_meta = get_args(arg)
             if any(isinstance(md, Json) for md in inner_meta):  # type: ignore[misc]
                 continue
-        if is_union_origin(get_origin(inner)) and _union_is_complex(inner, metadata, init_state):
+        if is_union_origin(get_origin(inner)) and _union_is_complex(inner, metadata, init_state, seen):
             return True
     return False
 

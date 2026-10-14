@@ -17,6 +17,7 @@ from pydantic_settings.sources.utils import (
     _get_union_members,
     _resolve_type_alias,
     _substitute_typevars,
+    _union_is_complex,
     _validate_by_name_enabled,
 )
 from pydantic_settings.utils import path_type_label
@@ -231,6 +232,29 @@ def test_get_field_annotation_and_metadata():
         assert field.metadata == [outer_metadata]
 
     assert _get_field_annotation_and_metadata(FieldInfo(annotation=int)) == (int, [])
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason='PEP 695 syntax requires Python 3.12+')
+@pytest.mark.parametrize('generic', [False, True])
+@pytest.mark.parametrize('member, expected', [('int', False), ('list[int]', True)])
+def test_union_is_complex_recursive_type_alias(generic, member, expected):
+    namespace = {}
+    if generic:
+        exec(f'type Recursive[T] = Recursive[T] | {member.replace("int", "T")}', namespace)
+        annotation = namespace['Recursive'][int]
+    else:
+        exec(f'type Recursive = Recursive | {member}', namespace)
+        annotation = namespace['Recursive']
+
+    assert _union_is_complex(annotation | None, []) is expected
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason='PEP 695 syntax requires Python 3.12+')
+def test_union_is_complex_recursive_alias_distinct_parameters():
+    namespace = {}
+    exec('type Recursive[T, U] = Recursive[U, T] | T', namespace)
+
+    assert _union_is_complex(namespace['Recursive'][int, list[int]] | None, []) is True
 
 
 @pytest.mark.parametrize(
