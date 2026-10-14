@@ -49,6 +49,23 @@ def test_toml_table_header_missing_from_home_file(tmp_path, monkeypatch):
         TomlConfigSettingsSource(BaseSettings, toml_file='~/config.toml', toml_table_header=('app',))
 
 
+@pytest.mark.parametrize('home_path', [False, True])
+@pytest.mark.parametrize('multiple_files', [False, True])
+def test_toml_table_header_ignores_directories(tmp_path, monkeypatch, home_path, multiple_files):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    monkeypatch.setenv('USERPROFILE', str(tmp_path))
+    (tmp_path / 'config.toml').mkdir()
+    path = '~/config.toml' if home_path else tmp_path / 'config.toml'
+    paths = [path, tmp_path / 'missing.toml'] if multiple_files else path
+
+    class Settings(BaseSettings):
+        foobar: str = 'default'
+
+    source = TomlConfigSettingsSource(Settings, toml_file=paths, toml_table_header=('app',))
+    assert source() == {}
+    assert Settings.model_validate(source()).foobar == 'default'
+
+
 def test_toml_file(tmp_path):
     p = tmp_path / '.env'
     p.write_text(
