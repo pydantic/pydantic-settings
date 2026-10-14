@@ -149,7 +149,7 @@ def test_cli_validation_alias_differs_from_alias():
 
     assert CliApp.run(Settings, cli_args=['--DATABASE_URL', 'postgres://prod']).database_url == 'postgres://prod'
     # Pydantic doesn't validate input by `alias` when `validation_alias` is set, so it isn't a CLI flag either
-    with pytest.raises(SettingsError, match='error parsing CLI: unrecognized arguments: --dbalias postgres://prod'):
+    with pytest.raises(SettingsError, match='error parsing CLI: unrecognized arguments: --dbAlias postgres://prod'):
         CliApp.run(Settings, cli_args=['--dbAlias', 'postgres://prod'])
     assert '--dbalias' not in CliApp.format_help(Settings).lower()
     args = CliApp.serialize(Settings(DATABASE_URL='postgres://prod'))
@@ -574,6 +574,35 @@ def test_cli_case_insensitive_preserves_non_option_args():
 
     cfg = CliApp.run(WithSubCommand, cli_args=['sub', '--PORT', '1'])
     assert cfg.sub.port == 1
+
+
+def test_cli_case_insensitive_short_option_with_attached_value():
+    class Settings(BaseSettings, cli_exit_on_error=False, cli_implicit_flags=True, cli_ignore_unknown_args=True):
+        name: str = Field('x', validation_alias=AliasChoices('n', 'name'))
+        verbose: bool = Field(False, validation_alias=AliasChoices('v', 'verbose'))
+        quiet: bool = Field(False, validation_alias=AliasChoices('q', 'quiet'))
+        extra: CliUnknownArgs
+
+    assert CliApp.run(Settings, cli_args=['-NBob']).name == 'Bob'
+    assert CliApp.run(Settings, cli_args=['-nBob']).name == 'Bob'
+    assert CliApp.run(Settings, cli_args=['-VNBob']).model_dump() == {
+        'name': 'Bob',
+        'verbose': True,
+        'quiet': False,
+        'extra': [],
+    }
+    assert CliApp.run(Settings, cli_args=['-VQ']).model_dump() == {
+        'name': 'x',
+        'verbose': True,
+        'quiet': True,
+        'extra': [],
+    }
+    assert CliApp.run(Settings, cli_args=['-NBob', '-Xmx4G']).model_dump() == {
+        'name': 'Bob',
+        'verbose': False,
+        'quiet': False,
+        'extra': ['-Xmx4G'],
+    }
 
 
 @pytest.mark.parametrize('case_sensitive', [True, False])

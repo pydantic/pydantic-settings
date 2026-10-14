@@ -10,6 +10,7 @@ import sys
 import typing
 from argparse import (
     SUPPRESS,
+    Action,
     ArgumentParser,
     BooleanOptionalAction,
     Namespace,
@@ -954,7 +955,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 args: list[str] | tuple[str, ...] | None = None,
                 namespace: Namespace | None = None,
             ) -> Any:
-                option_strings = self._get_option_strings(root_parser)
+                option_actions = self._get_option_string_actions(root_parser)
                 insensitive_args = []
                 split_args = shlex.split(shlex.join(args)) if args else []
                 for index, arg in enumerate(split_args):
@@ -964,9 +965,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         break
                     flag_prefix = rf'\{self.cli_flag_prefix_char}{{1,2}}'
                     matched = re.match(rf'^({flag_prefix}[^\s=]+)(.*)', arg)
-                    # only lowercase registered options so unknown args keep their case
-                    if matched and matched.group(1).lower() in option_strings:
-                        arg = matched.group(1).lower() + matched.group(2)
+                    if matched:
+                        # only lowercase registered options so unknown args keep their case
+                        if matched.group(1).lower() in option_actions:
+                            arg = matched.group(1).lower() + matched.group(2)
+                        else:
+                            arg = self._lower_short_options(arg, option_actions)
                     insensitive_args.append(arg)
                 return parser_method(root_parser, insensitive_args, namespace)
 
@@ -983,13 +987,29 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
         return parser_method
 
-    def _get_option_strings(self, parser: ArgumentParser) -> set[str]:
-        option_strings = set(parser._option_string_actions)
+    def _get_option_string_actions(self, parser: ArgumentParser) -> dict[str, Action]:
+        option_actions = dict(parser._option_string_actions)
         for action in parser._actions:
             if isinstance(action, _SubParsersAction):
                 for sub_parser in action.choices.values():
-                    option_strings |= self._get_option_strings(sub_parser)
-        return option_strings
+                    option_actions.update(self._get_option_string_actions(sub_parser))
+        return option_actions
+
+    def _lower_short_options(self, arg: str, option_actions: dict[str, Action]) -> str:
+        """Lowercase the short options in a token like `-P80` or `-VP80`, keeping an attached value as typed."""
+        prefix = self.cli_flag_prefix_char
+        if arg.startswith(prefix * 2):
+            return arg
+        for index in range(1, len(arg)):
+            action = option_actions.get(prefix + arg[index].lower())
+            if action is None:
+                # not a registered short option, keep the token as typed
+                return arg
+            if action.nargs != 0:
+                # argparse reads the rest of the token as the option value
+                return prefix + arg[1 : index + 1].lower() + arg[index + 1 :]
+        # only flags that take no value, e.g. `-VQ`
+        return arg.lower()
 
     def _connect_group_method(self, add_argument_group_method: Callable[..., Any] | None) -> Callable[..., Any]:
         add_argument_group = self._connect_parser_method(add_argument_group_method, 'add_argument_group_method')
