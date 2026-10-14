@@ -142,6 +142,13 @@ def test_cli_validation_alias_with_cli_prefix():
     assert CliApp.run(Settings, cli_args=['--p.foo', 'bar']).foobar == 'bar'
 
 
+def test_cli_validation_alias_differs_from_alias():
+    class Settings(BaseSettings, cli_exit_on_error=False):
+        database_url: str = Field('sqlite://', alias='dbAlias', validation_alias='DATABASE_URL')
+
+    assert CliApp.run(Settings, cli_args=['--DATABASE_URL', 'postgres://prod']).database_url == 'postgres://prod'
+
+
 @pytest.mark.parametrize(
     'alias_generator',
     [

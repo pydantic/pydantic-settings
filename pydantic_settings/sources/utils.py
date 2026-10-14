@@ -367,7 +367,7 @@ def _get_alias_names(
         is_alias_path_only = False
     else:
         new_alias_paths: list[AliasPath] = []
-        for alias in (field_info.alias, field_info.validation_alias):
+        for alias in (field_info.validation_alias, field_info.alias):
             if alias is None:
                 continue
             if isinstance(alias, str):
