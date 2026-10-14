@@ -3539,6 +3539,26 @@ def test_cli_mapping_or_sequence_union_type_alias(args, expected):
     assert CliApp.run(Settings, cli_args=args).value == expected
 
 
+@pytest.mark.skipif(sys.version_info < (3, 12), reason='requires python 3.12 or higher')
+@pytest.mark.parametrize(
+    'args,expected',
+    [
+        (['--value', '1', '--value', '2'], [1, 2]),
+        (['--value', '{"one": {}}', '--value', '{"two": {"three": {}}}'], {'one': {}, 'two': {'three': {}}}),
+    ],
+    ids=['list', 'dict'],
+)
+def test_cli_recursive_mapping_or_sequence_union_type_alias(args, expected):
+    namespace = {}
+    exec('type Value = dict[str, Value] | list[int]', namespace)
+    Value = namespace['Value']
+
+    class Settings(BaseSettings):
+        value: Value
+
+    assert CliApp.run(Settings, cli_args=args).value == expected
+
+
 def test_cli_scalar_type_alias():
     Value = typing_extensions.TypeAliasType('Value', str)
 

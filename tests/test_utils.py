@@ -173,6 +173,16 @@ def test_get_union_members():
     assert _get_union_members(Annotated[Values, 'metadata'] | str) == (dict[str, int], list[int], str)
 
 
+@pytest.mark.skipif(sys.version_info < (3, 12), reason='requires python 3.12 or higher')
+def test_get_union_members_recursive_alias():
+    """Only union members are flattened, so an alias recursing through a container terminates."""
+    namespace = {}
+    exec('type Recursive = dict[str, Recursive] | list[int]', namespace)
+    Recursive = namespace['Recursive']
+
+    assert _get_union_members(Recursive | None) == (dict[str, Recursive], list[int], type(None))
+
+
 def test_unwrap_optional_annotation():
     """`T | None` unwraps to `T`, regardless of where `None` sits in the union."""
     assert _unwrap_optional_annotation(int | None) is int
