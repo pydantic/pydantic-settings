@@ -551,6 +551,31 @@ def test_cli_case_insensitive_arg():
         CliSettingsSource(Cfg, root_parser=CliDummyParser(), case_sensitive=False)
 
 
+def test_cli_case_insensitive_preserves_non_option_args():
+    class Positional(BaseSettings, cli_exit_on_error=False):
+        name: str = 'x'
+        files: CliPositionalArg[list[str]]
+
+    cfg = CliApp.run(Positional, cli_args=['--NAME', 'Bob', '--', '-Report.PDF', '--KEEP=Case'])
+    assert cfg.model_dump() == {'name': 'Bob', 'files': ['-Report.PDF', '--KEEP=Case']}
+
+    class Passthrough(BaseSettings, cli_exit_on_error=False, cli_ignore_unknown_args=True):
+        name: str = 'x'
+        extra: CliUnknownArgs
+
+    cfg = CliApp.run(Passthrough, cli_args=['--NAME', 'Bob', '-Xmx4G', '--Dfoo=Bar'])
+    assert cfg.model_dump() == {'name': 'Bob', 'extra': ['-Xmx4G', '--Dfoo=Bar']}
+
+    class Sub(BaseModel):
+        port: int = 0
+
+    class WithSubCommand(BaseSettings, cli_exit_on_error=False):
+        sub: CliSubCommand[Sub]
+
+    cfg = CliApp.run(WithSubCommand, cli_args=['sub', '--PORT', '1'])
+    assert cfg.sub.port == 1
+
+
 @pytest.mark.parametrize('case_sensitive', [True, False])
 @pytest.mark.parametrize('alias', [None, 'Serve'])
 def test_cli_subcommand_preserves_case(case_sensitive, alias):

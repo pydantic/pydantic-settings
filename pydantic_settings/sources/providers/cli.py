@@ -954,11 +954,18 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 args: list[str] | tuple[str, ...] | None = None,
                 namespace: Namespace | None = None,
             ) -> Any:
+                option_strings = self._get_option_strings(root_parser)
                 insensitive_args = []
-                for arg in shlex.split(shlex.join(args)) if args else []:
+                split_args = shlex.split(shlex.join(args)) if args else []
+                for index, arg in enumerate(split_args):
+                    if arg == '--':
+                        # everything after '--' is a positional value, not an option
+                        insensitive_args.extend(split_args[index:])
+                        break
                     flag_prefix = rf'\{self.cli_flag_prefix_char}{{1,2}}'
                     matched = re.match(rf'^({flag_prefix}[^\s=]+)(.*)', arg)
-                    if matched:
+                    # only lowercase registered options so unknown args keep their case
+                    if matched and matched.group(1).lower() in option_strings:
                         arg = matched.group(1).lower() + matched.group(2)
                     insensitive_args.append(arg)
                 return parser_method(root_parser, insensitive_args, namespace)
@@ -975,6 +982,14 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             return none_parser_method
 
         return parser_method
+
+    def _get_option_strings(self, parser: ArgumentParser) -> set[str]:
+        option_strings = set(parser._option_string_actions)
+        for action in parser._actions:
+            if isinstance(action, _SubParsersAction):
+                for sub_parser in action.choices.values():
+                    option_strings |= self._get_option_strings(sub_parser)
+        return option_strings
 
     def _connect_group_method(self, add_argument_group_method: Callable[..., Any] | None) -> Callable[..., Any]:
         add_argument_group = self._connect_parser_method(add_argument_group_method, 'add_argument_group_method')
