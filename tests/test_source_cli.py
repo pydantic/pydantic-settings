@@ -26,6 +26,7 @@ from pydantic import (
     Discriminator,
     Field,
     GetCoreSchemaHandler,
+    IPvAnyAddress,
     RootModel,
     SecretStr,
     Tag,
@@ -3478,6 +3479,103 @@ type TypeAliasInt = int
 assert CliSettingsSource(SimpleSettings)._metavar_format(TypeAliasInt) == 'TypeAliasInt'
 """
     )
+
+
+@pytest.mark.parametrize('use_alias', [False, True], ids=['plain', 'alias'])
+@pytest.mark.parametrize(
+    'annotation,args,expected',
+    [
+        (list[str], ['one', 'two'], ['one', 'two']),
+        (set[str], ['one', 'two'], {'one', 'two'}),
+        (tuple[str, ...], ['one', 'two'], ('one', 'two')),
+        (dict[str, int], ['one=1', 'two=2'], {'one': 1, 'two': 2}),
+        (Annotated[list[str], Field(min_length=2)], ['one', 'two'], ['one', 'two']),
+    ],
+    ids=['list', 'set', 'tuple', 'dict', 'annotated-list'],
+)
+def test_cli_collection_type_alias(use_alias, annotation, args, expected):
+    value_type = typing_extensions.TypeAliasType('Value', annotation) if use_alias else annotation
+
+    class Settings(BaseSettings):
+        value: value_type
+
+    cli_args = [arg for value in args for arg in ('--value', value)]
+    assert CliApp.run(Settings, cli_args=cli_args).value == expected
+
+
+def test_cli_generic_collection_type_alias():
+    Values = typing_extensions.TypeAliasType('Values', list[T], type_params=(T,))
+
+    class Settings(BaseSettings):
+        value: Values[int]
+
+    assert CliApp.run(Settings, cli_args=['--value', '1', '--value', '2']).value == [1, 2]
+
+
+def test_cli_nested_collection_type_alias():
+    Values = typing_extensions.TypeAliasType('Values', typing_extensions.TypeAliasType('Inner', list[int]))
+
+    class Settings(BaseSettings):
+        value: Values
+
+    assert CliApp.run(Settings, cli_args=['--value', '1', '--value', '2']).value == [1, 2]
+
+
+@pytest.mark.parametrize(
+    'args,expected',
+    [
+        (['--value', '1', '--value', '2'], [1, 2]),
+        (['--value', 'one=1', '--value', 'two=2'], {'one': 1, 'two': 2}),
+        (['--value', '[1,2]'], [1, 2]),
+    ],
+    ids=['list', 'dict', 'json-list'],
+)
+def test_cli_mapping_or_sequence_union_type_alias(args, expected):
+    Value = typing_extensions.TypeAliasType('Value', dict[str, int] | list[int])
+
+    class Settings(BaseSettings):
+        value: Value
+
+    assert CliApp.run(Settings, cli_args=args).value == expected
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason='requires python 3.12 or higher')
+@pytest.mark.parametrize(
+    'args,expected',
+    [
+        (['--value', '1', '--value', '2'], [1, 2]),
+        (['--value', '{"one": {}}', '--value', '{"two": {"three": {}}}'], {'one': {}, 'two': {'three': {}}}),
+    ],
+    ids=['list', 'dict'],
+)
+def test_cli_recursive_mapping_or_sequence_union_type_alias(args, expected):
+    namespace = {}
+    exec('type Value = dict[str, Value] | list[int]', namespace)
+    Value = namespace['Value']
+
+    class Settings(BaseSettings):
+        value: Value
+
+    assert CliApp.run(Settings, cli_args=args).value == expected
+
+
+def test_cli_scalar_type_alias():
+    Value = typing_extensions.TypeAliasType('Value', str)
+
+    class Settings(BaseSettings):
+        value: Value
+
+    assert CliApp.run(Settings, cli_args=['--value', 'one', '--value', 'two']).value == 'two'
+
+
+def test_cli_type_alias_ip_addresses():
+    IPAddresses = typing_extensions.TypeAliasType('IPAddresses', list[IPvAnyAddress])
+
+    class Settings(BaseModel):
+        addresses: IPAddresses = Field(default_factory=list)
+
+    settings = CliApp.run(Settings, cli_args=['--addresses', '1.2.3.4', '--addresses', '::1'])
+    assert [str(address) for address in settings.addresses] == ['1.2.3.4', '::1']
 
 
 def test_cli_app():
