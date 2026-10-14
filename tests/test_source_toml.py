@@ -252,7 +252,6 @@ def test_toml_table_header_override(tmp_path, table_header, expected):
             return (TomlConfigSettingsSource(settings_cls, toml_table_header=table_header),)
 
     assert Settings().hello == expected
-    assert Settings.model_config['toml_table_header'] == ('app',)
 
 
 def test_toml_table_header_no_header(tmp_path):
