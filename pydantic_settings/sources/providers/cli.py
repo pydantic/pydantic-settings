@@ -95,6 +95,21 @@ class _CliInternalArgParser(ArgumentParser):
         super().error(message)
 
 
+# argparse reads args like `-1` or `-.5` as values, not options
+_NEGATIVE_NUMBER = re.compile(r'^-\d+$|^-\d*\.\d+$')
+
+
+def _count_option_values(action: Action | None) -> int | None:
+    """Count the args that `action` takes as values, `None` for any number."""
+    if action is None:
+        return 0
+    if action.nargs is None or action.nargs == '?':
+        return 1
+    if isinstance(action.nargs, int):
+        return action.nargs
+    return None
+
+
 class CliMutuallyExclusiveGroup(BaseModel):
     pass
 
@@ -955,23 +970,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 args: list[str] | tuple[str, ...] | None = None,
                 namespace: Namespace | None = None,
             ) -> Any:
-                option_actions = self._get_option_string_actions(root_parser)
-                insensitive_args = []
                 split_args = shlex.split(shlex.join(args)) if args else []
-                for index, arg in enumerate(split_args):
-                    if arg == '--':
-                        # everything after '--' is a positional value, not an option
-                        insensitive_args.extend(split_args[index:])
-                        break
-                    flag_prefix = rf'\{self.cli_flag_prefix_char}{{1,2}}'
-                    matched = re.match(rf'^({flag_prefix}[^\s=]+)(.*)', arg)
-                    if matched:
-                        # only lowercase registered options so unknown args keep their case
-                        if matched.group(1).lower() in option_actions:
-                            arg = matched.group(1).lower() + matched.group(2)
-                        else:
-                            arg = self._lower_short_options(arg, option_actions)
-                    insensitive_args.append(arg)
+                insensitive_args = self._lower_option_names(root_parser, split_args)
                 return parser_method(root_parser, insensitive_args, namespace)
 
             return parse_args_insensitive_method
@@ -987,29 +987,62 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
         return parser_method
 
-    def _get_option_string_actions(self, parser: ArgumentParser) -> dict[str, Action]:
-        option_actions = dict(parser._option_string_actions)
-        for action in parser._actions:
-            if isinstance(action, _SubParsersAction):
-                for sub_parser in action.choices.values():
-                    option_actions.update(self._get_option_string_actions(sub_parser))
-        return option_actions
+    def _lower_option_names(self, parser: ArgumentParser, args: list[str]) -> list[str]:
+        """Lowercase the options in `args` that `parser` registers, keeping every other arg as typed.
 
-    def _lower_short_options(self, arg: str, option_actions: dict[str, Action]) -> str:
-        """Lowercase the short options in a token like `-P80` or `-VP80`, keeping an attached value as typed."""
+        Args after a subcommand name are matched against that subcommand's parser only.
+        """
+        subparsers = {
+            name: subparser
+            for action in parser._actions
+            if isinstance(action, _SubParsersAction)
+            for name, subparser in action.choices.items()
+        }
+        flag_prefix = rf'\{self.cli_flag_prefix_char}{{1,2}}'
+        lowered: list[str] = []
+        # how many of the next args are values of the last option, `None` for any number
+        values_left: int | None = 0
+        for index, arg in enumerate(args):
+            if arg == '--':
+                # everything after '--' is a positional value, not an option
+                return lowered + args[index:]
+            matched = re.match(rf'^({flag_prefix}[^\s=]+)(.*)', arg)
+            if not matched or _NEGATIVE_NUMBER.match(arg):
+                if values_left != 0:
+                    if values_left is not None:
+                        values_left -= 1
+                elif arg in subparsers:
+                    return lowered + [arg] + self._lower_option_names(subparsers[arg], args[index + 1 :])
+                lowered.append(arg)
+                continue
+            arg, action = self._lower_option(matched.group(1), matched.group(2), parser._option_string_actions)
+            values_left = _count_option_values(action)
+            lowered.append(arg)
+        return lowered
+
+    def _lower_option(self, flag: str, rest: str, option_actions: Mapping[str, Action]) -> tuple[str, Action | None]:
+        """Lowercase a registered option, or the short options in a token like `-P80` or `-VP80`.
+
+        Returns the arg and, when its value isn't attached, the action that takes the following args as values.
+        """
+        if flag.lower() in option_actions:
+            return flag.lower() + rest, None if rest else option_actions[flag.lower()]
         prefix = self.cli_flag_prefix_char
+        arg = flag + rest
         if arg.startswith(prefix * 2):
-            return arg
+            # not a registered option, keep the arg as typed
+            return arg, None
         for index in range(1, len(arg)):
             action = option_actions.get(prefix + arg[index].lower())
             if action is None:
-                # not a registered short option, keep the token as typed
-                return arg
+                # not a registered short option, keep the arg as typed
+                return arg, None
             if action.nargs != 0:
-                # argparse reads the rest of the token as the option value
-                return prefix + arg[1 : index + 1].lower() + arg[index + 1 :]
+                # argparse reads the rest of the arg as the option value
+                value = arg[index + 1 :]
+                return prefix + arg[1 : index + 1].lower() + value, None if value else action
         # only flags that take no value, e.g. `-VQ`
-        return arg.lower()
+        return arg.lower(), None
 
     def _connect_group_method(self, add_argument_group_method: Callable[..., Any] | None) -> Callable[..., Any]:
         add_argument_group = self._connect_parser_method(add_argument_group_method, 'add_argument_group_method')

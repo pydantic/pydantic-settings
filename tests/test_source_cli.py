@@ -605,6 +605,37 @@ def test_cli_case_insensitive_short_option_with_attached_value():
     }
 
 
+def test_cli_case_insensitive_options_scoped_to_subcommand():
+    class Serve(BaseModel):
+        port: int = 0
+        name: str = Field('x', validation_alias=AliasChoices('n', 'name'))
+        extra: CliUnknownArgs
+
+    class Check(BaseModel):
+        name: bool = Field(False, validation_alias=AliasChoices('n', 'name'))
+        verbose: bool = Field(False, validation_alias=AliasChoices('v', 'verbose'))
+
+    class Settings(BaseSettings, cli_exit_on_error=False, cli_implicit_flags=True, cli_ignore_unknown_args=True):
+        tag: str = 'x'
+        extra: CliUnknownArgs
+        serve: CliSubCommand[Serve]
+        check: CliSubCommand[Check]
+
+    # `--port` is only a `serve` option, so it isn't lowercased before the subcommand
+    cfg = CliApp.run(Settings, cli_args=['--PORT=MiX', 'serve', '--PORT', '1'])
+    assert cfg.extra == ['--PORT=MiX']
+    assert cfg.serve.port == 1
+
+    # `-n` takes a value in `serve` and is a flag in `check`
+    assert CliApp.run(Settings, cli_args=['serve', '-NBob']).serve.name == 'Bob'
+    assert CliApp.run(Settings, cli_args=['check', '-NV']).check.model_dump() == {'name': True, 'verbose': True}
+
+    # a value that matches a subcommand name doesn't select the subcommand
+    cfg = CliApp.run(Settings, cli_args=['--TAG', 'serve', 'check', '-N'])
+    assert cfg.tag == 'serve'
+    assert cfg.check.name is True
+
+
 @pytest.mark.parametrize('case_sensitive', [True, False])
 @pytest.mark.parametrize('alias', [None, 'Serve'])
 def test_cli_subcommand_preserves_case(case_sensitive, alias):
