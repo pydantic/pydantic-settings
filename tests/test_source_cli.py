@@ -149,7 +149,7 @@ def test_cli_validation_alias_differs_from_alias():
 
     assert CliApp.run(Settings, cli_args=['--DATABASE_URL', 'postgres://prod']).database_url == 'postgres://prod'
     # Pydantic doesn't validate input by `alias` when `validation_alias` is set, so it isn't a CLI flag either
-    with pytest.raises(SettingsError, match='error parsing CLI: unrecognized arguments: --dbalias postgres://prod'):
+    with pytest.raises(SettingsError, match='error parsing CLI: unrecognized arguments: --dbAlias postgres://prod'):
         CliApp.run(Settings, cli_args=['--dbAlias', 'postgres://prod'])
     assert '--dbalias' not in CliApp.format_help(Settings).lower()
     args = CliApp.serialize(Settings(DATABASE_URL='postgres://prod'))
@@ -549,6 +549,91 @@ def test_cli_case_insensitive_arg():
 
     with pytest.raises(SettingsError, match='Case-insensitive matching is only supported on the internal root parser'):
         CliSettingsSource(Cfg, root_parser=CliDummyParser(), case_sensitive=False)
+
+
+def test_cli_case_insensitive_preserves_non_option_args():
+    class Positional(BaseSettings, cli_exit_on_error=False):
+        name: str = 'x'
+        files: CliPositionalArg[list[str]]
+
+    cfg = CliApp.run(Positional, cli_args=['--NAME', 'Bob', '--', '-Report.PDF', '--KEEP=Case'])
+    assert cfg.model_dump() == {'name': 'Bob', 'files': ['-Report.PDF', '--KEEP=Case']}
+
+    class Passthrough(BaseSettings, cli_exit_on_error=False, cli_ignore_unknown_args=True):
+        name: str = 'x'
+        extra: CliUnknownArgs
+
+    cfg = CliApp.run(Passthrough, cli_args=['--NAME', 'Bob', '-Xmx4G', '--Dfoo=Bar'])
+    assert cfg.model_dump() == {'name': 'Bob', 'extra': ['-Xmx4G', '--Dfoo=Bar']}
+
+    class Sub(BaseModel):
+        port: int = 0
+
+    class WithSubCommand(BaseSettings, cli_exit_on_error=False):
+        sub: CliSubCommand[Sub]
+
+    cfg = CliApp.run(WithSubCommand, cli_args=['sub', '--PORT', '1'])
+    assert cfg.sub.port == 1
+
+
+def test_cli_case_insensitive_short_option_with_attached_value():
+    class Settings(BaseSettings, cli_exit_on_error=False, cli_implicit_flags=True, cli_ignore_unknown_args=True):
+        name: str = Field('x', validation_alias=AliasChoices('n', 'name'))
+        verbose: bool = Field(False, validation_alias=AliasChoices('v', 'verbose'))
+        quiet: bool = Field(False, validation_alias=AliasChoices('q', 'quiet'))
+        extra: CliUnknownArgs
+
+    assert CliApp.run(Settings, cli_args=['-NBob']).name == 'Bob'
+    assert CliApp.run(Settings, cli_args=['-nBob']).name == 'Bob'
+    assert CliApp.run(Settings, cli_args=['-VNBob']).model_dump() == {
+        'name': 'Bob',
+        'verbose': True,
+        'quiet': False,
+        'extra': [],
+    }
+    assert CliApp.run(Settings, cli_args=['-VQ']).model_dump() == {
+        'name': 'x',
+        'verbose': True,
+        'quiet': True,
+        'extra': [],
+    }
+    assert CliApp.run(Settings, cli_args=['-NBob', '-Xmx4G']).model_dump() == {
+        'name': 'Bob',
+        'verbose': False,
+        'quiet': False,
+        'extra': ['-Xmx4G'],
+    }
+
+
+def test_cli_case_insensitive_options_scoped_to_subcommand():
+    class Serve(BaseModel):
+        port: int = 0
+        name: str = Field('x', validation_alias=AliasChoices('n', 'name'))
+        extra: CliUnknownArgs
+
+    class Check(BaseModel):
+        name: bool = Field(False, validation_alias=AliasChoices('n', 'name'))
+        verbose: bool = Field(False, validation_alias=AliasChoices('v', 'verbose'))
+
+    class Settings(BaseSettings, cli_exit_on_error=False, cli_implicit_flags=True, cli_ignore_unknown_args=True):
+        tag: str = 'x'
+        extra: CliUnknownArgs
+        serve: CliSubCommand[Serve]
+        check: CliSubCommand[Check]
+
+    # `--port` is only a `serve` option, so it isn't lowercased before the subcommand
+    cfg = CliApp.run(Settings, cli_args=['--PORT=MiX', 'serve', '--PORT', '1'])
+    assert cfg.extra == ['--PORT=MiX']
+    assert cfg.serve.port == 1
+
+    # `-n` takes a value in `serve` and is a flag in `check`
+    assert CliApp.run(Settings, cli_args=['serve', '-NBob']).serve.name == 'Bob'
+    assert CliApp.run(Settings, cli_args=['check', '-NV']).check.model_dump() == {'name': True, 'verbose': True}
+
+    # a value that matches a subcommand name doesn't select the subcommand
+    cfg = CliApp.run(Settings, cli_args=['--TAG', 'serve', 'check', '-N'])
+    assert cfg.tag == 'serve'
+    assert cfg.check.name is True
 
 
 @pytest.mark.parametrize('case_sensitive', [True, False])
