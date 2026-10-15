@@ -159,6 +159,11 @@ def _collect_sub_models(type_: Any, sub_models: list[type[BaseModel]]) -> None:
             _collect_sub_models(arg, sub_models)
 
 
+def _is_mapping_annotation(annotation: Any) -> bool:
+    """Check if any union member of an annotation is itself a Mapping, ignoring Mappings nested in collections."""
+    return any(_lenient_issubclass(get_origin(member) or member, Mapping) for member in _get_union_members(annotation))
+
+
 class _CliArg(BaseModel):
     model: Any
     parser: Any
@@ -745,7 +750,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         if merge_type is list or not any(
             type_
             for type_ in _get_union_members(merge_type)
-            if type_ is not type(None) and not _annotation_contains_types(type_, (Mapping,), is_subtype=True)
+            if type_ is not type(None) and not _is_mapping_annotation(type_)
         ):
             inferred_type = merge_type
         else:
@@ -1375,7 +1380,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 kwargs['nargs'] = '+' if kwargs.get('required') else '*'
             else:
                 kwargs['action'] = 'append'
-            if _annotation_contains_types(field_info.annotation, (Mapping,), is_strip_annotated=True, is_subtype=True):
+            if _is_mapping_annotation(field_info.annotation):
                 self._cli_dict_args[kwargs['dest']] = field_info.annotation
 
     def _convert_bool_flag(self, kwargs: dict[str, Any], field_info: FieldInfo, model_default: Any) -> None:
