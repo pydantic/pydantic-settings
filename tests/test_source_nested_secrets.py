@@ -175,6 +175,37 @@ def test_nested_secrets_directory_wrapper_and_runtime_precedence(tmp_path, expli
     assert settings.value == ('wrapper' if explicit_wrapper else 'runtime' if runtime_override else 'config')
 
 
+def test_secrets_dir_as_non_path_pathlike(env, tmp_files):
+    class SecretsDir:
+        """An `os.PathLike` that is neither a `Path` nor iterable."""
+
+        def __init__(self, path: Path) -> None:
+            self._path = path
+
+        def __fspath__(self) -> str:
+            return str(self._path)
+
+    env.set('DB__USER', 'user')
+    tmp_files.write(
+        {
+            'app_key': 'secret1',
+            'db__passwd': 'secret2',
+        }
+    )
+
+    class Settings(AppSettings):
+        model_config = SettingsConfigDict(
+            env_nested_delimiter='__',
+            secrets_dir=SecretsDir(tmp_files.basedir),
+            secrets_nested_delimiter='__',
+        )
+
+    assert Settings().model_dump() == {
+        'app_key': 'secret1',
+        'db': {'user': 'user', 'passwd': 'secret2'},
+    }
+
+
 @pytest.mark.parametrize(
     'conf,secrets',
     (
