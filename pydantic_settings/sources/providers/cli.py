@@ -1813,11 +1813,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 if not positionals_first
                 else serialized_args['positional'] + serialized_args['optional']
             )
-            + serialized_args['subcommand']
-            # Unknown args are emitted last, regardless of positionals_first. They are replayed verbatim and may
-            # contain an end-of-options marker ('--') or an unknown option, either of which would capture known args
-            # that follow it.
+            # Unknown args are emitted after this level's known args, regardless of positionals_first. They are
+            # replayed verbatim and may contain an end-of-options marker ('--') or an unknown option, either of which
+            # would capture known args that follow it. They precede the subcommand so that this level's parser
+            # captures them again rather than the subcommand's.
             + serialized_args['unknown']
+            + serialized_args['subcommand']
         )
 
     def _serialized_args(
@@ -1854,10 +1855,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     positionals_first=positionals_first,
                     _is_submodel=True,
                 )
-                # Hoist the subcommand's unknown args into this model's trailing segment so that all unknown args,
-                # at any depth, stay at the very end of the serialized output.
-                unknown_args += sub_args['unknown']
-                sub_args['unknown'] = []
                 subcommand_args += self._flatten_serialized_args(sub_args, positionals_first)
                 continue
             if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
