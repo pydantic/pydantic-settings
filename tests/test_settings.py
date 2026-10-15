@@ -885,6 +885,39 @@ def test_optional_recursive_union_type_alias(env, raw_value, expected):
     assert Settings().value == expected
 
 
+def test_nested_env_under_type_alias_field(env):
+    class Sub(BaseModel):
+        x: list[int] = []
+
+    class Settings(BaseSettings):
+        m: TypeAliasType('MaybeSub', Sub | None) = None
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set('m__x', '[1,2]')
+    assert Settings().m == Sub(x=[1, 2])
+
+
+def test_case_insensitive_nested_type_alias_sub_model(env):
+    class Sub(BaseModel):
+        Val: int = 0
+
+    SubAlias = TypeAliasType('SubAlias', Sub)
+
+    class Outer(BaseModel):
+        i: SubAlias = Sub()
+
+    class Settings(BaseSettings):
+        m: SubAlias = Sub()
+        o: Outer = Outer()
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set('M__VAL', '5')
+    env.set('O__I__VAL', '5')
+    s = Settings()
+    assert s.m == Sub(Val=5)
+    assert s.o.i == Sub(Val=5)
+
+
 @pytest.mark.parametrize('annotation, raw_value, expected', [(Json[list[int]], '[1, 2]', [1, 2]), (Json[int], '5', 5)])
 @pytest.mark.parametrize('nested', [False, True])
 def test_inline_json_strict(env, annotation, raw_value, expected, nested):
