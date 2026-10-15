@@ -3606,8 +3606,26 @@ assert CliSettingsSource(SimpleSettings)._metavar_format(TypeAliasInt) == 'TypeA
         (tuple[str, ...], ['one', 'two'], ('one', 'two')),
         (dict[str, int], ['one=1', 'two=2'], {'one': 1, 'two': 2}),
         (Annotated[list[str], Field(min_length=2)], ['one', 'two'], ['one', 'two']),
+        (list[dict[str, int]], ['[{"a":1},{"b":2}]'], [{'a': 1}, {'b': 2}]),
+        (list[dict[str, int]], ['[{"a":1}]'], [{'a': 1}]),
+        (list[dict[str, int]], ['{"a":1}', '{"b":2}'], [{'a': 1}, {'b': 2}]),
+        (list[dict[str, int]] | None, ['[{"a":1},{"b":2}]'], [{'a': 1}, {'b': 2}]),
+        (tuple[dict[str, int], ...], ['{"a":1}', '{"b":2}'], ({'a': 1}, {'b': 2})),
+        (dict[str, int] | None, ['one=1', 'two=2'], {'one': 1, 'two': 2}),
     ],
-    ids=['list', 'set', 'tuple', 'dict', 'annotated-list'],
+    ids=[
+        'list',
+        'set',
+        'tuple',
+        'dict',
+        'annotated-list',
+        'list-of-dict-json',
+        'list-of-dict-json-single',
+        'list-of-dict-repeated',
+        'optional-list-of-dict',
+        'tuple-of-dict',
+        'optional-dict',
+    ],
 )
 def test_cli_collection_type_alias(use_alias, annotation, args, expected):
     value_type = typing_extensions.TypeAliasType('Value', annotation) if use_alias else annotation
