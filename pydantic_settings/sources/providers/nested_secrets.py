@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Literal, Optional
 from ...exceptions import SettingsError
 from ...utils import path_type_label
 from ..base import PydanticBaseSettingsSource
-from ..utils import InitState, parse_env_vars
+from ..utils import InitState, _as_list
 from .env import EnvSettingsSource
 from .secrets import SecretsSettingsSource
 
@@ -95,12 +95,7 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
             self.secrets_nested_delimiter = os.sep
 
         # ensure valid secrets_path
-        if self.secrets_dir is None:
-            paths = []
-        elif isinstance(self.secrets_dir, (Path, str)):
-            paths = [self.secrets_dir]
-        else:
-            paths = list(self.secrets_dir)
+        paths = [] if self.secrets_dir is None else _as_list(self.secrets_dir)
         self.secrets_paths: list[Path] = [Path(p).expanduser().resolve() for p in paths]
         for path in self.secrets_paths:
             self.validate_secrets_path(path)
@@ -131,14 +126,7 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
         # ``TOKEN`` could not displace an earlier ``token`` once names are case-folded.
         secrets: dict[str, str | None] = {}
         for path in self.secrets_paths:
-            secrets.update(
-                parse_env_vars(
-                    self.load_secrets(path),
-                    self.case_sensitive,
-                    self.env_ignore_empty,
-                    self.env_parse_none_str,
-                )
-            )
+            secrets.update(self._parse_env_vars(self.load_secrets(path)))
         return secrets
 
     def validate_secrets_path(self, path: Path) -> None:
