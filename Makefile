@@ -10,6 +10,12 @@ refresh-lockfiles:
 	@echo "Updating uv.lock file"
 	uv lock -U
 
+.PHONY: build-constraints
+build-constraints:
+	uv run --no-project python -c "import tomllib; print('\n'.join(tomllib.load(open('pyproject.toml', 'rb'))['build-system']['requires']))" \
+		| uv pip compile - --universal --python-version 3.11 --generate-hashes --upgrade \
+			--custom-compile-command 'make build-constraints' -o .github/build-constraints.txt
+
 .PHONY: format
 format:
 	uv run ruff check --fix $(sources)
