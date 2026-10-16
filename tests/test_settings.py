@@ -1584,6 +1584,30 @@ def test_nested_model_default_partial_update_with_nested_discriminated_union(val
     assert Settings(pet=value).pet == expected
 
 
+@pytest.mark.parametrize(
+    'nested_discriminator',
+    [Discriminator('color'), Field(discriminator='color'), Field(discriminator=Discriminator('color'))],
+    ids=['discriminator', 'field', 'field-with-discriminator'],
+)
+@pytest.mark.parametrize(
+    'value,expected',
+    [
+        pytest.param({'pet_type': 'cat', 'color': 'white'}, _WhiteCat(), id='nested-other-member'),
+        pytest.param({'black_name': 'x'}, _BlackCat(black_name='x'), id='same-member'),
+    ],
+)
+def test_nested_model_default_partial_update_with_nested_discriminator_forms(nested_discriminator, value, expected):
+    """Test that a nested discriminator is checked however it is declared."""
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(nested_model_default_partial_update=True)
+        pet: Annotated[_BlackCat | _WhiteCat, nested_discriminator] | _Dog = Field(
+            _BlackCat(black_name='custom'), discriminator='pet_type'
+        )
+
+    assert Settings(pet=value).pet == expected
+
+
 def test_nested_model_default_partial_update_nested_discriminator_without_outer_tag():
     """Test that dropping the default also drops the outer tag it provided.
 
