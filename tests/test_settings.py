@@ -1536,6 +1536,32 @@ def test_nested_model_default_partial_update_with_stdlib_dataclass_aliased_discr
     assert SettingsDefault(root_field={'type': 'submodel2'}).root_field == DefaultField2(kind='submodel2')
 
 
+def test_nested_model_default_partial_update_with_stdlib_dataclass_local_forward_ref():
+    """Test that a stdlib dataclass member with an unresolvable forward reference on another field still works.
+
+    The forward reference names a class defined in this function, which can't be resolved from the module.
+    """
+
+    class Local(BaseModel):
+        v: int = 0
+
+    @dataclasses.dataclass
+    class First:
+        kind: Annotated[Literal['first'], Field(validation_alias='type')] = 'first'
+        local: 'Local' = dataclasses.field(default_factory=Local)
+
+    @dataclasses.dataclass
+    class Second:
+        kind: Annotated[Literal['second'], Field(validation_alias='type')] = 'second'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(nested_model_default_partial_update=True)
+        root_field: First | Second = Field(First(local=Local(v=1)), discriminator='kind')
+
+    assert Settings().root_field == First(local=Local(v=1))
+    assert Settings(root_field={'type': 'second'}).root_field == Second()
+
+
 class _BlackCat(BaseModel):
     model_config = ConfigDict(extra='forbid')
     pet_type: Literal['cat'] = 'cat'
