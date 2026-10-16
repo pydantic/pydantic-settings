@@ -159,6 +159,33 @@ def _collect_sub_models(type_: Any, sub_models: list[type[BaseModel]]) -> None:
             _collect_sub_models(arg, sub_models)
 
 
+def _is_fixed_length_tuple(annotation: Any) -> bool:
+    """Check if an annotation, ignoring `Annotated` and `None`, is a fixed-length tuple or a `NamedTuple`."""
+    members = [member for member in _get_union_members(annotation) if member is not type(None)]
+    if len(members) != 1:
+        return False
+    args = get_args(members[0])
+    if get_origin(members[0]) is tuple:
+        return not (len(args) == 2 and args[1] is Ellipsis)
+    return members[0] is not tuple and _lenient_issubclass(members[0], tuple)
+
+
+def _is_append_field(field_info: FieldInfo) -> bool:
+    """Check if a field takes repeated values at the CLI.
+
+    A fixed-length tuple or `NamedTuple` positional takes a single value unless it is a `CliVariadicArg`.
+    """
+    if (
+        _CliPositionalArg in field_info.metadata
+        and _CliVariadicArg not in field_info.metadata
+        and _is_fixed_length_tuple(field_info.annotation)
+    ):
+        return False
+    return _annotation_contains_types(
+        field_info.annotation, (Sequence, AbstractSet, Mapping), is_strip_annotated=True, is_subtype=True
+    )
+
+
 def _is_mapping_annotation(annotation: Any) -> bool:
     """Check if any union member of an annotation is itself a Mapping, ignoring Mappings nested in collections."""
     return any(_lenient_issubclass(get_origin(member) or member, Mapping) for member in _get_union_members(annotation))
@@ -309,9 +336,7 @@ class _CliArg(BaseModel):
 
     @cached_property
     def is_append_action(self) -> bool:
-        return not self.subcommand_dest and _annotation_contains_types(
-            self.field_info.annotation, (Sequence, AbstractSet, Mapping), is_strip_annotated=True, is_subtype=True
-        )
+        return not self.subcommand_dest and _is_append_field(self.field_info)
 
     @cached_property
     def is_parser_submodel(self) -> bool:
@@ -932,10 +957,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 alias_names, *_ = _get_alias_names(field_name, field_info, validate_by_alias=validate_by_alias)
                 if len(alias_names) > 1:
                     raise SettingsError(f'positional argument {model.__name__}.{field_name} has multiple aliases')
-                is_append_action = _annotation_contains_types(
-                    field_info.annotation, (Sequence, AbstractSet, Mapping), is_strip_annotated=True, is_subtype=True
-                )
-                if not is_append_action:
+                if not _is_append_field(field_info):
                     positional_args.append((field_name, field_info))
                 else:
                     positional_variadic_arg.append((field_name, field_info))
