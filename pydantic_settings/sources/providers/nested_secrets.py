@@ -154,9 +154,11 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
         else:
             if not path.is_dir():
                 raise SettingsError(f'secrets_dir must reference a directory, not a {path_type_label(path)}')
-            secrets_dir_size = sum(f.stat().st_size for f in self._iter_secret_files(path))
-            if secrets_dir_size > self.secrets_dir_max_size:
-                raise SettingsError(f'secrets_dir size is above {self.secrets_dir_max_size} bytes')
+            secrets_dir_size = 0
+            for f in self._iter_secret_files(path):
+                secrets_dir_size += f.stat().st_size
+                if secrets_dir_size > self.secrets_dir_max_size:
+                    raise SettingsError(f'secrets_dir size is above {self.secrets_dir_max_size} bytes')
 
     @staticmethod
     def _iter_secret_files(path: Path) -> Iterator[Path]:
@@ -169,22 +171,21 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
           that resolve outside of it (e.g. through a symbolic link) are skipped, so
           they neither contribute to the ``secrets_dir_max_size`` accounting nor get
           loaded;
-        * each real directory is visited at most once, so cyclic or repeated
-          symlinks cannot make the walk loop and inflate the size accounting or the
-          number of loaded secrets.
+        * a symbolic link back to a directory on the current recursion path is not
+          followed, so cyclic symlinks cannot make the walk loop. A directory reached
+          through several links is walked once per link, which the
+          ``secrets_dir_max_size`` check bounds.
 
         Because the size check and the loader share this iterator, they always see
         the same set of files.
         """
-        seen_dirs: set[Path] = set()
+        ancestors: set[Path] = set()
 
         def walk(directory: Path) -> Iterator[Path]:
-            # Guard against symlink loops / a directory reachable through multiple
-            # links being traversed more than once.
             resolved_dir = directory.resolve()
-            if resolved_dir in seen_dirs:
+            if resolved_dir in ancestors:
                 return
-            seen_dirs.add(resolved_dir)
+            ancestors.add(resolved_dir)
             try:
                 entries = sorted(directory.iterdir())
             except OSError:
@@ -203,6 +204,7 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
                     # secrets_dir (e.g. a symlink pointing outside of ``path``) is
                     # skipped from both the size accounting and the load.
                     yield entry
+            ancestors.discard(resolved_dir)
 
         yield from walk(path)
 
