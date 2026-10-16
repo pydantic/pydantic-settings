@@ -673,3 +673,19 @@ def test_load_secrets_utf8_under_non_utf8_locale(tmp_path, non_utf8_default_enco
     (tmp_path / 'token').write_bytes('café-pässwörd'.encode())
 
     assert NestedSecretsSettingsSource.load_secrets(tmp_path) == {'token': 'café-pässwörd'}
+
+
+@pytest.mark.parametrize('two_links', [False, True], ids=['self-loop', 'two-link-loop'])
+def test_unresolvable_symlink_is_ignored(tmp_path, two_links):
+    (tmp_path / 'token').write_text('secret', encoding='utf-8')
+    (tmp_path / 'loop').symlink_to('other' if two_links else 'loop')
+    if two_links:
+        (tmp_path / 'other').symlink_to('loop')
+
+    class Settings(BaseSettings):
+        token: str
+        model_config = SettingsConfigDict(secrets_dir=tmp_path)
+
+    source = NestedSecretsSettingsSource(Settings)
+
+    assert source() == {'token': 'secret'}
