@@ -1782,7 +1782,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         # dates or decimals to JSON-compatible values, so the CLI parser can read them back.
         if isinstance(value, Enum):
             value = value.value
-        if isinstance(value, (dict, list, set, tuple)):
+        if isinstance(value, (Mapping, Sequence, AbstractSet)) and not isinstance(value, (str, bytes, bytearray)):
             return json.dumps(to_jsonable_python(value))
         return str(value)
 
