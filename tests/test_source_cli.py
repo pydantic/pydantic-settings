@@ -3028,6 +3028,52 @@ def test_cli_ignore_unknown_args():
     }
 
 
+def test_cli_unknown_args_round_trip_when_a_parent_has_some():
+    class SubCmd(BaseSettings, cli_ignore_unknown_args=True):
+        v0: int = 0
+        unknown_args: CliUnknownArgs
+
+    class Root(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+        sub_cmd: CliSubCommand[SubCmd]
+
+    root = CliApp.run(Root, cli_args=['--unk-root', 'sub_cmd', '--unk-sub'])
+    assert root.unknown_args == ['--unk-root']
+    assert root.sub_cmd is not None and root.sub_cmd.unknown_args == ['--unk-sub']
+
+    # A parent's unknown args have to be emitted before the subcommand token: argparse hands everything after
+    # that token to the subcommand, so emitting them last would move them onto the subcommand's field (#1048).
+    serialized = CliApp.serialize(root)
+    assert serialized == ['--unk-root', 'sub_cmd', '--unk-sub']
+
+    again = CliApp.run(Root, cli_args=serialized)
+    assert again.unknown_args == ['--unk-root']
+    assert again.sub_cmd is not None and again.sub_cmd.unknown_args == ['--unk-sub']
+    assert again == root
+
+
+def test_cli_unknown_args_round_trip_through_two_subcommand_levels():
+    class Leaf(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+
+    class Mid(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+        leaf: CliSubCommand[Leaf]
+
+    class Top(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+        mid: CliSubCommand[Mid]
+
+    top = CliApp.run(Top, cli_args=['--unk-top', 'mid', '--unk-mid', 'leaf', '--unk-leaf'])
+    assert top.mid is not None and top.mid.leaf is not None
+    assert top.unknown_args == ['--unk-top']
+    assert top.mid.unknown_args == ['--unk-mid']
+    assert top.mid.leaf.unknown_args == ['--unk-leaf']
+
+    again = CliApp.run(Top, cli_args=CliApp.serialize(top))
+    assert again == top
+
+
 def test_cli_unknown_args_are_not_shared_across_depths():
     class SubCmd(BaseSettings, cli_ignore_unknown_args=True):
         v0: int = 0
