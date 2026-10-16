@@ -5135,6 +5135,31 @@ def test_cli_nested_model_validate_by_alias_false():
     assert CliApp.run(Settings, cli_args=['--sub.apple=honeycrisp']).sub.apple == 'honeycrisp'
 
 
+def test_cli_validate_by_alias_false_with_cli_prefix():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(validate_by_alias=False, cli_prefix='app')
+
+        apple: str = Field('default', alias='pomo')
+        plain: str = 'default'
+
+    assert CliApp.run(Settings, cli_args=['--app.apple=honeycrisp']).apple == 'honeycrisp'
+    assert CliApp.run(Settings, cli_args=['--app.plain=gala']).plain == 'gala'
+
+
+def test_cli_nested_model_validate_by_alias_false_with_cli_prefix():
+    class Sub(BaseModel):
+        model_config = ConfigDict(validate_by_alias=False)
+
+        apple: str = Field('default', alias='pomo')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(validate_by_alias=False, cli_prefix='app')
+
+        sub: Sub = Sub()
+
+    assert CliApp.run(Settings, cli_args=['--app.sub.apple=honeycrisp']).sub.apple == 'honeycrisp'
+
+
 def test_cli_app_run_base_model_validate_by_alias_false():
     class Cmd(BaseModel):
         model_config = ConfigDict(validate_by_alias=False)
