@@ -1653,6 +1653,50 @@ def test_nested_model_default_partial_update_with_optional_nested_discriminated_
     assert Settings().pet == _BlackCat(black_name='custom')
 
 
+@pytest.mark.parametrize(
+    'nested_discriminator',
+    [Discriminator('color'), Field(discriminator='color'), Field(discriminator=Discriminator('color'))],
+    ids=['Discriminator', 'Field', 'Field-with-Discriminator'],
+)
+@pytest.mark.parametrize(
+    'env_vars,expected',
+    [
+        pytest.param({'PET__PET_TYPE': 'cat', 'PET__COLOR': 'white'}, _WhiteCat(), id='other-member'),
+        pytest.param({'PET__BLACK_NAME': 'x'}, _BlackCat(black_name='x'), id='same-member'),
+    ],
+)
+def test_nested_model_default_partial_update_with_nested_discriminator_forms(
+    env, nested_discriminator, env_vars, expected
+):
+    """Test that a nested discriminator is recognised whether it is given as a ``Discriminator`` or a ``Field``."""
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', nested_model_default_partial_update=True)
+        pet: Annotated[_BlackCat | _WhiteCat, nested_discriminator] | _Dog = Field(
+            _BlackCat(black_name='custom'), discriminator='pet_type'
+        )
+
+    for name, value in env_vars.items():
+        env.set(name, value)
+    assert Settings().pet == expected
+
+
+def test_nested_model_default_partial_update_with_nested_field_without_discriminator(env):
+    """Test that a nested ``Field`` without a discriminator doesn't stop the default from being partially updated."""
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', nested_model_default_partial_update=True)
+        pet: _BlackCat | Annotated[_Dog, Field(title='Dog')] = Field(
+            _BlackCat(black_name='custom'), discriminator='pet_type'
+        )
+
+    env.set('PET__BLACK_NAME', 'x')
+    assert Settings().pet == _BlackCat(black_name='x')
+    env.pop('PET__BLACK_NAME')
+    env.set('PET__PET_TYPE', 'dog')
+    assert Settings().pet == _Dog()
+
+
 def test_env_str(env):
     class Settings(BaseSettings):
         apple: str = Field(None, validation_alias='BOOM')
