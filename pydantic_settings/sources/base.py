@@ -317,10 +317,14 @@ def _get_nested_discriminators(annotation: Any) -> list[str] | None:
         if arg is type(None):
             continue
         for metadata in get_args(arg)[1:]:
-            if isinstance(metadata, Discriminator):
-                if not isinstance(metadata.discriminator, str):
-                    return None
-                discriminators.append(metadata.discriminator)
+            discriminator = metadata.discriminator if isinstance(metadata, (Discriminator, FieldInfo)) else None
+            if isinstance(discriminator, Discriminator):
+                discriminator = discriminator.discriminator
+            if discriminator is None:
+                continue
+            if not isinstance(discriminator, str):
+                return None
+            discriminators.append(discriminator)
         nested = _get_nested_discriminators(arg)
         if nested is None:
             return None

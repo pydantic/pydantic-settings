@@ -1653,6 +1653,25 @@ def test_nested_model_default_partial_update_with_optional_nested_discriminated_
     assert Settings().pet == _BlackCat(black_name='custom')
 
 
+@pytest.mark.parametrize(
+    'nested_discriminator',
+    [Discriminator('color'), Field(discriminator='color')],
+    ids=['Discriminator', 'Field'],
+)
+def test_nested_model_default_partial_update_with_nested_discriminator_forms(env, nested_discriminator):
+    """Test that a nested discriminator is recognised whether it is given as a ``Discriminator`` or a ``Field``."""
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', nested_model_default_partial_update=True)
+        pet: Annotated[_BlackCat | _WhiteCat, nested_discriminator] | _Dog = Field(
+            _BlackCat(black_name='custom'), discriminator='pet_type'
+        )
+
+    env.set('PET__PET_TYPE', 'cat')
+    env.set('PET__COLOR', 'white')
+    assert Settings().pet == _WhiteCat()
+
+
 def test_env_str(env):
     class Settings(BaseSettings):
         apple: str = Field(None, validation_alias='BOOM')
