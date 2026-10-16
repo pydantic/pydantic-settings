@@ -171,7 +171,8 @@ def _is_fixed_length_tuple(annotation: Any) -> bool:
         return _lenient_issubclass(annotation, tuple) and hasattr(annotation, '_fields')
     args = get_args(annotation)
     # `tuple[()]` has no args either, but unlike a bare `typing.Tuple` it is a fixed (empty) tuple
-    return _lenient_issubclass(origin, tuple) and annotation is not tuple and (not args or args[-1] is not Ellipsis)
+    is_bare_tuple = annotation is typing.Tuple  # noqa: UP006
+    return _lenient_issubclass(origin, tuple) and not is_bare_tuple and (not args or args[-1] is not Ellipsis)
 
 
 def _is_append_action(field_info: FieldInfo) -> bool:

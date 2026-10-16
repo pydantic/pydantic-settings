@@ -2431,6 +2431,13 @@ def test_cli_variadic_fixed_length_tuple_positional():
     assert CliApp.run(Settings, cli_args=['1', '2']).model_dump() == {'pair': (1, 2)}
 
 
+def test_cli_bare_tuple_positional_is_variadic():
+    class Settings(BaseSettings):
+        values: CliPositionalArg[Tuple]  # noqa: UP006
+
+    assert CliApp.run(Settings, cli_args=['a', 'b']).model_dump() == {'values': ('a', 'b')}
+
+
 def test_cli_sequence_subtypes_are_repeated_options():
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(cli_parse_args=True)
