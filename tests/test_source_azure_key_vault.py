@@ -5,7 +5,7 @@ Test pydantic_settings.AzureKeyVaultSettingsSource.
 from typing import Annotated, Dict, Literal  # noqa: UP035
 
 import pytest
-from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag, ValidationError
+from pydantic import AliasPath, BaseModel, ConfigDict, Discriminator, Field, Tag, ValidationError
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 from pytest_mock import MockerFixture
 
@@ -516,6 +516,18 @@ class TestAzureKeyVaultSettingsSource:
 
         assert settings.database.sql_password == 'password'
         assert settings.database.credentials.api_key == 'secret'
+
+    def test_dash_to_underscore_translation_nested_alias_path(self, mocker: MockerFixture) -> None:
+        class Nested(BaseModel):
+            v: str = Field(validation_alias=AliasPath('my_path', 0))
+
+        class Settings(BaseSettings):
+            nest: Nested
+
+        secrets = {'nest--my-path': '["a"]'}
+        settings = self._load_dash_to_underscore_settings(mocker, Settings, secrets)
+
+        assert settings.nest.v == 'a'
 
     @pytest.mark.parametrize(
         'env_prefix', (None, 'singlewordprefix', 'prefix-kebab-case-', 'PrefixPascalCaseprefixCamelCaseSeparator-')
