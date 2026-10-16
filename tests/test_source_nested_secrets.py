@@ -198,6 +198,64 @@ def test_symlink_subdir(env, tmp_files):
     }
 
 
+def _link_sorting_after_target(basedir: Path) -> None:
+    basedir.joinpath('a_random').mkdir()
+    basedir.joinpath('a_random', 'passwd').write_text('secret2')
+    basedir.joinpath('db').symlink_to('a_random')
+
+
+def _kubernetes_volume(basedir: Path) -> None:
+    # ..<timestamp>/db/passwd holds the data, ..data -> ..<timestamp>, db -> ..data/db
+    basedir.joinpath('..2026_10_16_00_00_00.123', 'db').mkdir(parents=True)
+    basedir.joinpath('..2026_10_16_00_00_00.123', 'db', 'passwd').write_text('secret2')
+    basedir.joinpath('..data').symlink_to('..2026_10_16_00_00_00.123')
+    basedir.joinpath('db').symlink_to('..data/db')
+
+
+@pytest.mark.parametrize('build', [_link_sorting_after_target, _kubernetes_volume])
+def test_second_link_to_subdir_is_loaded(build, env, tmp_path):
+    env.set('DB__USER', 'user')
+    build(tmp_path)
+
+    class Settings(AppSettings):
+        model_config = SettingsConfigDict(
+            secrets_dir=tmp_path,
+            env_nested_delimiter='__',
+            secrets_nested_subdir=True,
+        )
+
+    assert Settings().model_dump() == {
+        'app_key': None,
+        'db': {'user': 'user', 'passwd': 'secret2'},
+    }
+
+
+def test_second_link_is_loaded_after_unreadable_first_link(env, tmp_path, monkeypatch):
+    env.set('DB__USER', 'user')
+    _link_sorting_after_target(tmp_path)
+    real_iterdir = Path.iterdir
+
+    def iterdir(self: Path):
+        # the real directory cannot be listed under its first name, only through the link
+        if self == tmp_path / 'a_random':
+            raise PermissionError(str(self))
+        return real_iterdir(self)
+
+    monkeypatch.setattr(Path, 'iterdir', iterdir)
+
+    class Settings(AppSettings):
+        model_config = SettingsConfigDict(
+            secrets_dir=tmp_path,
+            env_nested_delimiter='__',
+            secrets_nested_subdir=True,
+        )
+
+    assert Settings().model_dump() == {
+        'app_key': None,
+        'db': {'user': 'user', 'passwd': 'secret2'},
+    }
+
+
 def test_symlink_dir_escaping_secrets_dir_is_ignored(env, tmp_path):
     """Regression test for GHSA-4xgf-cpjx-pc3j.
 
