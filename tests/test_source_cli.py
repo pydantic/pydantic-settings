@@ -5,7 +5,7 @@ import re
 import sys
 import time
 import typing
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from collections.abc import MutableMapping, MutableSequence
 from datetime import date
 from decimal import Decimal
@@ -4852,6 +4852,18 @@ def test_cli_serialize_container_values(list_style, dict_style):
 
     cfg = Cfg(dates=[date(2020, 1, 2), date(2021, 3, 4)], amounts={'a': Decimal('1.5')}, pair=(1, 2))
     serialized_cli_args = CliApp.serialize(cfg, list_style=list_style, dict_style=dict_style)
+
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+
+
+@pytest.mark.parametrize('list_style', ['json', 'lazy', 'argparse'])
+def test_cli_serialize_collection_subtypes(list_style):
+    class Cfg(BaseModel):
+        tags: frozenset[str]
+        queue: deque[int]
+
+    cfg = Cfg(tags=frozenset({'x'}), queue=deque([1, 2]))
+    serialized_cli_args = CliApp.serialize(cfg, list_style=list_style)
 
     assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
 
