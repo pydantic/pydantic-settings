@@ -5135,6 +5135,28 @@ def test_cli_nested_model_validate_by_alias_false():
     assert CliApp.run(Settings, cli_args=['--sub.apple=honeycrisp']).sub.apple == 'honeycrisp'
 
 
+def test_cli_prefix_validate_by_alias_false():
+    class Sub(BaseModel):
+        model_config = ConfigDict(validate_by_alias=False)
+
+        foo: str = Field('default', alias='fooAlias')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(validate_by_alias=False)
+
+        apple: str = Field('default', alias='pomo')
+        sub: Sub = Sub()
+
+    def run(args: list[str]) -> Settings:
+        source = CliSettingsSource(Settings, cli_prefix='app', cli_parse_args=args, cli_exit_on_error=False)
+        return Settings(_cli_settings_source=source)
+
+    assert run(['--app.apple=honeycrisp']).apple == 'honeycrisp'
+    assert run(['--app.sub.foo=bar']).sub.foo == 'bar'
+    with pytest.raises(SettingsError, match=r'unrecognized arguments: --app\.pomo'):
+        run(['--app.pomo=honeycrisp'])
+
+
 def test_cli_app_run_base_model_validate_by_alias_false():
     class Cmd(BaseModel):
         model_config = ConfigDict(validate_by_alias=False)
