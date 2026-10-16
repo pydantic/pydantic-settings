@@ -164,6 +164,30 @@ def _is_mapping_annotation(annotation: Any) -> bool:
     return any(_lenient_issubclass(get_origin(member) or member, Mapping) for member in _get_union_members(annotation))
 
 
+def _is_fixed_length_tuple(annotation: Any) -> bool:
+    """Check if an annotation is a fixed-length tuple, like `tuple[int, int]` or a `NamedTuple`."""
+    origin = get_origin(annotation)
+    if origin is None:
+        return _lenient_issubclass(annotation, tuple) and hasattr(annotation, '_fields')
+    args = get_args(annotation)
+    return _lenient_issubclass(origin, tuple) and bool(args) and args[-1] is not Ellipsis
+
+
+def _is_append_action(field_info: FieldInfo) -> bool:
+    """Check if a field collects multiple CLI values.
+
+    A fixed-length tuple positional takes a single value unless it is explicitly marked with `CliVariadicArg`.
+    """
+    collection_types = (Sequence, AbstractSet, Mapping)
+    if _CliPositionalArg in field_info.metadata and _CliVariadicArg not in field_info.metadata:
+        return any(
+            not _is_fixed_length_tuple(member)
+            and _annotation_contains_types(member, collection_types, is_strip_annotated=True, is_subtype=True)
+            for member in _get_union_members(field_info.annotation)
+        )
+    return _annotation_contains_types(field_info.annotation, collection_types, is_strip_annotated=True, is_subtype=True)
+
+
 class _CliArg(BaseModel):
     model: Any
     parser: Any
@@ -309,9 +333,7 @@ class _CliArg(BaseModel):
 
     @cached_property
     def is_append_action(self) -> bool:
-        return not self.subcommand_dest and _annotation_contains_types(
-            self.field_info.annotation, (Sequence, AbstractSet, Mapping), is_strip_annotated=True, is_subtype=True
-        )
+        return not self.subcommand_dest and _is_append_action(self.field_info)
 
     @cached_property
     def is_parser_submodel(self) -> bool:
@@ -932,10 +954,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 alias_names, *_ = _get_alias_names(field_name, field_info, validate_by_alias=validate_by_alias)
                 if len(alias_names) > 1:
                     raise SettingsError(f'positional argument {model.__name__}.{field_name} has multiple aliases')
-                is_append_action = _annotation_contains_types(
-                    field_info.annotation, (Sequence, AbstractSet, Mapping), is_strip_annotated=True, is_subtype=True
-                )
-                if not is_append_action:
+                if not _is_append_action(field_info):
                     positional_args.append((field_name, field_info))
                 else:
                     positional_variadic_arg.append((field_name, field_info))
