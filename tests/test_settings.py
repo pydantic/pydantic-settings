@@ -800,6 +800,27 @@ def test_named_union_type_alias_parsing(
     assert actual == expected
 
 
+def test_nested_type_alias_sub_field_is_found(env):
+    # A named alias is opaque to get_args and is_model_class, so the sub-field behind it used to be
+    # missed and the nested env value was not JSON-decoded (#1047).
+    class Sub(BaseModel):
+        x: list[int] = []
+
+    MaybeSub = TypeAliasType('MaybeSub', Sub | None)
+
+    class AliasSettings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+        m: MaybeSub = None
+
+    class InlineSettings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+        m: Sub | None = None
+
+    env.set('m__x', '[1, 2]')
+    assert AliasSettings().m == Sub(x=[1, 2])
+    assert InlineSettings().m == Sub(x=[1, 2])
+
+
 def test_nested_type_alias_parsing(env):
     Values = TypeAliasType('Values', TypeAliasType('Inner', list[int]))
 

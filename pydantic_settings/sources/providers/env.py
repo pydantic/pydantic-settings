@@ -29,6 +29,7 @@ from ..utils import (
     _get_model_config,
     _get_model_fields,
     _literal_has_numeric_enum,
+    _resolve_type_alias,
     _union_has_strict_types,
     _union_is_complex,
     parse_env_vars,
@@ -249,7 +250,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         if not field:
             return None
 
-        annotation = field.annotation if isinstance(field, FieldInfo) else field
+        # A named alias (TypeAliasType) is opaque to get_args and is_model_class, so resolve it first: without
+        # this, sub-fields behind an alias are never found and the nested env values are dropped or mis-decoded.
+        annotation = _resolve_type_alias(field.annotation if isinstance(field, FieldInfo) else field)
         for type_ in get_args(annotation):
             type_has_key = self.next_field(type_, key, case_sensitive)
             if type_has_key:
@@ -258,7 +261,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             # get value type if it's a dict
             args = get_args(annotation)
             return args[-1] if args else None
-        if is_model_class(annotation) or is_pydantic_dataclass(annotation):  # type: ignore[arg-type]
+        if is_model_class(annotation) or is_pydantic_dataclass(annotation):
             fields = _get_model_fields(annotation)
             model_config = _get_model_config(annotation)
             # `case_sensitive is None` is here to be compatible with the old behavior.
