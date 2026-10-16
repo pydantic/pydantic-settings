@@ -274,28 +274,31 @@ def _get_discriminator(field_info: FieldInfo) -> str | Callable[[Any], Hashable]
     return discriminator.discriminator if isinstance(discriminator, Discriminator) else discriminator
 
 
-def _get_member_fields(model_cls: type[Any]) -> dict[str, FieldInfo]:
-    """Get the fields of a discriminated union member: a model, a pydantic dataclass or a stdlib dataclass."""
+def _get_member_field(model_cls: type[Any], name: str) -> FieldInfo | None:
+    """Get a field of a discriminated union member: a model, a pydantic dataclass or a stdlib dataclass."""
     if _is_model_or_dataclass(model_cls):
-        return _get_model_fields(model_cls)
-    # Pydantic doesn't attach `__pydantic_fields__` to a stdlib dataclass, so collect the `FieldInfo`s itself:
+        return _get_model_fields(model_cls).get(name)
+    # Pydantic doesn't attach `__pydantic_fields__` to a stdlib dataclass, so find the `FieldInfo` itself:
     # `Field()` is kept as the dataclass field's default, or in its `Annotated` metadata.
-    fields: dict[str, FieldInfo] = {}
-    hints = get_type_hints(model_cls, include_extras=True)
-    for dc_field in dataclass_fields(model_cls):
-        if isinstance(dc_field.default, FieldInfo):
-            fields[dc_field.name] = dc_field.default
-        else:
-            metadata = get_args(hints.get(dc_field.name))[1:]
-            field_info = next((m for m in metadata if isinstance(m, FieldInfo)), None)
-            if field_info is not None:
-                fields[dc_field.name] = field_info
-    return fields
+    dc_field = next((f for f in dataclass_fields(model_cls) if f.name == name), None)
+    if dc_field is None:
+        return None
+    if isinstance(dc_field.default, FieldInfo):
+        return dc_field.default
+    # Resolve this field's annotation alone: another field may name a class that is only in a local scope
+    annotations_holder = type(
+        model_cls.__name__, (), {'__module__': model_cls.__module__, '__annotations__': {name: dc_field.type}}
+    )
+    try:
+        hint = get_type_hints(annotations_holder, localns=dict(vars(model_cls)), include_extras=True)[name]
+    except NameError:
+        return None
+    return next((m for m in get_args(hint)[1:] if isinstance(m, FieldInfo)), None)
 
 
 def _get_discriminator_keys(model_cls: type[Any], discriminator: str) -> tuple[str, ...]:
     """Get the keys that can hold the discriminator value of a discriminated union member: its name and alias."""
-    alias = getattr(_get_member_fields(model_cls).get(discriminator), 'validation_alias', None)
+    alias = getattr(_get_member_field(model_cls, discriminator), 'validation_alias', None)
     return (discriminator, alias) if isinstance(alias, str) else (discriminator,)
 
 
