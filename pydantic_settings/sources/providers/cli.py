@@ -248,6 +248,7 @@ class _CliArg(BaseModel):
             not self.subcommand_dest
             and self.arg_prefix
             and self.field_info.validation_alias is not None
+            and self.validate_by_alias
             and not self.is_parser_submodel
         ):
             # Strip prefix if validation alias is set and value is not complex.
