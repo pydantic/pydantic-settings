@@ -2409,10 +2409,15 @@ def test_cli_fixed_length_tuple_positional_is_single_value():
         src: CliPositionalArg[tuple[str, str]]
         dst: CliPositionalArg[tuple[str, str]]
 
+    class EmptyAndName(BaseSettings):
+        empty: CliPositionalArg[tuple[()]]
+        name: CliPositionalArg[str]
+
     assert CliApp.run(PairAndName, cli_args=['[1,2]', 'bob']).model_dump() == {'pair': (1, 2), 'name': 'bob'}
     assert CliApp.run(PointAndName, cli_args=['[1,2]', 'bob']).model_dump() == {'point': (1, 2), 'name': 'bob'}
     assert CliApp.run(OptionalPairAndName, cli_args=['[1,2]', 'bob']).model_dump() == {'pair': (1, 2), 'name': 'bob'}
     assert CliApp.run(PairAndSub, cli_args=['[1,2]', 'sub']).model_dump() == {'pair': (1, 2), 'sub': {'x': 0}}
+    assert CliApp.run(EmptyAndName, cli_args=['[]', 'bob']).model_dump() == {'empty': (), 'name': 'bob'}
     assert CliApp.run(TwoPairs, cli_args=['["a","b"]', '["c","d"]']).model_dump() == {
         'src': ('a', 'b'),
         'dst': ('c', 'd'),
