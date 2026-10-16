@@ -2,6 +2,7 @@
 Test pydantic_settings.AzureKeyVaultSettingsSource.
 """
 
+from enum import IntEnum
 from typing import Annotated, Dict, Literal  # noqa: UP035
 
 import pytest
@@ -333,6 +334,7 @@ class TestAzureKeyVaultSettingsSource:
         settings_cls: type[BaseSettings],
         secrets: dict[str, str],
         env_prefix: str | None = None,
+        env_parse_enums: bool | None = None,
     ) -> BaseSettings:
         mocker.patch.object(
             SecretClient,
@@ -360,10 +362,44 @@ class TestAzureKeyVaultSettingsSource:
                         DefaultAzureCredential(),
                         dash_to_underscore=True,
                         env_prefix=env_prefix,
+                        env_parse_enums=env_parse_enums,
                     ),
                 )
 
         return AzureKeyVaultSettings()
+
+    @pytest.mark.parametrize('env_prefix', (None, 'APP-'))
+    def test_dash_to_underscore_translation_nested_complex_and_enum(
+        self, mocker: MockerFixture, env_prefix: str | None
+    ) -> None:
+        """Test that nested complex and enum values are parsed, also when the secrets have an env prefix."""
+
+        class Mode(IntEnum):
+            fast = 1
+            slow = 2
+
+        class ConnectionPool(BaseModel):
+            hosts: list[str] = []
+
+        class Database(BaseModel):
+            allowed_hosts: list[str] = []
+            run_mode: Mode = Mode.slow
+            connection_pool: ConnectionPool = ConnectionPool()
+
+        class Settings(BaseSettings):
+            database: Database
+
+        prefix = env_prefix or ''
+        secrets = {
+            f'{prefix}database--allowed-hosts': '["a","b"]',
+            f'{prefix}database--run-mode': 'fast',
+            f'{prefix}database--connection-pool--hosts': '["c"]',
+        }
+        settings = self._load_dash_to_underscore_settings(mocker, Settings, secrets, env_prefix, env_parse_enums=True)
+
+        assert settings.database == Database(
+            allowed_hosts=['a', 'b'], run_mode=Mode.fast, connection_pool=ConnectionPool(hosts=['c'])
+        )
 
     @pytest.mark.parametrize('env_prefix', (None, 'APP-'))
     def test_dash_to_underscore_translation_nested(self, mocker: MockerFixture, env_prefix: str | None) -> None:
