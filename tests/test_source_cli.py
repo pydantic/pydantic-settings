@@ -5515,3 +5515,187 @@ def test_serialize_cli_unknown_args_subcommand_end_of_options():
         serialized = CliApp.serialize(root, positionals_first=positionals_first)
         assert serialized == ['--flag', 'world', 'sub_cmd', '--v0', '2', '--', '--unk=3']
         assert CliApp.run(Root, cli_args=serialized) == root
+
+
+def test_cli_unknown_args_nested_models_scoped_by_prefix():
+    class Nested(BaseModel):
+        v: int = 1
+        unknown_args: CliUnknownArgs
+
+    class Root(BaseSettings, cli_ignore_unknown_args=True):
+        flag: str = 'hello'
+        unknown_args: CliUnknownArgs
+        nested: Nested
+
+    root = CliApp.run(
+        Root,
+        cli_args=['--flag=world', '--root_extra=1', '--nested.v=2', '--nested.extra=3', '--nested.flag', 'val'],
+    )
+    assert root.unknown_args == ['--root_extra=1']
+    assert root.nested.unknown_args == ['--nested.extra=3', '--nested.flag', 'val']
+
+    serialized = CliApp.serialize(root)
+    assert serialized.count('--root_extra=1') == 1
+    assert serialized.count('--nested.extra=3') == 1
+    reparsed = CliApp.run(Root, cli_args=serialized)
+    assert reparsed.unknown_args == ['--root_extra=1']
+    assert reparsed.nested.unknown_args == ['--nested.extra=3', '--nested.flag', 'val']
+    assert reparsed.model_dump() == root.model_dump()
+
+
+def test_cli_strict_root_nested_unknown_args():
+    class Nested(BaseModel):
+        v: int = 1
+        unknown_args: CliUnknownArgs
+
+    class Root(BaseSettings):
+        flag: str = 'hello'
+        nested: Nested
+
+    root = CliApp.run(Root, cli_args=['--flag=world', '--nested.v=2', '--nested.extra=3'])
+    assert root.nested.unknown_args == ['--nested.extra=3']
+
+    serialized = CliApp.serialize(root)
+    reparsed = CliApp.run(Root, cli_args=serialized)
+    assert reparsed.model_dump() == root.model_dump()
+
+    with pytest.raises(SystemExit):
+        CliApp.run(Root, cli_args=['--root_typo=1', '--nested.extra=3'])
+
+
+def test_cli_unknown_args_deeply_nested_models():
+    class Leaf(BaseModel):
+        l_val: int = 1
+        leaf_unk: CliUnknownArgs
+
+    class Mid(BaseModel):
+        m_val: int = 2
+        mid_unk: CliUnknownArgs
+        leaf: Leaf
+
+    class Root(BaseSettings, cli_ignore_unknown_args=True):
+        r_val: int = 0
+        root_unk: CliUnknownArgs
+        mid: Mid
+
+    root = CliApp.run(
+        Root,
+        cli_args=[
+            '--r_val=9',
+            '--root_extra=10',
+            '--mid.m_val=8',
+            '--mid.extra=20',
+            '--mid.leaf.l_val=7',
+            '--mid.leaf.extra=30',
+        ],
+    )
+    assert root.root_unk == ['--root_extra=10']
+    assert root.mid.mid_unk == ['--mid.extra=20']
+    assert root.mid.leaf.leaf_unk == ['--mid.leaf.extra=30']
+
+    serialized = CliApp.serialize(root)
+    reparsed = CliApp.run(Root, cli_args=serialized)
+    assert reparsed.model_dump() == root.model_dump()
+
+
+def test_cli_unknown_args_sibling_nested_models():
+    class First(BaseModel):
+        unknown_args: CliUnknownArgs
+
+    class Second(BaseModel):
+        unknown_args: CliUnknownArgs
+
+    class Root(BaseSettings, cli_ignore_unknown_args=True):
+        first: First
+        second: Second
+
+    root = CliApp.run(Root, cli_args=['--first.a=1', '--second.b=2'])
+    assert root.first.unknown_args == ['--first.a=1']
+    assert root.second.unknown_args == ['--second.b=2']
+
+    serialized = CliApp.serialize(root)
+    reparsed = CliApp.run(Root, cli_args=serialized)
+    assert reparsed.model_dump() == root.model_dump()
+
+
+def test_cli_unknown_args_nested_kebab_case():
+    class MyNested(BaseModel):
+        v: int = 1
+        nested_unk: CliUnknownArgs
+
+    class Root(BaseSettings, cli_ignore_unknown_args=True, cli_kebab_case=True):
+        flag: str = 'hello'
+        root_unk: CliUnknownArgs
+        my_nested: MyNested
+
+    root = CliApp.run(
+        Root,
+        cli_args=['--flag=world', '--root-extra=10', '--my-nested.v=2', '--my-nested.foo=20', '--my-nested.val', '-5'],
+    )
+    assert root.root_unk == ['--root-extra=10']
+    assert root.my_nested.nested_unk == ['--my-nested.foo=20', '--my-nested.val', '-5']
+
+    serialized = CliApp.serialize(root)
+    reparsed = CliApp.run(Root, cli_args=serialized)
+    assert reparsed.model_dump() == root.model_dump()
+
+
+def test_cli_unknown_args_nested_models_end_of_options():
+    class Nested(BaseModel):
+        v: int = 1
+        unknown_args: CliUnknownArgs
+
+    class Root(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+        nested: Nested
+
+    root = CliApp.run(Root, cli_args=['--nested.v=2', '--', '--extra=1', 'pos_val'])
+    assert root.unknown_args == ['--', '--extra=1', 'pos_val']
+    assert root.nested.unknown_args == []
+
+
+def test_cli_strict_root_nested_end_of_options():
+    class Nested(BaseModel):
+        unknown_args: CliUnknownArgs
+
+    class Root(BaseSettings, cli_exit_on_error=False):
+        nested: Nested
+
+    with pytest.raises(SettingsError, match='unrecognized arguments'):
+        CliSettingsSource(Root)(args=['--', 'extra'])
+
+
+def test_cli_subcommand_with_nested_unknown_args():
+    class Nested(BaseModel):
+        unknown_args: CliUnknownArgs
+
+    class SubCmd(BaseSettings, cli_ignore_unknown_args=True):
+        sub_unk: CliUnknownArgs
+        nested: Nested
+
+    class Root(BaseSettings):
+        sub: CliSubCommand[SubCmd]
+
+    cmd = CliApp.run(Root, cli_args=['sub', '--sub_extra=1', '--nested.extra=2'])
+    assert cmd.sub is not None
+    assert cmd.sub.sub_unk == ['--sub_extra=1']
+    assert cmd.sub.nested.unknown_args == ['--nested.extra=2']
+
+
+def test_cli_unknown_args_nested_option_and_root_positional():
+    class Nested(BaseModel):
+        unknown_args: CliUnknownArgs
+
+    class Root(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+        nested: Nested
+
+    # With '=': option value is self-contained, bare token belongs to root
+    root1 = CliApp.run(Root, cli_args=['--nested.opt=val', 'root_pos'])
+    assert root1.nested.unknown_args == ['--nested.opt=val']
+    assert root1.unknown_args == ['root_pos']
+
+    # Without '=': next token is option value, subsequent bare token belongs to root
+    root2 = CliApp.run(Root, cli_args=['--nested.opt', 'val', 'root_pos'])
+    assert root2.nested.unknown_args == ['--nested.opt', 'val']
+    assert root2.unknown_args == ['root_pos']

@@ -657,13 +657,18 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         # not stored on a root CliUnknownArgs field is still an error, including when
         # the selected subcommand accepts unknowns of its own.
         if not self.cli_ignore_unknown_args and self._cli_unknown_args:
-            root_accepts_unknown = id(self._root_parser) in self._unknown_dests_by_parser
-            # Match command path components, not substrings of other names.
-            selected_accepts_unknown = any(
-                dest.rsplit('.', 1)[0] == last_selected_subcommand
-                or last_selected_subcommand.startswith(f'{dest.rsplit(".", 1)[0]}.')
-                for dest in self._cli_unknown_args
-            )
+            root_dests = set(self._unknown_dests_by_parser.get(id(self._root_parser), ()))
+            root_accepts_unknown = any(not self._unknown_dest_prefixes.get(dest) for dest in root_dests)
+            if last_selected_subcommand:
+                # Match command path components, not substrings of other names.
+                selected_accepts_unknown = any(
+                    dest.rsplit('.', 1)[0] == last_selected_subcommand
+                    or last_selected_subcommand.startswith(f'{dest.rsplit(".", 1)[0]}.')
+                    for dest in self._cli_unknown_args
+                )
+            else:
+                selected_accepts_unknown = True
+
             if self._unclaimed_unknown_args and not root_accepts_unknown:
                 pending = self._unclaimed_unknown_args.copy()
             elif not selected_accepts_unknown:
@@ -1081,6 +1086,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     ) -> None:
         self._cli_unknown_args: dict[str, list[str]] = {}
         self._unknown_dests_by_parser: dict[int, list[str]] = {}
+        self._unknown_dest_prefixes: dict[str, set[str]] = {}
         self._unclaimed_unknown_args: list[str] = []
         self._captured_parsers: set[int] = set()
 
@@ -1088,8 +1094,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             parsed, unknown_args = ArgumentParser.parse_known_args(*args, **kwargs)
             parser = args[0] if args else None
             self._store_unknown_args(parser, unknown_args)
-            # This method is only connected as the root parser's parse method.
-            self._unclaimed_unknown_args = list(unknown_args)
             return cast(Namespace, parsed)
 
         self._root_parser = root_parser
@@ -1164,9 +1168,86 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if dest.startswith(prefixes):
                 self._cli_unknown_args[dest] = []
 
+    @staticmethod
+    def _is_numeric_cli_token(token: str) -> bool:
+        try:
+            float(token)
+            return True
+        except ValueError:
+            return False
+
+    def _resolve_unknown_dest(
+        self, token: str, nested_dests: list[tuple[str, list[str]]], base_dest: str | None
+    ) -> str | None:
+        if token.startswith('-') and len(token.lstrip('-')) > 0 and not self._is_numeric_cli_token(token):
+            opt_name = token.lstrip('-').split('=', 1)[0]
+            for dest, prefixes in nested_dests:
+                if any(opt_name.startswith(p) for p in prefixes):
+                    return dest
+            return base_dest
+        return None
+
     def _store_unknown_args(self, parser: Any, unknown_args: list[str]) -> None:
-        for dest in self._unknown_dests_by_parser.get(id(parser), ()):
-            self._cli_unknown_args[dest] = list(unknown_args)
+        dests = self._unknown_dests_by_parser.get(id(parser), ())
+        if not dests:
+            self._unclaimed_unknown_args = list(unknown_args)
+            return
+
+        if len(dests) == 1 and not self._unknown_dest_prefixes.get(dests[0]):
+            self._cli_unknown_args[dests[0]] = list(unknown_args)
+            if parser is self._root_parser:
+                self._unclaimed_unknown_args = []
+            return
+
+        base_dest: str | None = None
+        nested_dests: list[tuple[str, list[str]]] = []
+        for dest in dests:
+            prefixes = self._unknown_dest_prefixes.get(dest, set())
+            if not prefixes:
+                base_dest = dest
+            else:
+                nested_dests.append((dest, sorted(prefixes, key=len, reverse=True)))
+
+        nested_dests.sort(key=lambda item: max(len(p) for p in item[1]), reverse=True)
+
+        captured: dict[str, list[str]] = {dest: [] for dest in dests}
+        unclaimed: list[str] = []
+        current_target: str | None = base_dest
+        expects_value: bool = False
+
+        for idx, token in enumerate(unknown_args):
+            if token == '--':
+                remainder = unknown_args[idx:]
+                (captured[base_dest] if base_dest is not None else unclaimed).extend(remainder)
+                break
+
+            resolved = self._resolve_unknown_dest(token, nested_dests, base_dest)
+            is_opt = resolved is not None or (
+                token.startswith('-') and len(token.lstrip('-')) > 0 and not self._is_numeric_cli_token(token)
+            )
+
+            if is_opt:
+                target = resolved if resolved is not None else base_dest
+                (captured[target] if target is not None else unclaimed).append(token)
+                if '=' in token:
+                    expects_value = False
+                    current_target = base_dest
+                else:
+                    expects_value = True
+                    current_target = target
+            elif expects_value:
+                (captured[current_target] if current_target is not None else unclaimed).append(token)
+                expects_value = False
+                current_target = base_dest
+            else:
+                (captured[base_dest] if base_dest is not None else unclaimed).append(token)
+                current_target = base_dest
+
+        for dest, tokens in captured.items():
+            self._cli_unknown_args[dest] = tokens
+
+        if parser is self._root_parser:
+            self._unclaimed_unknown_args = unclaimed
 
     def _install_unknown_args_capture(self, parser: Any) -> None:
         if id(parser) in self._captured_parsers or not hasattr(parser, 'parse_known_args'):
@@ -1355,6 +1436,14 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     dest = arg.kwargs['dest']
                     self._cli_unknown_args[dest] = []
                     self._unknown_dests_by_parser.setdefault(id(parser), []).append(dest)
+                    raw_prefixes = [arg.arg_prefix] + [p for p in alias_prefixes if p.endswith('.')]
+                    rel_prefixes: set[str] = set()
+                    for p in raw_prefixes:
+                        rel = p.replace(subcommand_prefix, '', 1)
+                        if rel:
+                            rel_prefixes.add(rel)
+                            rel_prefixes.add(_CliArg.get_kebab_case(rel, self.cli_kebab_case))
+                    self._unknown_dest_prefixes[dest] = rel_prefixes
                     self._install_unknown_args_capture(parser)
                 elif not arg.is_alias_path_only:
                     if isinstance(group, dict):  # pragma: no cover
