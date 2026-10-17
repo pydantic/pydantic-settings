@@ -1886,9 +1886,9 @@ With subcommands, unknown arguments are captured by the innermost parser that de
 Arguments appearing before a subcommand remain with the parent parser. If a child parser has no capture field,
 its leftovers are passed back to its parent. Captured lists are reset when a `CliSettingsSource` parses new arguments.
 
-Ordinary nested models share their parent's parser. Declaring multiple `CliUnknownArgs` fields on that same parser
-still duplicates its leftovers; this case is not covered by the subcommand behavior above. Custom parsers whose
-`parse_known_args` method cannot be replaced also cannot capture subcommand leftovers independently.
+With nested models sharing a parser, unknown arguments with a nested model's prefix are scoped to that nested model's
+`CliUnknownArgs` field, while arguments without the prefix belong to the parent parser. Custom parsers whose
+`parse_known_args` method cannot be replaced cannot capture subcommand leftovers independently.
 
 #### CLI Kebab Case for Arguments
 
