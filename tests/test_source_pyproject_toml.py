@@ -59,6 +59,28 @@ class TestPyprojectTomlConfigSettingsSource:
         assert obj.toml_data == {'field': 'some'}
         assert obj.toml_file_path == pyproject
 
+    def test___init___explicit_expanduser(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """Test __init__ explicit file with ~ expansion."""
+        monkeypatch.setenv('HOME', str(tmp_path))
+        monkeypatch.setenv('USERPROFILE', str(tmp_path))
+        pyproject = tmp_path / 'child' / 'pyproject.toml'
+        pyproject.parent.mkdir()
+        pyproject.write_text(SOME_TOML_DATA)
+        obj = PyprojectTomlConfigSettingsSource(SimpleSettings, Path('~/child/pyproject.toml'))
+        assert obj.toml_table_header == ('some', 'table')
+        assert obj.toml_data == {'field': 'some'}
+        assert obj.toml_file_path == pyproject.resolve()
+
+    def test___init___explicit_expanduser_missing(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """Test __init__ explicit file with ~ expansion when file is missing."""
+        monkeypatch.setenv('HOME', str(tmp_path))
+        monkeypatch.setenv('USERPROFILE', str(tmp_path))
+        pyproject = tmp_path / 'child' / 'pyproject.toml'
+        obj = PyprojectTomlConfigSettingsSource(SimpleSettings, Path('~/child/pyproject.toml'))
+        assert obj.toml_table_header == ('some', 'table')
+        assert not obj.toml_data
+        assert obj.toml_file_path == pyproject.resolve()
+
     def test___init___explicit_missing(self, mocker: MockerFixture, tmp_path: Path) -> None:
         """Test __init__ explicit file missing."""
         mocker.patch(f'{MODULE}.Path.cwd', return_value=tmp_path)
@@ -158,6 +180,40 @@ def test_pyproject_toml_file_explicit(cd_tmp_path: Path):
             cls, settings_cls: type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
         ) -> tuple[PydanticBaseSettingsSource, ...]:
             return (PyprojectTomlConfigSettingsSource(settings_cls, pyproject),)
+
+    s = Settings()
+    assert s.foobar == 'Hello'
+    assert s.nested.nested_field == 'world!'
+
+
+def test_pyproject_toml_file_explicit_expanduser(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    monkeypatch.setenv('HOME', str(tmp_path))
+    monkeypatch.setenv('USERPROFILE', str(tmp_path))
+    pyproject = tmp_path / 'child' / 'grandchild' / 'pyproject.toml'
+    pyproject.parent.mkdir(parents=True)
+    pyproject.write_text(
+        """
+    [tool.pydantic-settings]
+    foobar = "Hello"
+
+    [tool.pydantic-settings.nested]
+    nested_field = "world!"
+    """
+    )
+
+    class Nested(BaseModel):
+        nested_field: str
+
+    class Settings(BaseSettings):
+        foobar: str
+        nested: Nested
+        model_config = SettingsConfigDict()
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls: type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (PyprojectTomlConfigSettingsSource(settings_cls, Path('~/child/grandchild/pyproject.toml')),)
 
     s = Settings()
     assert s.foobar == 'Hello'
