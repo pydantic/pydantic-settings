@@ -1536,6 +1536,57 @@ def test_nested_model_default_partial_update_with_stdlib_dataclass_aliased_discr
     assert SettingsDefault(root_field={'type': 'submodel2'}).root_field == DefaultField2(kind='submodel2')
 
 
+def test_nested_model_default_partial_update_with_stdlib_dataclass_local_forward_ref(env):
+    """Test that a stdlib dataclass default with a forward reference to a local class on another field works."""
+
+    class Local(BaseModel):
+        v: int = 0
+
+    @dataclasses.dataclass
+    class DA:
+        kind: Literal['a'] = 'a'
+        loc: 'Local' = dataclasses.field(default_factory=Local)
+
+    @dataclasses.dataclass
+    class DB:
+        kind: Literal['b'] = 'b'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', nested_model_default_partial_update=True)
+        p: DA | DB = Field(DA(), discriminator='kind')
+
+    env.set('P__KIND', 'a')
+    assert Settings().p == DA(kind='a', loc=Local(v=0))
+
+    # When the discriminator's own annotation can't be resolved, it is looked up by its name only
+    KindC = Literal['c']
+
+    @dataclasses.dataclass
+    class DC:
+        kind: 'KindC' = 'c'
+        x: int = 0
+
+    class SettingsLocalKind(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', nested_model_default_partial_update=True)
+        p: DC | DB = Field(DC(), discriminator='kind')
+
+    env.set('P__KIND', 'c')
+    env.set('P__X', '3')
+    assert SettingsLocalKind().p == DC(x=3)
+
+    # A default without the discriminator field still fails validation instead of breaking the lookup
+    @dataclasses.dataclass
+    class NoKind:
+        y: int = 0
+
+    class SettingsNoKind(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', nested_model_default_partial_update=True)
+        q: DA | DB = Field(NoKind(), discriminator='kind')
+
+    with pytest.raises(ValidationError, match='union_tag_not_found'):
+        SettingsNoKind()
+
+
 class _BlackCat(BaseModel):
     model_config = ConfigDict(extra='forbid')
     pet_type: Literal['cat'] = 'cat'
