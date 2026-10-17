@@ -544,6 +544,32 @@ def test_yaml_config_section_empty_section(tmp_path):
 
 
 @pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
+@pytest.mark.parametrize('yaml_file', ['missing.yaml', None])
+def test_yaml_config_section_missing_yaml_file(tmp_path, yaml_file):
+    """If a section is configured but no yaml file is read, fall back to defaults instead of raising."""
+    if yaml_file is not None:
+        yaml_file = tmp_path / yaml_file
+
+    class Settings(BaseSettings):
+        foo: str = 'default'
+
+        model_config = SettingsConfigDict(yaml_file=yaml_file, yaml_config_section='nested')
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls),)
+
+    assert Settings().foo == 'default'
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
 def test_yaml_config_section_scalar_section(tmp_path):
     """A section that resolves to a scalar (not a mapping) is a user error and must raise a
     clear TypeError, rather than an opaque AttributeError from deep in the init machinery."""

@@ -60,7 +60,9 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         )
         self.yaml_data = self._read_files(self.yaml_file_path, deep_merge=deep_merge)
 
-        if self.yaml_config_section is not None:
+        # Like `toml_table_header`, only look up the section when a yaml file was actually
+        # read; a missing (optional) file should fall back to defaults, not raise `KeyError`.
+        if self.yaml_config_section is not None and self._existing_files(self.yaml_file_path):
             section_data = self._traverse_nested_section(
                 self.yaml_data, self.yaml_config_section, self.yaml_config_section
             )
