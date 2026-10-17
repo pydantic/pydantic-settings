@@ -5577,8 +5577,7 @@ def test_serialize_cli_unknown_args_subcommand_end_of_options():
         flag: str = 'hello'
         sub_cmd: CliSubCommand[SubCmd]
 
-    # A subcommand's unknown args are hoisted into the trailing segment too, since a subcommand name may not follow
-    # an end-of-options marker.
+    # A subcommand's unknown args are serialized within that subcommand's segment, after its options.
     root = CliApp.run(Root, cli_args=['--flag=world', 'sub_cmd', '--v0=2', '--', '--unk=3'])
     assert root.sub_cmd is not None and root.sub_cmd.unknown_args == ['--', '--unk=3']
 
@@ -5586,3 +5585,34 @@ def test_serialize_cli_unknown_args_subcommand_end_of_options():
         serialized = CliApp.serialize(root, positionals_first=positionals_first)
         assert serialized == ['--flag', 'world', 'sub_cmd', '--v0', '2', '--', '--unk=3']
         assert CliApp.run(Root, cli_args=serialized) == root
+
+
+def test_serialize_cli_unknown_args_subcommand_round_trip():
+    class Sub(BaseModel, cli_ignore_unknown_args=True):
+        ignored_args: CliUnknownArgs
+
+    class Root(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+        sub: CliSubCommand[Sub]
+
+    first = CliApp.run(Root, cli_args=['--typo', 'sub', '--other'])
+    serialized = CliApp.serialize(first)
+    assert serialized == ['--typo', 'sub', '--other']
+    second = CliApp.run(Root, cli_args=serialized)
+    assert first.model_dump() == second.model_dump()
+
+    class Leaf(BaseModel, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+
+    class Mid(BaseModel, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+        leaf: CliSubCommand[Leaf]
+
+    class Top(BaseSettings, cli_ignore_unknown_args=True):
+        mid: CliSubCommand[Mid]
+
+    top_first = CliApp.run(Top, cli_args=['mid', '--m', 'leaf', '--l'])
+    top_serialized = CliApp.serialize(top_first)
+    assert top_serialized == ['mid', '--m', 'leaf', '--l']
+    top_second = CliApp.run(Top, cli_args=top_serialized)
+    assert top_first.model_dump() == top_second.model_dump()
