@@ -5586,3 +5586,43 @@ def test_serialize_cli_unknown_args_subcommand_end_of_options():
         serialized = CliApp.serialize(root, positionals_first=positionals_first)
         assert serialized == ['--flag', 'world', 'sub_cmd', '--v0', '2', '--', '--unk=3']
         assert CliApp.run(Root, cli_args=serialized) == root
+
+
+def test_serialize_cli_unknown_args_per_subcommand_level():
+    class Sub(BaseModel, cli_ignore_unknown_args=True):
+        ignored_args: CliUnknownArgs
+
+    class Root(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+        sub: CliSubCommand[Sub]
+
+    root = CliApp.run(Root, cli_args=['--typo', 'sub', '--other'])
+    assert root.model_dump() == {'unknown_args': ['--typo'], 'sub': {'ignored_args': ['--other']}}
+    serialized = CliApp.serialize(root)
+    assert serialized == ['--typo', 'sub', '--other']
+    assert CliApp.run(Root, cli_args=serialized) == root
+
+    class Leaf(BaseModel, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+
+    class Mid(BaseModel, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+        leaf: CliSubCommand[Leaf]
+
+    class Top(BaseSettings, cli_ignore_unknown_args=True):
+        unknown_args: CliUnknownArgs
+        mid: CliSubCommand[Mid]
+
+    top = CliApp.run(Top, cli_args=['--t', 'mid', '--m', 'leaf', '--l'])
+    assert top.model_dump() == {
+        'unknown_args': ['--t'],
+        'mid': {'unknown_args': ['--m'], 'leaf': {'unknown_args': ['--l']}},
+    }
+    serialized = CliApp.serialize(top)
+    assert serialized == ['--t', 'mid', '--m', 'leaf', '--l']
+    assert CliApp.run(Top, cli_args=serialized) == top
+
+    top = CliApp.run(Top, cli_args=['mid', '--m', 'leaf', '--l'])
+    serialized = CliApp.serialize(top)
+    assert serialized == ['mid', '--m', 'leaf', '--l']
+    assert CliApp.run(Top, cli_args=serialized) == top
