@@ -29,6 +29,8 @@ from ..utils import (
     _get_model_config,
     _get_model_fields,
     _literal_has_numeric_enum,
+    _resolve_type_alias,
+    _strip_annotated,
     _union_has_strict_types,
     _union_is_complex,
     parse_env_vars,
@@ -249,7 +251,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         if not field:
             return None
 
-        annotation = field.annotation if isinstance(field, FieldInfo) else field
+        annotation = _strip_annotated(_resolve_type_alias(field.annotation if isinstance(field, FieldInfo) else field))
         for type_ in get_args(annotation):
             type_has_key = self.next_field(type_, key, case_sensitive)
             if type_has_key:
