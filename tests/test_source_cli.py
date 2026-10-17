@@ -5,7 +5,7 @@ import re
 import sys
 import time
 import typing
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from collections.abc import MutableMapping, MutableSequence
 from datetime import date
 from decimal import Decimal
@@ -1523,6 +1523,17 @@ def test_cli_empty_json_list_serialize_roundtrip():
 
     cfg = Cfg(values=[])
     assert CliApp.run(Cfg, cli_args=CliApp.serialize(cfg, list_style='json')) == cfg
+
+
+def test_cli_serialize_frozenset_and_deque_roundtrip():
+    class Cfg(BaseSettings):
+        tags: frozenset[str] = frozenset()
+        queue: deque[str] = deque()
+
+    cfg = CliApp.run(Cfg, cli_args=['--tags', '["x"]', '--queue', '["x","y"]'])
+    serialized_cli_args = CliApp.serialize(cfg)
+    assert serialized_cli_args == ['--tags', '["x"]', '--queue', '["x", "y"]']
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
 
 
 class _MQTTVersion(IntEnum):
