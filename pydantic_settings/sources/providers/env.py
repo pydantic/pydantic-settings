@@ -250,14 +250,17 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             return None
 
         annotation = field.annotation if isinstance(field, FieldInfo) else field
+        if _lenient_issubclass(get_origin(annotation), dict):
+            # get value type if it's a dict. Return it before recursing into the annotation's
+            # arguments below: for a mapping of mappings (e.g. `dict[str, dict[str, int]]`) the
+            # recursion would find the inner `dict` and return *its* value type (`int`), so the
+            # nested value would not be recognized as complex and would skip JSON decoding.
+            args = get_args(annotation)
+            return args[-1] if args else None
         for type_ in get_args(annotation):
             type_has_key = self.next_field(type_, key, case_sensitive)
             if type_has_key:
                 return type_has_key
-        if _lenient_issubclass(get_origin(annotation), dict):
-            # get value type if it's a dict
-            args = get_args(annotation)
-            return args[-1] if args else None
         if is_model_class(annotation) or is_pydantic_dataclass(annotation):  # type: ignore[arg-type]
             fields = _get_model_fields(annotation)
             model_config = _get_model_config(annotation)
