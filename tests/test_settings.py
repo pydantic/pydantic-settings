@@ -1536,6 +1536,136 @@ def test_nested_model_default_partial_update_with_stdlib_dataclass_aliased_discr
     assert SettingsDefault(root_field={'type': 'submodel2'}).root_field == DefaultField2(kind='submodel2')
 
 
+def test_nested_model_default_partial_update_with_stdlib_dataclass_local_forward_ref(env):
+    """Test that a stdlib dataclass default with a forward reference to a local class on another field works."""
+
+    class Local(BaseModel):
+        v: int = 0
+
+    @dataclasses.dataclass
+    class DA:
+        kind: Literal['a'] = 'a'
+        loc: 'Local' = dataclasses.field(default_factory=Local)
+
+    @dataclasses.dataclass
+    class DB:
+        kind: Literal['b'] = 'b'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', nested_model_default_partial_update=True)
+        p: DA | DB = Field(DA(), discriminator='kind')
+
+    env.set('P__KIND', 'a')
+    assert Settings().p == DA(kind='a', loc=Local(v=0))
+
+
+def test_nested_model_default_partial_update_with_stdlib_dataclass_alias_and_local_forward_ref(env):
+    """Test that a stdlib dataclass discriminator alias is found when another field names a local class."""
+
+    class Local(BaseModel):
+        v: int = 0
+
+    @dataclasses.dataclass
+    class DA:
+        kind: Annotated[Literal['a'], Field(validation_alias='type')] = 'a'
+        loc: 'Local' = dataclasses.field(default_factory=Local)
+        x: int = 0
+
+    @dataclasses.dataclass
+    class DB:
+        kind: Annotated[Literal['b'], Field(validation_alias='type')] = 'b'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', nested_model_default_partial_update=True)
+        p: DA | DB = Field(DA(x=5), discriminator='kind')
+
+    env.set('P__TYPE', 'b')
+    assert Settings().p == DB()
+
+
+def test_nested_model_default_partial_update_with_inherited_stdlib_dataclass_alias(env, monkeypatch):
+    """Test that a discriminator alias declared on a stdlib dataclass base in another module is found."""
+    base_module = type(sys)('_base_module_for_alias_test')
+    monkeypatch.setitem(sys.modules, base_module.__name__, base_module)
+    exec(
+        """
+from __future__ import annotations
+
+import dataclasses
+import typing as t
+
+import pydantic as pd
+
+
+@dataclasses.dataclass
+class BaseA:
+    kind: t.Annotated[t.Literal['a'], pd.Field(validation_alias='type')] = 'a'
+    x: int = 0
+""",
+        base_module.__dict__,
+    )
+
+    @dataclasses.dataclass
+    class DA(base_module.BaseA):
+        pass
+
+    @dataclasses.dataclass
+    class DB:
+        kind: Annotated[Literal['b'], Field(validation_alias='type')] = 'b'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', nested_model_default_partial_update=True)
+        p: DA | DB = Field(DA(x=5), discriminator='kind')
+
+    env.set('P__TYPE', 'b')
+    assert Settings().p == DB()
+
+
+def test_nested_model_default_partial_update_with_stdlib_dataclass_unresolvable_discriminator(env):
+    """Test that a discriminator whose own annotation can't be resolved is looked up by its name only."""
+    KindC = Literal['c']
+
+    @dataclasses.dataclass
+    class DC:
+        kind: 'KindC' = 'c'
+        x: int = 0
+
+    @dataclasses.dataclass
+    class DB:
+        kind: Literal['b'] = 'b'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', nested_model_default_partial_update=True)
+        p: DC | DB = Field(DC(), discriminator='kind')
+
+    env.set('P__KIND', 'c')
+    env.set('P__X', '3')
+    assert Settings().p == DC(x=3)
+
+
+def test_nested_model_default_partial_update_with_stdlib_dataclass_default_without_discriminator():
+    """Test that a stdlib dataclass default without the discriminator field still fails validation."""
+
+    @dataclasses.dataclass
+    class DA:
+        kind: Literal['a'] = 'a'
+
+    @dataclasses.dataclass
+    class DB:
+        kind: Literal['b'] = 'b'
+
+    @dataclasses.dataclass
+    class NoKind:
+        y: int = 0
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(nested_model_default_partial_update=True)
+        q: DA | DB = Field(NoKind(), discriminator='kind')
+
+    with pytest.raises(ValidationError, match='union_tag_not_found'):
+        Settings()
+
+
 class _BlackCat(BaseModel):
     model_config = ConfigDict(extra='forbid')
     pet_type: Literal['cat'] = 'cat'
