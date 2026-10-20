@@ -318,6 +318,8 @@ def _get_nested_discriminators(annotation: Any) -> list[str] | None:
     reaching ``BlackCat`` requires both ``pet_type='cat'`` and ``color='black'``. Each one has to keep the
     default's value for its default to still apply.
 
+    A nested discriminator can be given as ``Discriminator(...)`` or ``Field(discriminator=...)``.
+
     Returns ``None`` if a nested discriminator can't be resolved to a field name (i.e. it is callable), as
     the member it selects can't be looked up in the incoming value.
     """
@@ -328,10 +330,18 @@ def _get_nested_discriminators(annotation: Any) -> list[str] | None:
         if arg is type(None):
             continue
         for metadata in get_args(arg)[1:]:
-            if isinstance(metadata, Discriminator):
-                if not isinstance(metadata.discriminator, str):
-                    return None
-                discriminators.append(metadata.discriminator)
+            # A nested discriminator is set either with `Discriminator(...)` or `Field(discriminator=...)`
+            if isinstance(metadata, FieldInfo):
+                discriminator = _get_discriminator(metadata)
+            elif isinstance(metadata, Discriminator):
+                discriminator = metadata.discriminator
+            else:
+                continue
+            if discriminator is None:
+                continue
+            if not isinstance(discriminator, str):
+                return None
+            discriminators.append(discriminator)
         nested = _get_nested_discriminators(arg)
         if nested is None:
             return None
