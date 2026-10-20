@@ -2,8 +2,6 @@
 
 from __future__ import annotations as _annotations
 
-import logging
-import os
 import warnings
 from collections.abc import Mapping
 from pathlib import Path
@@ -15,13 +13,15 @@ from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
 )
 from typing_inspection.introspection import is_union_origin
 
-from ...utils import _settings_debug_enabled, logger
+from ...utils import _debug_logging_enabled, logger
 from ..types import ENV_FILE_SENTINEL, DotenvFiltering, DotenvType, EnvPrefixTarget
 from ..utils import (
     InitState,
     _annotation_is_complex,
+    _as_list,
     _get_field_annotation_and_metadata,
     _resolve_config_file,
+    _resolve_setting,
     _union_is_complex,
     parse_env_vars,
 )
@@ -53,16 +53,11 @@ class DotEnvSettingsSource(EnvSettingsSource):
         env_file_depth: int | None = None,
         _init_state: InitState | None = None,
     ) -> None:
-        self.env_file = env_file if env_file != ENV_FILE_SENTINEL else settings_cls.model_config.get('env_file')
-        self.env_file_encoding = (
-            env_file_encoding if env_file_encoding is not None else settings_cls.model_config.get('env_file_encoding')
-        )
-        self.env_file_depth = (
-            env_file_depth if env_file_depth is not None else settings_cls.model_config.get('env_file_depth', 0)
-        )
-        self.dotenv_filtering = (
-            dotenv_filtering if dotenv_filtering is not None else settings_cls.model_config.get('dotenv_filtering')
-        )
+        config = settings_cls.model_config
+        self.env_file = env_file if env_file != ENV_FILE_SENTINEL else config.get('env_file')
+        self.env_file_encoding = _resolve_setting(env_file_encoding, config, 'env_file_encoding')
+        self.env_file_depth = _resolve_setting(env_file_depth, config, 'env_file_depth', 0)
+        self.dotenv_filtering = _resolve_setting(dotenv_filtering, config, 'dotenv_filtering')
         super().__init__(
             settings_cls,
             case_sensitive,
@@ -105,17 +100,13 @@ class DotEnvSettingsSource(EnvSettingsSource):
         )
 
     def _read_env_files(self) -> Mapping[str, str | None]:
-        env_files = self.env_file
-        if env_files is None:
+        if self.env_file is None:
             return {}
 
-        if isinstance(env_files, (str, os.PathLike)):
-            env_files = [env_files]
-
-        debug = _settings_debug_enabled() and logger.isEnabledFor(logging.DEBUG)
+        debug = _debug_logging_enabled()
 
         dotenv_vars: dict[str, str | None] = {}
-        for env_file in env_files:
+        for env_file in _as_list(self.env_file):
             env_path = _resolve_config_file(env_file, self.env_file_depth, allow_fifo=True)
             if env_path is not None:
                 if debug:

@@ -15,7 +15,6 @@ from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
     get_origin,
 )
 from pydantic._internal._utils import deep_update, is_model_class
-from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
 from typing_inspection.introspection import is_union_origin
 
@@ -33,10 +32,13 @@ from .utils import (
     InitState,
     _annotation_is_complex,
     _get_alias_names,
+    _get_env_var_key,
     _get_field_annotation_and_metadata,
     _get_field_metadata,
     _get_model_config,
     _get_model_fields,
+    _is_model_or_dataclass,
+    _resolve_setting,
     _strip_annotated,
     _union_is_complex,
     _validate_by_alias_enabled,
@@ -259,11 +261,6 @@ def _unwrap_optional_annotation(annotation: Any) -> Any:
     return annotation
 
 
-def _is_model_or_dataclass(annotation: Any) -> bool:
-    """Whether the annotation is a pydantic model or a pydantic dataclass, i.e. a type with nested fields."""
-    return is_model_class(annotation) or is_pydantic_dataclass(annotation)
-
-
 def _get_discriminator(field_info: FieldInfo) -> str | Callable[[Any], Hashable] | None:
     """Get the discriminator of a field using a discriminated union (via Annotated or Field(discriminator=...))."""
     from pydantic import Discriminator
@@ -359,10 +356,8 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
         # Discriminated union fields: per discriminator guarding the default's member, the keys that can hold
         # its value, and the default's value
         self._discriminator_tags: dict[str, list[tuple[tuple[str, ...], Any]]] = {}
-        self.nested_model_default_partial_update = (
-            nested_model_default_partial_update
-            if nested_model_default_partial_update is not None
-            else self.config.get('nested_model_default_partial_update', False)
+        self.nested_model_default_partial_update = _resolve_setting(
+            nested_model_default_partial_update, self.config, 'nested_model_default_partial_update', False
         )
         if self.nested_model_default_partial_update:
             validate_by_alias = _validate_by_alias_enabled(self.config)
@@ -431,7 +426,7 @@ class InitSettingsSource(PydanticBaseSettingsSource):
 
         def normalize(name: str) -> str:
             # When case_sensitive is False, matching is done on lower-cased names.
-            return name if case_sensitive else name.lower()
+            return _get_env_var_key(name, case_sensitive)
 
         self.init_kwargs = {}
         init_kwarg_names = set(init_kwargs.keys())
@@ -479,10 +474,8 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         # no alias exists, we keep it as-is so it can be processed as extra if allowed.
         self.init_kwargs.update({key: val for key, val in init_kwargs.items() if key in init_kwarg_names})
 
-        self.nested_model_default_partial_update = (
-            nested_model_default_partial_update
-            if nested_model_default_partial_update is not None
-            else self.config.get('nested_model_default_partial_update', False)
+        self.nested_model_default_partial_update = _resolve_setting(
+            nested_model_default_partial_update, self.config, 'nested_model_default_partial_update', False
         )
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
@@ -513,21 +506,15 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         _init_state: InitState | None = None,
     ) -> None:
         super().__init__(settings_cls, _init_state)
-        self.case_sensitive = case_sensitive if case_sensitive is not None else self.config.get('case_sensitive', False)
-        self.env_prefix = env_prefix if env_prefix is not None else self.config.get('env_prefix', '')
-        self.env_prefix_target = (
-            env_prefix_target if env_prefix_target is not None else self.config.get('env_prefix_target', 'variable')
-        )
-        self.env_ignore_empty = (
-            env_ignore_empty if env_ignore_empty is not None else self.config.get('env_ignore_empty', False)
-        )
-        self.env_parse_none_str = (
-            env_parse_none_str if env_parse_none_str is not None else self.config.get('env_parse_none_str')
-        )
-        self.env_parse_enums = env_parse_enums if env_parse_enums is not None else self.config.get('env_parse_enums')
+        self.case_sensitive = _resolve_setting(case_sensitive, self.config, 'case_sensitive', False)
+        self.env_prefix = _resolve_setting(env_prefix, self.config, 'env_prefix', '')
+        self.env_prefix_target = _resolve_setting(env_prefix_target, self.config, 'env_prefix_target', 'variable')
+        self.env_ignore_empty = _resolve_setting(env_ignore_empty, self.config, 'env_ignore_empty', False)
+        self.env_parse_none_str = _resolve_setting(env_parse_none_str, self.config, 'env_parse_none_str')
+        self.env_parse_enums = _resolve_setting(env_parse_enums, self.config, 'env_parse_enums')
 
     def _apply_case_sensitive(self, value: str) -> str:
-        return value.lower() if not self.case_sensitive else value
+        return _get_env_var_key(value, self.case_sensitive)
 
     def _extract_field_info(
         self, field: FieldInfo, field_name: str, model_config: Mapping[str, Any] | None = None
