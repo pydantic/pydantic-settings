@@ -275,7 +275,11 @@ def _get_discriminator(field_info: FieldInfo) -> str | Callable[[Any], Hashable]
 
 
 def _get_member_field(model_cls: type[Any], name: str) -> FieldInfo | None:
-    """Get a field of a discriminated union member: a model, a pydantic dataclass or a stdlib dataclass."""
+    """Get a field of a discriminated union member: a model, a pydantic dataclass or a stdlib dataclass.
+
+    Returns ``None`` if a stdlib dataclass field's annotation can't be resolved, e.g. when it names a class that
+    is only in a local scope, so a `Field()` in its `Annotated` metadata is then not found.
+    """
     if _is_model_or_dataclass(model_cls):
         return _get_model_fields(model_cls).get(name)
     # Pydantic doesn't attach `__pydantic_fields__` to a stdlib dataclass, so find the `FieldInfo` itself:
@@ -285,12 +289,16 @@ def _get_member_field(model_cls: type[Any], name: str) -> FieldInfo | None:
         return None
     if isinstance(dc_field.default, FieldInfo):
         return dc_field.default
-    # Resolve this field's annotation alone: another field may name a class that is only in a local scope
-    annotations_holder = type(
-        model_cls.__name__, (), {'__module__': model_cls.__module__, '__annotations__': {name: dc_field.type}}
-    )
+    # Resolve this field's annotation alone, as another field may name a class that is only in a local scope.
+    # `typing` can't evaluate a single annotation, so it is put on a class created in the module of the class
+    # declaring the field, which may be a base in another module.
     try:
-        hint = get_type_hints(annotations_holder, localns=dict(vars(model_cls)), include_extras=True)[name]
+        # On Python 3.14+ reading `__annotations__` evaluates them, so it can raise `NameError` too
+        owner = next((c for c in model_cls.__mro__ if name in getattr(c, '__annotations__', {})), model_cls)
+        annotations_holder = type(
+            owner.__name__, (), {'__module__': owner.__module__, '__annotations__': {name: dc_field.type}}
+        )
+        hint = get_type_hints(annotations_holder, localns=dict(vars(owner)), include_extras=True)[name]
     except NameError:
         return None
     return next((m for m in get_args(hint)[1:] if isinstance(m, FieldInfo)), None)
