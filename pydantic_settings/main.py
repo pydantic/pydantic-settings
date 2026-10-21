@@ -820,13 +820,13 @@ class CliApp:
             if loop and loop.is_running():
                 # We're in a context with an active event loop (e.g., Jupyter Notebook).
                 # Running asyncio.run() here would cause conflicts, so we use a separate thread.
-                exception_container = []
+                exception_container: list[BaseException] = []
 
                 def run_coro() -> None:
                     try:
                         # Execute the coroutine in a new event loop in this separate thread.
                         asyncio.run(command(model))
-                    except Exception as e:
+                    except BaseException as e:
                         exception_container.append(e)
 
                 thread = threading.Thread(target=run_coro)
