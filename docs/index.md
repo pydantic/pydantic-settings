@@ -2646,6 +2646,10 @@ class Settings(BaseSettings):
 
 Path to secrets directory, same as `SecretsSettingsSource.secrets_dir`. If `list`, the last match wins.
 If `secrets_dir` is passed in both source constructor and model config, values are not merged (constructor wins).
+When wrapping a `SecretsSettingsSource`, an explicit `secrets_dir` on `NestedSecretsSettingsSource` also takes
+precedence over the wrapped source's directory, including one provided via `Settings(_secrets_dir=...)`.
+Leave the wrapper's `secrets_dir` unspecified to inherit the wrapped source's directory and runtime overrides.
+An explicit empty list disables loading from secrets directories.
 
 #### secrets_dir_missing
 

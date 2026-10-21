@@ -119,6 +119,63 @@ def test_secrets_dir_as_arg(env, tmp_files):
     }
 
 
+@pytest.mark.parametrize('wrap_source', [False, True], ids=['settings-class', 'wrapped-source'])
+@pytest.mark.parametrize('directory_kind', ['path', 'string', 'list', 'empty'])
+def test_explicit_nested_secrets_directory_overrides_config(tmp_path, wrap_source, directory_kind):
+    directories = [tmp_path / name for name in ('config', 'explicit', 'last')]
+    for directory in directories:
+        directory.mkdir()
+        (directory / 'value').write_text(directory.name)
+    configured, explicit, last = directories
+    directory = {
+        'path': explicit,
+        'string': str(explicit),
+        'list': [explicit, last],
+        'empty': [],
+    }[directory_kind]
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(secrets_dir=configured)
+        value: str = 'default'
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            source = file_secret_settings if wrap_source else settings_cls
+            return (NestedSecretsSettingsSource(source, secrets_dir=directory),)
+
+    assert (
+        Settings().value
+        == {'path': 'explicit', 'string': 'explicit', 'list': 'last', 'empty': 'default'}[directory_kind]
+    )
+
+
+@pytest.mark.parametrize('explicit_wrapper', [False, True])
+@pytest.mark.parametrize('runtime_override', [False, True])
+def test_nested_secrets_directory_wrapper_and_runtime_precedence(tmp_path, explicit_wrapper, runtime_override):
+    directories = [tmp_path / name for name in ('config', 'wrapper', 'runtime')]
+    for directory in directories:
+        directory.mkdir()
+        (directory / 'value').write_text(directory.name)
+    configured, wrapper, runtime = directories
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(secrets_dir=configured)
+        value: str
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            return (
+                NestedSecretsSettingsSource(file_secret_settings, secrets_dir=wrapper if explicit_wrapper else None),
+            )
+
+    settings = Settings(_secrets_dir=runtime if runtime_override else None)
+    assert settings.value == ('wrapper' if explicit_wrapper else 'runtime' if runtime_override else 'config')
+
+
 @pytest.mark.parametrize(
     'conf,secrets',
     (
