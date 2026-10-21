@@ -651,14 +651,18 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                 values[name] = value
                 continue
             model_fields = _get_model_fields(annotation)
-            validate_by_alias = _validate_by_alias_enabled(_get_model_config(annotation))
+            model_config = _get_model_config(annotation)
+            validate_by_alias = _validate_by_alias_enabled(model_config)
 
             # Find field in sub model by looking in fields case insensitively
             field_key: str | None = None
             for sub_model_field_name, sub_model_field in model_fields.items():
                 _warn_if_field_info_incomplete(sub_model_field, sub_model_field_name, self._init_state)
                 aliases, _ = _get_alias_names(
-                    sub_model_field_name, sub_model_field, validate_by_alias=validate_by_alias
+                    sub_model_field_name,
+                    sub_model_field,
+                    populate_by_name=_validate_by_name_enabled(model_config),
+                    validate_by_alias=validate_by_alias,
                 )
                 _search = (alias for alias in aliases if alias.lower() == name.lower())
                 if field_key := next(_search, None):

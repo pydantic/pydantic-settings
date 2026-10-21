@@ -4582,6 +4582,83 @@ def test_case_insensitive_nested_alias(env):
     assert s.model_dump() == {'nEstEd': {'BaR': 123, 'FOO': 'string'}}
 
 
+@pytest.mark.parametrize(
+    'config',
+    [ConfigDict(populate_by_name=True), ConfigDict(validate_by_name=True)],
+    ids=['populate-by-name', 'validate-by-name'],
+)
+@pytest.mark.parametrize('as_dataclass', [False, True], ids=['model', 'dataclass'])
+@pytest.mark.parametrize('as_json', [False, True], ids=['delimiter', 'json'])
+def test_case_insensitive_nested_accepted_field_names(env, config, as_dataclass, as_json):
+    if as_dataclass:
+
+        @pydantic_dataclasses.dataclass(config=config)
+        class Nested:
+            ApiKey: str = Field(validation_alias=AliasChoices('api_key', 'token'))
+
+    else:
+
+        class Nested(BaseModel):
+            model_config = config
+            ApiKey: str = Field(validation_alias=AliasChoices('api_key', 'token'))
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', populate_by_name=False)
+        nested: Nested | None = None
+
+    if as_json:
+        env.set('NESTED', json.dumps({'aPiKeY': 'value'}))
+    else:
+        env.set('NESTED__aPiKeY', 'value')
+    assert Settings().nested.ApiKey == 'value'
+
+
+@pytest.mark.parametrize('root_populate_by_name', [False, True])
+def test_case_insensitive_nested_rejected_field_names(env, root_populate_by_name):
+    class Nested(BaseModel):
+        model_config = ConfigDict(populate_by_name=False)
+        ApiKey: str = Field(alias='api_key')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', populate_by_name=root_populate_by_name)
+        nested: Nested
+
+    env.set('NESTED__APIKEY', 'value')
+    with pytest.raises(ValidationError, match=r'nested\.api_key'):
+        Settings()
+
+
+@pytest.mark.parametrize('reverse_order', [False, True])
+def test_case_insensitive_nested_alias_precedes_accepted_field_name(env, reverse_order):
+    class Nested(BaseModel):
+        model_config = ConfigDict(populate_by_name=True)
+        ApiKey: str = Field(alias='api_key')
+
+    class Settings(BaseSettings):
+        nested: Nested
+
+    values = [('aPiKeY', 'from-name'), ('API_KEY', 'from-alias')]
+    env.set('NESTED', json.dumps(dict(reversed(values) if reverse_order else values)))
+    assert Settings().nested.ApiKey == 'from-alias'
+
+
+def test_case_sensitive_nested_accepted_field_name(env):
+    class Nested(BaseModel):
+        model_config = ConfigDict(populate_by_name=True)
+        ApiKey: str = Field(alias='api_key')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', case_sensitive=True)
+        nested: Nested
+
+    env.set('nested__APIKEY', 'value')
+    with pytest.raises(ValidationError, match=r'nested\.api_key'):
+        Settings()
+    env.pop('nested__APIKEY')
+    env.set('nested__ApiKey', 'value')
+    assert Settings().nested.ApiKey == 'value'
+
+
 def test_case_insensitive_nested_list(env):
     class NestedSettings(BaseModel):
         FOO: list[str]
