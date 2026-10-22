@@ -20,6 +20,7 @@ from argparse import (
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
+from datetime import timedelta
 from enum import Enum
 from functools import cached_property
 from itertools import chain
@@ -1807,6 +1808,21 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             return json.dumps(to_jsonable_python(value))
         return str(value)
 
+    @staticmethod
+    def _append_serialized_value(
+        optional_args: list[str | list[Any] | dict[str, Any]],
+        model_default: Any,
+        value: str | list[Any] | dict[str, Any],
+    ) -> None:
+        if isinstance(model_default, timedelta) and isinstance(value, str):
+            # Only scalar optional durations use ISO format; preserve alias-path containers and positionals.
+            value = str(to_jsonable_python(model_default))
+            if value.startswith('-'):
+                # Bind negative ISO durations so argparse does not mistake them for options.
+                optional_args[-1] = f'{optional_args[-1]}={value}'
+                return
+        optional_args.append(value)
+
     def _coerce_value_styles(
         self,
         model_default: Any,
@@ -1932,7 +1948,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
                 # If implicit bool flag, do not add a value
                 if arg.kwargs.get('action') not in (BooleanOptionalAction, 'store_true', 'store_false'):
-                    optional_args.append(coerced_value)
+                    self._append_serialized_value(optional_args, model_default, coerced_value)
 
         return {
             'optional': [json.dumps(value) if not isinstance(value, str) else value for value in optional_args],
