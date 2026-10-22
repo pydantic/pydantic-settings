@@ -190,7 +190,11 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
             except OSError:
                 return
             for entry in entries:
-                resolved = entry.resolve()
+                try:
+                    resolved = entry.resolve()
+                except RuntimeError:
+                    # Python 3.11 and 3.12 raise RuntimeError for a symlink loop.
+                    continue
                 if resolved.is_dir():
                     # Only descend into directories that stay within secrets_dir.
                     # A symlinked directory pointing outside of ``path`` is not
