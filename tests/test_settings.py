@@ -4437,6 +4437,59 @@ def test_env_nested_dict_complex_value_type(env):
     assert s.model_dump() == {'nested_field': {'key': ['a', 'b']}}
 
 
+@pytest.mark.parametrize('nested', [False, True])
+@pytest.mark.parametrize(
+    'value_type,env_value,expected',
+    [
+        (list[str] | str, '[]', []),
+        (list[str] | str, '["a", "b"]', ['a', 'b']),
+        (list[str] | None, '[]', []),
+        (list[str] | None, '["a", "b"]', ['a', 'b']),
+        (list[str] | None, 'null', None),
+        (list[str] | str, 'plain', 'plain'),
+        (list[str] | str, '[invalid', '[invalid'),
+        (int | str, '123', '123'),
+    ],
+)
+def test_env_nested_dict_union_value_type(env, nested, value_type, env_value, expected):
+    class SubModel(BaseModel):
+        values: dict[str, value_type]
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='APP_', env_nested_delimiter='__')
+        config: SubModel if nested else dict[str, value_type]
+
+    env.set('APP_CONFIG__VALUES__KEY' if nested else 'APP_CONFIG__KEY', env_value)
+    expected_values = {'key': expected}
+    assert Settings().model_dump() == {'config': {'values': expected_values} if nested else expected_values}
+
+
+@pytest.mark.parametrize('nested', [False, True])
+@pytest.mark.parametrize('value_type', [list[str], list[str] | str, list[str] | None])
+def test_env_nested_dict_value_disable_decoding(env, nested, value_type):
+    seen = []
+
+    class SubModel(BaseModel):
+        values: dict[str, value_type]
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', enable_decoding=False)
+        config: SubModel if nested else dict[str, value_type]
+
+        @field_validator('config', mode='before')
+        @classmethod
+        def decode_config(cls, value):
+            values = value['values'] if nested else value
+            seen.append(values['key'])
+            values['key'] = json.loads(values['key'])
+            return value
+
+    env.set('CONFIG__VALUES__KEY' if nested else 'CONFIG__KEY', '["a", "b"]')
+    expected_values = {'key': ['a', 'b']}
+    assert Settings().model_dump() == {'config': {'values': expected_values} if nested else expected_values}
+    assert seen == ['["a", "b"]']
+
+
 def test_nested_models_leaf_vs_deeper_env_dict_assumed(env):
     class NestedSettings(BaseModel):
         foo: str

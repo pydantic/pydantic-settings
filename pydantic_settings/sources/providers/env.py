@@ -327,7 +327,10 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                         env_val = env_val if enum_val is None else enum_val
                 elif target_field:
                     # target_field is a raw type (e.g. from dict value type annotation)
-                    is_complex = _annotation_is_complex(target_field, [], self._init_state)
+                    is_complex = _annotation_is_complex(target_field, [], self._init_state) or (
+                        is_union_origin(get_origin(target_field))
+                        and _union_is_complex(target_field, [], self._init_state)
+                    )
                     allow_json_failure = True
                 else:
                     # nested field type is dict
