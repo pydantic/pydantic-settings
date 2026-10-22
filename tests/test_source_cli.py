@@ -5540,6 +5540,32 @@ def test_cli_app_run_alias_path_revalidates_original_container_value():
     assert exc_info.value.errors()[0]['type'] == 'int_parsing'
 
 
+def test_cli_app_run_alias_path_passes_supplied_container():
+    seen = []
+
+    class Cmd(BaseModel):
+        x: int = Field(validation_alias=AliasPath('a', 0))
+
+        @model_validator(mode='before')
+        @classmethod
+        def record(cls, data):
+            seen.append(data['a'])
+            return data
+
+    assert CliApp.run(Cmd, cli_args=['--a', '[4, 5]']).model_dump() == {'x': 4}
+    assert seen[-1] == [4, 5]
+
+
+def test_cli_app_run_unsupplied_alias_path_with_extra_forbid():
+    class Cmd(BaseModel):
+        model_config = ConfigDict(extra='forbid')
+        x: int = Field(1, validation_alias=AliasPath('a', 'b'))
+        y: int = 2
+
+    assert CliApp.run(Cmd, cli_args=[]).model_dump() == {'x': 1, 'y': 2}
+    assert CliApp.run(Cmd, cli_args=['--a', '{"b": 3}']).model_dump() == {'x': 3, 'y': 2}
+
+
 def test_get_model_description_returns_docstring():
     class MyModel(BaseModel):
         """My docstring."""
