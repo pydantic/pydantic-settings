@@ -43,6 +43,8 @@ from pydantic import (
     StrictInt,
     Tag,
     ValidationError,
+    computed_field,
+    field_serializer,
     field_validator,
     model_validator,
 )
@@ -54,6 +56,7 @@ from typing_extensions import TypeAliasType, override
 
 from pydantic_settings import (
     BaseSettings,
+    CliApp,
     DotEnvSettingsSource,
     EnvSettingsSource,
     ForceDecode,
@@ -1241,7 +1244,7 @@ def test_class_nested_model_default_partial_update(env):
     assert SettingsDefaultsA().model_dump(exclude_unset=True) == {
         'nested_a': {'v0': True, 'v1': True},
         'nested_b': {'v0': True, 'v1': True},
-        'nested_c': {'v0': True, 'v1': True},
+        'nested_c': {'v0': True},
         'nested_d': {'v0': True, 'v1': True},
     }
 
@@ -1294,6 +1297,175 @@ def test_init_kwargs_nested_model_default_partial_update(env):
 
     s = Settings(v0='0', sub_model={'v1': 'init-v1', 'v2': b'init-v2', 'v3': 3, 'deep': DeepSubModel(v4='init-v4')})
     assert s.model_dump() == s_final
+
+
+@pytest.mark.parametrize('source', ['env', 'cli', 'init', 'init_model'])
+def test_nested_model_default_partial_update_fields_set_deep(env, source):
+    """Nested `model_fields_set` only holds the fields a source gave or that were set on the default object.
+
+    See: https://github.com/pydantic/pydantic-settings/issues/851
+    """
+
+    class DeepInner(BaseModel):
+        x: int = 1
+        y: int = 2
+
+    class Middle(BaseModel):
+        deep: DeepInner | None = DeepInner()
+        z: str = 'hello'
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        middle: Middle | None = Middle(z='set')
+
+    if source == 'env':
+        env.set('MIDDLE__DEEP__X', '99')
+        s = Settings()
+    elif source == 'cli':
+        s = CliApp.run(Settings, cli_args=['--middle.deep.x', '99'])
+    elif source == 'init':
+        s = Settings(middle={'deep': {'x': 99}})
+    else:
+        s = Settings(middle=Middle(deep=DeepInner(x=99), z='set'))
+    assert s.middle == Middle(deep=DeepInner(x=99), z='set')
+    assert s.middle.model_fields_set == {'deep', 'z'}
+    assert s.middle.deep.model_fields_set == {'x'}
+    assert s.model_dump(exclude_unset=True) == {'middle': {'deep': {'x': 99}, 'z': 'set'}}
+
+
+def test_nested_model_default_partial_update_fields_set_multiple_sources(env):
+    class Nested(BaseModel):
+        field_a: str = 'default_a'
+        field_b: int = 42
+        field_c: float = 3.14
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        nested: Nested = Nested()
+
+    env.set('NESTED__FIELD_B', '7')
+    s = CliApp.run(Settings, cli_args=['--nested.field_a', 'x'])
+    assert s.nested == Nested(field_a='x', field_b=7)
+    assert s.nested.model_fields_set == {'field_a', 'field_b'}
+
+
+def test_nested_model_default_partial_update_fields_set_keeps_default_values(env):
+    class Inner(BaseModel):
+        x: int = 1
+        y: int = 2
+
+    class Other(BaseModel):
+        x: int = 1
+
+    class Middle(BaseModel):
+        deep: Inner | None = Inner(x=5)
+        shown: Inner = Inner()
+        hidden: int = Field(0, exclude=True)
+        either: Other | Inner = Inner()
+        opts: dict = {'k': 1}
+        tags: list[str] = ['a']
+        w: int = 0
+        uid: str = Field(default_factory=lambda: uuid.uuid4().hex)
+        z: str = 'hello'
+
+        @field_serializer('shown')
+        def _shown(self, v: Inner) -> str:
+            return str(v)
+
+        @computed_field
+        @property
+        def size(self) -> int:
+            return len(self.tags)
+
+    default = Middle(w=0)
+    default.tags.append('b')
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        middle: Middle = default
+
+    env.set('MIDDLE__Z', 'x')
+    env.set('MIDDLE__SHOWN__X', '5')
+    env.set('MIDDLE__EITHER__X', '5')
+    env.set('MIDDLE__OPTS', '{"k": 2}')
+    env.set('MIDDLE__HIDDEN', '3')
+    s = Settings()
+    # A changed list, a `default_factory` value and a field set to its class default on the default object are kept,
+    # an untouched nested default is not marked as set and a union keeps its member
+    assert s.middle == Middle(
+        shown=Inner(x=5), hidden=3, either=Inner(x=5), opts={'k': 2}, tags=['a', 'b'], uid=default.uid, w=0, z='x'
+    )
+    assert s.middle.model_fields_set == {'shown', 'hidden', 'either', 'opts', 'tags', 'uid', 'w', 'z'}
+    assert s.middle.shown.model_fields_set == {'x'}
+    # A source can still set a nested default to None
+    assert Settings(middle={'deep': None}).middle.deep is None
+
+
+def test_nested_model_default_partial_update_uncomparable_default(env):
+    class Ambiguous:
+        def __bool__(self):
+            raise ValueError('ambiguous')
+
+    class Matrix:
+        # Like a numpy array: `==` gives a value that has no truth value
+        __hash__ = None
+
+        def __eq__(self, other):
+            return Ambiguous()
+
+    class Model(BaseModel):
+        model_config = ConfigDict(arbitrary_types_allowed=True)
+        weights: Matrix = Matrix()
+        lr: float = 0.1
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        model: Model = Model()
+
+    env.set('MODEL__LR', '0.5')
+    s = Settings()
+    assert s.model.lr == 0.5
+    assert s.model.model_fields_set == {'weights', 'lr'}
+
+
+def test_nested_model_default_partial_update_nan_default(env):
+    class Model(BaseModel):
+        ratio: float = float('nan')
+        lr: float = 0.1
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        model: Model = Model()
+
+    env.set('MODEL__LR', '0.5')
+    assert Settings().model.model_fields_set == {'lr'}
+
+
+def test_nested_model_default_partial_update_discriminator_on_model_default(env):
+    class Cat(BaseModel):
+        kind: Literal['cat'] = 'cat'
+        name: str = 'tom'
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        pet: Cat = Field(Cat(), discriminator='kind')
+
+    env.set('PET__KIND', 'dog')
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_nested_model_default_partial_update_root_model_default(env):
+    class Mounts(RootModel[dict[str, str]]):
+        root: dict[str, str] = {'root': '/', 'home': '/home'}
+
+    class Config(BaseModel):
+        mounts: Mounts = Mounts()
+        debug: bool = False
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        mounts: Mounts = Mounts()
+        config: Config = Config()
+
+    env.set('MOUNTS__TMP', '/tmp')
+    env.set('CONFIG__MOUNTS__TMP', '/tmp')
+    s = Settings()
+    assert s.mounts.root == {'root': '/', 'home': '/home', 'tmp': '/tmp'}
+    assert s.config.mounts.root == {'root': '/', 'home': '/home', 'tmp': '/tmp'}
 
 
 def test_alias_resolution_init_source(env):
