@@ -4642,7 +4642,7 @@ def test_case_insensitive_nested_alias_precedes_accepted_field_name(env, reverse
     assert Settings().nested.ApiKey == 'from-alias'
 
 
-def test_case_sensitive_nested_accepted_field_name(env):
+def test_case_sensitive_nested_accepted_field_name(monkeypatch):
     class Nested(BaseModel):
         model_config = ConfigDict(populate_by_name=True)
         ApiKey: str = Field(alias='api_key')
@@ -4651,11 +4651,11 @@ def test_case_sensitive_nested_accepted_field_name(env):
         model_config = SettingsConfigDict(env_nested_delimiter='__', case_sensitive=True)
         nested: Nested
 
-    env.set('nested__APIKEY', 'value')
+    # Windows' os.environ forces the source to fall back to case-insensitive matching.
+    monkeypatch.setattr(os, 'environ', value={'nested__APIKEY': 'value'})
     with pytest.raises(ValidationError, match=r'nested\.api_key'):
         Settings()
-    env.pop('nested__APIKEY')
-    env.set('nested__ApiKey', 'value')
+    monkeypatch.setattr(os, 'environ', value={'nested__ApiKey': 'value'})
     assert Settings().nested.ApiKey == 'value'
 
 
