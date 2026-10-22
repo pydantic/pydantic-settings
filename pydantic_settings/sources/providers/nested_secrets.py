@@ -47,8 +47,8 @@ class NestedSecretsSettingsSource(EnvSettingsSource):
         # config options
         conf = settings_cls.model_config
         self.secrets_dir: PathType | None = first_not_none(
-            getattr(file_secret_settings, 'secrets_dir', None),
             secrets_dir,
+            getattr(file_secret_settings, 'secrets_dir', None),
             conf.get('secrets_dir'),
         )
         self.secrets_dir_missing: Literal['ok', 'warn', 'error'] = first_not_none(
