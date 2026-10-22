@@ -204,7 +204,9 @@ class PydanticBaseSettingsSource(ABC):
             The decoded value for further preparation
         """
         metadata = _get_field_metadata(field) if field else []
-        if NoDecode in metadata or (self.config.get('enable_decoding') is False and ForceDecode not in metadata):
+        if field and (
+            NoDecode in metadata or (self.config.get('enable_decoding') is False and ForceDecode not in metadata)
+        ):
             return value
 
         return json.loads(value)

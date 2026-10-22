@@ -29,8 +29,10 @@ from ..utils import (
     _get_model_config,
     _get_model_fields,
     _literal_has_numeric_enum,
+    _resolve_type_alias,
     _union_has_strict_types,
     _union_is_complex,
+    _unwrap_union_member,
     parse_env_vars,
 )
 
@@ -211,6 +213,28 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
         return True, allow_parse_failure
 
+    def _raw_union_is_complex(self, annotation: Any) -> bool:
+        """
+        Find out if a raw type (e.g. a dict value type) is a union containing complex types.
+        """
+        union = _unwrap_union_member(_resolve_type_alias(annotation))
+        return is_union_origin(get_origin(union)) and _union_is_complex(union, [], self._init_state)
+
+    def _decode_union_value(self, field_name: str, field: FieldInfo, value: str) -> Any:
+        """
+        Decode a value whose raw type is a union containing complex types, e.g. `list[str] | str`.
+
+        Only JSON arrays and objects are used, any other value is kept as the original string so that
+        values like `123` or `true` still validate against the scalar members of the union.
+        Decoding follows the `NoDecode`/`ForceDecode` metadata of the containing `field` and the
+        `enable_decoding` config.
+        """
+        try:
+            decoded = self.decode_complex_value(field_name, field, value)
+        except ValueError:
+            return value
+        return decoded if isinstance(decoded, (list, dict)) else value
+
     # Default value of `case_sensitive` is `None`, because we don't want to break existing behavior.
     # We have to change the method to a non-static method and use
     # `self.case_sensitive` instead in V3.
@@ -306,8 +330,12 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             *keys, last_key = env_name_without_prefix.split(self.env_nested_delimiter, self.maxsplit)
             env_var = result
             target_field: FieldInfo | None = field
+            # the closest field containing the target, its decoding settings apply to raw types
+            parent_field = field
             for key in keys:
                 target_field = self.next_field(target_field, key, self.case_sensitive)
+                if isinstance(target_field, FieldInfo):
+                    parent_field = target_field
                 if isinstance(env_var, dict):
                     env_var = env_var.setdefault(key, {})
 
@@ -327,11 +355,10 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                         env_val = env_val if enum_val is None else enum_val
                 elif target_field:
                     # target_field is a raw type (e.g. from dict value type annotation)
-                    is_complex = _annotation_is_complex(target_field, [], self._init_state) or (
-                        is_union_origin(get_origin(target_field))
-                        and _union_is_complex(target_field, [], self._init_state)
-                    )
+                    is_complex = _annotation_is_complex(target_field, [], self._init_state)
                     allow_json_failure = True
+                    if not is_complex and self._raw_union_is_complex(target_field):
+                        env_val = self._decode_union_value(last_key, parent_field, env_val)
                 else:
                     # nested field type is dict
                     is_complex, allow_json_failure = True, True

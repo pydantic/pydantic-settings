@@ -4437,6 +4437,9 @@ def test_env_nested_dict_complex_value_type(env):
     assert s.model_dump() == {'nested_field': {'key': ['a', 'b']}}
 
 
+ListOrStr = TypeAliasType('ListOrStr', list[str] | str)
+
+
 @pytest.mark.parametrize('nested', [False, True])
 @pytest.mark.parametrize(
     'value_type,env_value,expected',
@@ -4445,10 +4448,21 @@ def test_env_nested_dict_complex_value_type(env):
         (list[str] | str, '["a", "b"]', ['a', 'b']),
         (list[str] | None, '[]', []),
         (list[str] | None, '["a", "b"]', ['a', 'b']),
-        (list[str] | None, 'null', None),
+        (typing.Optional[list[str]], '["a"]', ['a']),  # noqa: UP045
+        (typing.Union[list[str], str], '["a"]', ['a']),  # noqa: UP007
+        (ListOrStr, '["a"]', ['a']),
+        (Annotated[list[str] | str, Field(min_length=1)], '["a"]', ['a']),
         (list[str] | str, 'plain', 'plain'),
         (list[str] | str, '[invalid', '[invalid'),
+        (list[str] | str, '123', '123'),
+        (list[str] | str, 'true', 'true'),
+        (list[str] | str, 'null', 'null'),
+        (list[str] | str, '"quoted"', '"quoted"'),
+        (list[str] | int, '123', 123),
         (int | str, '123', '123'),
+        # Json values are left to pydantic
+        (Json[list[str] | str], '["a"]', ['a']),
+        (Json[list[str] | str], '"a"', 'a'),
     ],
 )
 def test_env_nested_dict_union_value_type(env, nested, value_type, env_value, expected):
@@ -4465,29 +4479,32 @@ def test_env_nested_dict_union_value_type(env, nested, value_type, env_value, ex
 
 
 @pytest.mark.parametrize('nested', [False, True])
-@pytest.mark.parametrize('value_type', [list[str], list[str] | str, list[str] | None])
-def test_env_nested_dict_value_disable_decoding(env, nested, value_type):
-    seen = []
+@pytest.mark.parametrize(
+    'value_type,marker,enable_decoding,expected',
+    [
+        (list[str] | str, None, True, ['a']),
+        (list[str] | str, None, False, '["a"]'),
+        (list[str] | str, NoDecode, True, '["a"]'),
+        (list[str] | str, ForceDecode, False, ['a']),
+        # values of non-union types are decoded regardless of the decoding settings
+        (list[str], None, False, ['a']),
+        (list[str], NoDecode, True, ['a']),
+    ],
+)
+def test_env_nested_dict_union_value_decoding_settings(env, nested, value_type, marker, enable_decoding, expected):
+    # NoDecode/ForceDecode apply to the field containing the dict
+    dict_type = dict[str, value_type] if marker is None else Annotated[dict[str, value_type], marker]
 
     class SubModel(BaseModel):
-        values: dict[str, value_type]
+        values: dict_type
 
     class Settings(BaseSettings):
-        model_config = SettingsConfigDict(env_nested_delimiter='__', enable_decoding=False)
-        config: SubModel if nested else dict[str, value_type]
+        model_config = SettingsConfigDict(env_nested_delimiter='__', enable_decoding=enable_decoding)
+        config: SubModel if nested else dict_type
 
-        @field_validator('config', mode='before')
-        @classmethod
-        def decode_config(cls, value):
-            values = value['values'] if nested else value
-            seen.append(values['key'])
-            values['key'] = json.loads(values['key'])
-            return value
-
-    env.set('CONFIG__VALUES__KEY' if nested else 'CONFIG__KEY', '["a", "b"]')
-    expected_values = {'key': ['a', 'b']}
+    env.set('CONFIG__VALUES__KEY' if nested else 'CONFIG__KEY', '["a"]')
+    expected_values = {'key': expected}
     assert Settings().model_dump() == {'config': {'values': expected_values} if nested else expected_values}
-    assert seen == ['["a", "b"]']
 
 
 def test_nested_models_leaf_vs_deeper_env_dict_assumed(env):
