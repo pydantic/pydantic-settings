@@ -13,6 +13,7 @@ from itertools import islice
 from pathlib import Path
 from typing import Any, TypedDict, TypeVar, cast, get_args, get_origin
 
+from annotated_types import GroupedMetadata
 from pydantic import BaseModel, Json, RootModel, Secret
 from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
@@ -196,9 +197,24 @@ def _get_field_annotation_and_metadata(field: FieldInfo) -> tuple[Any, list[Any]
     return annotation, metadata
 
 
+def _expand_grouped_metadata(metadata: list[Any]) -> list[Any]:
+    """
+    Gathers a list of annotations from `metadata`, recursing into any
+    which are `GroupedMetadata`.
+    """
+
+    expanded: list[Any] = []
+    for entry in metadata:
+        if isinstance(entry, GroupedMetadata):
+            expanded.extend(_expand_grouped_metadata(list(entry)))
+        else:
+            expanded.append(entry)
+    return expanded
+
+
 def _get_field_metadata(field: FieldInfo) -> list[Any]:
-    """Collect a field's metadata, including the outer Annotated metadata of its type alias."""
-    return _get_field_annotation_and_metadata(field)[1]
+    """Collect a field's metadata, including the expanded Annotated metadata of its type alias."""
+    return _expand_grouped_metadata(_get_field_annotation_and_metadata(field)[1])
 
 
 def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:
