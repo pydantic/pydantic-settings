@@ -120,22 +120,24 @@ def test_secrets_dir_as_arg(env, tmp_files):
 
 
 @pytest.mark.parametrize('wrap_source', [False, True], ids=['settings-class', 'wrapped-source'])
-@pytest.mark.parametrize('directory_kind', ['path', 'string', 'list', 'empty'])
-def test_explicit_nested_secrets_directory_overrides_config(tmp_path, wrap_source, directory_kind):
-    directories = [tmp_path / name for name in ('config', 'explicit', 'last')]
-    for directory in directories:
-        directory.mkdir()
-        (directory / 'value').write_text(directory.name)
-    configured, explicit, last = directories
-    directory = {
-        'path': explicit,
-        'string': str(explicit),
-        'list': [explicit, last],
-        'empty': [],
-    }[directory_kind]
+@pytest.mark.parametrize(
+    'make_secrets_dir,expected',
+    [
+        (lambda base: base / 'explicit', 'explicit'),
+        (lambda base: str(base / 'explicit'), 'explicit'),
+        (lambda base: [base / 'explicit', base / 'last'], 'last'),
+        (lambda base: [], 'default'),
+    ],
+    ids=['path', 'string', 'list', 'empty'],
+)
+def test_nested_secrets_explicit_directory_precedence(tmp_path, wrap_source, make_secrets_dir, expected):
+    for name in ('config', 'explicit', 'last'):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / 'value').write_text(name)
+    secrets_dir = make_secrets_dir(tmp_path)
 
     class Settings(BaseSettings):
-        model_config = SettingsConfigDict(secrets_dir=configured)
+        model_config = SettingsConfigDict(secrets_dir=tmp_path / 'config')
         value: str = 'default'
 
         @classmethod
@@ -143,12 +145,9 @@ def test_explicit_nested_secrets_directory_overrides_config(tmp_path, wrap_sourc
             cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
         ):
             source = file_secret_settings if wrap_source else settings_cls
-            return (NestedSecretsSettingsSource(source, secrets_dir=directory),)
+            return (NestedSecretsSettingsSource(source, secrets_dir=secrets_dir),)
 
-    assert (
-        Settings().value
-        == {'path': 'explicit', 'string': 'explicit', 'list': 'last', 'empty': 'default'}[directory_kind]
-    )
+    assert Settings().value == expected
 
 
 @pytest.mark.parametrize('explicit_wrapper', [False, True])
