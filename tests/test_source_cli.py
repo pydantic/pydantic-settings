@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import json
 import os
 import re
 import sys
@@ -7,7 +8,7 @@ import time
 import typing
 from collections import OrderedDict
 from collections.abc import MutableMapping, MutableSequence
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from enum import Enum, IntEnum
 from pathlib import Path, PureWindowsPath
@@ -77,6 +78,52 @@ from pydantic_settings.sources import (
     get_subcommand,
 )
 from pydantic_settings.sources.providers.cli import _get_model_description
+
+
+@pytest.mark.parametrize(
+    'duration',
+    [timedelta(seconds=-1), timedelta(microseconds=-1), timedelta(days=-2, seconds=123), timedelta(days=2)],
+)
+def test_cli_serialize_timedelta_roundtrip(duration):
+    class Cfg(BaseModel):
+        duration: timedelta
+
+    cfg = Cfg(duration=duration)
+    assert CliApp.run(Cfg, cli_args=CliApp.serialize(cfg)) == cfg
+
+
+@pytest.mark.parametrize('alias_path', [AliasPath('durations', 1), AliasPath('durations', 'deep', 0)])
+def test_cli_serialize_timedelta_alias_path_roundtrip(alias_path):
+    class Cfg(BaseSettings):
+        duration: timedelta = Field(validation_alias=alias_path)
+
+    durations = ['', '2 days, 0:00:00'] if len(alias_path.path) == 2 else {'deep': ['2 days, 0:00:00']}
+    cfg = Cfg.model_validate({'durations': durations})
+    args = CliApp.serialize(cfg)
+    assert args == ['--durations', json.dumps(durations)]
+    assert CliApp.run(Cfg, cli_args=args) == cfg
+
+
+@pytest.mark.parametrize('positionals_first', [False, True])
+@pytest.mark.parametrize('subcommand', [False, True])
+@pytest.mark.parametrize('duration', [timedelta(seconds=-1), timedelta(days=2)])
+def test_cli_serialize_timedelta_preserves_positional_args(positionals_first, subcommand, duration):
+    class Command(BaseModel):
+        duration: CliPositionalArg[timedelta]
+        label: str
+
+    class Root(BaseModel):
+        command: CliSubCommand[Command]
+
+    command = Command(duration=duration, label='example')
+    cfg = Root(command=command) if subcommand else command
+    expected = [str(duration), '--label', 'example'] if positionals_first else ['--label', 'example', str(duration)]
+    if subcommand:
+        expected.insert(0, 'command')
+    # Negative ISO durations would be mistaken for options. Preserve positional
+    # serialization until a fix can also handle positionals_first and subcommands.
+    assert CliApp.serialize(cfg, positionals_first=positionals_first) == expected
+
 
 ARGPARSE_OPTIONS_TEXT = 'options'
 
