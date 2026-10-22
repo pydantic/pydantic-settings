@@ -5264,6 +5264,59 @@ def test_cli_app_run_alias_path_shared_list():
     assert (result.first, result.second) == (7, 9)
 
 
+@pytest.mark.parametrize(
+    'path,first,second',
+    [
+        ((0,), '[7]', '[9]'),
+        (('value',), '{"value":7}', '{"value":9}'),
+        (('rows', -1, 'value'), '{"rows":[{"value":7}]}', '{"rows":[{"value":9}]}'),
+    ],
+)
+def test_cli_app_run_alias_choices_preserves_distinct_fallback_paths(path, first, second):
+    class Cmd(BaseModel):
+        model_config = ConfigDict(extra='forbid')
+
+        first: int = Field(validation_alias=AliasChoices(AliasPath('shared', 0), AliasPath('first', *path)))
+        second: int = Field(validation_alias=AliasChoices(AliasPath('shared', 0), AliasPath('second', *path)))
+
+    result = CliApp.run(Cmd, cli_args=['--first', first, '--second', second])
+    assert (result.first, result.second) == (7, 9)
+
+
+@pytest.mark.parametrize('shared,expected', [('[11]', (11, 11)), ('[null]', (None, None))])
+def test_cli_app_run_alias_choices_preserves_supplied_path_precedence(shared, expected):
+    class Cmd(BaseModel):
+        model_config = ConfigDict(extra='ignore')
+
+        first: int | None = Field(validation_alias=AliasChoices(AliasPath('shared', 0), AliasPath('first', 0)))
+        second: int | None = Field(validation_alias=AliasChoices(AliasPath('shared', 0), AliasPath('second', 0)))
+
+    result = CliApp.run(Cmd, cli_args=['--shared', shared, '--first', '[7]', '--second', '[9]'])
+    assert (result.first, result.second) == expected
+
+
+def test_cli_app_run_alias_choices_dataclass_fallback_paths():
+    @pydantic_dataclasses.dataclass(config=ConfigDict(extra='forbid'))
+    class Cmd:
+        first: int = Field(validation_alias=AliasChoices(AliasPath('shared', 0), AliasPath('first', 0)))
+        second: int = Field(validation_alias=AliasChoices(AliasPath('shared', 0), AliasPath('second', 0)))
+
+    result = CliApp.run(Cmd, cli_args=['--first', '[7]', '--second', '[9]'])
+    assert (result.first, result.second) == (7, 9)
+
+
+def test_cli_app_run_alias_path_supplied_by_validator():
+    class Cmd(BaseModel):
+        value: int = Field(1, validation_alias=AliasPath('payload', 0))
+
+        @model_validator(mode='before')
+        @classmethod
+        def supply_value(cls, data):
+            return {'payload': [7], **data}
+
+    assert CliApp.run(Cmd, cli_args=[]).value == 7
+
+
 def test_cli_app_run_alias_path_shared_mixed_containers():
     class Cmd(BaseModel):
         first: int = Field(validation_alias=AliasPath('payload', 'rows', 0, 'value'))

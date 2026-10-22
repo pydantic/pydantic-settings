@@ -792,6 +792,7 @@ class CliApp:
         validate_by_alias: bool,
         validate_by_name: bool,
         field_is_set: bool,
+        values: dict[str, Any],
     ) -> tuple[str | int, ...] | None:
         # Keyword aliases need not be identifiers. Prefer the existing string-alias
         # path, then accepted field names, before reconstructing an AliasPath.
@@ -804,7 +805,13 @@ class CliApp:
             if isinstance(alias, AliasPath) and not validate_by_name:
                 # Materializing an unsupplied path can override another field's
                 # AliasChoices. Leave its default to the original constructor.
-                return tuple(alias.path) if field_is_set else None
+                if not field_is_set:
+                    return None
+                # Different fields may share an absent first choice but consume
+                # distinct fallbacks. Reconstruct the path actually supplied.
+                return CliApp._consumed_init_kwarg_path(
+                    field_name, field_info, values, validate_by_alias, validate_by_name
+                ) or tuple(alias.path)
         return (field_name,)
 
     @staticmethod
@@ -823,14 +830,14 @@ class CliApp:
         return {key: CliApp._merge_init_kwarg_paths(items) for key, items in grouped.items()}
 
     @staticmethod
-    def _consumed_init_kwarg_root(
+    def _consumed_init_kwarg_path(
         field_name: str,
         field_info: FieldInfo,
         values: dict[str, Any],
         validate_by_alias: bool,
         validate_by_name: bool,
-    ) -> str | None:
-        """Find the root consumed by the first present validation alias."""
+    ) -> tuple[str | int, ...] | None:
+        """Find the path consumed by the first present validation alias."""
         alias = field_info.validation_alias if validate_by_alias else None
         aliases: list[str | AliasPath] = (
             list(alias.choices) if isinstance(alias, AliasChoices) else [alias] if alias is not None else []
@@ -850,7 +857,7 @@ class CliApp:
                 except (KeyError, IndexError, TypeError):
                     break
             else:
-                return cast(str, path[0])
+                return tuple(path)
         return None
 
     @staticmethod
@@ -958,7 +965,8 @@ class CliApp:
                 _cli_settings_source=cli_settings,
                 _init_kwargs=model_init_data,
             )
-            model = base_settings_cls(**base_settings_cls._settings_build_values(sources, init_kwargs))
+            model_data = base_settings_cls._settings_build_values(sources, init_kwargs)
+            model = base_settings_cls(**model_data)
             config = _get_model_config(model_cls)
             validate_by_alias = _validate_by_alias_enabled(config)
             validate_by_name = _validate_by_name_enabled(config)
@@ -970,14 +978,16 @@ class CliApp:
                     validate_by_alias,
                     validate_by_name,
                     field_name in model.model_fields_set,
+                    model_data,
                 )
                 if path is not None:
                     field_values[path] = getattr(model, field_name)
             init_data = CliApp._merge_init_kwarg_paths(field_values)
-            consumed_roots = {
-                CliApp._consumed_init_kwarg_root(field_name, field_info, init_data, validate_by_alias, validate_by_name)
+            consumed_paths = (
+                CliApp._consumed_init_kwarg_path(field_name, field_info, init_data, validate_by_alias, validate_by_name)
                 for field_name, field_info in base_settings_cls.model_fields.items()
-            }
+            )
+            consumed_roots = {path[0] for path in consumed_paths if path is not None}
             # A reconstructed path may precede a generated string fallback in
             # AliasChoices. Do not pass that unused fallback as an extra input.
             command = model_cls(**{key: value for key, value in init_data.items() if key in consumed_roots})
