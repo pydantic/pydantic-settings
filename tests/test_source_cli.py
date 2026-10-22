@@ -3868,6 +3868,62 @@ def test_cli_app_async_method_with_existing_loop_propagates_exception():
         asyncio.run(run_as_coro())
 
 
+@pytest.mark.parametrize('base', [BaseModel, BaseSettings])
+@pytest.mark.parametrize('existing_loop', [False, True])
+@pytest.mark.parametrize(
+    'error',
+    [SystemExit(7), KeyboardInterrupt('interrupted'), asyncio.CancelledError('cancelled'), RuntimeError('failed')],
+    ids=['exit', 'interrupt', 'cancel', 'ordinary-error'],
+)
+def test_cli_app_async_exception_identity_and_cleanup(base, existing_loop, error):
+    commands = []
+
+    class Command(base):
+        async def cli_cmd(self) -> None:
+            commands.append(self)
+            raise error
+
+    def run_and_check():
+        with pytest.raises(type(error)) as exc_info:
+            CliApp.run(Command, cli_args=[])
+        assert exc_info.value is error
+        assert len(commands) == 1
+        assert id(commands[0]) not in CliApp._subcommand_stack
+
+    if existing_loop:
+
+        async def run_as_coro():
+            run_and_check()
+
+        asyncio.run(run_as_coro())
+    else:
+        run_and_check()
+
+
+def test_cli_app_async_subcommand_exit_with_existing_loop():
+    error = SystemExit(7)
+    commands = []
+
+    class Child(BaseModel):
+        async def cli_cmd(self) -> None:
+            raise error
+
+    class Root(BaseModel):
+        child: CliSubCommand[Child]
+
+        def cli_cmd(self) -> None:
+            commands.append(self)
+            CliApp.run_subcommand(self)
+
+    async def run_as_coro():
+        with pytest.raises(SystemExit) as exc_info:
+            CliApp.run(Root, cli_args=['child'])
+        assert exc_info.value is error
+
+    asyncio.run(run_as_coro())
+    assert id(commands[0]) not in CliApp._subcommand_stack
+
+
 def test_cli_app_exceptions():
     with pytest.raises(
         SettingsError,
