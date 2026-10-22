@@ -12,7 +12,7 @@ from types import SimpleNamespace
 from typing import Any, ClassVar, Literal, Self, TextIO, TypeVar, cast
 from weakref import WeakKeyDictionary
 
-from pydantic import AliasChoices, ConfigDict
+from pydantic import AliasChoices, AliasPath, ConfigDict
 from pydantic._internal._config import config_keys
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
@@ -786,17 +786,72 @@ class CliApp:
         return CliAppBaseSettings
 
     @staticmethod
-    def _init_kwarg_name(field_name: str, field_info: FieldInfo, validate_by_alias: bool) -> str:
-        # The kwargs are passed as a dict, so unlike pydantic's `_field_name_for_signature` the alias
-        # does not need to be a valid identifier. `validation_alias` defaults to `alias` when only that is set.
+    def _init_kwarg_path(
+        field_name: str,
+        field_info: FieldInfo,
+        validate_by_alias: bool,
+        validate_by_name: bool,
+        field_is_set: bool,
+    ) -> tuple[str | int, ...] | None:
+        # Keyword aliases need not be identifiers. Prefer the existing string-alias
+        # path, then accepted field names, before reconstructing an AliasPath.
         if validate_by_alias:
-            if isinstance(field_info.validation_alias, str):
-                return field_info.validation_alias
-            if isinstance(field_info.validation_alias, AliasChoices):
-                # Any string choice validates the field. An `AliasPath` choice can't be a single kwarg.
-                choices = field_info.validation_alias.choices
-                return next((choice for choice in choices if isinstance(choice, str)), field_name)
-        return field_name
+            alias = field_info.validation_alias
+            if isinstance(alias, AliasChoices):
+                alias = next((choice for choice in alias.choices if isinstance(choice, str)), alias.choices[0])
+            if isinstance(alias, str):
+                return (alias,)
+            if isinstance(alias, AliasPath) and not validate_by_name:
+                # Materializing an unsupplied path can override another field's
+                # AliasChoices. Leave its default to the original constructor.
+                return tuple(alias.path) if field_is_set else None
+        return (field_name,)
+
+    @staticmethod
+    def _merge_init_kwarg_paths(values: dict[tuple[str | int, ...], Any]) -> Any:
+        """Build fresh containers without modifying any validated field values."""
+        if () in values:
+            # An existing container already supplies its descendants. Preserve
+            # its contents and let the original constructor apply aliases.
+            return values[()]
+
+        grouped: dict[str | int, dict[tuple[str | int, ...], Any]] = {}
+        for path, value in values.items():
+            grouped.setdefault(path[0], {})[path[1:]] = value
+        # Integer mapping keys work for AliasPath indexes without list padding,
+        # which could make an absent earlier AliasChoices path appear present.
+        return {key: CliApp._merge_init_kwarg_paths(items) for key, items in grouped.items()}
+
+    @staticmethod
+    def _consumed_init_kwarg_root(
+        field_name: str,
+        field_info: FieldInfo,
+        values: dict[str, Any],
+        validate_by_alias: bool,
+        validate_by_name: bool,
+    ) -> str | None:
+        """Find the root consumed by the first present validation alias."""
+        alias = field_info.validation_alias if validate_by_alias else None
+        aliases: list[str | AliasPath] = (
+            list(alias.choices) if isinstance(alias, AliasChoices) else [alias] if alias is not None else []
+        )
+        if alias is None or validate_by_name:
+            aliases.append(field_name)
+        for choice in aliases:
+            path = [choice] if isinstance(choice, str) else choice.path
+            value: Any = values
+            for key in path:
+                # Use AliasPath's traversal rules without requiring newer
+                # Pydantic helper methods.
+                if isinstance(value, str):
+                    break
+                try:
+                    value = value[key]
+                except (KeyError, IndexError, TypeError):
+                    break
+            else:
+                return cast(str, path[0])
+        return None
 
     @staticmethod
     def _run_cli_cmd(model: Any, cli_cmd_method_name: str, is_required: bool) -> Any:
@@ -904,13 +959,28 @@ class CliApp:
                 _init_kwargs=model_init_data,
             )
             model = base_settings_cls(**base_settings_cls._settings_build_values(sources, init_kwargs))
-            model_init_data = {}
-            validate_by_alias = _validate_by_alias_enabled(_get_model_config(model_cls))
+            config = _get_model_config(model_cls)
+            validate_by_alias = _validate_by_alias_enabled(config)
+            validate_by_name = _validate_by_name_enabled(config)
+            field_values: dict[tuple[str | int, ...], Any] = {}
             for field_name, field_info in base_settings_cls.model_fields.items():
-                model_init_data[CliApp._init_kwarg_name(field_name, field_info, validate_by_alias)] = getattr(
-                    model, field_name
+                path = CliApp._init_kwarg_path(
+                    field_name,
+                    field_info,
+                    validate_by_alias,
+                    validate_by_name,
+                    field_name in model.model_fields_set,
                 )
-            command = model_cls(**model_init_data)
+                if path is not None:
+                    field_values[path] = getattr(model, field_name)
+            init_data = CliApp._merge_init_kwarg_paths(field_values)
+            consumed_roots = {
+                CliApp._consumed_init_kwarg_root(field_name, field_info, init_data, validate_by_alias, validate_by_name)
+                for field_name, field_info in base_settings_cls.model_fields.items()
+            }
+            # A reconstructed path may precede a generated string fallback in
+            # AliasChoices. Do not pass that unused fallback as an extra input.
+            command = model_cls(**{key: value for key, value in init_data.items() if key in consumed_roots})
         else:
             sources, init_kwargs = model_cls._settings_init_sources(
                 _cli_parse_args=cli_parse_args,  # type: ignore[arg-type]
