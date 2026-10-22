@@ -12,7 +12,7 @@ from types import SimpleNamespace
 from typing import Any, ClassVar, Literal, Self, TextIO, TypeVar, cast
 from weakref import WeakKeyDictionary
 
-from pydantic import AliasChoices, ConfigDict
+from pydantic import AliasChoices, AliasPath, ConfigDict
 from pydantic._internal._config import config_keys
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
@@ -786,17 +786,35 @@ class CliApp:
         return CliAppBaseSettings
 
     @staticmethod
-    def _init_kwarg_name(field_name: str, field_info: FieldInfo, validate_by_alias: bool) -> str:
-        # The kwargs are passed as a dict, so unlike pydantic's `_field_name_for_signature` the alias
-        # does not need to be a valid identifier. `validation_alias` defaults to `alias` when only that is set.
-        if validate_by_alias:
-            if isinstance(field_info.validation_alias, str):
-                return field_info.validation_alias
-            if isinstance(field_info.validation_alias, AliasChoices):
-                # Any string choice validates the field. An `AliasPath` choice can't be a single kwarg.
-                choices = field_info.validation_alias.choices
-                return next((choice for choice in choices if isinstance(choice, str)), field_name)
-        return field_name
+    def _init_kwarg_aliases(
+        field_name: str, field_info: FieldInfo, validate_by_alias: bool, validate_by_name: bool
+    ) -> list[str | AliasPath]:
+        """The inputs a field validates from, in the order pydantic tries them."""
+        # `validation_alias` defaults to `alias` when only that is set.
+        alias = field_info.validation_alias if validate_by_alias else None
+        aliases: list[str | AliasPath] = (
+            list(alias.choices) if isinstance(alias, AliasChoices) else [alias] if alias is not None else []
+        )
+        if alias is None or validate_by_name:
+            aliases.append(field_name)
+        return aliases
+
+    @staticmethod
+    def _find_init_kwarg_alias(aliases: list[str | AliasPath], values: dict[str, Any]) -> str | AliasPath | None:
+        """Find the first alias present in `values`, following pydantic's `AliasPath` lookup rules."""
+        for alias in aliases:
+            path = [alias] if isinstance(alias, str) else alias.path
+            value: Any = values
+            for key in path:
+                if isinstance(value, str):
+                    break
+                try:
+                    value = value[key]
+                except (KeyError, IndexError, TypeError):
+                    break
+            else:
+                return alias
+        return None
 
     @staticmethod
     def _run_cli_cmd(model: Any, cli_cmd_method_name: str, is_required: bool) -> Any:
@@ -903,13 +921,32 @@ class CliApp:
                 _cli_settings_source=cli_settings,
                 _init_kwargs=model_init_data,
             )
-            model = base_settings_cls(**base_settings_cls._settings_build_values(sources, init_kwargs))
+            values = base_settings_cls._settings_build_values(sources, init_kwargs)
+            model = base_settings_cls(**values)
+            config = _get_model_config(model_cls)
+            validate_by_alias = _validate_by_alias_enabled(config)
+            validate_by_name = _validate_by_name_enabled(config)
             model_init_data = {}
-            validate_by_alias = _validate_by_alias_enabled(_get_model_config(model_cls))
+            alias_path_roots = []
             for field_name, field_info in base_settings_cls.model_fields.items():
-                model_init_data[CliApp._init_kwarg_name(field_name, field_info, validate_by_alias)] = getattr(
-                    model, field_name
-                )
+                aliases = CliApp._init_kwarg_aliases(field_name, field_info, validate_by_alias, validate_by_name)
+                # The kwargs are passed as a dict, so unlike pydantic's `_field_name_for_signature` the alias
+                # does not need to be a valid identifier.
+                alias = CliApp._find_init_kwarg_alias(aliases, values)
+                if alias is None:
+                    # The field was not supplied: pass its value under the first name it validates from, or
+                    # leave the default to the model if it only validates from `AliasPath`s.
+                    alias = next((alias for alias in aliases if isinstance(alias, str)), None)
+                    if alias is None:
+                        continue
+                if isinstance(alias, AliasPath):
+                    alias_path_roots.append(cast(str, alias.path[0]))
+                else:
+                    model_init_data[alias] = getattr(model, field_name)
+            for root in alias_path_roots:
+                # Pass the supplied container unchanged so the model reads the same `AliasPath`. A field
+                # validating from the root itself takes precedence, as its value already holds the container.
+                model_init_data.setdefault(root, values[root])
             command = model_cls(**model_init_data)
         else:
             sources, init_kwargs = model_cls._settings_init_sources(
