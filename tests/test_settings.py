@@ -4966,6 +4966,19 @@ def test_dotenv_env_prefix_env_without_prefix_ignored(tmp_path):
     assert s.model_dump() == {'foo': ''}
 
 
+def test_dotenv_env_prefix_env_without_prefix_ignored_uppercase_field(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('DEBUG=1')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_file=p, env_prefix='APP_')
+
+        DEBUG: bool = False
+
+    s = Settings()
+    assert s.model_dump() == {'DEBUG': False}
+
+
 def test_nested_model_dotenv_env_prefix_env_without_prefix_ignored(tmp_path):
     p = tmp_path / '.env'
     p.write_text('foo__val=1')
