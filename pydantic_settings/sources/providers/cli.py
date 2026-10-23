@@ -1833,18 +1833,16 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         serialized_args: dict[str, list[str]],
         positionals_first: bool,
     ) -> list[str]:
-        return (
-            (
-                serialized_args['optional'] + serialized_args['positional']
-                if not positionals_first
-                else serialized_args['positional'] + serialized_args['optional']
-            )
-            + serialized_args['subcommand']
-            # Unknown args are emitted last, regardless of positionals_first. They are replayed verbatim and may
-            # contain an end-of-options marker ('--') or an unknown option, either of which would capture known args
-            # that follow it.
-            + serialized_args['unknown']
+        known = (
+            serialized_args['optional'] + serialized_args['positional']
+            if not positionals_first
+            else serialized_args['positional'] + serialized_args['optional']
         )
+        # This level's unknown args are emitted before its subcommand tokens. Everything after a subcommand token
+        # is parsed by that subcommand, so unknowns placed there would come back on the wrong field. That ordering
+        # also keeps them after the known args of this level, so an unknown positional cannot be consumed as a known
+        # one, and an end-of-options marker cannot swallow a known arg that follows it.
+        return known + serialized_args['unknown'] + serialized_args['subcommand']
 
     def _serialized_args(
         self,
@@ -1880,11 +1878,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     positionals_first=positionals_first,
                     _is_submodel=True,
                 )
-                # Hoist the subcommand's unknown args into this model's trailing segment so that all unknown args,
-                # at any depth, stay at the very end of the serialized output.
-                unknown_args += sub_args['unknown']
-                sub_args['unknown'] = []
-                subcommand_args += self._flatten_serialized_args(sub_args, positionals_first)
+                # Everything after the subcommand token is parsed by the subcommand, so its own segment is emitted
+                # as-is and this level's unknown args follow it. That keeps each level's unknowns with the level
+                # that captured them, which is what makes the round trip hold (#1048).
+                subcommand_args = subcommand_args + self._flatten_serialized_args(sub_args, positionals_first)
                 continue
             if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
                 sub_args = self._serialized_args(
