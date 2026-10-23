@@ -4664,6 +4664,53 @@ def test_cli_serialize_ordering():
     ]
 
 
+@pytest.mark.parametrize('value', ['--help', '-x', '--', '-1e3', '-name=value', 'ordinary'])
+def test_cli_serialize_option_like_values(value):
+    class Cfg(BaseModel):
+        pattern: str
+
+    cfg = Cfg(pattern=value)
+    args = CliApp.serialize(cfg)
+
+    assert CliApp.run(Cfg, cli_args=args, cli_exit_on_error=False) == cfg
+    assert args == ([f'--pattern={value}'] if value.startswith('-') else ['--pattern', value])
+
+
+@pytest.mark.parametrize('prefix', ['-', '+'])
+@pytest.mark.parametrize('end_of_options', [False, True])
+def test_cli_serialize_option_like_nested_values(prefix, end_of_options):
+    class Nested(BaseModel):
+        pattern: str
+
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(cli_flag_prefix_char=prefix)
+        nested: Nested
+        short: str = Field(alias='s')
+        flag: CliImplicitFlag[bool] = False
+
+    value = '--' if end_of_options else f'{prefix}{prefix}help'
+    cfg = Cfg(nested=Nested(pattern=value), s=f'{prefix}x', flag=True)
+    args = CliApp.serialize(cfg)
+
+    assert CliApp.run(Cfg, cli_args=args, cli_exit_on_error=False) == cfg
+    assert args == [
+        f'{prefix}{prefix}nested.pattern={value}',
+        f'{prefix}s={prefix}x',
+        f'{prefix}{prefix}flag',
+    ]
+
+
+@pytest.mark.parametrize('list_style', ['json', 'lazy', 'argparse'])
+def test_cli_serialize_option_like_list_values(list_style):
+    class Cfg(BaseModel):
+        patterns: list[str]
+
+    cfg = Cfg(patterns=['-first', '--help', '-x', 'last'])
+    args = CliApp.serialize(cfg, list_style=list_style)
+
+    assert CliApp.run(Cfg, cli_args=args, cli_exit_on_error=False) == cfg
+
+
 def test_cli_serialize_styles():
     class Cfg(BaseModel):
         my_list: list[int]
