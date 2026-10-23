@@ -1626,6 +1626,9 @@ An instantiated Pydantic model can be serialized into its CLI arguments using th
 For optional arguments that take one value per occurrence, `--` and values starting with the CLI flag prefix are attached with
 `=`. For example, `pattern='--help'` is serialized as `['--pattern=--help']` so it is parsed as a value.
 
+On Python 3.12, round-tripping the literal value `--` requires Python 3.12.7 or later. Earlier 3.12 releases discard it
+because of an [argparse bug](https://github.com/python/cpython/issues/81691).
+
 ```py
 from pydantic import BaseModel
 
