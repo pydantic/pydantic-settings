@@ -194,15 +194,11 @@ def _get_field_annotation_and_metadata(field: FieldInfo) -> tuple[Any, list[Any]
         # across instantiations, subclasses and rebuilds, so mutating it would append
         # the alias metadata again on every call.
         metadata = [*metadata, *meta]
-    return annotation, metadata
+    return annotation, _expand_grouped_metadata(metadata)
 
 
 def _expand_grouped_metadata(metadata: list[Any]) -> list[Any]:
-    """
-    Gathers a list of annotations from `metadata`, recursing into any
-    which are `GroupedMetadata`.
-    """
-
+    """Gathers a list of annotations from `metadata`, recursing into any `GroupedMetadata`."""
     expanded: list[Any] = []
     for entry in metadata:
         if isinstance(entry, GroupedMetadata):
@@ -214,7 +210,7 @@ def _expand_grouped_metadata(metadata: list[Any]) -> list[Any]:
 
 def _get_field_metadata(field: FieldInfo) -> list[Any]:
     """Collect a field's metadata, including the expanded Annotated metadata of its type alias."""
-    return _expand_grouped_metadata(_get_field_annotation_and_metadata(field)[1])
+    return _get_field_annotation_and_metadata(field)[1]
 
 
 def _annotation_is_complex_inner(annotation: type[Any] | None) -> bool:

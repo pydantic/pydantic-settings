@@ -4,16 +4,18 @@ from collections.abc import Set as AbstractSet
 from typing import Annotated, Any, Literal, TypeVar
 
 import pytest
+from annotated_types import Ge, GroupedMetadata, Le
 from pydantic import BaseModel, ConfigDict, Field, Json, RootModel, ValidationError
 from pydantic.fields import FieldInfo
 from typing_extensions import TypeAliasType
 
 from pydantic_settings.sources.base import _unwrap_optional_annotation
-from pydantic_settings.sources.types import SecretVersion
+from pydantic_settings.sources.types import NoDecode, SecretVersion
 from pydantic_settings.sources.utils import (
     _annotation_contains_types,
     _annotation_is_complex,
     _get_field_annotation_and_metadata,
+    _get_field_metadata,
     _get_union_members,
     _resolve_type_alias,
     _substitute_typevars,
@@ -286,3 +288,19 @@ def test_validate_by_name_enabled_matches_pydantic(config: ConfigDict, expected:
     else:
         pydantic_validates_by_name = True
     assert pydantic_validates_by_name is expected
+
+
+def test_get_field_metadata_expands_grouped_metadata():
+    class Grouped(GroupedMetadata):
+        def __iter__(self):
+            yield NoDecode
+            yield Ge(0)
+            yield Le(20)
+
+    class Settings(BaseModel):
+        value: Annotated[int, Grouped()] = 0
+
+    metadata = _get_field_metadata(Settings.model_fields['value'])
+    assert NoDecode in metadata
+    assert Ge(0) in metadata
+    assert Le(20) in metadata
