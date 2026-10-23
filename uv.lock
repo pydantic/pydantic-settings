@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -1419,6 +1419,7 @@ wheels = [
 name = "pydantic-settings"
 source = { editable = "." }
 dependencies = [
+    { name = "annotated-types" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "typing-extensions" },
@@ -1469,6 +1470,7 @@ testing = [
 
 [package.metadata]
 requires-dist = [
+    { name = "annotated-types", specifier = ">=0.4.0" },
     { name = "azure-identity", marker = "extra == 'azure-key-vault'", specifier = ">=1.16.0" },
     { name = "azure-keyvault-secrets", marker = "extra == 'azure-key-vault'", specifier = ">=4.8.0" },
     { name = "boto3", marker = "extra == 'aws-secrets-manager'", specifier = ">=1.35.0" },
