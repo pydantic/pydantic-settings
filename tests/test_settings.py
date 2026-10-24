@@ -684,6 +684,19 @@ def test_nested_env_delimiter_bare_typing_dict_in_sub_model(env):
     assert Cfg().model_dump() == {'sub_model': {'dvals': {'k1': 'v1', 'k2': 'v2'}}}
 
 
+def test_nested_env_delimiter_dict_of_dict(env):
+    class Cfg(BaseSettings):
+        dvals: dict[str, dict[str, int]]
+
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    # A mapping's value type is itself complex, so its value is JSON-decoded, like
+    # `dict[str, list[int]]` already is.
+    env.set('dvals__k1', '{"a": 1}')
+    env.set('dvals__k2__b', '2')
+    assert Cfg().model_dump() == {'dvals': {'k1': {'a': 1}, 'k2': {'b': 2}}}
+
+
 @pytest.mark.parametrize('env_prefix', [None, 'prefix_', 'prefix__'])
 def test_nested_env_max_split(env, env_prefix):
     class Person(BaseModel):
