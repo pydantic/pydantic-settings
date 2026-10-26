@@ -237,6 +237,9 @@ class ConfigFileSourceMixin(ABC):
         vars: dict[str, Any] = {}
         for file_path in self._existing_files(files):
             updating_vars = self._read_file(file_path)
+            if not isinstance(updating_vars, Mapping):
+                file_name = file_path if isinstance(file_path, Path) else file_path.name
+                raise TypeError(f'Config file "{file_name}" must contain a mapping, got {type(updating_vars).__name__}')
             if deep_merge:
                 vars = deep_update(vars, updating_vars)
             else:
