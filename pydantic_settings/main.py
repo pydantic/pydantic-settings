@@ -697,23 +697,22 @@ class BaseSettings(BaseModel):
 
     @classmethod
     def _set_discriminator_value(cls, state: dict) -> None:
+        """"""
         for field_name, model_field in cls.model_fields.items():
-            if model_field.discriminator and isinstance(model_field.discriminator, str):
-                if field_name not in state:
-                    fields_dict = {
-                        model_field.discriminator: (model_field.annotation, model_field.default if not model_field.is_required() else ...)
-                    }
-                    _helper_class = create_model(
-                        'NewSettings',
-                        __base__=cls.__base__,
-                        __config__=cls.model_config,
-                        **fields_dict
+            if model_field.discriminator and isinstance(model_field.discriminator, str) and field_name not in state:
+                fields_dict = {
+                    model_field.discriminator: (
+                        model_field.annotation,
+                        model_field.default if not model_field.is_required() else ...,
                     )
-                    sources, init_kwargs = _helper_class._settings_init_sources()
-                    value = _helper_class._settings_build_values(sources, init_kwargs)
-                    if value:
-                        state[field_name] = value
-
+                }
+                _helper_class = create_model(
+                    'HelperClass', __base__=cls.__base__, __config__=cls.model_config, **fields_dict
+                )
+                sources, init_kwargs = _helper_class._settings_init_sources()
+                value = _helper_class._settings_build_values(sources, init_kwargs)
+                if value:
+                    state[field_name] = value
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         extra='forbid',
