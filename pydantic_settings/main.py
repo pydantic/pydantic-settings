@@ -710,7 +710,9 @@ class BaseSettings(BaseModel):
                         **fields_dict
                     )
                     sources, init_kwargs = _helper_class._settings_init_sources()
-                    state[field_name] = _helper_class._settings_build_values(sources, init_kwargs)
+                    value = _helper_class._settings_build_values(sources, init_kwargs)
+                    if value:
+                        state[field_name] = value
 
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
