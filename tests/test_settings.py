@@ -52,6 +52,8 @@ from pydantic import (
 from pydantic.fields import FieldInfo
 from typing_extensions import TypeAliasType, override
 
+
+
 from pydantic_settings import (
     BaseSettings,
     DotEnvSettingsSource,
@@ -1825,6 +1827,40 @@ def test_nested_model_default_partial_update_with_nested_field_without_discrimin
     env.pop('PET__BLACK_NAME')
     env.set('PET__PET_TYPE', 'dog')
     assert Settings().pet == _Dog()
+
+
+def test_nested_settings_with_discriminator(env):
+
+    class Cat(BaseSettings):
+        t: Literal['cat']
+
+    class Dog(BaseSettings):
+        t: Literal['dog']
+
+    class Settings(BaseSettings):
+        animal: Cat | Dog = Field(discriminator='t')
+
+    env.set('t', 'cat')
+    assert isinstance(Settings().animal, Cat)
+    assert Settings().animal.t == 'cat'
+
+
+def test_nested_settings_with_discriminator_and_another_attributes(env):
+    class Cat(BaseSettings):
+        t: Literal['cat']
+
+    class Dog(BaseSettings):
+        t: Literal['dog']
+        x: str = 'default'
+
+    class Settings(BaseSettings):
+        animal: Cat | Dog = Field(discriminator='t')
+
+    env.set('t', 'dog')
+    env.set('x', 'x')
+    assert isinstance(Settings().animal, Dog)
+    assert Settings().animal.t == 'dog'
+    assert Settings().animal.x == 'x'
 
 
 def test_env_str(env):
@@ -5763,3 +5799,6 @@ def test_debug_secret_file_resolution(env, caplog, tmp_path):
     messages = [r.getMessage() for r in caplog.records]
     assert any(f'Loading secret file: {(tmp_path / "name").resolve()}' == m for m in messages)
     assert any('Secret file not found, skipping' in m and 'missing' in m for m in messages)
+
+
+
