@@ -17,7 +17,7 @@ from pydantic._internal._config import config_keys
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
-from pydantic.main import BaseModel
+from pydantic.main import BaseModel, create_model
 
 from .exceptions import SettingsError
 from .sources import (
@@ -587,6 +587,7 @@ class BaseSettings(BaseModel):
             last_source = sources[-1]
             init_state = last_source._init_state if isinstance(last_source, PydanticBaseSettingsSource) else InitState()
             cls._settings_restore_init_kwarg_names(cls, init_kwargs, state, init_state)
+            cls._set_discriminator_value(state)
 
             return state
         # no one should mean to do this, but I think returning an empty dict is marginally preferable
@@ -693,6 +694,24 @@ class BaseSettings(BaseModel):
                 'secrets_nested_subdir',
             ),
         )
+
+    @classmethod
+    def _set_discriminator_value(cls, state: dict) -> None:
+        for field_name, model_field in cls.model_fields.items():
+            if model_field.discriminator and isinstance(model_field.discriminator, str):
+                if field_name not in state:
+                    fields_dict = {
+                        model_field.discriminator: (model_field.annotation, model_field.default if not model_field.is_required() else ...)
+                    }
+                    _helper_class = create_model(
+                        'NewSettings',
+                        __base__=cls.__base__,
+                        __config__=cls.model_config,
+                        **fields_dict
+                    )
+                    sources, init_kwargs = _helper_class._settings_init_sources()
+                    state[field_name] = _helper_class._settings_build_values(sources, init_kwargs)
+
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         extra='forbid',
