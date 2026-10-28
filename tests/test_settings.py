@@ -1879,6 +1879,21 @@ def test_nested_settings_with_discriminator_and_alias(env):
     assert Settings().animal.x == 'x'
 
 
+def test_nested_settings_with_discriminator_without_data_from_env(env):
+    class Cat(BaseSettings):
+        t: Literal['cat'] = Field(alias='TYPE')
+
+    class Dog(BaseSettings):
+        t: Literal['dog'] = Field(alias='TYPE')
+        x: str = 'default'
+
+    class Settings(BaseSettings):
+        animal: Cat | Dog = Field(discriminator='t')
+
+    with pytest.raises(ValidationError):
+        Settings()
+
+
 def test_env_str(env):
     class Settings(BaseSettings):
         apple: str = Field(None, validation_alias='BOOM')
