@@ -1,6 +1,3 @@
-# commit
-#fdgdgdfg
-#sdfsdfsdfdsfd
 import dataclasses
 import gc
 import json
@@ -24,7 +21,6 @@ from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar
 from unittest import mock
 
-import pytest
 import pytest
 from annotated_types import Len, MinLen
 from pydantic import (
@@ -74,7 +70,7 @@ from pydantic_settings import (
 from pydantic_settings.main import _settings_cache
 from pydantic_settings.sources import DefaultSettingsSource, read_env_file
 from pydantic_settings.sources.providers import env as env_provider
-ertsertsertsert
+
 try:
     import dotenv
 except ImportError:
