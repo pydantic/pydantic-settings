@@ -17,7 +17,7 @@ from pydantic._internal._config import config_keys
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
-from pydantic.main import BaseModel, create_model
+from pydantic.main import BaseModel
 
 from .exceptions import SettingsError
 from .sources import (
@@ -46,6 +46,7 @@ from .sources.utils import (
     InitState,
     _get_alias_names,
     _get_model_config,
+    _get_union_members,
     _validate_by_alias_enabled,
     _validate_by_name_enabled,
     _warn_if_field_info_incomplete,
@@ -697,22 +698,26 @@ class BaseSettings(BaseModel):
 
     @classmethod
     def _set_discriminator_value(cls, state: dict) -> None:
-        """"""
+        """
+        Populate the discriminator field from all configured settings sources when not provided via init.
+
+        For fields that carry a string discriminator attribute and are missing from the resolved state,
+        this method iterates over the union members of the field annotation. Each member that is a
+        BaseSettings subclass is instantiated as a mini-settings-graph — its sources are built and
+        merged exactly as for the top-level class. The resulting key-value pairs are collected into a
+        single dictionary and stored under the field name in ``state``, ensuring downstream Pydantic
+        discriminators can select the correct subclass variant.
+        """
         for field_name, model_field in cls.model_fields.items():
             if model_field.discriminator and isinstance(model_field.discriminator, str) and field_name not in state:
-                fields_dict = {
-                    model_field.discriminator: (
-                        model_field.annotation,
-                        model_field.default if not model_field.is_required() else ...,
-                    )
-                }
-                _helper_class = create_model(
-                    'HelperClass', __base__=cls.__base__, __config__=cls.model_config, **fields_dict
-                )
-                sources, init_kwargs = _helper_class._settings_init_sources()
-                value = _helper_class._settings_build_values(sources, init_kwargs)
-                if value:
-                    state[field_name] = value
+                result: dict = {}
+                for item in _get_union_members(model_field.annotation):
+                    if issubclass(item, BaseSettings):
+                        sources, init_kwargs = item._settings_init_sources()
+                        value = item._settings_build_values(sources, init_kwargs)
+                        result.update(value)
+                if result:
+                    state[field_name] = result
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         extra='forbid',
