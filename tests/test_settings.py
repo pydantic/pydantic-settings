@@ -1,3 +1,6 @@
+# commit
+#fdgdgdfg
+#sdfsdfsdfdsfd
 import dataclasses
 import gc
 import json
@@ -21,6 +24,7 @@ from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar
 from unittest import mock
 
+import pytest
 import pytest
 from annotated_types import Len, MinLen
 from pydantic import (
@@ -52,8 +56,6 @@ from pydantic import (
 from pydantic.fields import FieldInfo
 from typing_extensions import TypeAliasType, override
 
-
-
 from pydantic_settings import (
     BaseSettings,
     DotEnvSettingsSource,
@@ -72,7 +74,7 @@ from pydantic_settings import (
 from pydantic_settings.main import _settings_cache
 from pydantic_settings.sources import DefaultSettingsSource, read_env_file
 from pydantic_settings.sources.providers import env as env_provider
-
+ertsertsertsert
 try:
     import dotenv
 except ImportError:
@@ -1857,6 +1859,24 @@ def test_nested_settings_with_discriminator_and_another_attributes(env):
         animal: Cat | Dog = Field(discriminator='t')
 
     env.set('t', 'dog')
+    env.set('x', 'x')
+    assert isinstance(Settings().animal, Dog)
+    assert Settings().animal.t == 'dog'
+    assert Settings().animal.x == 'x'
+
+
+def test_nested_settings_with_discriminator_and_alias(env):
+    class Cat(BaseSettings):
+        t: Literal['cat'] = Field(alias='TYPE')
+
+    class Dog(BaseSettings):
+        t: Literal['dog'] = Field(alias='TYPE')
+        x: str = 'default'
+
+    class Settings(BaseSettings):
+        animal: Cat | Dog = Field(discriminator='t')
+
+    env.set('TYPE', 'dog')
     env.set('x', 'x')
     assert isinstance(Settings().animal, Dog)
     assert Settings().animal.t == 'dog'
@@ -5799,6 +5819,3 @@ def test_debug_secret_file_resolution(env, caplog, tmp_path):
     messages = [r.getMessage() for r in caplog.records]
     assert any(f'Loading secret file: {(tmp_path / "name").resolve()}' == m for m in messages)
     assert any('Secret file not found, skipping' in m and 'missing' in m for m in messages)
-
-
-
