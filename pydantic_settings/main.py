@@ -17,7 +17,7 @@ from pydantic._internal._config import config_keys
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
-from pydantic.main import BaseModel
+from pydantic.main import BaseModel, create_model
 
 from .exceptions import SettingsError
 from .sources import (
