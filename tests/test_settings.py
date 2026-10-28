@@ -5763,3 +5763,21 @@ def test_debug_secret_file_resolution(env, caplog, tmp_path):
     messages = [r.getMessage() for r in caplog.records]
     assert any(f'Loading secret file: {(tmp_path / "name").resolve()}' == m for m in messages)
     assert any('Secret file not found, skipping' in m and 'missing' in m for m in messages)
+
+
+@pytest.mark.parametrize(
+    'value_type,value',
+    [
+        (list[dict[str, str]], [{'k': 'v'}]),
+        (dict[str, list[str]], {'k': ['v']}),
+        (dict[str, dict[str, int]], {'k': {'nested': 1}}),
+        (list[list[dict[str, str]]], [[{'k': 'v'}]]),
+    ],
+)
+def test_nested_dict_env_value_preserves_container_type(env, value_type, value):
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='APP_', env_nested_delimiter='__')
+        values: dict[str, value_type]
+
+    env.set('APP_VALUES__X', json.dumps(value))
+    assert Settings().values == {'x': value}
