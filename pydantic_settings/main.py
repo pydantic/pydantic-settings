@@ -711,7 +711,6 @@ class BaseSettings(BaseModel):
         """
         for field_name, model_field in cls.model_fields.items():
             if model_field.discriminator and isinstance(model_field.discriminator, str) and field_name not in state:
-                result: dict[str, Any] = {}
                 for item in _get_union_members(model_field.annotation):
                     if issubclass(item, BaseSettings):
                         field_info = item.model_fields.get(model_field.discriminator, FieldInfo())
@@ -721,10 +720,9 @@ class BaseSettings(BaseModel):
                         )
                         sources, init_kwargs = _HelperClass._settings_init_sources()
                         value = _HelperClass._settings_build_values(sources, init_kwargs)
-                        result.update(value)
-                        break
-                if result:
-                    state[field_name] = result
+                        if value:
+                            state[field_name] = value
+                        return
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         extra='forbid',
