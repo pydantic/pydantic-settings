@@ -1846,6 +1846,19 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             + serialized_args['unknown']
         )
 
+    def _serialize_optional_arg(
+        self, arg: _CliArg, arg_name: str, value: str | list[Any] | dict[str, Any]
+    ) -> list[str | list[Any] | dict[str, Any]]:
+        if arg.kwargs.get('action') in (BooleanOptionalAction, 'store_true', 'store_false'):
+            return [arg_name]
+        if (
+            arg.kwargs.get('nargs') not in ('*', '+')
+            and isinstance(value, str)
+            and (value == '--' or value.startswith(self.cli_flag_prefix_char))
+        ):
+            return [f'{arg_name}={value}']
+        return [arg_name, value]
+
     def _serialized_args(
         self,
         model: PydanticModel,
@@ -1928,10 +1941,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 )
             ):
                 if index == 0 or arg.kwargs.get('nargs') not in ('*', '+'):
-                    optional_args.append(f'{flag_chars}{arg_name}')
-
-                # If implicit bool flag, do not add a value
-                if arg.kwargs.get('action') not in (BooleanOptionalAction, 'store_true', 'store_false'):
+                    optional_args += self._serialize_optional_arg(arg, f'{flag_chars}{arg_name}', coerced_value)
+                else:
                     optional_args.append(coerced_value)
 
         return {

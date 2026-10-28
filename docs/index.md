@@ -1623,6 +1623,12 @@ options:
 
 An instantiated Pydantic model can be serialized into its CLI arguments using the `CliApp.serialize` method. Serialization styles can be controlled using the `list_style`, `dict_style`, and `positionals_first` flags.
 
+For optional arguments that take one value per occurrence, `--` and values starting with the CLI flag prefix are attached with
+`=`. For example, `pattern='--help'` is serialized as `['--pattern=--help']` so it is parsed as a value.
+
+On Python 3.12, round-tripping the literal value `--` requires Python 3.12.7 or later. Earlier 3.12 releases discard it
+because of an [argparse bug](https://github.com/python/cpython/issues/81691).
+
 ```py
 from pydantic import BaseModel
 
