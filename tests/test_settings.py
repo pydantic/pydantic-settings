@@ -4489,6 +4489,80 @@ def test_env_nested_dict_complex_value_type(env):
     assert s.model_dump() == {'nested_field': {'key': ['a', 'b']}}
 
 
+@pytest.mark.parametrize(
+    'value_type,value',
+    [
+        (list[dict[str, str]], [{'k': 'v'}]),
+        (dict[str, list[str]], {'k': ['v']}),
+        (dict[str, dict[str, int]], {'k': {'nested': 1}}),
+        (list[list[dict[str, str]]], [[{'k': 'v'}]]),
+        (Annotated[list[dict[str, str]], Field(min_length=1)], [{'k': 'v'}]),
+    ],
+)
+def test_env_nested_dict_nested_container_value_type(env, value_type, value):
+    """Regression test for https://github.com/pydantic/pydantic-settings/issues/1107"""
+
+    class Settings(BaseSettings):
+        nested_field: dict[str, value_type]
+
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set('nested_field__key', json.dumps(value))
+    s = Settings()
+    assert s.model_dump() == {'nested_field': {'key': value}}
+
+
+class _DictOfListOfDicts(BaseModel):
+    d: dict[str, list[dict[str, str]]] = {}
+
+
+@pytest.mark.parametrize(
+    'annotation,env_name,expected',
+    [
+        (typing.Optional[dict[str, list[dict[str, str]]]], 'field__key', {'key': [{'k': 'v'}]}),  # noqa: UP045
+        (dict[str, list[dict[str, str]]] | None, 'field__key', {'key': [{'k': 'v'}]}),
+        (_DictOfListOfDicts, 'field__d__key', {'d': {'key': [{'k': 'v'}]}}),
+        (dict[str, _DictOfListOfDicts], 'field__a__d__key', {'a': {'d': {'key': [{'k': 'v'}]}}}),
+    ],
+)
+def test_env_nested_dict_nested_container_value_type_in_wrapper(env, annotation, env_name, expected):
+    """Regression test for https://github.com/pydantic/pydantic-settings/issues/1107"""
+
+    class Settings(BaseSettings):
+        field: annotation
+
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set(env_name, '[{"k": "v"}]')
+    s = Settings()
+    assert s.model_dump() == {'field': expected}
+
+
+def test_env_nested_dict_model_value_key_matching_model_field(env):
+    """A dict key that matches a field name of the dict's value model is still a dict key."""
+
+    class Value(BaseModel):
+        name: str
+        count: int = 0
+
+    class Settings(BaseSettings):
+        values: dict[str, Value]
+
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set('values__name', '{"name": "a", "count": 1}')
+    env.set('values__count', '{"name": "b", "count": 2}')
+    env.set('values__other__name', 'c')
+    s = Settings()
+    assert s.model_dump() == {
+        'values': {
+            'name': {'name': 'a', 'count': 1},
+            'count': {'name': 'b', 'count': 2},
+            'other': {'name': 'c', 'count': 0},
+        }
+    }
+
+
 ListOrStr = TypeAliasType('ListOrStr', list[str] | str)
 
 
