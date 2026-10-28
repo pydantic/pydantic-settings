@@ -709,7 +709,7 @@ class BaseSettings(BaseModel):
         discriminators can select the correct subclass variant.
         """
         for field_name, model_field in cls.model_fields.items():
-            if model_field.discriminator and isinstance(model_field.discriminator, str) and field_name not in state:
+            if model_field.discriminator and field_name not in state:
                 result: dict = {}
                 for item in _get_union_members(model_field.annotation):
                     if issubclass(item, BaseSettings):
