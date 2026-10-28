@@ -717,7 +717,7 @@ class BaseSettings(BaseModel):
                         field_info = item.model_fields.get(model_field.discriminator, FieldInfo())
                         fields_dict: dict[str, Any] = {model_field.discriminator: (field_info.annotation, field_info)}
                         _HelperClass = create_model(
-                            '_HelperClass', __base__=item.__base__, __config__=item.model_config, **fields_dict
+                            '_HelperClass', __base__=item, __config__=item.model_config, **fields_dict
                         )
                         sources, init_kwargs = _HelperClass._settings_init_sources()
                         value = _HelperClass._settings_build_values(sources, init_kwargs)
