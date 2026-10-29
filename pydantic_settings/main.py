@@ -709,6 +709,12 @@ class BaseSettings(BaseModel):
         """
         for field_name, model_field in cls.model_fields.items():
             if model_field.discriminator and isinstance(model_field.discriminator, str) and field_name not in state:
+                alias_names, *_ = _get_alias_names(
+                    field_name=field_name,
+                    field_info=model_field,
+                )
+                if any(alias_name in state for alias_name in alias_names):
+                    break
                 for item in _get_union_members(model_field.annotation):
                     if not (isinstance(item, type) and issubclass(item, BaseSettings)):
                         continue
@@ -720,7 +726,8 @@ class BaseSettings(BaseModel):
                     sources, init_kwargs = _HelperClass._settings_init_sources()
                     value = _HelperClass._settings_build_values(sources, init_kwargs)
                     if value:
-                        state[field_name] = value
+                        key: str = alias_names[0] if alias_names else field_name
+                        state[key] = value
                         break
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
