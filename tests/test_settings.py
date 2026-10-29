@@ -1951,7 +1951,7 @@ def test_nested_settings_with_discriminator_anddiscriminator_has_alias(env):
         t: Literal['dog']
 
     class Settings(BaseSettings):
-        animal: Cat | Dog = Field(discriminator='t', alias="MY_ANIMAl")
+        animal: Cat | Dog = Field(discriminator='t', alias='MY_ANIMAl')
 
     env.set('t', 'cat')
     assert isinstance(Settings().animal, Cat)
