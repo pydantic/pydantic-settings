@@ -714,7 +714,7 @@ class BaseSettings(BaseModel):
                     field_info=model_field,
                 )
                 if any(alias_name in state for alias_name in alias_names):
-                    break
+                    continue
                 for item in _get_union_members(model_field.annotation):
                     if not (isinstance(item, type) and issubclass(item, BaseSettings)):
                         continue
