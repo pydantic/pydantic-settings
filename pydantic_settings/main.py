@@ -699,30 +699,29 @@ class BaseSettings(BaseModel):
     @classmethod
     def _set_discriminator_value(cls, state: dict[str, Any]) -> None:
         """
-        Populate the discriminator field from all configured settings sources when not provided via init.
+        Populate a missing discriminator field via the variant's own config.
 
-        For fields with a string discriminator attribute that are missing from the resolved state,
-        this method iterates over the union members of the field annotation and picks the first
-        BaseSettings subclass. It constructs a temporary one-field model containing only the
-        discriminator field (typed from the original field info) and resolves its value through the
-        standard settings pipeline — sources are built and merged exactly as for the parent class.
-        The resulting key-value pair is stored under the discriminator's field name in ``state``,
-        ensuring downstream Pydantic discriminators can select the correct variant.
+        For each discriminated union field not yet in ``state``, iterates union members,
+        builds a helper model inheriting the variant's ``model_config`` (so ``env_prefix``,
+        ``env_file``, etc. come from that variant — **not** the parent), and resolves the
+        discriminator value through the normal sources pipeline. Stores the result in
+        ``state`` so Pydantic can select the correct variant.
         """
         for field_name, model_field in cls.model_fields.items():
             if model_field.discriminator and isinstance(model_field.discriminator, str) and field_name not in state:
                 for item in _get_union_members(model_field.annotation):
-                    if issubclass(item, BaseSettings):
-                        field_info = item.model_fields.get(model_field.discriminator, FieldInfo())
-                        fields_dict: dict[str, Any] = {model_field.discriminator: (field_info.annotation, field_info)}
-                        _HelperClass = create_model(
-                            '_HelperClass', __base__=item, __config__=item.model_config, **fields_dict
-                        )
-                        sources, init_kwargs = _HelperClass._settings_init_sources()
-                        value = _HelperClass._settings_build_values(sources, init_kwargs)
-                        if value:
-                            state[field_name] = value
-                        return
+                    if not (isinstance(item, type) and issubclass(item, BaseSettings)):
+                        continue
+                    field_info = item.model_fields.get(model_field.discriminator, FieldInfo())
+                    fields_dict: dict[str, Any] = {model_field.discriminator: (field_info.annotation, field_info)}
+                    _HelperClass = create_model(
+                        '_HelperClass', __base__=BaseSettings, __config__=item.model_config, **fields_dict
+                    )
+                    sources, init_kwargs = _HelperClass._settings_init_sources()
+                    value = _HelperClass._settings_build_values(sources, init_kwargs)
+                    if value:
+                        state[field_name] = value
+                        break
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         extra='forbid',
