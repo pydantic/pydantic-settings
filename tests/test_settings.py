@@ -1942,7 +1942,7 @@ def test_nested_settings_with_discriminator_and_default_value(env):
     assert Settings().animal.t == 'dog'
 
 
-def test_nested_settings_with_discriminator_anddiscriminator_has_alias(env):
+def test_nested_settings_with_discriminator_and_discriminator_has_alias(env):
 
     class Cat(BaseSettings):
         t: Literal['cat']
@@ -1954,6 +1954,22 @@ def test_nested_settings_with_discriminator_anddiscriminator_has_alias(env):
         animal: Cat | Dog = Field(discriminator='t', alias='MY_ANIMAl')
 
     env.set('t', 'cat')
+    assert isinstance(Settings().animal, Cat)
+    assert Settings().animal.t == 'cat'
+
+
+def test_nested_settings_with_discriminator_has_alias_and_data(env):
+
+    class Cat(BaseSettings):
+        t: Literal['cat']
+
+    class Dog(BaseSettings):
+        t: Literal['dog']
+
+    class Settings(BaseSettings):
+        animal: Cat | Dog = Field(discriminator='t', alias='MY_ANIMAl')
+
+    env.set('MY_ANIMAl', '{"t": "cat"}')
     assert isinstance(Settings().animal, Cat)
     assert Settings().animal.t == 'cat'
 
