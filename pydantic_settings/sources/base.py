@@ -470,14 +470,12 @@ class InitSettingsSource(PydanticBaseSettingsSource):
                 if name not in matchable_names:
                     matchable_names.append(name)
             # All provided keys matching this field, in matchable_names preference order
-            # (aliases first, then the field name). Only keys not yet consumed by an
-            # earlier field are considered.
+            # (aliases first, then the field name).
             matched_keys = [
                 original
                 for name in matchable_names
                 if name in normalized_provided
                 for original in normalized_provided[name]
-                if original in init_kwarg_names
             ]
             if matched_keys:
                 preferred_alias = canonical_alias_names[0] if canonical_alias_names else field_name
