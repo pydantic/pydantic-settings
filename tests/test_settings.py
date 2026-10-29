@@ -4511,6 +4511,23 @@ def test_env_nested_dict_model_value_key_matching_model_field(env):
     }
 
 
+@pytest.mark.parametrize('key', ['label', 'other'])
+def test_env_nested_dict_model_value_key_matching_validation_alias(env, key):
+    """A dict key matching a value-model validation alias is still a dict key."""
+
+    class Value(BaseModel):
+        name: str = Field(validation_alias='label')
+        count: int
+
+    class Settings(BaseSettings):
+        values: dict[str, Value]
+
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set(f'values__{key}', '{"label":"a","count":1}')
+    assert Settings().model_dump() == {'values': {key: {'name': 'a', 'count': 1}}}
+
+
 ListOrStr = TypeAliasType('ListOrStr', list[str] | str)
 
 
