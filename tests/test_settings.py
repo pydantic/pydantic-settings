@@ -4094,6 +4094,37 @@ def test_env_parse_enums_with_nested_annotated(env):
     assert Settings(_env_parse_enums=True).fruit == FruitsEnum.kiwi
 
 
+@pytest.mark.parametrize(
+    'annotation',
+    [FruitsEnum, FruitsEnum | None, Annotated[FruitsEnum, Field(description='fruit')], FruitsEnum | list[FruitsEnum]],
+    ids=['direct', 'optional', 'annotated', 'complex-union'],
+)
+@pytest.mark.parametrize('parse_enums', [False, True])
+@pytest.mark.parametrize('value', ['kiwi', '1'], ids=['name', 'value'])
+def test_env_parse_enums_for_dictionary_values(env, annotation, parse_enums, value):
+    class Settings(BaseSettings, env_nested_delimiter='__'):
+        fruits: dict[str, annotation]
+
+    env.set('FRUITS__CHOSEN', value)
+
+    if value == 'kiwi' and not parse_enums:
+        with pytest.raises(ValidationError) as exc_info:
+            Settings(_env_parse_enums=parse_enums)
+        assert exc_info.value.errors(include_url=False)[0]['loc'][:2] == ('fruits', 'chosen')
+    else:
+        assert Settings(_env_parse_enums=parse_enums).fruits == {'chosen': FruitsEnum.kiwi}
+
+
+@pytest.mark.parametrize('parse_enums', [False, True])
+def test_env_parse_enums_for_dictionary_union_containers(env, parse_enums):
+    class Settings(BaseSettings, env_nested_delimiter='__'):
+        fruits: dict[str, FruitsEnum | list[FruitsEnum]]
+
+    env.set('FRUITS__CHOSEN', '[1, 2]')
+
+    assert Settings(_env_parse_enums=parse_enums).fruits == {'chosen': [FruitsEnum.kiwi, FruitsEnum.lime]}
+
+
 def test_env_parse_none_str(env):
     env.set('x', 'null')
     env.set('y', 'y_override')
