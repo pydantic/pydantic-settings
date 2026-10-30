@@ -1310,16 +1310,19 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     self.cli_enforce_required and field_info.is_required() and model_default is PydanticUndefined
                 )
 
+                is_custom_non_option = self.cli_nested_delimiter != '.' and (
+                    _CliPositionalArg in field_info.metadata or _CliUnknownArgs in field_info.metadata
+                )
                 arg_names = self._get_arg_names(
                     arg,
                     external_arg_prefix,
                     subcommand_prefix,
                     alias_prefixes,
-                    added_args,
+                    [] if is_custom_non_option else added_args,
                     discriminator_vals,
                     is_last_discriminator,
                 )
-                if not arg_names or (arg.kwargs['dest'] in added_args):
+                if not arg_names or (not is_custom_non_option and arg.kwargs['dest'] in added_args):
                     continue
 
                 self._convert_append_action(arg.kwargs, field_info, arg.is_append_action)
@@ -1371,7 +1374,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     arg.args = [f'{flag_prefix[: 1 if len(name) == 1 else None]}{name}' for name in arg_names]
                     self._add_env_var_names(arg.dest, arg.kwargs['help'], env_var_names)
                     self._add_argument(context, *arg.args, **arg.kwargs)
-                    added_args += list(arg_names)
+                    if not is_custom_non_option:
+                        added_args += list(arg_names)
 
         self._add_parser_alias_paths(
             parser, alias_path_args, added_args, arg_prefix, subcommand_prefix, group, external_arg_prefix
@@ -1450,6 +1454,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         is_last_discriminator: bool,
     ) -> list[str]:
         arg_names: list[str] = []
+        is_option = _CliPositionalArg not in arg.field_info.metadata and _CliUnknownArgs not in arg.field_info.metadata
         for default_prefix, prefix in [(arg.arg_prefix, external_arg_prefix)] + alias_prefixes:
             for name in arg.alias_names:
                 # Only structural boundaries use the delimiter; literal alias text is preserved.
@@ -1462,7 +1467,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 )
                 if self.cli_nested_delimiter == '.':
                     arg_name = default_name
-                if not arg.is_alias_path_only:
+                if is_option and not arg.is_alias_path_only:
                     self._register_option_name(arg.parser, arg_name, default_name)
                 if arg_name not in added_args and arg_name not in arg_names:
                     arg_names.append(arg_name)
@@ -1473,7 +1478,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     alias_list = [aliases] if isinstance(aliases, str) else aliases
                     for alias in alias_list:
                         if alias not in added_args and alias not in arg_names:
-                            self._register_option_name(arg.parser, alias, alias)
+                            if is_option:
+                                self._register_option_name(arg.parser, alias, alias)
                             arg_names.append(alias)
 
         tags: set[Any] = set()

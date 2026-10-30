@@ -237,3 +237,34 @@ def test_default_hyphenated_alias_path_keeps_parser_destination_inference():
 
     # Preserve existing argparse destination inference rather than repair it.
     assert CliApp.run(Settings, cli_args=['--child.token-list', '["chosen"]']).child.value == ''
+
+
+@pytest.mark.parametrize('delimiter', ['.', '__'])
+@pytest.mark.parametrize('reverse_fields', [False, True])
+@pytest.mark.parametrize('unknown_args', [False, True])
+def test_nested_delimiter_non_option_names_do_not_collide(delimiter, reverse_fields, unknown_args):
+    from pydantic import create_model
+
+    from pydantic_settings import CliPositionalArg, CliUnknownArgs
+
+    class Nested(BaseModel):
+        value: int = 0
+
+    fields = {
+        'nested__value': (CliUnknownArgs if unknown_args else CliPositionalArg[str], ...),
+        'nested': (Nested, Nested()),
+    }
+    if reverse_fields:
+        fields = dict(reversed(list(fields.items())))
+    Settings = create_model(
+        'Settings',
+        __base__=BaseSettings,
+        __config__=SettingsConfigDict(cli_nested_delimiter=delimiter, cli_ignore_unknown_args=unknown_args),
+        **fields,
+    )
+    option = f'--nested{delimiter}value'
+    instance = CliApp.run(Settings, cli_args=['item', option, '7'])
+    assert instance.nested.value == 7
+    assert instance.nested__value == (['item'] if unknown_args else 'item')
+    assert option in CliApp.format_help(Settings)
+    assert CliApp.run(Settings, cli_args=CliApp.serialize(instance)) == instance
