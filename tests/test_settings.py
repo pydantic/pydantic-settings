@@ -1300,6 +1300,14 @@ def test_nested_model_default_partial_update_keeps_aliased_subfields(env):
     }
     assert Settings().db.model_dump() == expected
     assert Settings(db={'host': 'init'}).db.model_dump() == {**expected, 'host': 'init'}
+    # Given under another of its aliases, the update wins over the default
+    assert Settings(db={'p': 6000}).db.model_dump() == {**expected, 'port': 6000}
+    assert Settings(db={'deep': {'TIMEOUT': 1}}).db.model_dump() == {**expected, 'deep': {'retries': 3, 'timeout': 1}}
+    assert Settings(db={'deep': Deep(TIMEOUT=1)}).db.model_dump() == {**expected, 'deep': {'retries': 0, 'timeout': 1}}
+    assert Settings(db={'shards': {'eu': {'TIMEOUT': 2}}}).db.model_dump() == {
+        **expected,
+        'shards': {'eu': {'retries': 1, 'timeout': 2}},
+    }
     env.set('DB__HOST', 'env')
     assert Settings().db.model_dump() == {**expected, 'host': 'env'}
     env.set('DB__DEEP__TIMEOUT', '9')
@@ -1312,6 +1320,12 @@ def test_nested_model_default_partial_update_keeps_subfields_validated_by_name(e
 
         pool_size: int = Field(5, alias='poolSize')
         host: str = 'localhost'
+
+    class Queue(BaseModel):
+        model_config = ConfigDict(validate_by_name=True)
+
+        size: int = Field(1, alias='queueSize')
+        name: str = 'jobs'
 
     @pydantic_dataclasses.dataclass
     class Cache:
@@ -1327,6 +1341,7 @@ def test_nested_model_default_partial_update_keeps_subfields_validated_by_name(e
         db: Database = Database(pool_size=20)
         cache: Cache = Cache(TTL=300)
         storage: Storage = Storage(cache=Cache(TTL=30))
+        queue: Queue = Queue(queueSize=10, name='tasks')
 
     env.set('DB__HOST', 'env')
     env.set('CACHE__BACKEND', 'redis')
@@ -1335,6 +1350,10 @@ def test_nested_model_default_partial_update_keeps_subfields_validated_by_name(e
     assert s.db == Database(pool_size=20, host='env')
     assert s.cache == Cache(TTL=300, backend='redis')
     assert s.storage == Storage(cache=Cache(TTL=30), name='s3')
+    assert Settings(queue={'name': 'emails'}).queue == Queue(queueSize=10, name='emails')
+    assert Settings(queue={'size': 3}).queue == Queue(queueSize=3, name='tasks')
+    env.set('STORAGE__CACHE__BACKEND', 'disk')
+    assert Settings().storage == Storage(cache=Cache(TTL=30, backend='disk'), name='s3')
 
 
 def test_init_kwargs_nested_model_default_partial_update(env):
