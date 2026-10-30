@@ -1259,6 +1259,84 @@ def test_nested_model_default_partial_update_validation_alias_differs_from_alias
     assert Settings().nested == Nested(v0=1, v1=2)
 
 
+def test_nested_model_default_partial_update_keeps_aliased_subfields(env):
+    class Deep(BaseModel):
+        model_config = ConfigDict(alias_generator=lambda s: s.upper())
+
+        retries: int = 0
+        timeout: int = 0
+
+    class Database(BaseModel):
+        model_config = ConfigDict(extra='allow')
+
+        pool_size: int = Field(5, alias='poolSize')
+        port: int = Field(0, alias='portAlias', validation_alias=AliasChoices('PORT', 'p'))
+        user: str = Field(alias='userName')
+        host: str = 'localhost'
+        deep: Deep = Deep()
+        replicas: list[Deep] = []
+        shards: dict[str, Deep] = {}
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        db: Database = Database(
+            poolSize=20,
+            PORT=5433,
+            userName='admin',
+            deep=Deep(RETRIES=3),
+            replicas=[Deep(TIMEOUT=7)],
+            shards={'eu': Deep(RETRIES=1)},
+            region='eu',
+        )
+
+    expected = {
+        'pool_size': 20,
+        'port': 5433,
+        'user': 'admin',
+        'host': 'localhost',
+        'deep': {'retries': 3, 'timeout': 0},
+        'replicas': [{'retries': 0, 'timeout': 7}],
+        'shards': {'eu': {'retries': 1, 'timeout': 0}},
+        'region': 'eu',
+    }
+    assert Settings().db.model_dump() == expected
+    assert Settings(db={'host': 'init'}).db.model_dump() == {**expected, 'host': 'init'}
+    env.set('DB__HOST', 'env')
+    assert Settings().db.model_dump() == {**expected, 'host': 'env'}
+    env.set('DB__DEEP__TIMEOUT', '9')
+    assert Settings().db.model_dump() == {**expected, 'host': 'env', 'deep': {'retries': 3, 'timeout': 9}}
+
+
+def test_nested_model_default_partial_update_keeps_subfields_validated_by_name(env):
+    class Database(BaseModel):
+        model_config = ConfigDict(validate_by_alias=False, validate_by_name=True)
+
+        pool_size: int = Field(5, alias='poolSize')
+        host: str = 'localhost'
+
+    @pydantic_dataclasses.dataclass
+    class Cache:
+        ttl: int = Field(60, alias='TTL')
+        backend: str = 'memory'
+
+    @dataclasses.dataclass
+    class Storage:
+        cache: Cache
+        name: str = 'local'
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        db: Database = Database(pool_size=20)
+        cache: Cache = Cache(TTL=300)
+        storage: Storage = Storage(cache=Cache(TTL=30))
+
+    env.set('DB__HOST', 'env')
+    env.set('CACHE__BACKEND', 'redis')
+    env.set('STORAGE__NAME', 's3')
+    s = Settings()
+    assert s.db == Database(pool_size=20, host='env')
+    assert s.cache == Cache(TTL=300, backend='redis')
+    assert s.storage == Storage(cache=Cache(TTL=30), name='s3')
+
+
 def test_init_kwargs_nested_model_default_partial_update(env):
     class DeepSubModel(BaseModel):
         v4: str

@@ -349,6 +349,37 @@ def _get_nested_discriminators(annotation: Any) -> list[str] | None:
     return discriminators
 
 
+def _key_by_validation_alias(default: Any, dumped: Any) -> Any:
+    """Re-key `dumped`, the dump of `default`, by the names pydantic validates each field under.
+
+    `model_dump()` and `asdict()` key fields by name, but a nested model only takes its aliases unless it is
+    populated by name, so a partial update merged into the dump would lose the values set on the default.
+    """
+    if isinstance(dumped, list) and isinstance(default, (list, tuple)) and len(dumped) == len(default):
+        return [_key_by_validation_alias(item, value) for item, value in zip(default, dumped, strict=True)]
+    if not isinstance(dumped, dict):
+        return dumped
+    if isinstance(default, dict):
+        return {key: _key_by_validation_alias(default.get(key), value) for key, value in dumped.items()}
+    if not (is_model_class(type(default)) or is_pydantic_dataclass(type(default))):
+        # A stdlib dataclass has no aliases, but `asdict()` also dumps the pydantic dataclasses inside it
+        return {key: _key_by_validation_alias(getattr(default, key, None), value) for key, value in dumped.items()}
+    fields = _get_model_fields(type(default))
+    validate_by_alias = _validate_by_alias_enabled(_get_model_config(type(default)))
+    result: dict[str, Any] = {}
+    for key, value in dumped.items():
+        field_info = fields.get(key)
+        if field_info is None:
+            # Extra values are dumped under the key they were given with
+            result[key] = value
+            continue
+        value = _key_by_validation_alias(getattr(default, key, None), value)
+        alias_names, is_alias_path_only = _get_alias_names(key, field_info, validate_by_alias=validate_by_alias)
+        # An `AliasPath` points into nested input, so its first element isn't a key the value can go under
+        result[key if is_alias_path_only else alias_names[0]] = value
+    return result
+
+
 class DefaultSettingsSource(PydanticBaseSettingsSource):
     """
     Source class for loading default object values.
@@ -390,9 +421,13 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
                 alias_names, *_ = _get_alias_names(field_name, field_info, validate_by_alias=validate_by_alias)
                 preferred_alias = alias_names[0]
                 if is_dataclass(type(field_info.default)):
-                    self.defaults[preferred_alias] = asdict(field_info.default)
+                    self.defaults[preferred_alias] = _key_by_validation_alias(
+                        field_info.default, asdict(field_info.default)
+                    )
                 elif is_model_class(type(field_info.default)):
-                    self.defaults[preferred_alias] = field_info.default.model_dump()
+                    self.defaults[preferred_alias] = _key_by_validation_alias(
+                        field_info.default, field_info.default.model_dump(by_alias=False)
+                    )
                 if discriminator is not None and preferred_alias in self.defaults:
                     default_cls = type(field_info.default)
                     self._discriminator_tags[preferred_alias] = [
