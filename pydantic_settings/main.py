@@ -41,6 +41,7 @@ from .sources import (
     YamlConfigSettingsSource,
     get_subcommand,
 )
+from .sources.base import _unwrap_optional_annotation
 from .sources.utils import (
     InitState,
     _get_alias_names,
@@ -527,6 +528,7 @@ class BaseSettings(BaseModel):
         if sources:
             state: dict[str, Any] = {}
             defaults: dict[str, Any] = {}
+            default_objects: dict[str, Any] = {}
             states: dict[str, dict[str, Any]] = {}
             for source in sources:
                 if isinstance(source, PydanticBaseSettingsSource):
@@ -538,11 +540,15 @@ class BaseSettings(BaseModel):
 
                 if isinstance(source, DefaultSettingsSource):
                     defaults = source_state
+                    default_objects = source._default_objects
 
                 states[source_name] = source_state
                 state = deep_update(source_state, state)
 
             # Strip any default values not explicitly set before returning final state
+            for key in defaults.keys() & default_objects.keys():
+                if state[key] != defaults[key]:
+                    state[key] = _strip_unset_defaults(state[key], defaults[key], default_objects[key])
             state = {key: val for key, val in state.items() if key not in defaults or defaults[key] != val}
 
             if _debug_logging_enabled():
@@ -712,6 +718,46 @@ class BaseSettings(BaseModel):
         ),
         enable_decoding=True,
     )
+
+
+def _strip_unset_defaults(value: Any, default: Any, default_obj: BaseModel) -> Any:
+    """Drop the values in `value` that `default_obj` only has from its class defaults.
+
+    A value is dropped when it equals the dumped default, was not set on `default_obj` and is still the class
+    default, so the nested `model_fields_set` holds what the sources gave plus what was set on `default_obj`.
+    """
+    if not isinstance(value, dict) or not isinstance(default, dict) or default_obj.__pydantic_root_model__:
+        # Not a dumped model, or a root model, whose keys are not its fields
+        return value
+    result: dict[str, Any] = {}
+    for key, val in value.items():
+        field = type(default_obj).model_fields.get(key)
+        if field is not None and key in default:
+            sub_obj = getattr(default_obj, key)
+            # A `default_factory` field has no class default (`field.default` is `PydanticUndefined`), so it is kept
+            if (
+                key not in default_obj.model_fields_set
+                and _is_unchanged(val, default[key])
+                and _is_unchanged(sub_obj, field.default)
+            ):
+                continue
+            # Only recurse into a field annotated with the default's own model class: in a union, dropping values
+            # could make pydantic pick another member
+            if is_model_class(type(sub_obj)) and _unwrap_optional_annotation(field.annotation) is type(sub_obj):
+                val = _strip_unset_defaults(val, default[key], sub_obj)
+        result[key] = val
+    return result
+
+
+def _is_unchanged(value: Any, default: Any) -> bool:
+    """Whether `value` equals `default`, checking identity first like a dict comparison does.
+
+    Values whose `==` fails or has no truth value, like numpy arrays, count as changed.
+    """
+    try:
+        return value is default or bool(value == default)
+    except Exception:
+        return False
 
 
 class CliApp:
