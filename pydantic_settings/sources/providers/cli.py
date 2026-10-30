@@ -10,6 +10,7 @@ import sys
 import typing
 from argparse import (
     SUPPRESS,
+    Action,
     ArgumentParser,
     BooleanOptionalAction,
     Namespace,
@@ -67,9 +68,14 @@ from ..utils import (
     _annotation_contains_types,
     _annotation_enum_val_to_name,
     _get_alias_names,
+    _get_field_metadata,
+    _get_model_config,
     _get_model_fields,
+    _get_union_members,
     _is_function,
     _strip_annotated,
+    _validate_by_alias_enabled,
+    _validate_by_name_enabled,
     parse_env_vars,
 )
 from .env import EnvSettingsSource
@@ -87,6 +93,21 @@ class _CliInternalArgParser(ArgumentParser):
         if not self._cli_exit_on_error:
             raise SettingsError(f'error parsing CLI: {message}')
         super().error(message)
+
+
+# argparse reads args like `-1` or `-.5` as values, not options
+_NEGATIVE_NUMBER = re.compile(r'^-\d+$|^-\d*\.\d+$')
+
+
+def _count_option_values(action: Action | None) -> int | None:
+    """Count the args that `action` takes as values, `None` for any number."""
+    if action is None:
+        return 0
+    if action.nargs is None or action.nargs == '?':
+        return 1
+    if isinstance(action.nargs, int):
+        return action.nargs
+    return None
 
 
 class CliMutuallyExclusiveGroup(BaseModel):
@@ -138,6 +159,37 @@ def _collect_sub_models(type_: Any, sub_models: list[type[BaseModel]]) -> None:
             _collect_sub_models(arg, sub_models)
 
 
+def _is_mapping_annotation(annotation: Any) -> bool:
+    """Check if any union member of an annotation is itself a Mapping, ignoring Mappings nested in collections."""
+    return any(_lenient_issubclass(get_origin(member) or member, Mapping) for member in _get_union_members(annotation))
+
+
+def _is_fixed_length_tuple(annotation: Any) -> bool:
+    """Check if an annotation is a fixed-length tuple, like `tuple[int, int]` or a `NamedTuple`."""
+    origin = get_origin(annotation)
+    if origin is None:
+        return _lenient_issubclass(annotation, tuple) and hasattr(annotation, '_fields')
+    args = get_args(annotation)
+    # `tuple[()]` has no args either, but unlike a bare `typing.Tuple` it is a fixed (empty) tuple
+    is_bare_tuple = annotation is typing.Tuple  # noqa: UP006
+    return _lenient_issubclass(origin, tuple) and not is_bare_tuple and (not args or args[-1] is not Ellipsis)
+
+
+def _is_append_action(field_info: FieldInfo) -> bool:
+    """Check if a field collects multiple CLI values.
+
+    A fixed-length tuple positional takes a single value unless it is explicitly marked with `CliVariadicArg`.
+    """
+    collection_types = (Sequence, AbstractSet, Mapping)
+    if _CliPositionalArg in field_info.metadata and _CliVariadicArg not in field_info.metadata:
+        return any(
+            not _is_fixed_length_tuple(member)
+            and _annotation_contains_types(member, collection_types, is_strip_annotated=True, is_subtype=True)
+            for member in _get_union_members(field_info.annotation)
+        )
+    return _annotation_contains_types(field_info.annotation, collection_types, is_strip_annotated=True, is_subtype=True)
+
+
 class _CliArg(BaseModel):
     model: Any
     parser: Any
@@ -145,6 +197,7 @@ class _CliArg(BaseModel):
     arg_prefix: str
     case_sensitive: bool
     populate_by_name: bool
+    validate_by_alias: bool = True
     hide_none_type: bool
     kebab_case: bool | Literal['all', 'no_enums'] | None
     enable_decoding: bool | None
@@ -171,6 +224,7 @@ class _CliArg(BaseModel):
             alias_path_args=self._alias_paths,
             case_sensitive=self.case_sensitive,
             populate_by_name=self.populate_by_name,
+            validate_by_alias=self.validate_by_alias,
         )
 
         alias_path_dests = {f'{self.arg_prefix}{name}': index for name, index in self._alias_paths.items()}
@@ -192,9 +246,7 @@ class _CliArg(BaseModel):
         return name.replace('_', '-') if kebab_case not in (None, False) else name
 
     @classmethod
-    def get_enum_names(
-        cls, annotation: type[Any], kebab_case: bool | Literal['all', 'no_enums'] | None
-    ) -> tuple[str, ...]:
+    def get_enum_names(cls, annotation: Any, kebab_case: bool | Literal['all', 'no_enums'] | None) -> tuple[str, ...]:
         enum_names: tuple[str, ...] = ()
         annotation = _strip_annotated(annotation)
         for type_ in get_args(annotation):
@@ -275,7 +327,7 @@ class _CliArg(BaseModel):
     @cached_property
     def case_sensitive_alias(self) -> str:
         # Subcommands are always case sensitive, so use the declared alias rather than the lowercased one.
-        return _get_alias_names(self.field_name, self.field_info)[0][0]
+        return _get_alias_names(self.field_name, self.field_info, validate_by_alias=self.validate_by_alias)[0][0]
 
     @cached_property
     def is_alias_path_only(self) -> bool:
@@ -283,9 +335,7 @@ class _CliArg(BaseModel):
 
     @cached_property
     def is_append_action(self) -> bool:
-        return not self.subcommand_dest and _annotation_contains_types(
-            self.field_info.annotation, (Sequence, AbstractSet, Mapping), is_strip_annotated=True, is_subtype=True
-        )
+        return not self.subcommand_dest and _is_append_action(self.field_info)
 
     @cached_property
     def is_parser_submodel(self) -> bool:
@@ -293,10 +343,8 @@ class _CliArg(BaseModel):
 
     @cached_property
     def is_no_decode(self) -> bool:
-        return self.field_info is not None and (
-            NoDecode in self.field_info.metadata
-            or (self.enable_decoding is False and ForceDecode not in self.field_info.metadata)
-        )
+        metadata = _get_field_metadata(self.field_info)
+        return NoDecode in metadata or (self.enable_decoding is False and ForceDecode not in metadata)
 
 
 T = TypeVar('T')
@@ -565,20 +613,26 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         if args is not None and parsed_args is not None:
             raise SettingsError('`args` and `parsed_args` are mutually exclusive')
         if args is not None:
+            # Unknown arguments belong to this parse, including unselected commands.
+            for dest in self._cli_unknown_args:
+                self._cli_unknown_args[dest] = []
+            self._unclaimed_unknown_args.clear()
             if args is False:
                 return self._load_env_vars(parsed_args={})
             if args is True:
                 args = sys.argv[1:]
             return self._load_env_vars(parsed_args=self._parse_args(self.root_parser, args))
         if parsed_args is not None:
-            return self._load_env_vars(parsed_args=copy.copy(parsed_args))
+            return self._load_env_vars(parsed_args=copy.copy(parsed_args), reset_unselected=True)
         return super().__call__()
 
     @overload
     def _load_env_vars(self) -> Mapping[str, str | None]: ...
 
     @overload
-    def _load_env_vars(self, *, parsed_args: Namespace | SimpleNamespace | dict[str, Any]) -> CliSettingsSource[T]:
+    def _load_env_vars(
+        self, *, parsed_args: Namespace | SimpleNamespace | dict[str, Any], reset_unselected: bool = False
+    ) -> CliSettingsSource[T]:
         """
         Loads the parsed command line arguments into the CLI environment settings variables.
 
@@ -594,7 +648,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         """
 
     def _load_env_vars(
-        self, *, parsed_args: Namespace | SimpleNamespace | dict[str, list[str] | str] | None = None
+        self,
+        *,
+        parsed_args: Namespace | SimpleNamespace | dict[str, list[str] | str] | None = None,
+        reset_unselected: bool = False,
     ) -> Mapping[str, str | None] | CliSettingsSource[T]:
         if parsed_args is None:
             return {}
@@ -603,11 +660,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             parsed_args = vars(parsed_args)
 
         selected_subcommands = self._resolve_parsed_args(parsed_args)
-        for arg_dest, arg_map in self._parser_map.items():
-            if isinstance(arg_dest, str) and arg_dest.endswith(':subcommand'):
-                for subcommand_dest in [arg.dest for arg in arg_map.values()]:
-                    if subcommand_dest not in selected_subcommands:
-                        parsed_args[subcommand_dest] = self.cli_parse_none_str
+        unselected_subcommands = self._unset_unselected_subcommands(parsed_args, selected_subcommands)
+        if reset_unselected:
+            # External parser calls can leave captures from an unselected command.
+            self._reset_unknown_args(tuple(f'{dest}.' for dest in unselected_subcommands))
 
         parsed_args = {
             key: val
@@ -621,19 +677,29 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         else:
             last_selected_subcommand = ''
 
-        # When using parse_known_args due to a subcommand's CliUnknownArgs, reject
-        # unknown args if the selected subcommand does not accept them.
+        # parse_known_args lets a subcommand record leftovers. A root token that was
+        # not stored on a root CliUnknownArgs field is still an error, including when
+        # the selected subcommand accepts unknowns of its own.
         if not self.cli_ignore_unknown_args and self._cli_unknown_args:
-            has_unknown = any(args for args in self._cli_unknown_args.values())
-            if has_unknown:
-                selected_accepts_unknown = any(
-                    dest.rsplit('.', 1)[0] in last_selected_subcommand for dest in self._cli_unknown_args
-                )
-                if not selected_accepts_unknown:
-                    unknown = next(args for args in self._cli_unknown_args.values() if args)
-                    if isinstance(self.root_parser, ArgumentParser):
-                        self.root_parser.error(f'unrecognized arguments: {" ".join(unknown)}')
-                    raise SystemExit(2)
+            root_accepts_unknown = id(self._root_parser) in self._unknown_dests_by_parser
+            # Match command path components, not substrings of other names.
+            selected_accepts_unknown = any(
+                dest.rsplit('.', 1)[0] == last_selected_subcommand
+                or last_selected_subcommand.startswith(f'{dest.rsplit(".", 1)[0]}.')
+                for dest in self._cli_unknown_args
+            )
+            if self._unclaimed_unknown_args and not root_accepts_unknown:
+                pending = self._unclaimed_unknown_args.copy()
+            elif not selected_accepts_unknown:
+                pending = next((args for args in self._cli_unknown_args.values() if args), [])
+            else:
+                pending = []
+            if pending:
+                # Consumed errors must not poison a later external parse.
+                self._unclaimed_unknown_args.clear()
+                if isinstance(self.root_parser, ArgumentParser):
+                    self.root_parser.error(f'unrecognized arguments: {" ".join(pending)}')
+                raise SystemExit(2)
 
         parsed_args.update(self._cli_unknown_args)
 
@@ -705,14 +771,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _get_merge_parsed_list_types(self, parsed_list: list[str], field_name: str) -> tuple[type | None, type | None]:
         merge_type = self._cli_dict_args.get(field_name, list)
-        if (
-            merge_type is list
-            or not is_union_origin(get_origin(merge_type))
-            or not any(
-                type_
-                for type_ in get_args(merge_type)
-                if type_ is not type(None) and not _annotation_contains_types(type_, (Mapping,), is_subtype=True)
-            )
+        if merge_type is list or not any(
+            type_
+            for type_ in _get_union_members(merge_type)
+            if type_ is not type(None) and not _is_mapping_annotation(type_)
         ):
             inferred_type = merge_type
         else:
@@ -729,7 +791,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         is_use_decode: bool | None = None
         cli_arg_map = self._parser_map.get(field_name, {})
         try:
-            list_adapter: Any = TypeAdapter(next(iter(cli_arg_map.values())).field_info.annotation)
+            list_adapter: Any = TypeAdapter(cast('Any', next(iter(cli_arg_map.values())).field_info.annotation))
             is_num_type_str = type(next(iter(list_adapter.validate_python(['1'])))) is str
         except Exception:
             is_num_type_str = None
@@ -875,11 +937,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _sort_arg_fields(self, model: type[BaseModel]) -> list[tuple[str, FieldInfo]]:
         positional_variadic_arg: list[tuple[str, FieldInfo]] = []
         positional_args, subcommand_args, optional_args = [], [], []
+        validate_by_alias = _validate_by_alias_enabled(_get_model_config(model))
         for field_name, field_info in _get_model_fields(model).items():
             if _CliSubCommand in field_info.metadata:
                 if not field_info.is_required():
                     raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has a default value')
-                alias_names, *_ = _get_alias_names(field_name, field_info)
+                alias_names, *_ = _get_alias_names(field_name, field_info, validate_by_alias=validate_by_alias)
                 if len(alias_names) > 1:
                     raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has multiple aliases')
                 field_types = [type_ for type_ in get_args(field_info.annotation) if type_ is not type(None)]
@@ -890,13 +953,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         )
                 subcommand_args.append((field_name, field_info))
             elif _CliPositionalArg in field_info.metadata:
-                alias_names, *_ = _get_alias_names(field_name, field_info)
+                alias_names, *_ = _get_alias_names(field_name, field_info, validate_by_alias=validate_by_alias)
                 if len(alias_names) > 1:
                     raise SettingsError(f'positional argument {model.__name__}.{field_name} has multiple aliases')
-                is_append_action = _annotation_contains_types(
-                    field_info.annotation, (Sequence, AbstractSet, Mapping), is_strip_annotated=True, is_subtype=True
-                )
-                if not is_append_action:
+                if not _is_append_action(field_info):
                     positional_args.append((field_name, field_info))
                 else:
                     positional_variadic_arg.append((field_name, field_info))
@@ -936,13 +996,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 args: list[str] | tuple[str, ...] | None = None,
                 namespace: Namespace | None = None,
             ) -> Any:
-                insensitive_args = []
-                for arg in shlex.split(shlex.join(args)) if args else []:
-                    flag_prefix = rf'\{self.cli_flag_prefix_char}{{1,2}}'
-                    matched = re.match(rf'^({flag_prefix}[^\s=]+)(.*)', arg)
-                    if matched:
-                        arg = matched.group(1).lower() + matched.group(2)
-                    insensitive_args.append(arg)
+                split_args = shlex.split(shlex.join(args)) if args else []
+                insensitive_args = self._lower_option_names(root_parser, split_args)
                 return parser_method(root_parser, insensitive_args, namespace)
 
             return parse_args_insensitive_method
@@ -957,6 +1012,63 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             return none_parser_method
 
         return parser_method
+
+    def _lower_option_names(self, parser: ArgumentParser, args: list[str]) -> list[str]:
+        """Lowercase the options in `args` that `parser` registers, keeping every other arg as typed.
+
+        Args after a subcommand name are matched against that subcommand's parser only.
+        """
+        subparsers = {
+            name: subparser
+            for action in parser._actions
+            if isinstance(action, _SubParsersAction)
+            for name, subparser in action.choices.items()
+        }
+        flag_prefix = rf'\{self.cli_flag_prefix_char}{{1,2}}'
+        lowered: list[str] = []
+        # how many of the next args are values of the last option, `None` for any number
+        values_left: int | None = 0
+        for index, arg in enumerate(args):
+            if arg == '--':
+                # everything after '--' is a positional value, not an option
+                return lowered + args[index:]
+            matched = re.match(rf'^({flag_prefix}[^\s=]+)(.*)', arg)
+            if not matched or _NEGATIVE_NUMBER.match(arg):
+                if values_left != 0:
+                    if values_left is not None:
+                        values_left -= 1
+                elif arg in subparsers:
+                    return lowered + [arg] + self._lower_option_names(subparsers[arg], args[index + 1 :])
+                lowered.append(arg)
+                continue
+            arg, action = self._lower_option(matched.group(1), matched.group(2), parser._option_string_actions)
+            values_left = _count_option_values(action)
+            lowered.append(arg)
+        return lowered
+
+    def _lower_option(self, flag: str, rest: str, option_actions: Mapping[str, Action]) -> tuple[str, Action | None]:
+        """Lowercase a registered option, or the short options in a token like `-P80` or `-VP80`.
+
+        Returns the arg and, when its value isn't attached, the action that takes the following args as values.
+        """
+        if flag.lower() in option_actions:
+            return flag.lower() + rest, None if rest else option_actions[flag.lower()]
+        prefix = self.cli_flag_prefix_char
+        arg = flag + rest
+        if arg.startswith(prefix * 2):
+            # not a registered option, keep the arg as typed
+            return arg, None
+        for index in range(1, len(arg)):
+            action = option_actions.get(prefix + arg[index].lower())
+            if action is None:
+                # not a registered short option, keep the arg as typed
+                return arg, None
+            if action.nargs != 0:
+                # argparse reads the rest of the arg as the option value
+                value = arg[index + 1 :]
+                return prefix + arg[1 : index + 1].lower() + value, None if value else action
+        # only flags that take no value, e.g. `-VQ`
+        return arg.lower(), None
 
     def _connect_group_method(self, add_argument_group_method: Callable[..., Any] | None) -> Callable[..., Any]:
         add_argument_group = self._connect_parser_method(add_argument_group_method, 'add_argument_group_method')
@@ -989,12 +1101,17 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         formatter_class: Any = RawDescriptionHelpFormatter,
     ) -> None:
         self._cli_unknown_args: dict[str, list[str]] = {}
+        self._unknown_dests_by_parser: dict[int, list[str]] = {}
+        self._unclaimed_unknown_args: list[str] = []
+        self._captured_parsers: set[int] = set()
 
         def _parse_known_args(*args: Any, **kwargs: Any) -> Namespace:
-            args, unknown_args = ArgumentParser.parse_known_args(*args, **kwargs)
-            for dest in self._cli_unknown_args:
-                self._cli_unknown_args[dest] = unknown_args
-            return cast(Namespace, args)
+            parsed, unknown_args = ArgumentParser.parse_known_args(*args, **kwargs)
+            parser = args[0] if args else None
+            self._store_unknown_args(parser, unknown_args)
+            # This method is only connected as the root parser's parse method.
+            self._unclaimed_unknown_args = list(unknown_args)
+            return cast(Namespace, parsed)
 
         self._root_parser = root_parser
         _is_default_parse_args = parse_args_method is None
@@ -1007,7 +1124,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self._add_subparsers = self._connect_parser_method(add_subparsers_method, 'add_subparsers_method')
         self._format_help = self._connect_parser_method(format_help_method, 'format_help_method')
         self._formatter_class = formatter_class
-        self._cli_dict_args: dict[str, type[Any] | None] = {}
+        self._cli_dict_args: dict[str, Any] = {}
         self._parser_map: defaultdict[str | FieldInfo, dict[int | str | type[BaseModel] | None, _CliArg]] = defaultdict(
             dict
         )
@@ -1034,8 +1151,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _add_default_help(self) -> None:
         if isinstance(self._root_parser, _CliInternalArgParser):
             if not self.cli_prefix:
+                validate_by_alias = _validate_by_alias_enabled(self.config)
                 for field_name, field_info in _get_model_fields(self.settings_cls).items():
-                    alias_names, *_ = _get_alias_names(field_name, field_info, case_sensitive=self.case_sensitive)
+                    alias_names, *_ = _get_alias_names(
+                        field_name, field_info, case_sensitive=self.case_sensitive, validate_by_alias=validate_by_alias
+                    )
                     if 'help' in alias_names:
                         return
 
@@ -1047,6 +1167,49 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 default=SUPPRESS,
                 help='show this help message and exit',
             )
+
+    def _unset_unselected_subcommands(
+        self, parsed_args: dict[str, list[str] | str], selected_subcommands: list[str]
+    ) -> list[str]:
+        unselected_subcommands: list[str] = []
+        for arg_dest, arg_map in self._parser_map.items():
+            if isinstance(arg_dest, str) and arg_dest.endswith(':subcommand'):
+                for subcommand_dest in [arg.dest for arg in arg_map.values()]:
+                    if subcommand_dest not in selected_subcommands:
+                        parsed_args[subcommand_dest] = self.cli_parse_none_str
+                        unselected_subcommands.append(subcommand_dest)
+        return unselected_subcommands
+
+    def _reset_unknown_args(self, prefixes: tuple[str, ...]) -> None:
+        for dest in self._cli_unknown_args:
+            if dest.startswith(prefixes):
+                self._cli_unknown_args[dest] = []
+
+    def _store_unknown_args(self, parser: Any, unknown_args: list[str]) -> None:
+        for dest in self._unknown_dests_by_parser.get(id(parser), ()):
+            self._cli_unknown_args[dest] = list(unknown_args)
+
+    def _install_unknown_args_capture(self, parser: Any) -> None:
+        if id(parser) in self._captured_parsers or not hasattr(parser, 'parse_known_args'):
+            return
+        self._captured_parsers.add(id(parser))
+        original = parser.parse_known_args
+
+        # Preserve custom parser positional and keyword parameters.
+        def parse_known_args(*args: Any, **kwargs: Any) -> tuple[Namespace, list[str]]:
+            parsed, unknown = original(*args, **kwargs)
+            self._store_unknown_args(parser, unknown)
+            # Keep leftovers on the subparser that failed to recognize them.
+            # Returning them to the parent copies one list onto every field.
+            if parser is not self._root_parser and id(parser) in self._unknown_dests_by_parser:
+                unknown = []
+            return parsed, unknown
+
+        try:
+            parser.parse_known_args = parse_known_args
+        except AttributeError:
+            # Slotted or read-only parsers keep returning leftovers to their parent.
+            pass
 
     def _add_parser_args(  # noqa: C901
         self,
@@ -1080,6 +1243,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             )
             else model_default
         )
+        model_config = _get_model_config(model)
+        validate_by_alias = _validate_by_alias_enabled(model_config)
         for field_name, field_info in self._sort_arg_fields(model):
             arg = _CliArg(
                 parser=parser,
@@ -1089,8 +1254,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 field_name=field_name,
                 arg_prefix=arg_prefix,
                 case_sensitive=self.case_sensitive,
-                populate_by_name=self.config.get('populate_by_name', False)
-                or self.config.get('validate_by_name', False),
+                populate_by_name=_validate_by_name_enabled(self.config),
+                validate_by_alias=validate_by_alias,
                 hide_none_type=self.cli_hide_none_type,
                 kebab_case=self.cli_kebab_case,
                 enable_decoding=self.config.get('enable_decoding'),
@@ -1142,12 +1307,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         model_default=PydanticUndefined,
                         model_path=model_path,
                         env_prefixes=self._nested_env_prefixes(
-                            self._get_field_env_var_names(field_name, field_info, env_prefixes)
+                            self._get_field_env_var_names(field_name, field_info, env_prefixes, model_config)
                         ),
                     )
             else:
                 flag_prefix: str = self._cli_flag_prefix
-                env_var_names = self._get_field_env_var_names(field_name, field_info, env_prefixes)
+                env_var_names = self._get_field_env_var_names(field_name, field_info, env_prefixes, model_config)
                 arg.kwargs['dest'] = arg.dest
                 arg.kwargs['default'] = CLI_SUPPRESS
                 arg.kwargs['help'] = self._help_format(
@@ -1207,7 +1372,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         env_var_names=env_var_names,
                     )
                 elif _CliUnknownArgs in field_info.metadata:
-                    self._cli_unknown_args[arg.kwargs['dest']] = []
+                    # Only parsers owning an unknown-argument field need capture.
+                    dest = arg.kwargs['dest']
+                    self._cli_unknown_args[dest] = []
+                    self._unknown_dests_by_parser.setdefault(id(parser), []).append(dest)
+                    self._install_unknown_args_capture(parser)
                 elif not arg.is_alias_path_only:
                     if isinstance(group, dict):  # pragma: no cover
                         group = self._add_group(parser, **group)
@@ -1232,7 +1401,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 kwargs['nargs'] = '+' if kwargs.get('required') else '*'
             else:
                 kwargs['action'] = 'append'
-            if _annotation_contains_types(field_info.annotation, (Mapping,), is_strip_annotated=True, is_subtype=True):
+            if _is_mapping_annotation(field_info.annotation):
                 self._cli_dict_args[kwargs['dest']] = field_info.annotation
 
     def _convert_bool_flag(self, kwargs: dict[str, Any], field_info: FieldInfo, model_default: Any) -> None:
@@ -1528,6 +1697,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         field_name: str,
         field_info: FieldInfo,
         env_prefixes: tuple[tuple[str, bool], ...],
+        model_config: Mapping[str, Any],
     ) -> tuple[str, ...]:
         if (
             self._env_settings_source is None
@@ -1542,7 +1712,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         for env_prefix, force_env_prefix in env_prefixes:
             env_settings_source.env_prefix = env_prefix
             normalized_env_prefix = env_settings_source._apply_case_sensitive(env_prefix)
-            for _, env_name, _ in env_settings_source._extract_field_info(field_info, field_name):
+            for _, env_name, _ in env_settings_source._extract_field_info(field_info, field_name, model_config):
                 if force_env_prefix and normalized_env_prefix and not env_name.startswith(normalized_env_prefix):
                     env_name = f'{normalized_env_prefix}{env_name}'
                 display_env_name = self._display_env_var_name(env_name)
@@ -1643,9 +1813,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         value: str | list[Any] | dict[str, Any],
         list_style: Literal['json', 'argparse', 'lazy'] = 'json',
         dict_style: Literal['json', 'env'] = 'json',
+        is_no_decode: bool = False,
     ) -> list[str | list[Any] | dict[str, Any]]:
         values = [value]
         if isinstance(value, str):
+            if not is_no_decode and isinstance(model_default, (list, dict)) and not model_default:
+                return values
             if isinstance(model_default, list):
                 if list_style == 'lazy':
                     values = [','.join(f'{v}' for v in json.loads(value))]
@@ -1738,8 +1911,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 value = self._update_alias_path_only_default(arg_name, value, field_info, alias_path_only_defaults)
 
             if _CliPositionalArg in field_info.metadata:
-                for value in model_default if isinstance(model_default, list) else [model_default]:
-                    positional_args.append(self._serialize_value(value))
+                if isinstance(model_default, list) and (model_default or arg.is_no_decode):
+                    positional_args += [self._serialize_value(value) for value in model_default]
+                else:
+                    # Keep an empty list as '[]' so it is not dropped and replaced by the default when parsed.
+                    positional_args.append(self._serialize_value(model_default))
                 continue
 
             # Note: prepend 'no-' for boolean optional action flag if model_default value is False and flag is not a short option
@@ -1747,7 +1923,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 flag_chars += 'no-'
 
             for index, coerced_value in enumerate(
-                self._coerce_value_styles(model_default, value, list_style=list_style, dict_style=dict_style)
+                self._coerce_value_styles(
+                    model_default, value, list_style=list_style, dict_style=dict_style, is_no_decode=arg.is_no_decode
+                )
             ):
                 if index == 0 or arg.kwargs.get('nargs') not in ('*', '+'):
                     optional_args.append(f'{flag_chars}{arg_name}')

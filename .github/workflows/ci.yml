@@ -43,7 +43,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ['3.10', '3.11', '3.12', '3.13', '3.14']
+        python: ['3.11', '3.12', '3.13', '3.14', '3.15']
 
     env:
       PYTHON: ${{ matrix.python }}
@@ -174,12 +174,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: '3.12'
+          enable-cache: false
 
-      - name: Install 'build' library
-        run: pip install -U build
+      - run: uv sync --only-group build
 
       - name: Check version
         id: check-tag
@@ -188,7 +188,8 @@ jobs:
           version_file_path: pydantic_settings/version.py
 
       - name: Build library
-        run: python -m build
+        # Regenerate build constraints with `make build-constraints`:
+        run: uv run --no-sync python -m build --installer uv --dependency-constraints-txt .github/build-constraints.txt
 
       - name: Upload package to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2

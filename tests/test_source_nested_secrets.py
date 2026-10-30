@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import StrEnum
 from os import sep
 from pathlib import Path
 from unittest.mock import patch
@@ -42,7 +42,7 @@ class AppSettings(BaseSettings):
         )
 
 
-class SampleEnum(str, Enum):
+class SampleEnum(StrEnum):
     TEST = 'test'
 
 
@@ -117,6 +117,62 @@ def test_secrets_dir_as_arg(env, tmp_files):
         'app_key': 'secret1',
         'db': {'user': 'user', 'passwd': 'secret2'},
     }
+
+
+@pytest.mark.parametrize('wrap_source', [False, True], ids=['settings-class', 'wrapped-source'])
+@pytest.mark.parametrize(
+    'make_secrets_dir,expected',
+    [
+        (lambda base: base / 'explicit', 'explicit'),
+        (lambda base: str(base / 'explicit'), 'explicit'),
+        (lambda base: [base / 'explicit', base / 'last'], 'last'),
+        (lambda base: [], 'default'),
+    ],
+    ids=['path', 'string', 'list', 'empty'],
+)
+def test_nested_secrets_explicit_directory_precedence(tmp_path, wrap_source, make_secrets_dir, expected):
+    for name in ('config', 'explicit', 'last'):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / 'value').write_text(name)
+    secrets_dir = make_secrets_dir(tmp_path)
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(secrets_dir=tmp_path / 'config')
+        value: str = 'default'
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            source = file_secret_settings if wrap_source else settings_cls
+            return (NestedSecretsSettingsSource(source, secrets_dir=secrets_dir),)
+
+    assert Settings().value == expected
+
+
+@pytest.mark.parametrize('explicit_wrapper', [False, True])
+@pytest.mark.parametrize('runtime_override', [False, True])
+def test_nested_secrets_directory_wrapper_and_runtime_precedence(tmp_path, explicit_wrapper, runtime_override):
+    directories = [tmp_path / name for name in ('config', 'wrapper', 'runtime')]
+    for directory in directories:
+        directory.mkdir()
+        (directory / 'value').write_text(directory.name)
+    configured, wrapper, runtime = directories
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(secrets_dir=configured)
+        value: str
+
+        @classmethod
+        def settings_customise_sources(
+            cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+        ):
+            return (
+                NestedSecretsSettingsSource(file_secret_settings, secrets_dir=wrapper if explicit_wrapper else None),
+            )
+
+    settings = Settings(_secrets_dir=runtime if runtime_override else None)
+    assert settings.value == ('wrapper' if explicit_wrapper else 'runtime' if runtime_override else 'config')
 
 
 @pytest.mark.parametrize(

@@ -9,7 +9,7 @@ from pydantic.fields import FieldInfo
 
 from ...exceptions import SettingsError
 from ..types import SecretVersion
-from ..utils import InitState
+from ..utils import InitState, _parse_env_none_str, _validate_by_name_enabled
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
@@ -55,11 +55,18 @@ class GoogleSecretManagerMapping(Mapping[str, str | None]):
     _loaded_secrets: dict[str, str | None]
     _secret_client: SecretManagerServiceClient
 
-    def __init__(self, secret_client: SecretManagerServiceClient, project_id: str, case_sensitive: bool) -> None:
+    def __init__(
+        self,
+        secret_client: SecretManagerServiceClient,
+        project_id: str,
+        case_sensitive: bool,
+        env_parse_none_str: str | None = None,
+    ) -> None:
         self._loaded_secrets = {}
         self._secret_client = secret_client
         self._project_id = project_id
         self._case_sensitive = case_sensitive
+        self._env_parse_none_str = env_parse_none_str
 
     @property
     def _gcp_project_path(self) -> str:
@@ -112,21 +119,23 @@ class GoogleSecretManagerMapping(Mapping[str, str | None]):
 
     def _get_secret_value(self, gcp_secret_name: str, version: str = 'latest') -> str | None:
         try:
-            return self._secret_client.access_secret_version(
+            value = self._secret_client.access_secret_version(
                 name=self._secret_version_path(gcp_secret_name, version)
             ).payload.data.decode('UTF-8')
         except Exception:
             return None
+        return _parse_env_none_str(value, self._env_parse_none_str)
 
     def _get_secret_value_or_raise(self, gcp_secret_name: str) -> str | None:
         try:
-            return self._secret_client.access_secret_version(
+            value = self._secret_client.access_secret_version(
                 name=self._secret_version_path(gcp_secret_name)
             ).payload.data.decode('UTF-8')
         except Exception as e:
             if _is_not_found_error(e):
                 raise KeyError(gcp_secret_name) from e
             return None
+        return _parse_env_none_str(value, self._env_parse_none_str)
 
     def __getitem__(self, key: str) -> str | None:
         if key in self._loaded_secrets:
@@ -254,9 +263,9 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
                 if gcp_secret_name:
                     env_val = self.env_vars._get_secret_value(gcp_secret_name, secret_version)
                     if env_val is not None:
-                        # If populate_by_name is enabled, return field_name to allow multiple fields
+                        # If validation by name is enabled, return field_name to allow multiple fields
                         # with the same alias but different versions to be distinguished
-                        if self.settings_cls.model_config.get('populate_by_name'):
+                        if _validate_by_name_enabled(self.config):
                             return env_val, field_name, value_is_complex
                         return env_val, field_key, value_is_complex
 
@@ -266,9 +275,9 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
 
         val, key, is_complex = super().get_field_value(field, field_name)
 
-        # If populate_by_name is enabled, we need to return the field_name as the key
+        # If validation by name is enabled, we need to return the field_name as the key
         # without this being enabled, you cannot load two secrets with the same name but different versions
-        if self.settings_cls.model_config.get('populate_by_name') and val is not None:
+        if _validate_by_name_enabled(self.config) and val is not None:
             return val, field_name, is_complex
         return val, key, is_complex
 
@@ -331,7 +340,10 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
                 'Pass project_id explicitly or ensure it is available via application default credentials or a previous settings source.'
             )
         return GoogleSecretManagerMapping(
-            self._secret_client, project_id=self._project_id, case_sensitive=self.case_sensitive
+            self._secret_client,
+            project_id=self._project_id,
+            case_sensitive=self.case_sensitive,
+            env_parse_none_str=self.env_parse_none_str,
         )
 
     def __call__(self) -> dict[str, Any]:
