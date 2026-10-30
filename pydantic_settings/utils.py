@@ -14,6 +14,11 @@ def _settings_debug_enabled() -> bool:
     return os.environ.get(_DEBUG_ENV_VAR, '').strip().lower() in ('1', 'true', 'yes', 'on')
 
 
+def _debug_logging_enabled() -> bool:
+    """Whether settings source debugging is enabled and the `pydantic_settings` logger emits debug records."""
+    return _settings_debug_enabled() and logger.isEnabledFor(logging.DEBUG)
+
+
 _PATH_TYPE_LABELS: tuple[tuple[str, str], ...] = (
     ('is_dir', 'directory'),
     ('is_file', 'file'),

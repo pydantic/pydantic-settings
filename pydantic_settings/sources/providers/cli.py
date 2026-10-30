@@ -73,6 +73,8 @@ from ..utils import (
     _get_model_fields,
     _get_union_members,
     _is_function,
+    _is_model_or_dataclass,
+    _resolve_setting,
     _strip_annotated,
     _validate_by_alias_enabled,
     _validate_by_name_enabled,
@@ -152,8 +154,8 @@ def _get_model_description(model_cls: type[Any]) -> str | None:
 def _collect_sub_models(type_: Any, sub_models: list[type[BaseModel]]) -> None:
     """Recursively collect BaseModel subclasses from possibly nested union types."""
     stripped = _strip_annotated(type_)
-    if is_model_class(stripped) or is_pydantic_dataclass(stripped):
-        sub_models.append(stripped)  # type: ignore[arg-type]
+    if _is_model_or_dataclass(stripped):
+        sub_models.append(stripped)
     elif is_union_origin(get_origin(stripped)):
         for arg in get_args(stripped):
             _collect_sub_models(arg, sub_models)
@@ -443,50 +445,24 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         _env_settings_source: EnvSettingsSource | None = None,
         _init_state: InitState | None = None,
     ) -> None:
-        self.cli_prog_name = (
-            cli_prog_name if cli_prog_name is not None else settings_cls.model_config.get('cli_prog_name', sys.argv[0])
-        )
-        self.cli_hide_none_type = (
-            cli_hide_none_type
-            if cli_hide_none_type is not None
-            else settings_cls.model_config.get('cli_hide_none_type', False)
-        )
-        self.cli_avoid_json = (
-            cli_avoid_json if cli_avoid_json is not None else settings_cls.model_config.get('cli_avoid_json', False)
-        )
+        config = settings_cls.model_config
+        # `sys.argv[0]` is only looked up when needed, as `sys.argv` may be empty in an embedded interpreter.
+        self.cli_prog_name = cli_prog_name if cli_prog_name is not None else config.get('cli_prog_name', sys.argv[0])
+        self.cli_hide_none_type = _resolve_setting(cli_hide_none_type, config, 'cli_hide_none_type', False)
+        self.cli_avoid_json = _resolve_setting(cli_avoid_json, config, 'cli_avoid_json', False)
         if not cli_parse_none_str:
-            cli_parse_none_str = settings_cls.model_config.get('env_parse_none_str') or settings_cls.model_config.get(
-                'cli_parse_none_str'
-            )
+            cli_parse_none_str = config.get('env_parse_none_str') or config.get('cli_parse_none_str')
         if not cli_parse_none_str:
             cli_parse_none_str = 'None' if self.cli_avoid_json is True else 'null'
         self.cli_parse_none_str = cli_parse_none_str
-        self.cli_enforce_required = (
-            cli_enforce_required
-            if cli_enforce_required is not None
-            else settings_cls.model_config.get('cli_enforce_required', False)
+        self.cli_enforce_required = _resolve_setting(cli_enforce_required, config, 'cli_enforce_required', False)
+        self.cli_use_class_docs_for_groups = _resolve_setting(
+            cli_use_class_docs_for_groups, config, 'cli_use_class_docs_for_groups', False
         )
-        self.cli_use_class_docs_for_groups = (
-            cli_use_class_docs_for_groups
-            if cli_use_class_docs_for_groups is not None
-            else settings_cls.model_config.get('cli_use_class_docs_for_groups', False)
-        )
-        self.cli_show_env_vars = (
-            cli_show_env_vars
-            if cli_show_env_vars is not None
-            else settings_cls.model_config.get('cli_show_env_vars', False)
-        )
-        self.cli_exit_on_error = (
-            cli_exit_on_error
-            if cli_exit_on_error is not None
-            else settings_cls.model_config.get('cli_exit_on_error', True)
-        )
-        self.cli_prefix = cli_prefix if cli_prefix is not None else settings_cls.model_config.get('cli_prefix', '')
-        self.cli_flag_prefix_char = (
-            cli_flag_prefix_char
-            if cli_flag_prefix_char is not None
-            else settings_cls.model_config.get('cli_flag_prefix_char', '-')
-        )
+        self.cli_show_env_vars = _resolve_setting(cli_show_env_vars, config, 'cli_show_env_vars', False)
+        self.cli_exit_on_error = _resolve_setting(cli_exit_on_error, config, 'cli_exit_on_error', True)
+        self.cli_prefix = _resolve_setting(cli_prefix, config, 'cli_prefix', '')
+        self.cli_flag_prefix_char = _resolve_setting(cli_flag_prefix_char, config, 'cli_flag_prefix_char', '-')
         self._cli_flag_prefix = self.cli_flag_prefix_char * 2
         if self.cli_prefix:
             if (
@@ -496,22 +472,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             ):
                 raise SettingsError(f'CLI settings source prefix is invalid: {self.cli_prefix}')
             self.cli_prefix += '.'
-        self.cli_implicit_flags = (
-            cli_implicit_flags
-            if cli_implicit_flags is not None
-            else settings_cls.model_config.get('cli_implicit_flags', False)
+        self.cli_implicit_flags = _resolve_setting(cli_implicit_flags, config, 'cli_implicit_flags', False)
+        self.cli_ignore_unknown_args = _resolve_setting(
+            cli_ignore_unknown_args, config, 'cli_ignore_unknown_args', False
         )
-        self.cli_ignore_unknown_args = (
-            cli_ignore_unknown_args
-            if cli_ignore_unknown_args is not None
-            else settings_cls.model_config.get('cli_ignore_unknown_args', False)
-        )
-        self.cli_kebab_case = (
-            cli_kebab_case if cli_kebab_case is not None else settings_cls.model_config.get('cli_kebab_case', False)
-        )
-        self.cli_shortcuts = (
-            cli_shortcuts if cli_shortcuts is not None else settings_cls.model_config.get('cli_shortcuts', None)
-        )
+        self.cli_kebab_case = _resolve_setting(cli_kebab_case, config, 'cli_kebab_case', False)
+        self.cli_shortcuts = _resolve_setting(cli_shortcuts, config, 'cli_shortcuts')
         self._env_settings_source: EnvSettingsSource | None = None
         if self.cli_show_env_vars:
             self._env_settings_source = _env_settings_source or EnvSettingsSource(settings_cls)
@@ -947,7 +913,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has multiple aliases')
                 field_types = [type_ for type_ in get_args(field_info.annotation) if type_ is not type(None)]
                 for field_type in field_types:
-                    if not (is_model_class(field_type) or is_pydantic_dataclass(field_type)):
+                    if not _is_model_or_dataclass(field_type):
                         raise SettingsError(
                             f'subcommand argument {model.__name__}.{field_name} has type not derived from BaseModel'
                         )
@@ -1237,10 +1203,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         # Ignore model default if the default is a model and not a subclass of the current model.
         model_default = (
             None
-            if (
-                (is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)))
-                and not issubclass(type(model_default), model)
-            )
+            if (_is_model_or_dataclass(type(model_default)) and not issubclass(type(model_default), model))
             else model_default
         )
         model_config = _get_model_config(model)
@@ -1534,7 +1497,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             model_group_kwargs['description'] = _get_model_description(sub_models[0])
 
         if model_default is not PydanticUndefined:
-            if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
+            if _is_model_or_dataclass(type(model_default)):
                 model_default = getattr(model_default, field_name)
         else:
             if field_info.default is not PydanticUndefined:
@@ -1662,7 +1625,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             )
         if obj is type(None):
             return self.cli_parse_none_str
-        if is_model_class(obj) or is_pydantic_dataclass(obj):
+        if _is_model_or_dataclass(obj):
             return (
                 self._metavar_format_recurse(_get_model_fields(obj)['root'].annotation)
                 if getattr(obj, '__pydantic_root_model__', False)
@@ -1749,7 +1712,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 _help += f' ({ifdef}required)' if _help else f'({ifdef}required)'
         else:
             default = f'(default: {self.cli_parse_none_str})'
-            if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
+            if _is_model_or_dataclass(type(model_default)):
                 default = f'(default: {getattr(model_default, field_name)})'
             elif model_default not in (PydanticUndefined, None) and _is_function(model_default):
                 default = f'(default factory: {self._metavar_format(model_default)})'
@@ -1883,7 +1846,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 # that captured them, which is what makes the round trip hold (#1048).
                 subcommand_args = subcommand_args + self._flatten_serialized_args(sub_args, positionals_first)
                 continue
-            if is_model_class(type(model_default)) or is_pydantic_dataclass(type(model_default)):
+            if _is_model_or_dataclass(type(model_default)):
                 sub_args = self._serialized_args(
                     model_default,
                     list_style=list_style,
