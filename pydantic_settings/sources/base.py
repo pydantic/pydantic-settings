@@ -349,6 +349,78 @@ def _get_nested_discriminators(annotation: Any) -> list[str] | None:
     return discriminators
 
 
+def _key_by_validation_alias(default: Any, dumped: Any) -> Any:
+    """Re-key `dumped`, the dump of `default`, by the names pydantic validates each field under.
+
+    `model_dump()` and `asdict()` key fields by name, but a nested model only takes its aliases unless it is
+    populated by name, so a partial update merged into the dump would lose the values set on the default.
+    """
+    if isinstance(dumped, list) and isinstance(default, (list, tuple)) and len(dumped) == len(default):
+        return [_key_by_validation_alias(item, value) for item, value in zip(default, dumped, strict=True)]
+    if not isinstance(dumped, dict):
+        return dumped
+    if isinstance(default, dict):
+        return {key: _key_by_validation_alias(default.get(key), value) for key, value in dumped.items()}
+    if not (is_model_class(type(default)) or is_pydantic_dataclass(type(default))):
+        # A stdlib dataclass has no aliases, but `asdict()` also dumps the pydantic dataclasses inside it
+        return {key: _key_by_validation_alias(getattr(default, key, None), value) for key, value in dumped.items()}
+    fields = _get_model_fields(type(default))
+    validate_by_alias = _validate_by_alias_enabled(_get_model_config(type(default)))
+    result: dict[str, Any] = {}
+    for key, value in dumped.items():
+        field_info = fields.get(key)
+        if field_info is None:
+            # Extra values are dumped under the key they were given with
+            result[key] = value
+            continue
+        value = _key_by_validation_alias(getattr(default, key, None), value)
+        alias_names, is_alias_path_only = _get_alias_names(key, field_info, validate_by_alias=validate_by_alias)
+        # An `AliasPath` points into nested input, so its first element isn't a key the value can go under
+        result[key if is_alias_path_only else alias_names[0]] = value
+    return result
+
+
+def _drop_fields_given_under_other_keys(default: Any, dumped: Any, value: Any) -> Any:
+    """Drop the fields of `dumped`, the re-keyed dump of `default`, that `value` gives under another key.
+
+    `value` is merged over the dump, so a field given under another alias, or by name, would reach pydantic
+    under two keys and the default's key could win.
+    """
+    if not isinstance(dumped, dict) or not isinstance(value, dict):
+        return dumped
+    if isinstance(default, dict):
+        return {
+            key: _drop_fields_given_under_other_keys(default.get(key), sub, value[key]) if key in value else sub
+            for key, sub in dumped.items()
+        }
+    if not (is_model_class(type(default)) or is_pydantic_dataclass(type(default))):
+        # A stdlib dataclass has no aliases, but the pydantic dataclasses inside it can
+        return {
+            key: _drop_fields_given_under_other_keys(getattr(default, key, None), sub, value[key])
+            if key in value
+            else sub
+            for key, sub in dumped.items()
+        }
+    config = _get_model_config(type(default))
+    result = dict(dumped)
+    for field_name, field_info in _get_model_fields(type(default)).items():
+        names, is_alias_path_only = _get_alias_names(
+            field_name,
+            field_info,
+            populate_by_name=_validate_by_name_enabled(config),
+            validate_by_alias=_validate_by_alias_enabled(config),
+        )
+        key = field_name if is_alias_path_only else names[0]
+        if any(name in value for name in names if name != key):
+            # `pop` because a field with `exclude=True` is not in the dump
+            result.pop(key, None)
+        elif key in value and key in result:
+            result[key] = _drop_fields_given_under_other_keys(
+                getattr(default, field_name, None), result[key], value[key]
+            )
+    return result
+
+
 class DefaultSettingsSource(PydanticBaseSettingsSource):
     """
     Source class for loading default object values.
@@ -370,6 +442,8 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
         # Discriminated union fields: per discriminator guarding the default's member, the keys that can hold
         # its value, and the default's value
         self._discriminator_tags: dict[str, list[tuple[tuple[str, ...], Any]]] = {}
+        # The default objects the dumps in `defaults` were made from
+        self._default_objects: dict[str, Any] = {}
         self.nested_model_default_partial_update = (
             nested_model_default_partial_update
             if nested_model_default_partial_update is not None
@@ -390,9 +464,15 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
                 alias_names, *_ = _get_alias_names(field_name, field_info, validate_by_alias=validate_by_alias)
                 preferred_alias = alias_names[0]
                 if is_dataclass(type(field_info.default)):
-                    self.defaults[preferred_alias] = asdict(field_info.default)
+                    self.defaults[preferred_alias] = _key_by_validation_alias(
+                        field_info.default, asdict(field_info.default)
+                    )
                 elif is_model_class(type(field_info.default)):
-                    self.defaults[preferred_alias] = field_info.default.model_dump()
+                    self.defaults[preferred_alias] = _key_by_validation_alias(
+                        field_info.default, field_info.default.model_dump(by_alias=False)
+                    )
+                if preferred_alias in self.defaults:
+                    self._default_objects[preferred_alias] = field_info.default
                 if discriminator is not None and preferred_alias in self.defaults:
                     default_cls = type(field_info.default)
                     self._discriminator_tags[preferred_alias] = [
@@ -415,6 +495,10 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
             # The default's fields don't apply when any discriminator selects another member.
             if any(value[key] != default_tag for keys, default_tag in discriminators for key in keys if key in value):
                 del defaults[alias]
+        for alias in defaults.keys() & self._default_objects.keys():
+            defaults[alias] = _drop_fields_given_under_other_keys(
+                self._default_objects[alias], defaults[alias], self.current_state.get(alias)
+            )
         return defaults
 
     def __repr__(self) -> str:
@@ -501,10 +585,11 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         return None, '', False
 
     def __call__(self) -> dict[str, Any]:
-        return (
-            TypeAdapter(dict[str, Any]).dump_python(self.init_kwargs)
-            if self.nested_model_default_partial_update
-            else self.init_kwargs
+        if not self.nested_model_default_partial_update:
+            return self.init_kwargs
+        # Models given here are dumped to be merged with the defaults, so they need the same keys
+        return _key_by_validation_alias(
+            self.init_kwargs, TypeAdapter(dict[str, Any]).dump_python(self.init_kwargs, by_alias=False)
         )
 
     def __repr__(self) -> str:
