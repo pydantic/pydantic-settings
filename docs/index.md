@@ -983,14 +983,15 @@ Pydantic settings consider `extra` config in case of dotenv file. It means if yo
 on `model_config` and your dotenv file contains an entry for a field that is not defined in settings model,
 it will raise `ValidationError` in settings construction.
 
-!!! warning "Empty dotenv extras"
+!!! note "Empty dotenv extras"
     Empty assignments such as `OTHER_TOOL_KEY=` are subject to the configured `extra` policy, just like nonempty
-    assignments. Previously, unknown keys with empty values were silently ignored. With `extra='forbid'`, shared dotenv
-    files containing these placeholders now raise `extra_forbidden` errors, including unknown keys outside `env_prefix`.
-    With `extra='allow'`, these entries now appear as empty strings in `model_extra` and `model_dump()`.
+    assignments: with `extra='forbid'` they raise `extra_forbidden` (including unknown keys outside `env_prefix`), and
+    with `extra='allow'` they are kept as empty strings in `model_extra`. Bare names without an assignment, such as
+    `OTHER_TOOL_KEY` without `=`, are ignored.
 
-    Set `env_ignore_empty=True` to ignore empty values for both declared fields and extra keys. Bare names without an
-    assignment, such as `OTHER_TOOL_KEY` without `=`, continue to be ignored.
+    Set `env_ignore_empty=True` to ignore empty values for both declared fields and extra keys.
+
+    Before v2.17, unknown keys with empty values were silently ignored.
 
 This behaviour can be customized by using the setting `dotenv_filtering` that supports two additional alternative modes:
 - `'match_prefix'`: only the variables that match the prefix will be passed to the model. Useful when used in conjunction with `env_prefix` to "scope" a single dotenv file to a specific model.
