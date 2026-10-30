@@ -2,7 +2,6 @@ from __future__ import annotations as _annotations
 
 import asyncio
 import inspect
-import logging
 import re
 import threading
 import warnings
@@ -46,11 +45,12 @@ from .sources.utils import (
     InitState,
     _get_alias_names,
     _get_model_config,
+    _resolve_setting,
     _validate_by_alias_enabled,
     _validate_by_name_enabled,
     _warn_if_field_info_incomplete,
 )
-from .utils import _settings_debug_enabled, logger
+from .utils import _debug_logging_enabled, logger
 
 T = TypeVar('T')
 
@@ -391,78 +391,43 @@ class BaseSettings(BaseModel):
         _init_kwargs: dict[str, Any] | None = None,
     ) -> tuple[tuple[PydanticBaseSettingsSource, ...], dict[str, Any]]:
         # Determine settings config values
-        case_sensitive = _case_sensitive if _case_sensitive is not None else cls.model_config.get('case_sensitive')
-        env_prefix = _env_prefix if _env_prefix is not None else cls.model_config.get('env_prefix')
-        env_prefix_target = (
-            _env_prefix_target if _env_prefix_target is not None else cls.model_config.get('env_prefix_target')
+        config = cls.model_config
+        case_sensitive = _resolve_setting(_case_sensitive, config, 'case_sensitive')
+        env_prefix = _resolve_setting(_env_prefix, config, 'env_prefix')
+        env_prefix_target = _resolve_setting(_env_prefix_target, config, 'env_prefix_target')
+        nested_model_default_partial_update = _resolve_setting(
+            _nested_model_default_partial_update, config, 'nested_model_default_partial_update'
         )
-        nested_model_default_partial_update = (
-            _nested_model_default_partial_update
-            if _nested_model_default_partial_update is not None
-            else cls.model_config.get('nested_model_default_partial_update')
-        )
-        env_file = _env_file if _env_file != ENV_FILE_SENTINEL else cls.model_config.get('env_file')
-        env_file_encoding = (
-            _env_file_encoding if _env_file_encoding is not None else cls.model_config.get('env_file_encoding')
-        )
-        env_file_depth = _env_file_depth if _env_file_depth is not None else cls.model_config.get('env_file_depth')
-        env_ignore_empty = (
-            _env_ignore_empty if _env_ignore_empty is not None else cls.model_config.get('env_ignore_empty')
-        )
-        env_nested_delimiter = (
-            _env_nested_delimiter if _env_nested_delimiter is not None else cls.model_config.get('env_nested_delimiter')
-        )
-        env_nested_max_split = (
-            _env_nested_max_split if _env_nested_max_split is not None else cls.model_config.get('env_nested_max_split')
-        )
-        env_parse_none_str = (
-            _env_parse_none_str if _env_parse_none_str is not None else cls.model_config.get('env_parse_none_str')
-        )
-        env_parse_enums = _env_parse_enums if _env_parse_enums is not None else cls.model_config.get('env_parse_enums')
+        env_file = _env_file if _env_file != ENV_FILE_SENTINEL else config.get('env_file')
+        env_file_encoding = _resolve_setting(_env_file_encoding, config, 'env_file_encoding')
+        env_file_depth = _resolve_setting(_env_file_depth, config, 'env_file_depth')
+        env_ignore_empty = _resolve_setting(_env_ignore_empty, config, 'env_ignore_empty')
+        env_nested_delimiter = _resolve_setting(_env_nested_delimiter, config, 'env_nested_delimiter')
+        env_nested_max_split = _resolve_setting(_env_nested_max_split, config, 'env_nested_max_split')
+        env_parse_none_str = _resolve_setting(_env_parse_none_str, config, 'env_parse_none_str')
+        env_parse_enums = _resolve_setting(_env_parse_enums, config, 'env_parse_enums')
 
-        cli_prog_name = _cli_prog_name if _cli_prog_name is not None else cls.model_config.get('cli_prog_name')
-        cli_parse_args = _cli_parse_args if _cli_parse_args is not None else cls.model_config.get('cli_parse_args')
-        cli_settings_source = (
-            _cli_settings_source if _cli_settings_source is not None else cls.model_config.get('cli_settings_source')
-        )
-        cli_parse_none_str = (
-            _cli_parse_none_str if _cli_parse_none_str is not None else cls.model_config.get('cli_parse_none_str')
-        )
+        cli_prog_name = _resolve_setting(_cli_prog_name, config, 'cli_prog_name')
+        cli_parse_args = _resolve_setting(_cli_parse_args, config, 'cli_parse_args')
+        cli_settings_source = _resolve_setting(_cli_settings_source, config, 'cli_settings_source')
+        cli_parse_none_str = _resolve_setting(_cli_parse_none_str, config, 'cli_parse_none_str')
         cli_parse_none_str = cli_parse_none_str if not env_parse_none_str else env_parse_none_str
-        cli_hide_none_type = (
-            _cli_hide_none_type if _cli_hide_none_type is not None else cls.model_config.get('cli_hide_none_type')
+        cli_hide_none_type = _resolve_setting(_cli_hide_none_type, config, 'cli_hide_none_type')
+        cli_avoid_json = _resolve_setting(_cli_avoid_json, config, 'cli_avoid_json')
+        cli_enforce_required = _resolve_setting(_cli_enforce_required, config, 'cli_enforce_required')
+        cli_use_class_docs_for_groups = _resolve_setting(
+            _cli_use_class_docs_for_groups, config, 'cli_use_class_docs_for_groups'
         )
-        cli_avoid_json = _cli_avoid_json if _cli_avoid_json is not None else cls.model_config.get('cli_avoid_json')
-        cli_enforce_required = (
-            _cli_enforce_required if _cli_enforce_required is not None else cls.model_config.get('cli_enforce_required')
-        )
-        cli_use_class_docs_for_groups = (
-            _cli_use_class_docs_for_groups
-            if _cli_use_class_docs_for_groups is not None
-            else cls.model_config.get('cli_use_class_docs_for_groups')
-        )
-        cli_show_env_vars = (
-            _cli_show_env_vars if _cli_show_env_vars is not None else cls.model_config.get('cli_show_env_vars')
-        )
-        cli_exit_on_error = (
-            _cli_exit_on_error if _cli_exit_on_error is not None else cls.model_config.get('cli_exit_on_error')
-        )
-        cli_prefix = _cli_prefix if _cli_prefix is not None else cls.model_config.get('cli_prefix')
-        cli_flag_prefix_char = (
-            _cli_flag_prefix_char if _cli_flag_prefix_char is not None else cls.model_config.get('cli_flag_prefix_char')
-        )
-        cli_implicit_flags = (
-            _cli_implicit_flags if _cli_implicit_flags is not None else cls.model_config.get('cli_implicit_flags')
-        )
-        cli_ignore_unknown_args = (
-            _cli_ignore_unknown_args
-            if _cli_ignore_unknown_args is not None
-            else cls.model_config.get('cli_ignore_unknown_args')
-        )
-        cli_kebab_case = _cli_kebab_case if _cli_kebab_case is not None else cls.model_config.get('cli_kebab_case')
-        cli_shortcuts = _cli_shortcuts if _cli_shortcuts is not None else cls.model_config.get('cli_shortcuts')
+        cli_show_env_vars = _resolve_setting(_cli_show_env_vars, config, 'cli_show_env_vars')
+        cli_exit_on_error = _resolve_setting(_cli_exit_on_error, config, 'cli_exit_on_error')
+        cli_prefix = _resolve_setting(_cli_prefix, config, 'cli_prefix')
+        cli_flag_prefix_char = _resolve_setting(_cli_flag_prefix_char, config, 'cli_flag_prefix_char')
+        cli_implicit_flags = _resolve_setting(_cli_implicit_flags, config, 'cli_implicit_flags')
+        cli_ignore_unknown_args = _resolve_setting(_cli_ignore_unknown_args, config, 'cli_ignore_unknown_args')
+        cli_kebab_case = _resolve_setting(_cli_kebab_case, config, 'cli_kebab_case')
+        cli_shortcuts = _resolve_setting(_cli_shortcuts, config, 'cli_shortcuts')
 
-        secrets_dir = _secrets_dir if _secrets_dir is not None else cls.model_config.get('secrets_dir')
+        secrets_dir = _resolve_setting(_secrets_dir, config, 'secrets_dir')
 
         # Configure built-in sources, sharing the same init state so that incomplete
         # fields are only warned about once per settings resolution.
@@ -580,7 +545,7 @@ class BaseSettings(BaseModel):
             # Strip any default values not explicitly set before returning final state
             state = {key: val for key, val in state.items() if key not in defaults or defaults[key] != val}
 
-            if _settings_debug_enabled() and logger.isEnabledFor(logging.DEBUG):
+            if _debug_logging_enabled():
                 cls._settings_log_debug(states)
             # The last source is the `DefaultSettingsSource` instance created in `_settings_init_sources()`,
             # holding the init state shared by all built-in sources:
