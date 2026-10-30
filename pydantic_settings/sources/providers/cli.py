@@ -202,6 +202,7 @@ class _CliArg(BaseModel):
     validate_by_alias: bool = True
     hide_none_type: bool
     kebab_case: bool | Literal['all', 'no_enums'] | None
+    cli_nested_delimiter: str = '.'
     enable_decoding: bool | None
     env_prefix_len: int
     args: list[str] = []
@@ -285,7 +286,9 @@ class _CliArg(BaseModel):
 
     @cached_property
     def preferred_arg_name(self) -> str:
-        return self.args[0].replace('_', '-') if self.kebab_case else self.args[0]
+        if self.cli_nested_delimiter == '.' and self.kebab_case:
+            return self.args[0].replace('_', '-')
+        return self.args[0]
 
     @cached_property
     def sub_models(self) -> list[type[BaseModel]]:
@@ -389,6 +392,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_exit_on_error: Determines whether or not the internal parser exits with error info when an error occurs.
             Defaults to `True`.
         cli_prefix: Prefix for command line arguments added under the root parser. Defaults to "".
+        cli_nested_delimiter: Separator between nested command line argument names. Defaults to ".".
         cli_flag_prefix_char: The flag prefix character to use for CLI optional arguments. Defaults to '-'.
         cli_implicit_flags: Controls how `bool` fields are exposed as CLI flags.
 
@@ -442,6 +446,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         add_subparsers_method: Callable[..., Any] | None = ArgumentParser.add_subparsers,
         format_help_method: Callable[..., Any] | None = ArgumentParser.format_help,
         formatter_class: Any = RawDescriptionHelpFormatter,
+        cli_nested_delimiter: str | None = None,
         _env_settings_source: EnvSettingsSource | None = None,
         _init_state: InitState | None = None,
     ) -> None:
@@ -464,6 +469,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         self.cli_prefix = _resolve_setting(cli_prefix, config, 'cli_prefix', '')
         self.cli_flag_prefix_char = _resolve_setting(cli_flag_prefix_char, config, 'cli_flag_prefix_char', '-')
         self._cli_flag_prefix = self.cli_flag_prefix_char * 2
+        self.cli_nested_delimiter = _resolve_setting(cli_nested_delimiter, config, 'cli_nested_delimiter', '.')
+        if (
+            not isinstance(self.cli_nested_delimiter, str)
+            or not self.cli_nested_delimiter
+            or any(char.isspace() or not char.isprintable() or char == '=' for char in self.cli_nested_delimiter)
+        ):
+            raise SettingsError(f'CLI settings source nested delimiter is invalid: {self.cli_nested_delimiter!r}')
         if self.cli_prefix:
             if (
                 self.cli_prefix.startswith('.')
@@ -472,11 +484,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             ):
                 raise SettingsError(f'CLI settings source prefix is invalid: {self.cli_prefix}')
             self.cli_prefix += '.'
+        self._cli_option_names: dict[int, dict[str, str]] = {}
         self.cli_implicit_flags = _resolve_setting(cli_implicit_flags, config, 'cli_implicit_flags', False)
         self.cli_ignore_unknown_args = _resolve_setting(
             cli_ignore_unknown_args, config, 'cli_ignore_unknown_args', False
         )
         self.cli_kebab_case = _resolve_setting(cli_kebab_case, config, 'cli_kebab_case', False)
+        self._external_cli_prefix = self.cli_nested_delimiter.join(
+            _CliArg.get_kebab_case(segment, self.cli_kebab_case) for segment in self.cli_prefix.split('.')
+        )
         self.cli_shortcuts = _resolve_setting(cli_shortcuts, config, 'cli_shortcuts')
         self._env_settings_source: EnvSettingsSource | None = None
         if self.cli_show_env_vars:
@@ -1100,6 +1116,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             model=self.settings_cls,
             added_args=[],
             arg_prefix=self.env_prefix,
+            external_arg_prefix=self._external_cli_prefix,
             subcommand_prefix=self.env_prefix,
             group=None,
             alias_prefixes=[],
@@ -1185,13 +1202,14 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         arg_prefix: str,
         subcommand_prefix: str,
         group: Any,
-        alias_prefixes: list[str],
+        alias_prefixes: list[tuple[str, str]],
         model_default: Any,
         is_model_suppressed: bool = False,
         discriminator_vals: dict[str, set[Any]] | None = None,
         is_last_discriminator: bool = True,
         model_path: set[type[BaseModel]] | None = None,
         env_prefixes: tuple[tuple[str, bool], ...] = (),
+        external_arg_prefix: str = '',
     ) -> ArgumentParser:
         if discriminator_vals is None:
             discriminator_vals = {}
@@ -1221,6 +1239,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 validate_by_alias=validate_by_alias,
                 hide_none_type=self.cli_hide_none_type,
                 kebab_case=self.cli_kebab_case,
+                cli_nested_delimiter=self.cli_nested_delimiter,
                 enable_decoding=self.config.get('enable_decoding'),
                 env_prefix_len=self.env_prefix_len,
             )
@@ -1264,6 +1283,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         model=sub_model,
                         added_args=[],
                         arg_prefix=f'{arg.dest}.',
+                        external_arg_prefix='',
                         subcommand_prefix=f'{subcommand_prefix}{arg.preferred_alias}.',
                         group=None,
                         alias_prefixes=[],
@@ -1292,6 +1312,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
                 arg_names = self._get_arg_names(
                     arg,
+                    external_arg_prefix,
                     subcommand_prefix,
                     alias_prefixes,
                     added_args,
@@ -1333,6 +1354,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         is_model_suppressed=is_model_suppressed,
                         model_path=model_path,
                         env_var_names=env_var_names,
+                        external_arg_prefix=external_arg_prefix,
                     )
                 elif _CliUnknownArgs in field_info.metadata:
                     # Only parsers owning an unknown-argument field need capture.
@@ -1351,7 +1373,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     self._add_argument(context, *arg.args, **arg.kwargs)
                     added_args += list(arg_names)
 
-        self._add_parser_alias_paths(parser, alias_path_args, added_args, arg_prefix, subcommand_prefix, group)
+        self._add_parser_alias_paths(
+            parser, alias_path_args, added_args, arg_prefix, subcommand_prefix, group, external_arg_prefix
+        )
         return parser
 
     def _convert_append_action(self, kwargs: dict[str, Any], field_info: FieldInfo, is_append_action: bool) -> None:
@@ -1418,29 +1442,39 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
     def _get_arg_names(
         self,
         arg: _CliArg,
+        external_arg_prefix: str,
         subcommand_prefix: str,
-        alias_prefixes: list[str],
+        alias_prefixes: list[tuple[str, str]],
         added_args: list[str],
         discriminator_vals: dict[str, set[Any]],
         is_last_discriminator: bool,
     ) -> list[str]:
         arg_names: list[str] = []
-        for prefix in [arg.arg_prefix] + alias_prefixes:
+        for default_prefix, prefix in [(arg.arg_prefix, external_arg_prefix)] + alias_prefixes:
             for name in arg.alias_names:
-                arg_name = _CliArg.get_kebab_case(
-                    f'{prefix}{name}'
+                # Only structural boundaries use the delimiter; literal alias text is preserved.
+                arg_name = f'{prefix}{_CliArg.get_kebab_case(name, self.cli_kebab_case)}'
+                default_name = _CliArg.get_kebab_case(
+                    f'{default_prefix}{name}'
                     if subcommand_prefix == self.env_prefix
-                    else f'{prefix.replace(subcommand_prefix, "", 1)}{name}',
+                    else f'{default_prefix.replace(subcommand_prefix, "", 1)}{name}',
                     self.cli_kebab_case,
                 )
-                if arg_name not in added_args:
+                if self.cli_nested_delimiter == '.':
+                    arg_name = default_name
+                if not arg.is_alias_path_only:
+                    self._register_option_name(arg.parser, arg_name, default_name)
+                if arg_name not in added_args and arg_name not in arg_names:
                     arg_names.append(arg_name)
 
         if self.cli_shortcuts:
             for target, aliases in self.cli_shortcuts.items():
                 if target in arg_names:
                     alias_list = [aliases] if isinstance(aliases, str) else aliases
-                    arg_names.extend(alias for alias in alias_list if alias not in added_args)
+                    for alias in alias_list:
+                        if alias not in added_args and alias not in arg_names:
+                            self._register_option_name(arg.parser, alias, alias)
+                            arg_names.append(alias)
 
         tags: set[Any] = set()
         discriminators = discriminator_vals.get(arg.dest)
@@ -1457,6 +1491,18 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             arg.kwargs['metavar'] = self._metavar_format(Literal[tuple(sorted(discriminators))])
 
         return arg_names
+
+    def _register_option_name(self, parser: Any, name: str, default_name: str) -> None:
+        if self.cli_nested_delimiter == '.':
+            return
+        # Existing aliases may intentionally share a spelling. Only reject newly
+        # ambiguous names created by rendering different dotted paths identically.
+        option_names = self._cli_option_names.setdefault(id(parser), {})
+        previous_name = option_names.setdefault(name, default_name)
+        if previous_name != default_name:
+            raise SettingsError(
+                f'CLI option name {name!r} is ambiguous for names {previous_name!r} and {default_name!r}'
+            )
 
     def _add_parser_submodels(
         self,
@@ -1476,6 +1522,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         is_model_suppressed: bool,
         model_path: set[type[BaseModel]] | None = None,
         env_var_names: tuple[str, ...] = (),
+        external_arg_prefix: str = '',
     ) -> None:
         if issubclass(model, CliMutuallyExclusiveGroup):
             # Argparse has deprecated "calling add_argument_group() or add_mutually_exclusive_group() on a
@@ -1536,9 +1583,22 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 model=sub_model,
                 added_args=added_args,
                 arg_prefix=f'{arg_prefix}{preferred_alias}.',
+                external_arg_prefix=(
+                    f'{external_arg_prefix}{_CliArg.get_kebab_case(preferred_alias, self.cli_kebab_case)}'
+                    f'{self.cli_nested_delimiter}'
+                ),
                 subcommand_prefix=subcommand_prefix,
                 group=model_group,
-                alias_prefixes=[f'{arg_prefix}{name}.' for name in alias_names[1:]],
+                alias_prefixes=[
+                    (
+                        f'{arg_prefix}{name}.',
+                        (
+                            f'{external_arg_prefix}{_CliArg.get_kebab_case(name, self.cli_kebab_case)}'
+                            f'{self.cli_nested_delimiter}'
+                        ),
+                    )
+                    for name in alias_names[1:]
+                ],
                 model_default=model_default,
                 is_model_suppressed=is_model_suppressed,
                 discriminator_vals=discriminator_vals,
@@ -1555,6 +1615,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         arg_prefix: str,
         subcommand_prefix: str,
         group: Any,
+        external_arg_prefix: str,
     ) -> None:
         if alias_path_args:
             context = parser
@@ -1574,11 +1635,19 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 if index is None:
                     kwargs['metavar'] = 'dict'
                     self._cli_dict_args[arg_name] = dict
-                args = [f'{self._cli_flag_prefix}{arg_name}']
+                external_name = (
+                    arg_name
+                    if self.cli_nested_delimiter == '.'
+                    else f'{external_arg_prefix}{_CliArg.get_kebab_case(name, self.cli_kebab_case)}'
+                )
+                self._register_option_name(parser, external_name, arg_name)
+                if self.cli_nested_delimiter != '.':
+                    kwargs['dest'] = arg_name
+                args = [f'{self._cli_flag_prefix}{external_name}']
                 for arg in self._parser_map[arg_name].values():
                     arg.args, arg.kwargs = args, kwargs
                 self._add_argument(context, *args, **kwargs)
-                added_args.append(arg_name)
+                added_args.append(external_name)
 
     def _get_modified_args(self, obj: Any) -> tuple[str, ...]:
         if not self.cli_hide_none_type:

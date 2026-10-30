@@ -82,6 +82,7 @@ class SettingsConfigDict(ConfigDict, total=False):
     cli_show_env_vars: bool
     cli_exit_on_error: bool
     cli_prefix: str
+    cli_nested_delimiter: str
     cli_flag_prefix_char: str
     cli_implicit_flags: bool | Literal['dual', 'toggle'] | None
     cli_ignore_unknown_args: bool | None
@@ -200,6 +201,7 @@ class BaseSettings(BaseModel):
         _cli_exit_on_error: Determines whether or not the internal parser exits with error info when an error occurs.
             Defaults to `True`.
         _cli_prefix: The root parser command line arguments prefix. Defaults to "".
+        _cli_nested_delimiter: Separator between nested command line argument names. Defaults to ".".
         _cli_flag_prefix_char: The flag prefix character to use for CLI optional arguments. Defaults to '-'.
         _cli_implicit_flags: Controls how `bool` fields are exposed as CLI flags.
 
@@ -243,6 +245,7 @@ class BaseSettings(BaseModel):
         _cli_show_env_vars: bool | None = None,
         _cli_exit_on_error: bool | None = None,
         _cli_prefix: str | None = None,
+        _cli_nested_delimiter: str | None = None,
         _cli_flag_prefix_char: str | None = None,
         _cli_implicit_flags: bool | Literal['dual', 'toggle'] | None = None,
         _cli_ignore_unknown_args: bool | None = None,
@@ -279,6 +282,7 @@ class BaseSettings(BaseModel):
                 _cli_show_env_vars=_cli_show_env_vars,
                 _cli_exit_on_error=_cli_exit_on_error,
                 _cli_prefix=_cli_prefix,
+                _cli_nested_delimiter=_cli_nested_delimiter,
                 _cli_flag_prefix_char=_cli_flag_prefix_char,
                 _cli_implicit_flags=_cli_implicit_flags,
                 _cli_ignore_unknown_args=_cli_ignore_unknown_args,
@@ -382,6 +386,7 @@ class BaseSettings(BaseModel):
         _cli_show_env_vars: bool | None = None,
         _cli_exit_on_error: bool | None = None,
         _cli_prefix: str | None = None,
+        _cli_nested_delimiter: str | None = None,
         _cli_flag_prefix_char: str | None = None,
         _cli_implicit_flags: bool | Literal['dual', 'toggle'] | None = None,
         _cli_ignore_unknown_args: bool | None = None,
@@ -421,6 +426,7 @@ class BaseSettings(BaseModel):
         cli_show_env_vars = _resolve_setting(_cli_show_env_vars, config, 'cli_show_env_vars')
         cli_exit_on_error = _resolve_setting(_cli_exit_on_error, config, 'cli_exit_on_error')
         cli_prefix = _resolve_setting(_cli_prefix, config, 'cli_prefix')
+        cli_nested_delimiter = _resolve_setting(_cli_nested_delimiter, config, 'cli_nested_delimiter')
         cli_flag_prefix_char = _resolve_setting(_cli_flag_prefix_char, config, 'cli_flag_prefix_char')
         cli_implicit_flags = _resolve_setting(_cli_implicit_flags, config, 'cli_implicit_flags')
         cli_ignore_unknown_args = _resolve_setting(_cli_ignore_unknown_args, config, 'cli_ignore_unknown_args')
@@ -503,6 +509,7 @@ class BaseSettings(BaseModel):
                     cli_show_env_vars=cli_show_env_vars,
                     cli_exit_on_error=cli_exit_on_error,
                     cli_prefix=cli_prefix,
+                    cli_nested_delimiter=cli_nested_delimiter,
                     cli_flag_prefix_char=cli_flag_prefix_char,
                     cli_implicit_flags=cli_implicit_flags,
                     cli_ignore_unknown_args=cli_ignore_unknown_args,
@@ -685,6 +692,7 @@ class BaseSettings(BaseModel):
         cli_show_env_vars=False,
         cli_exit_on_error=True,
         cli_prefix='',
+        cli_nested_delimiter='.',
         cli_flag_prefix_char='-',
         cli_implicit_flags=False,
         cli_ignore_unknown_args=False,
