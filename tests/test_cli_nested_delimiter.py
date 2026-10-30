@@ -242,7 +242,8 @@ def test_default_hyphenated_alias_path_keeps_parser_destination_inference():
 @pytest.mark.parametrize('delimiter', ['.', '__'])
 @pytest.mark.parametrize('reverse_fields', [False, True])
 @pytest.mark.parametrize('unknown_args', [False, True])
-def test_nested_delimiter_non_option_names_do_not_collide(delimiter, reverse_fields, unknown_args):
+@pytest.mark.parametrize('shortcuts', [None, {'nested__value': 'short'}])
+def test_nested_delimiter_non_option_names_do_not_collide(delimiter, reverse_fields, unknown_args, shortcuts):
     from pydantic import create_model
 
     from pydantic_settings import CliPositionalArg, CliUnknownArgs
@@ -259,7 +260,9 @@ def test_nested_delimiter_non_option_names_do_not_collide(delimiter, reverse_fie
     Settings = create_model(
         'Settings',
         __base__=BaseSettings,
-        __config__=SettingsConfigDict(cli_nested_delimiter=delimiter, cli_ignore_unknown_args=unknown_args),
+        __config__=SettingsConfigDict(
+            cli_nested_delimiter=delimiter, cli_ignore_unknown_args=unknown_args, cli_shortcuts=shortcuts
+        ),
         **fields,
     )
     option = f'--nested{delimiter}value'
