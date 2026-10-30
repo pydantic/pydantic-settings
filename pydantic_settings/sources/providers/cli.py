@@ -1828,7 +1828,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 continue
             if _CliUnknownArgs in field_info.metadata:
                 # Unknown args are registered without option names or positional metadata, so there is no parser map
-                # entry to serialize from. Replay the captured args verbatim in their own trailing segment.
+                # entry to serialize from. Replay the captured args verbatim in their own segment.
                 unknown_args += model_default
                 continue
             arg = next(iter(self._parser_map[field_info].values()))
@@ -1841,10 +1841,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     positionals_first=positionals_first,
                     _is_submodel=True,
                 )
-                # Everything after the subcommand token is parsed by the subcommand, so its own segment is emitted
-                # as-is and this level's unknown args follow it. That keeps each level's unknowns with the level
-                # that captured them, which is what makes the round trip hold (#1048).
-                subcommand_args = subcommand_args + self._flatten_serialized_args(sub_args, positionals_first)
+                # Everything after the subcommand token is parsed by the subcommand, so its unknown args stay in its
+                # own segment instead of being lifted into this level's. That keeps each level's unknowns with the
+                # level that captured them, which is what makes the round trip hold (#1048).
+                subcommand_args += self._flatten_serialized_args(sub_args, positionals_first)
                 continue
             if _is_model_or_dataclass(type(model_default)):
                 sub_args = self._serialized_args(
