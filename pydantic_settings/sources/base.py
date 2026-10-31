@@ -364,6 +364,9 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
     ):
         super().__init__(settings_cls, _init_state)
         self.defaults: dict[str, Any] = {}
+        # Nested model defaults annotated with their own class, by alias: `_settings_build_values` strips their
+        # unset fields
+        self._default_objects: dict[str, Any] = {}
         # Discriminated union fields: per discriminator guarding the default's member, the keys that can hold
         # its value, and the default's value
         self._discriminator_tags: dict[str, list[tuple[tuple[str, ...], Any]]] = {}
@@ -388,6 +391,8 @@ class DefaultSettingsSource(PydanticBaseSettingsSource):
                     self.defaults[preferred_alias] = asdict(field_info.default)
                 elif is_model_class(type(field_info.default)):
                     self.defaults[preferred_alias] = field_info.default.model_dump()
+                    if _unwrap_optional_annotation(field_info.annotation) is type(field_info.default):
+                        self._default_objects[preferred_alias] = field_info.default
                 if discriminator is not None and preferred_alias in self.defaults:
                     default_cls = type(field_info.default)
                     self._discriminator_tags[preferred_alias] = [
