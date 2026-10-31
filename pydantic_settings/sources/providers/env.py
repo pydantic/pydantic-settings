@@ -12,8 +12,7 @@ from typing import (
 )
 
 from pydantic import AliasChoices, AliasPath, Json, TypeAdapter, ValidationError
-from pydantic._internal._utils import deep_update, is_model_class
-from pydantic.dataclasses import is_pydantic_dataclass
+from pydantic._internal._utils import deep_update
 from pydantic.fields import FieldInfo
 from typing_inspection.introspection import is_union_origin
 
@@ -28,7 +27,9 @@ from ..utils import (
     _get_field_annotation_and_metadata,
     _get_model_config,
     _get_model_fields,
+    _is_model_or_dataclass,
     _literal_has_numeric_enum,
+    _resolve_setting,
     _resolve_type_alias,
     _union_has_strict_types,
     _union_is_complex,
@@ -77,12 +78,8 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             env_parse_enums,
             _init_state,
         )
-        self.env_nested_delimiter = (
-            env_nested_delimiter if env_nested_delimiter is not None else self.config.get('env_nested_delimiter')
-        )
-        self.env_nested_max_split = (
-            env_nested_max_split if env_nested_max_split is not None else self.config.get('env_nested_max_split')
-        )
+        self.env_nested_delimiter = _resolve_setting(env_nested_delimiter, self.config, 'env_nested_delimiter')
+        self.env_nested_max_split = _resolve_setting(env_nested_max_split, self.config, 'env_nested_max_split')
         self.maxsplit = (self.env_nested_max_split or 0) - 1
         self.env_prefix_len = len(self.env_prefix)
 
@@ -96,7 +93,11 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         # preserve case and are handled by ``DotEnvSettingsSource``, which overrides this method.
         if self.case_sensitive and _environ_is_case_insensitive():
             self.case_sensitive = False
-        return parse_env_vars(os.environ, self.case_sensitive, self.env_ignore_empty, self.env_parse_none_str)
+        return self._parse_env_vars(os.environ)
+
+    def _parse_env_vars(self, env_vars: Mapping[str, str | None]) -> Mapping[str, str | None]:
+        """Normalize the keys and values of `env_vars` according to this source's env settings."""
+        return parse_env_vars(env_vars, self.case_sensitive, self.env_ignore_empty, self.env_parse_none_str)
 
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         """
@@ -274,16 +275,16 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             return None
 
         annotation = field.annotation if isinstance(field, FieldInfo) else field
-        for type_ in get_args(annotation):
-            type_has_key = self.next_field(type_, key, case_sensitive)
-            if type_has_key:
-                return type_has_key
         if _lenient_issubclass(get_origin(annotation), dict):
             # get value type if it's a dict
             args = get_args(annotation)
             return args[-1] if args else None
-        if is_model_class(annotation) or is_pydantic_dataclass(annotation):  # type: ignore[arg-type]
-            fields = _get_model_fields(annotation)
+        for type_ in get_args(annotation):
+            type_has_key = self.next_field(type_, key, case_sensitive)
+            if type_has_key:
+                return type_has_key
+        if _is_model_or_dataclass(annotation):
+            fields = _get_model_fields(annotation)  # type: ignore[arg-type]
             model_config = _get_model_config(annotation)
             # `case_sensitive is None` is here to be compatible with the old behavior.
             # Has to be removed in V3.

@@ -58,6 +58,16 @@ def _warn_if_field_info_incomplete(field_info: FieldInfo, field_name: str, init_
     )
 
 
+def _resolve_setting(value: Any, config: Mapping[str, Any], key: str, default: Any = None) -> Any:
+    """Return `value` if it was given (i.e. is not `None`), otherwise the `key` config value or `default`."""
+    return value if value is not None else config.get(key, default)
+
+
+def _as_list(value: Any) -> list[Any]:
+    """Wrap a single `str` or path-like in a list, otherwise convert the given sequence to a list."""
+    return [value] if isinstance(value, (str, os.PathLike)) else list(value)
+
+
 def _get_env_var_key(key: str, case_sensitive: bool = False) -> str:
     return key if case_sensitive else key.lower()
 
@@ -405,6 +415,11 @@ def _literal_has_numeric_enum(annotation: type[Any] | None) -> bool:
     return False
 
 
+def _is_model_or_dataclass(annotation: Any) -> bool:
+    """Whether the annotation is a pydantic model or a pydantic dataclass, i.e. a type with nested fields."""
+    return is_model_class(annotation) or is_pydantic_dataclass(annotation)
+
+
 def _get_model_fields(model_cls: type[Any]) -> dict[str, FieldInfo]:
     """Get fields from a pydantic model or dataclass."""
 
@@ -455,7 +470,7 @@ def _get_alias_names(
             new_alias_paths.append(cast(AliasPath, alias))
         for alias_path in new_alias_paths:
             name = cast(str, alias_path.path[0])
-            name = name.lower() if not case_sensitive else name
+            name = _get_env_var_key(name, case_sensitive)
             if alias_path_args is not None:
                 alias_path_args[name] = (
                     alias_path.path[1] if len(alias_path.path) > 1 and isinstance(alias_path.path[1], int) else None
@@ -510,14 +525,17 @@ __all__ = [
     '_annotation_enum_val_to_name',
     '_annotation_is_complex',
     '_annotation_is_complex_inner',
+    '_as_list',
     '_get_alias_names',
     '_get_env_var_key',
     '_get_model_fields',
     '_get_union_members',
     '_is_function',
+    '_is_model_or_dataclass',
     '_literal_has_numeric_enum',
     '_parse_env_none_str',
     '_resolve_config_file',
+    '_resolve_setting',
     '_resolve_type_alias',
     '_strip_annotated',
     '_union_has_strict_types',
