@@ -126,7 +126,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
             # In this case add all env vars that match the prefix, stripping the prefix.
             prefix = self._apply_case_sensitive(self.env_prefix)
             for env_name, env_value in self.env_vars.items():
-                if env_name.startswith(prefix):
+                if env_value is not None and env_name.startswith(prefix):
                     # Slice with the case-normalized prefix: `str.lower()` can change
                     # length (e.g. `'İ'` lowers to two code points), so the raw
                     # `env_prefix` length would under-strip and leave a partial prefix.
