@@ -16,7 +16,7 @@ from pydantic._internal._config import config_keys
 from pydantic._internal._utils import deep_update, is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
-from pydantic.main import BaseModel
+from pydantic.main import BaseModel, create_model
 
 from .exceptions import SettingsError
 from .sources import (
@@ -46,6 +46,7 @@ from .sources.utils import (
     InitState,
     _get_alias_names,
     _get_model_config,
+    _get_union_members,
     _resolve_setting,
     _validate_by_alias_enabled,
     _validate_by_name_enabled,
@@ -558,6 +559,7 @@ class BaseSettings(BaseModel):
             last_source = sources[-1]
             init_state = last_source._init_state if isinstance(last_source, PydanticBaseSettingsSource) else InitState()
             cls._settings_restore_init_kwarg_names(cls, init_kwargs, state, init_state)
+            cls._set_discriminator_value(state)
 
             return state
         # no one should mean to do this, but I think returning an empty dict is marginally preferable
@@ -664,6 +666,40 @@ class BaseSettings(BaseModel):
                 'secrets_nested_subdir',
             ),
         )
+
+    @classmethod
+    def _set_discriminator_value(cls, state: dict[str, Any]) -> None:
+        """
+        Populate a missing discriminator field via the variant's own config.
+
+        For each discriminated union field not yet in ``state``, iterates union members,
+        builds a helper model inheriting the variant's ``model_config`` (so ``env_prefix``,
+        ``env_file``, etc. come from that variant — **not** the parent), and resolves the
+        discriminator value through the normal sources pipeline. Stores the result in
+        ``state`` so Pydantic can select the correct variant.
+        """
+        for field_name, model_field in cls.model_fields.items():
+            if model_field.discriminator and isinstance(model_field.discriminator, str) and field_name not in state:
+                alias_names, *_ = _get_alias_names(
+                    field_name=field_name,
+                    field_info=model_field,
+                )
+                if any(alias_name in state for alias_name in alias_names):
+                    continue
+                for item in _get_union_members(model_field.annotation):
+                    if not (isinstance(item, type) and issubclass(item, BaseSettings)):
+                        continue
+                    field_info = item.model_fields.get(model_field.discriminator, FieldInfo())
+                    fields_dict: dict[str, Any] = {model_field.discriminator: (field_info.annotation, field_info)}
+                    _HelperClass = create_model(
+                        '_HelperClass', __base__=BaseSettings, __config__=item.model_config, **fields_dict
+                    )
+                    sources, init_kwargs = _HelperClass._settings_init_sources()
+                    value = _HelperClass._settings_build_values(sources, init_kwargs)
+                    if value:
+                        key: str = alias_names[0] if alias_names else field_name
+                        state[key] = value
+                        break
 
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         extra='forbid',
