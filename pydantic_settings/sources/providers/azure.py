@@ -183,6 +183,23 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
             ]
         return field_info
 
+    def next_field(
+        self, field: FieldInfo | Any | None, key: str, case_sensitive: bool | None = None
+    ) -> FieldInfo | None:
+        # Nested segments carry no env prefix, so match them against the dashed field keys.
+        annotation = field.annotation if isinstance(field, FieldInfo) else field
+        if (
+            self._dash_to_underscore
+            and not self._snake_case_conversion
+            and (is_model_class(annotation) or is_pydantic_dataclass(annotation))
+        ):
+            config = _get_model_config(annotation)
+            for field_name, f in _get_model_fields(annotation).items():
+                for field_key, _, _ in self._extract_field_info(f, field_name, config):
+                    if self._apply_case_sensitive(field_key).replace('_', '-') == key:
+                        return f
+        return super().next_field(field, key, case_sensitive)
+
     def explode_env_vars(self, field_name: str, field: FieldInfo, env_vars: Mapping[str, str | None]) -> dict[str, Any]:
         values = super().explode_env_vars(field_name, field, env_vars)
         if self._dash_to_underscore and not self._snake_case_conversion:
