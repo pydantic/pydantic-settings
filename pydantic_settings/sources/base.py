@@ -239,11 +239,58 @@ class ConfigFileSourceMixin(ABC):
         vars: dict[str, Any] = {}
         for file_path in self._existing_files(files):
             updating_vars = self._read_file(file_path)
+            self._normalize_file_keys(updating_vars)
             if deep_merge:
                 vars = deep_update(vars, updating_vars)
             else:
                 vars.update(updating_vars)
         return vars
+
+    @staticmethod
+    def _get_case_insensitive_field_names(settings_cls: type[BaseSettings]) -> set[str]:
+        config = settings_cls.model_config
+        if config.get('case_sensitive', False):
+            return set()
+        include_name = _validate_by_name_enabled(config)
+        return {
+            name
+            for field_name, field_info in settings_cls.model_fields.items()
+            for name in _get_alias_names(
+                field_name,
+                field_info,
+                case_sensitive=False,
+                populate_by_name=include_name,
+                validate_by_alias=_validate_by_alias_enabled(config),
+            )[0]
+        }
+
+    def _get_config_section(self, data: dict[str, Any]) -> Any:
+        return data
+
+    def _normalize_file_keys(self, data: dict[str, Any]) -> None:
+        names: set[str] = getattr(self, '_case_insensitive_file_keys', set())
+        if not names:
+            return
+        try:
+            values = self._get_config_section(data)
+        except (KeyError, TypeError):
+            # A section can be supplied by another file. The provider still checks
+            # the final merged structure and reports missing/non-mapping sections.
+            return
+        if isinstance(values, dict):
+            normalized: dict[str, Any] = {}
+            for key, value in values.items():
+                if key.lower() in names:
+                    # Keep the existing first-key-wins rule within a single file,
+                    # but make equivalent spellings collide when files are merged.
+                    normalized.setdefault(key.lower(), value)
+                else:
+                    normalized[key] = value
+            # Preserve outer tables and literal dictionary keys. Distinct aliases
+            # are not combined: InitSettingsSource applies alias priority once,
+            # after all files have been merged.
+            values.clear()
+            values.update(normalized)
 
     @abstractmethod
     def _read_file(self, path: Path | Traversable) -> dict[str, Any]:
