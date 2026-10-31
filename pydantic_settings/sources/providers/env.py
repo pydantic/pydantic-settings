@@ -276,7 +276,10 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
         annotation = field.annotation if isinstance(field, FieldInfo) else field
         if _lenient_issubclass(get_origin(annotation), dict):
-            # get value type if it's a dict
+            # get value type if it's a dict. Return it before recursing into the annotation's
+            # arguments below: for a mapping of mappings (e.g. `dict[str, dict[str, int]]`) the
+            # recursion would find the inner `dict` and return *its* value type (`int`), so the
+            # nested value would not be recognized as complex and would skip JSON decoding.
             args = get_args(annotation)
             return args[-1] if args else None
         for type_ in get_args(annotation):
