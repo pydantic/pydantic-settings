@@ -44,6 +44,7 @@ dependencies = [
     'python-dotenv>=1.2.2',
     'typing-extensions>=4.0.0',
     'typing-inspection>=0.4.0',
+    'annotated-types>=0.4.0',
 ]
 dynamic = ['version']
 
