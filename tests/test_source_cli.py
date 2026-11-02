@@ -4974,6 +4974,47 @@ def test_cli_serialize_container_values(list_style, dict_style):
     assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
 
 
+def test_cli_serialize_env_dict_style_falls_back_to_json():
+    class Sub(BaseModel):
+        a: int
+
+    class Cfg(BaseModel):
+        texts: dict[str, str]
+        optional_nums: dict[str, int | None]
+        subs: dict[str, Sub]
+        num_lists: dict[str, list[int]]
+
+    cfg = Cfg(
+        texts={'plain': 'x', 'comma': 'a,b', 'quoted': '"q"', 'padded': ' p ', 'k=1': 'v'},
+        optional_nums={'one': 1, 'none': None},
+        subs={'s': Sub(a=3)},
+        num_lists={'l': [1, 2]},
+    )
+    serialized_cli_args = CliApp.serialize(cfg, dict_style='env')
+
+    assert serialized_cli_args == [
+        '--texts',
+        'plain=x',
+        '--texts',
+        '{"comma": "a,b"}',
+        '--texts',
+        '{"quoted": "\\"q\\""}',
+        '--texts',
+        '{"padded": " p "}',
+        '--texts',
+        '{"k=1": "v"}',
+        '--optional-nums',
+        'one=1',
+        '--optional-nums',
+        '{"none": null}',
+        '--subs',
+        '{"s": {"a": 3}}',
+        '--num-lists',
+        '{"l": [1, 2]}',
+    ]
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+
+
 def test_cli_decoding():
     PATH_A_STR = str(PureWindowsPath(Path.cwd()))
     PATH_B_STR = str(PureWindowsPath(Path.cwd() / 'subdir'))
