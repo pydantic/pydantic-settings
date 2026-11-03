@@ -8,21 +8,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from dotenv import dotenv_values
-from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
-    get_origin,
-)
-from typing_inspection.introspection import is_union_origin
 
 from ...utils import _debug_logging_enabled, logger
 from ..types import ENV_FILE_SENTINEL, DotenvFiltering, DotenvType, EnvPrefixTarget
 from ..utils import (
     InitState,
-    _annotation_is_complex,
     _as_list,
-    _get_field_annotation_and_metadata,
     _resolve_config_file,
     _resolve_setting,
-    _union_is_complex,
     parse_env_vars,
 )
 from .env import EnvSettingsSource
@@ -117,8 +110,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
 
         return dotenv_vars
 
-    def __call__(self) -> dict[str, Any]:  # noqa: C901
-        data: dict[str, Any] = super().__call__()
+    def _filter_and_merge_data(self, data: dict[str, Any]) -> dict[str, Any]:
         if self.dotenv_filtering == 'only_existing':
             # This case behaves like the EnvSettingsSource, only return existing fields
             return data
@@ -148,6 +140,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
 
         # As `extra` config is allowed in dotenv settings source, We have to
         # update data with extra env variables from dotenv file.
+        claimed_env_names, complex_prefixes, _ = self._collect_field_claims()
         for env_name, env_value in self.env_vars.items():
             if (
                 env_value is None
@@ -155,37 +148,14 @@ class DotEnvSettingsSource(EnvSettingsSource):
                 or (self.env_prefix and env_name in self.settings_cls.model_fields)
             ):
                 continue
-            env_used = False
-            for field_name, field in self.settings_cls.model_fields.items():
-                annotation, metadata = _get_field_annotation_and_metadata(field)
-                for _, field_env_name, _ in self._extract_field_info(field, field_name):
-                    if env_name == field_env_name or (
-                        (
-                            _annotation_is_complex(annotation, metadata, self._init_state)
-                            or (
-                                is_union_origin(get_origin(annotation))
-                                and _union_is_complex(annotation, metadata, self._init_state)
-                            )
-                        )
-                        # A var only belongs to a complex field when it sits at the nested
-                        # delimiter boundary (`db<delim>...`, matching what explode_env_vars
-                        # consumes). A bare name-prefix match (e.g. `dbx_token` vs field `db`)
-                        # must not claim the var, otherwise it is silently dropped instead of
-                        # being kept as an extra.
-                        and self.env_nested_delimiter
-                        and env_name.startswith(f'{field_env_name}{self.env_nested_delimiter}')
-                    ):
-                        env_used = True
-                        break
-                if env_used:
-                    break
-            if not env_used:
-                if is_extra_allowed and env_name.startswith(env_prefix):
-                    # env_prefix should be respected and removed from the env_name
-                    normalized_env_name = env_name[len(env_prefix) :]
-                    data[normalized_env_name] = env_value
-                else:
-                    data[env_name] = env_value
+            if env_name in claimed_env_names or (bool(complex_prefixes) and env_name.startswith(complex_prefixes)):
+                continue
+            if is_extra_allowed and env_name.startswith(env_prefix):
+                # env_prefix should be respected and removed from the env_name
+                normalized_env_name = env_name[len(env_prefix) :]
+                data[normalized_env_name] = env_value
+            else:
+                data[env_name] = env_value
         return data
 
     def __repr__(self) -> str:

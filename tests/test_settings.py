@@ -6064,3 +6064,93 @@ def test_debug_secret_file_resolution(env, caplog, tmp_path):
     messages = [r.getMessage() for r in caplog.records]
     assert any(f'Loading secret file: {(tmp_path / "name").resolve()}' == m for m in messages)
     assert any('Secret file not found, skipping' in m and 'missing' in m for m in messages)
+
+
+@pytest.mark.parametrize('filtering', [None, 'only_existing', 'match_prefix'])
+def test_env_filtering_modes(env, filtering):
+    """Test env_filtering option: only 'match_prefix' pulls undeclared env vars into extras (#818)."""
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_prefix='PREFIX_',
+            extra='allow',
+            env_filtering=filtering,
+        )
+        apple: str = 'default'
+
+    env.set('PREFIX_apple', 'from_env')
+    env.set('PREFIX_banana', 'extra_val')
+    s = Settings()
+    assert s.apple == 'from_env'
+    if filtering == 'match_prefix':
+        assert s.__pydantic_extra__ == {'banana': 'extra_val'}
+    else:
+        assert 'banana' not in (s.__pydantic_extra__ or {})
+
+
+def test_env_filtering_type_alias_union(env):
+    """A field annotated with a union type alias does not leak its nested delimiter vars into extras (#818)."""
+    class Sub(BaseModel):
+        a: int = 0
+
+    UnionAlias = TypeAliasType('UnionAlias', Sub | None)
+
+    class S(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_prefix='Q_',
+            env_nested_delimiter='__',
+            extra='allow',
+            env_filtering='match_prefix',
+        )
+        u: UnionAlias = None
+
+    env.set('Q_u__a', '6')
+    s = S()
+    assert s.model_dump() == {'u': {'a': 6}}
+    assert 'u__a' not in (s.__pydantic_extra__ or {})
+
+
+def test_env_filtering_match_prefix_nested_delimiter_undeclared(env):
+    """Nested-delimiter vars for undeclared fields end up as flat extra keys."""
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_prefix='APP_',
+            env_nested_delimiter='__',
+            extra='allow',
+            env_filtering='match_prefix',
+        )
+
+    env.set('APP_foo__bar', 'val')
+    s = Settings()
+    assert s.__pydantic_extra__ == {'foo__bar': 'val'}
+
+
+def test_env_filtering_match_prefix_field_and_alias_guards(env):
+    """Prefix-stripped extras do not spoof or collide with declared field aliases, names, or AliasPath heads."""
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_prefix='PREFIX_',
+            env_prefix_target='all',
+            env_nested_delimiter='__',
+            extra='allow',
+            env_filtering='match_prefix',
+            env_parse_none_str='null',
+        )
+        foobar: str = Field(default='unset', validation_alias='foo')
+        aliased_name: str = Field(default='unset', validation_alias='alias_key')
+        head_field: str = Field(default='unset', validation_alias=AliasPath('path', 'child'))
+        none_field: str | None = 'default'
+
+    env.set('PREFIX_foo', 'real_foo')
+    env.set('PREFIX_aliased_name', 'should_not_spoof')
+    env.set('PREFIX_path__child', 'path_child_val')
+    env.set('PREFIX_none_field', 'null')
+    env.set('PREFIX_extra_none', 'null')
+    env.set('PREFIX_regular_extra', 'hello')
+
+    s = Settings()
+    assert s.foobar == 'real_foo'
+    assert s.none_field is None
+    assert 'aliased_name' not in s.__pydantic_extra__
+    assert 'path__child' not in s.__pydantic_extra__
+    assert s.__pydantic_extra__['extra_none'] is None
+    assert s.__pydantic_extra__['regular_extra'] == 'hello'
