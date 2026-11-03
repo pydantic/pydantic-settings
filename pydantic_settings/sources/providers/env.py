@@ -12,11 +12,10 @@ from typing import (
 )
 
 from pydantic import AliasChoices, AliasPath, Json, TypeAdapter, ValidationError
-from pydantic._internal._utils import deep_update
 from pydantic.fields import FieldInfo
 from typing_inspection.introspection import is_union_origin
 
-from ...utils import _lenient_issubclass
+from ...utils import _lenient_issubclass, deep_update
 from ..base import PydanticBaseEnvSettingsSource
 from ..types import EnvNoneType, EnvPrefixTarget
 from ..utils import (

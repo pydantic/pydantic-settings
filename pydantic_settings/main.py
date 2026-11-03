@@ -13,7 +13,7 @@ from weakref import WeakKeyDictionary
 
 from pydantic import AliasChoices, AliasPath, ConfigDict
 from pydantic._internal._config import config_keys
-from pydantic._internal._utils import deep_update, is_model_class
+from pydantic._internal._utils import is_model_class
 from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
 from pydantic.main import BaseModel
@@ -51,7 +51,7 @@ from .sources.utils import (
     _validate_by_name_enabled,
     _warn_if_field_info_incomplete,
 )
-from .utils import _debug_logging_enabled, logger
+from .utils import _debug_logging_enabled, deep_update, logger
 
 T = TypeVar('T')
 
