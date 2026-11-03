@@ -2,11 +2,13 @@ import logging
 import os
 import types
 from pathlib import Path
-from typing import Any, _Final, _GenericAlias  # type: ignore [attr-defined]
+from typing import Any, TypeVar, _Final, _GenericAlias  # type: ignore [attr-defined]
 
 logger = logging.getLogger('pydantic_settings')
 
 _DEBUG_ENV_VAR = 'PYDANTIC_SETTINGS_DEBUG'
+
+KeyType = TypeVar('KeyType')
 
 
 def _settings_debug_enabled() -> bool:
@@ -49,3 +51,18 @@ def _lenient_issubclass(cls: Any, class_or_tuple: Any) -> bool:
 
 _WithArgsTypes = (_GenericAlias, types.GenericAlias, types.UnionType)
 _typing_base: Any = _Final  # pyright: ignore[reportAttributeAccessIssue]
+
+
+def deep_update(mapping: dict[KeyType, Any], *updating_mappings: dict[KeyType, Any]) -> dict[KeyType, Any]:
+    """Recursively merge `updating_mappings` into a shallow copy of `mapping`.
+
+    Nested dictionaries are merged; any other value from a later mapping replaces the existing one.
+    """
+    updated_mapping = mapping.copy()
+    for updating_mapping in updating_mappings:
+        for k, v in updating_mapping.items():
+            if k in updated_mapping and isinstance(updated_mapping[k], dict) and isinstance(v, dict):
+                updated_mapping[k] = deep_update(updated_mapping[k], v)
+            else:
+                updated_mapping[k] = v
+    return updated_mapping
