@@ -6069,6 +6069,7 @@ def test_debug_secret_file_resolution(env, caplog, tmp_path):
 @pytest.mark.parametrize('filtering', [None, 'only_existing', 'match_prefix'])
 def test_env_filtering_modes(env, filtering):
     """Test env_filtering option: only 'match_prefix' pulls undeclared env vars into extras (#818)."""
+
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(
             env_prefix='PREFIX_',
@@ -6089,6 +6090,7 @@ def test_env_filtering_modes(env, filtering):
 
 def test_env_filtering_type_alias_union(env):
     """A field annotated with a union type alias does not leak its nested delimiter vars into extras (#818)."""
+
     class Sub(BaseModel):
         a: int = 0
 
@@ -6111,6 +6113,7 @@ def test_env_filtering_type_alias_union(env):
 
 def test_env_filtering_match_prefix_nested_delimiter_undeclared(env):
     """Nested-delimiter vars for undeclared fields end up as flat extra keys."""
+
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(
             env_prefix='APP_',
@@ -6126,6 +6129,7 @@ def test_env_filtering_match_prefix_nested_delimiter_undeclared(env):
 
 def test_env_filtering_match_prefix_field_and_alias_guards(env):
     """Prefix-stripped extras do not spoof or collide with declared field aliases, names, or AliasPath heads."""
+
     class Settings(BaseSettings):
         model_config = SettingsConfigDict(
             env_prefix='PREFIX_',

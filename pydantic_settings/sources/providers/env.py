@@ -436,8 +436,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             claimed_keys.add(self._apply_case_sensitive(field_name))
             annotation, metadata = _get_field_annotation_and_metadata(field)
             is_complex = _annotation_is_complex(annotation, metadata, self._init_state) or (
-                is_union_origin(get_origin(annotation))
-                and _union_is_complex(annotation, metadata, self._init_state)
+                is_union_origin(get_origin(annotation)) and _union_is_complex(annotation, metadata, self._init_state)
             )
             for field_key, field_env_name, _ in self._extract_field_info(field, field_name):
                 claimed_env_names.add(field_env_name)
