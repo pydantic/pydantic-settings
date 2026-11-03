@@ -6158,3 +6158,17 @@ def test_env_filtering_match_prefix_field_and_alias_guards(env):
     assert 'path__child' not in s.__pydantic_extra__
     assert s.__pydantic_extra__['extra_none'] is None
     assert s.__pydantic_extra__['regular_extra'] == 'hello'
+
+
+def test_env_filtering_match_prefix_no_prefix_does_not_leak_environ(env):
+    """Without an explicit env_prefix, match_prefix does not pull from the whole environment."""
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            extra='allow',
+            env_filtering='match_prefix',
+        )
+
+    env.set('SOME_UNRELATED_VAR', 'should_not_appear')
+    s = Settings()
+    assert 'SOME_UNRELATED_VAR' not in (s.__pydantic_extra__ or {})
