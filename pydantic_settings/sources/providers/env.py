@@ -162,6 +162,12 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
                 if isinstance(value, dict):
                     return deep_update(value, self.explode_env_vars(field_name, field, self.env_vars))
+                if isinstance(value, list):
+                    env_val_built = self._explode_env_vars_for_list(field_name, field, value)
+                    for index, item in enumerate(value):
+                        update = env_val_built.get(str(index))
+                        if isinstance(item, dict) and isinstance(update, dict):
+                            value[index] = deep_update(item, update)
                 return value
         elif value is not None:
             # simplest case, field is not complex, we only need to add the value if it was found
@@ -169,6 +175,26 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
         # No value resolved for this field; `None` tells the caller to skip it.
         return None
+
+    def _explode_env_vars_for_list(self, field_name: str, field: FieldInfo, value: list[Any]) -> dict[str, Any]:
+        if not self.env_nested_delimiter:
+            return {}
+
+        # Only parse variables that can update an existing object in the list.
+        # Other names may address an unused model alternative in a union.
+        item_names = {
+            f'{env_name}{self.env_nested_delimiter}{index}'
+            for _, env_name, _ in self._extract_field_info(field, field_name)
+            for index, item in enumerate(value)
+            if isinstance(item, dict)
+        }
+        prefixes = tuple(f'{name}{self.env_nested_delimiter}' for name in item_names)
+        env_vars = {
+            name: env_value
+            for name, env_value in self.env_vars.items()
+            if name in item_names or name.startswith(prefixes)
+        }
+        return self.explode_env_vars(field_name, field, env_vars)
 
     def _matches_alias_path_head(self, field: FieldInfo | Any | None, key: str) -> bool:
         """
