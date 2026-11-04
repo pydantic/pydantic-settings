@@ -769,7 +769,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             elif is_use_decode != is_decode:
                 raise SettingsError('Mixing Decode and NoDecode across different AliasPath fields is not allowed')
             if is_use_decode:
-                item = item.replace('\\', '\\\\')
                 try:
                     unquoted_item = item[1:-1] if item.startswith('"') and item.endswith('"') else item
                     float(unquoted_item)
@@ -806,13 +805,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         if val.startswith(('{', '[')):
                             val = self._consume_object_or_array(val, merged_list)
                         else:
+                            cli_arg = self._parser_map.get(field_name, {}).get(len(merged_list))
+                            decode = cli_arg is None or not cli_arg.is_no_decode
                             try:
-                                val = self._consume_string_or_number(val, merged_list, merge_type)
+                                val = self._consume_string_or_number(val, merged_list, merge_type, decode)
                             except ValueError:
                                 if merge_type is inferred_type:
                                     raise
                                 merge_type = inferred_type
-                                val = self._consume_string_or_number(val, merged_list, merge_type)
+                                val = self._consume_string_or_number(val, merged_list, merge_type, decode)
                         is_last_consumed_a_value = True
                 if not is_last_consumed_a_value and not is_empty_array:
                     # An explicitly empty array contributes no items, unlike a missing value.
@@ -852,7 +853,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     return item[consumed + 1 :]
         raise SettingsError(f'Missing end delimiter "{close_delim}"')
 
-    def _consume_string_or_number(self, item: str, merged_list: list[str], merge_type: type[Any] | None) -> str:
+    def _consume_string_or_number(
+        self, item: str, merged_list: list[str], merge_type: type[Any] | None, decode: bool
+    ) -> str:
+        if decode and merge_type is list and item.startswith('"'):
+            _, consumed = json.JSONDecoder().raw_decode(item)
+            if item[consumed:].strip() and not item[consumed:].lstrip().startswith(','):
+                raise SettingsError('Expected a comma after a quoted list value')
+            merged_list.append(item[:consumed])
+            return item[consumed:]
         consumed = 0 if merge_type is not str else len(item)
         is_find_end_quote = False
         while consumed < len(item):
@@ -871,7 +880,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 if val_string == self.cli_parse_none_str:
                     val_string = 'null'
                 if val_string not in ('true', 'false', 'null') and not val_string.startswith('"'):
-                    val_string = f'"{val_string}"'
+                    val_string = json.dumps(val_string) if decode else f'"{val_string}"'
             merged_list.append(val_string)
         else:
             key, val = (kv for kv in val_string.split('=', 1))
