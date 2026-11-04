@@ -46,7 +46,7 @@ class PyprojectTomlConfigSettingsSource(TomlConfigSettingsSource):
 
         """
         if provided:
-            return provided.resolve()
+            return provided.expanduser().resolve()
         rv = Path.cwd() / 'pyproject.toml'
         count = 0
         if not rv.is_file():
