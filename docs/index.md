@@ -3238,6 +3238,11 @@ foo = 3
 
 The files are merged shallowly in increasing order of priority. To enable deep merging, set `deep_merge=True` on the source directly.
 
+With `case_sensitive=False`, equivalent case spellings of an accepted field name or alias are matched before
+merging files. For example, a later file's `api_key` overrides an earlier file's `API_KEY`. This applies at the
+settings level (or within the selected TOML/YAML section); dictionary keys and precedence between distinct
+alias choices are unchanged.
+
 !!! warning
     The `deep_merge` option is **not available** through the `SettingsConfigDict`.
 
