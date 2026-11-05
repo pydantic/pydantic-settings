@@ -14,11 +14,12 @@ from pydantic import AliasChoices, AliasPath, TypeAdapter
 from pydantic._internal._typing_extra import (  # type: ignore[attr-defined]
     get_origin,
 )
-from pydantic._internal._utils import deep_update, is_model_class
+from pydantic._internal._utils import is_model_class
 from pydantic.fields import FieldInfo
 from typing_inspection.introspection import is_union_origin
 
 from ..exceptions import SettingsError
+from ..utils import deep_update
 from .types import (
     ConfigFileSourceType,
     EnvNoneType,
