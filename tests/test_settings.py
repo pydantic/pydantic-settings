@@ -1999,6 +1999,153 @@ def test_nested_model_default_partial_update_with_nested_field_without_discrimin
     assert Settings().pet == _Dog()
 
 
+def test_nested_settings_with_discriminator(env):
+
+    class Cat(BaseSettings):
+        t: Literal['cat']
+
+    class Dog(BaseSettings):
+        t: Literal['dog']
+
+    class Settings(BaseSettings):
+        animal: Cat | Dog = Field(discriminator='t')
+
+    env.set('t', 'cat')
+    assert isinstance(Settings().animal, Cat)
+    assert Settings().animal.t == 'cat'
+
+
+def test_nested_settings_with_discriminator_and_another_attributes(env):
+    class Cat(BaseSettings):
+        t: Literal['cat']
+
+    class Dog(BaseSettings):
+        t: Literal['dog']
+        x: str = 'default'
+
+    class Settings(BaseSettings):
+        animal: Cat | Dog = Field(discriminator='t')
+
+    env.set('t', 'dog')
+    env.set('x', 'x')
+    assert isinstance(Settings().animal, Dog)
+    assert Settings().animal.t == 'dog'
+    assert Settings().animal.x == 'x'
+
+
+def test_nested_settings_with_discriminator_and_alias(env):
+    class Cat(BaseSettings):
+        t: Literal['cat'] = Field(alias='TYPE')
+
+    class Dog(BaseSettings):
+        t: Literal['dog'] = Field(alias='TYPE')
+        x: str = 'default'
+
+    class Settings(BaseSettings):
+        animal: Cat | Dog = Field(discriminator='t')
+
+    env.set('TYPE', 'dog')
+    env.set('x', 'x')
+    assert isinstance(Settings().animal, Dog)
+    assert Settings().animal.t == 'dog'
+    assert Settings().animal.x == 'x'
+
+
+def test_nested_settings_with_discriminator_without_data_from_env(env):
+    class Cat(BaseSettings):
+        t: Literal['cat'] = Field(alias='TYPE')
+
+    class Dog(BaseSettings):
+        t: Literal['dog'] = Field(alias='TYPE')
+        x: str = 'default'
+
+    class Settings(BaseSettings):
+        animal: Cat | Dog = Field(discriminator='t')
+
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_nested_settings_with_2_discriminator_settings(env):
+    class Cat(BaseSettings):
+        t: Literal['cat'] = Field(alias='TYPE')
+
+    class Dog(BaseSettings):
+        t: Literal['dog'] = Field(alias='TYPE')
+        x: str = 'default'
+
+    class Settings(BaseSettings):
+        animal: Cat | Dog = Field(discriminator='t')
+        another_animal: Cat | Dog = Field(discriminator='t')
+
+    env.set('TYPE', 'cat')
+    assert Settings().animal.t == 'cat'
+    assert Settings().another_animal.t == 'cat'
+
+
+def test_nested_settings_with_discriminator_and_without_another_attributes(env):
+    class Cat(BaseSettings):
+        t: Literal['cat']
+
+    class Dog(BaseSettings):
+        t: Literal['dog']
+        x: str = 'default'
+
+    class Settings(BaseSettings):
+        animal: Dog | Cat = Field(discriminator='t')
+
+    env.set('t', 'cat')
+    env.set('x', 'x')
+    assert isinstance(Settings().animal, Cat)
+    assert Settings().animal.t == 'cat'
+
+
+def test_nested_settings_with_discriminator_and_default_value(env):
+    class Cat(BaseSettings):
+        t: Literal['cat']
+
+    class Dog(BaseSettings):
+        t: Literal['dog']
+
+    class Settings(BaseSettings):
+        animal: Dog | Cat = Field(discriminator='t', default_factory=lambda: Dog(t='dog'))
+
+    assert isinstance(Settings().animal, Dog)
+    assert Settings().animal.t == 'dog'
+
+
+def test_nested_settings_with_discriminator_and_discriminator_has_alias(env):
+
+    class Cat(BaseSettings):
+        t: Literal['cat']
+
+    class Dog(BaseSettings):
+        t: Literal['dog']
+
+    class Settings(BaseSettings):
+        animal: Cat | Dog = Field(discriminator='t', alias='MY_ANIMAl')
+
+    env.set('t', 'cat')
+    assert isinstance(Settings().animal, Cat)
+    assert Settings().animal.t == 'cat'
+
+
+def test_nested_settings_with_discriminator_has_alias_and_data(env):
+
+    class Cat(BaseSettings):
+        t: Literal['cat']
+
+    class Dog(BaseSettings):
+        t: Literal['dog']
+
+    class Settings(BaseSettings):
+        animal: Cat | Dog = Field(discriminator='t', alias='MY_ANIMAl')
+
+    env.set('MY_ANIMAl', '{"t": "cat"}')
+    assert isinstance(Settings().animal, Cat)
+    assert Settings().animal.t == 'cat'
+
+
 def test_env_str(env):
     class Settings(BaseSettings):
         apple: str = Field(None, validation_alias='BOOM')
