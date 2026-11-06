@@ -290,6 +290,16 @@ class TestTraversableSupport:
         # "test" value in file
         assert s.foobar == 'test'
 
+    @pytest.mark.parametrize('json_config_path', ['custom_with_path'], indirect=True)
+    def test_non_mapping_traversable(self, json_config_path: Traversable):
+        with json_config_path.open('w') as file:
+            json.dump(['private value'], file)
+
+        with pytest.raises(TypeError) as exc_info:
+            JsonConfigSettingsSource(BaseSettings, json_file=json_config_path)
+
+        assert str(exc_info.value) == f'Config file "{json_config_path.name}" must contain a mapping, got list'
+
 
 def test_json_file_is_read_as_utf8_by_default(tmp_path: Path, non_utf8_default_encoding: str) -> None:
     p = tmp_path / 'config.json'
@@ -338,3 +348,40 @@ def test_json_file_encoding_overrides_the_utf8_default(tmp_path: Path) -> None:
             return (JsonConfigSettingsSource(settings_cls),)
 
     assert Settings().city == 'café'
+
+
+@pytest.mark.parametrize('deep_merge', [False, True])
+@pytest.mark.parametrize('content', ['42', '"private value"', 'true', 'null', '["value"]', '[["key", "value"]]'])
+def test_json_non_mapping_config(tmp_path: Path, content: str, deep_merge: bool) -> None:
+    path = tmp_path / 'invalid.json'
+    path.write_text(content, encoding='utf-8')
+
+    with pytest.raises(TypeError) as exc_info:
+        JsonConfigSettingsSource(BaseSettings, json_file=path, deep_merge=deep_merge)
+
+    message = str(exc_info.value)
+    assert str(path) in message
+    assert 'mapping' in message
+    assert type(json.loads(content)).__name__ in message
+    assert 'private value' not in message
+
+
+@pytest.mark.parametrize('deep_merge', [False, True])
+def test_json_non_mapping_error_identifies_file(tmp_path: Path, deep_merge: bool) -> None:
+    valid = tmp_path / 'valid.json'
+    valid.write_text('{"key": "value"}', encoding='utf-8')
+    invalid = tmp_path / 'invalid.json'
+    invalid.write_text('[1]', encoding='utf-8')
+
+    with pytest.raises(TypeError) as exc_info:
+        JsonConfigSettingsSource(BaseSettings, json_file=[valid, invalid], deep_merge=deep_merge)
+
+    assert str(invalid) in str(exc_info.value)
+    assert str(valid) not in str(exc_info.value)
+
+
+def test_json_invalid_syntax_keeps_parser_error(tmp_path: Path) -> None:
+    path = tmp_path / 'invalid.json'
+    path.write_text('{', encoding='utf-8')
+    with pytest.raises(json.JSONDecodeError):
+        JsonConfigSettingsSource(BaseSettings, json_file=path)

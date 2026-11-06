@@ -816,3 +816,28 @@ def test_yaml_file_encoding_overrides_the_utf8_default(tmp_path: Path) -> None:
             return (YamlConfigSettingsSource(settings_cls),)
 
     assert Settings().city == 'café'
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
+@pytest.mark.parametrize('deep_merge', [False, True])
+@pytest.mark.parametrize('content', ['42', 'private value', 'true', '[value]', '[[key, value]]'])
+def test_yaml_non_mapping_config(tmp_path: Path, content: str, deep_merge: bool) -> None:
+    path = tmp_path / 'invalid.yaml'
+    path.write_text(content, encoding='utf-8')
+
+    with pytest.raises(TypeError) as exc_info:
+        YamlConfigSettingsSource(BaseSettings, yaml_file=path, deep_merge=deep_merge)
+
+    message = str(exc_info.value)
+    assert str(path) in message
+    assert 'mapping' in message
+    assert type(yaml.safe_load(content)).__name__ in message
+    assert 'private value' not in message
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
+@pytest.mark.parametrize('content', ['', '   ', 'null', 'false', '0', '[]'])
+def test_yaml_empty_values_keep_default_fallback(tmp_path: Path, content: str) -> None:
+    path = tmp_path / 'empty.yaml'
+    path.write_text(content, encoding='utf-8')
+    assert YamlConfigSettingsSource(BaseSettings, yaml_file=path)() == {}
