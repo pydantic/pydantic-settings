@@ -273,7 +273,10 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         if not field:
             return None
 
-        annotation = field.annotation if isinstance(field, FieldInfo) else field
+        # A named alias (TypeAliasType) is opaque to get_args and is_model_class, so resolve it first: without
+        # this, sub-fields behind an alias are never found and the nested env values are dropped or
+        # mis-decoded (#1047).
+        annotation = _resolve_type_alias(field.annotation if isinstance(field, FieldInfo) else field)
         if _lenient_issubclass(get_origin(annotation), dict):
             # get value type if it's a dict
             args = get_args(annotation)
@@ -283,7 +286,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             if type_has_key:
                 return type_has_key
         if _is_model_or_dataclass(annotation):
-            fields = _get_model_fields(annotation)  # type: ignore[arg-type]
+            fields = _get_model_fields(annotation)
             model_config = _get_model_config(annotation)
             # `case_sensitive is None` is here to be compatible with the old behavior.
             # Has to be removed in V3.
