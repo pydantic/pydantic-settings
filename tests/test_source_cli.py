@@ -3632,6 +3632,18 @@ def test_cli_user_settings_source_exceptions():
         CliSettingsSource(CfgWithSubCommand, add_subparsers_method=None)
 
 
+def test_cli_enum_default_through_type_alias(capsys, monkeypatch):
+    FruitAlias = typing_extensions.TypeAliasType('FruitAlias', FruitsEnum)
+
+    class Settings(BaseSettings, cli_parse_args=True):
+        fruit: FruitAlias = FruitsEnum.kiwi
+
+    monkeypatch.setattr('sys.argv', ['example', '--help'])
+    with pytest.raises(SystemExit):
+        Settings()
+    assert '(default: kiwi)' in capsys.readouterr().out
+
+
 def test_cli_enum_default_through_nested_annotation(capsys, monkeypatch):
     class Cfg(BaseSettings, cli_parse_args=True, cli_prog_name='example.py'):
         fruit: Annotated[FruitsEnum, Field(description='fruit')] | None = FruitsEnum.kiwi
