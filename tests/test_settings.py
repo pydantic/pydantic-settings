@@ -22,18 +22,20 @@ from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar
 from unittest import mock
 
 import pytest
-from annotated_types import Len, MinLen
+from annotated_types import GroupedMetadata, Len, MinLen
 from pydantic import (
     AfterValidator,
     AliasChoices,
     AliasGenerator,
     AliasPath,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Discriminator,
     Field,
     HttpUrl,
     Json,
+    PlainSerializer,
     PostgresDsn,
     PydanticUserError,
     RootModel,
@@ -6064,3 +6066,25 @@ def test_debug_secret_file_resolution(env, caplog, tmp_path):
     messages = [r.getMessage() for r in caplog.records]
     assert any(f'Loading secret file: {(tmp_path / "name").resolve()}' == m for m in messages)
     assert any('Secret file not found, skipping' in m and 'missing' in m for m in messages)
+
+
+def test_grouped_metadata_no_decode(env):
+    """Ensures NoDecode is respected when found inside GroupedMetadata."""
+
+    class CommaList(GroupedMetadata):
+        """A list[T] parsed from/serialized to a comma-delimited str."""
+
+        def __iter__(self):
+            yield NoDecode  # Required for the validator to receive a bare str
+            yield BeforeValidator(lambda value: value.split(',') if isinstance(value, str) else value)
+            yield PlainSerializer(lambda values: ','.join(values))
+
+    class Settings(BaseSettings):
+        tags: Annotated[list[str], CommaList()] = Field(default_factory=list)
+
+    # Set input as comma-delimited str
+    env.set('tags', 'python,programming')
+    settings = Settings()
+    # Confirm validated input and serialized output
+    assert settings.tags == ['python', 'programming']
+    assert settings.model_dump()['tags'] == 'python,programming'
