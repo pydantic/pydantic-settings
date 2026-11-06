@@ -448,15 +448,16 @@ def test_symlinked_dir_escaping_secrets_dir_is_not_walked(tmp_path):
 def _link_sorting_after_target(basedir: Path) -> None:
     basedir.joinpath('a_random').mkdir()
     basedir.joinpath('a_random', 'passwd').write_text('secret2')
-    basedir.joinpath('db').symlink_to('a_random')
+    basedir.joinpath('db').symlink_to('a_random', target_is_directory=True)
 
 
 def _kubernetes_volume(basedir: Path) -> None:
     # what the kubelet writes: ..<timestamp>/db/passwd, ..data -> ..<timestamp>, db -> ..data/db
     basedir.joinpath('..2026_10_16_00_00_00.123', 'db').mkdir(parents=True)
     basedir.joinpath('..2026_10_16_00_00_00.123', 'db', 'passwd').write_text('secret2')
-    basedir.joinpath('..data').symlink_to('..2026_10_16_00_00_00.123')
-    basedir.joinpath('db').symlink_to('..data/db')
+    # Windows needs to be told these are directory links, the chained target is not detected as one
+    basedir.joinpath('..data').symlink_to('..2026_10_16_00_00_00.123', target_is_directory=True)
+    basedir.joinpath('db').symlink_to(Path('..data', 'db'), target_is_directory=True)
 
 
 @pytest.mark.parametrize('build', [_link_sorting_after_target, _kubernetes_volume])
