@@ -5,9 +5,7 @@ from __future__ import annotations as _annotations
 from collections.abc import Iterable, Iterator, Mapping
 from typing import TYPE_CHECKING, Any, get_args, get_origin
 
-from pydantic._internal._utils import is_model_class
 from pydantic.alias_generators import to_snake
-from pydantic.dataclasses import is_pydantic_dataclass
 from pydantic.fields import FieldInfo
 from typing_inspection.introspection import is_union_origin
 
@@ -16,6 +14,7 @@ from ..utils import (
     InitState,
     _get_model_config,
     _get_model_fields,
+    _is_model_or_dataclass,
     _parse_env_none_str,
     _resolve_type_alias,
     _strip_annotated,
@@ -60,7 +59,7 @@ def _collect_nested_types(annotation: Any, models: list[Any], dict_value_types: 
         # A bare `typing.Dict` has no value type, so its keys are left as-is.
         if args := get_args(annotation):
             dict_value_types.append(args[-1])
-    elif is_model_class(annotation) or is_pydantic_dataclass(annotation):
+    elif _is_model_or_dataclass(annotation):
         models.append(annotation)
 
 

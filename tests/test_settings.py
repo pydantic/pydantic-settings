@@ -43,6 +43,8 @@ from pydantic import (
     StrictInt,
     Tag,
     ValidationError,
+    computed_field,
+    field_serializer,
     field_validator,
     model_validator,
 )
@@ -54,6 +56,7 @@ from typing_extensions import TypeAliasType, override
 
 from pydantic_settings import (
     BaseSettings,
+    CliApp,
     DotEnvSettingsSource,
     EnvSettingsSource,
     ForceDecode,
@@ -1241,7 +1244,7 @@ def test_class_nested_model_default_partial_update(env):
     assert SettingsDefaultsA().model_dump(exclude_unset=True) == {
         'nested_a': {'v0': True, 'v1': True},
         'nested_b': {'v0': True, 'v1': True},
-        'nested_c': {'v0': True, 'v1': True},
+        'nested_c': {'v0': True},
         'nested_d': {'v0': True, 'v1': True},
     }
 
@@ -1294,6 +1297,175 @@ def test_init_kwargs_nested_model_default_partial_update(env):
 
     s = Settings(v0='0', sub_model={'v1': 'init-v1', 'v2': b'init-v2', 'v3': 3, 'deep': DeepSubModel(v4='init-v4')})
     assert s.model_dump() == s_final
+
+
+@pytest.mark.parametrize('source', ['env', 'cli', 'init', 'init_model'])
+def test_nested_model_default_partial_update_fields_set_deep(env, source):
+    """Nested `model_fields_set` only holds the fields a source gave or that were set on the default object.
+
+    See: https://github.com/pydantic/pydantic-settings/issues/851
+    """
+
+    class DeepInner(BaseModel):
+        x: int = 1
+        y: int = 2
+
+    class Middle(BaseModel):
+        deep: DeepInner | None = DeepInner()
+        z: str = 'hello'
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        middle: Middle | None = Middle(z='set')
+
+    if source == 'env':
+        env.set('MIDDLE__DEEP__X', '99')
+        s = Settings()
+    elif source == 'cli':
+        s = CliApp.run(Settings, cli_args=['--middle.deep.x', '99'])
+    elif source == 'init':
+        s = Settings(middle={'deep': {'x': 99}})
+    else:
+        s = Settings(middle=Middle(deep=DeepInner(x=99), z='set'))
+    assert s.middle == Middle(deep=DeepInner(x=99), z='set')
+    assert s.middle.model_fields_set == {'deep', 'z'}
+    assert s.middle.deep.model_fields_set == {'x'}
+    assert s.model_dump(exclude_unset=True) == {'middle': {'deep': {'x': 99}, 'z': 'set'}}
+
+
+def test_nested_model_default_partial_update_fields_set_multiple_sources(env):
+    class Nested(BaseModel):
+        field_a: str = 'default_a'
+        field_b: int = 42
+        field_c: float = 3.14
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        nested: Nested = Nested()
+
+    env.set('NESTED__FIELD_B', '7')
+    s = CliApp.run(Settings, cli_args=['--nested.field_a', 'x'])
+    assert s.nested == Nested(field_a='x', field_b=7)
+    assert s.nested.model_fields_set == {'field_a', 'field_b'}
+
+
+def test_nested_model_default_partial_update_fields_set_keeps_default_values(env):
+    class Inner(BaseModel):
+        x: int = 1
+        y: int = 2
+
+    class Other(BaseModel):
+        x: int = 1
+
+    class Middle(BaseModel):
+        deep: Inner | None = Inner(x=5)
+        shown: Inner = Inner()
+        hidden: int = Field(0, exclude=True)
+        either: Other | Inner = Inner()
+        opts: dict = {'k': 1}
+        tags: list[str] = ['a']
+        w: int = 0
+        uid: str = Field(default_factory=lambda: uuid.uuid4().hex)
+        z: str = 'hello'
+
+        @field_serializer('shown')
+        def _shown(self, v: Inner) -> str:
+            return str(v)
+
+        @computed_field
+        @property
+        def size(self) -> int:
+            return len(self.tags)
+
+    default = Middle(w=0)
+    default.tags.append('b')
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        middle: Middle = default
+
+    env.set('MIDDLE__Z', 'x')
+    env.set('MIDDLE__SHOWN__X', '5')
+    env.set('MIDDLE__EITHER__X', '5')
+    env.set('MIDDLE__OPTS', '{"k": 2}')
+    env.set('MIDDLE__HIDDEN', '3')
+    s = Settings()
+    # A changed list, a `default_factory` value and a field set to its class default on the default object are kept,
+    # an untouched nested default is not marked as set and a union keeps its member
+    assert s.middle == Middle(
+        shown=Inner(x=5), hidden=3, either=Inner(x=5), opts={'k': 2}, tags=['a', 'b'], uid=default.uid, w=0, z='x'
+    )
+    assert s.middle.model_fields_set == {'shown', 'hidden', 'either', 'opts', 'tags', 'uid', 'w', 'z'}
+    assert s.middle.shown.model_fields_set == {'x'}
+    # A source can still set a nested default to None
+    assert Settings(middle={'deep': None}).middle.deep is None
+
+
+def test_nested_model_default_partial_update_uncomparable_default(env):
+    class Ambiguous:
+        def __bool__(self):
+            raise ValueError('ambiguous')
+
+    class Matrix:
+        # Like a numpy array: `==` gives a value that has no truth value
+        __hash__ = None
+
+        def __eq__(self, other):
+            return Ambiguous()
+
+    class Model(BaseModel):
+        model_config = ConfigDict(arbitrary_types_allowed=True)
+        weights: Matrix = Matrix()
+        lr: float = 0.1
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        model: Model = Model()
+
+    env.set('MODEL__LR', '0.5')
+    s = Settings()
+    assert s.model.lr == 0.5
+    assert s.model.model_fields_set == {'weights', 'lr'}
+
+
+def test_nested_model_default_partial_update_nan_default(env):
+    class Model(BaseModel):
+        ratio: float = float('nan')
+        lr: float = 0.1
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        model: Model = Model()
+
+    env.set('MODEL__LR', '0.5')
+    assert Settings().model.model_fields_set == {'lr'}
+
+
+def test_nested_model_default_partial_update_discriminator_on_model_default(env):
+    class Cat(BaseModel):
+        kind: Literal['cat'] = 'cat'
+        name: str = 'tom'
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        pet: Cat = Field(Cat(), discriminator='kind')
+
+    env.set('PET__KIND', 'dog')
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_nested_model_default_partial_update_root_model_default(env):
+    class Mounts(RootModel[dict[str, str]]):
+        root: dict[str, str] = {'root': '/', 'home': '/home'}
+
+    class Config(BaseModel):
+        mounts: Mounts = Mounts()
+        debug: bool = False
+
+    class Settings(BaseSettings, env_nested_delimiter='__', nested_model_default_partial_update=True):
+        mounts: Mounts = Mounts()
+        config: Config = Config()
+
+    env.set('MOUNTS__TMP', '/tmp')
+    env.set('CONFIG__MOUNTS__TMP', '/tmp')
+    s = Settings()
+    assert s.mounts.root == {'root': '/', 'home': '/home', 'tmp': '/tmp'}
+    assert s.config.mounts.root == {'root': '/', 'home': '/home', 'tmp': '/tmp'}
 
 
 def test_alias_resolution_init_source(env):
@@ -1536,6 +1708,136 @@ def test_nested_model_default_partial_update_with_stdlib_dataclass_aliased_discr
     assert SettingsDefault(root_field={'type': 'submodel2'}).root_field == DefaultField2(kind='submodel2')
 
 
+def test_nested_model_default_partial_update_with_stdlib_dataclass_local_forward_ref(env):
+    """Test that a stdlib dataclass default with a forward reference to a local class on another field works."""
+
+    class Local(BaseModel):
+        v: int = 0
+
+    @dataclasses.dataclass
+    class DA:
+        kind: Literal['a'] = 'a'
+        loc: 'Local' = dataclasses.field(default_factory=Local)
+
+    @dataclasses.dataclass
+    class DB:
+        kind: Literal['b'] = 'b'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', nested_model_default_partial_update=True)
+        p: DA | DB = Field(DA(), discriminator='kind')
+
+    env.set('P__KIND', 'a')
+    assert Settings().p == DA(kind='a', loc=Local(v=0))
+
+
+def test_nested_model_default_partial_update_with_stdlib_dataclass_alias_and_local_forward_ref(env):
+    """Test that a stdlib dataclass discriminator alias is found when another field names a local class."""
+
+    class Local(BaseModel):
+        v: int = 0
+
+    @dataclasses.dataclass
+    class DA:
+        kind: Annotated[Literal['a'], Field(validation_alias='type')] = 'a'
+        loc: 'Local' = dataclasses.field(default_factory=Local)
+        x: int = 0
+
+    @dataclasses.dataclass
+    class DB:
+        kind: Annotated[Literal['b'], Field(validation_alias='type')] = 'b'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', nested_model_default_partial_update=True)
+        p: DA | DB = Field(DA(x=5), discriminator='kind')
+
+    env.set('P__TYPE', 'b')
+    assert Settings().p == DB()
+
+
+def test_nested_model_default_partial_update_with_inherited_stdlib_dataclass_alias(env, monkeypatch):
+    """Test that a discriminator alias declared on a stdlib dataclass base in another module is found."""
+    base_module = type(sys)('_base_module_for_alias_test')
+    monkeypatch.setitem(sys.modules, base_module.__name__, base_module)
+    exec(
+        """
+from __future__ import annotations
+
+import dataclasses
+import typing as t
+
+import pydantic as pd
+
+
+@dataclasses.dataclass
+class BaseA:
+    kind: t.Annotated[t.Literal['a'], pd.Field(validation_alias='type')] = 'a'
+    x: int = 0
+""",
+        base_module.__dict__,
+    )
+
+    @dataclasses.dataclass
+    class DA(base_module.BaseA):
+        pass
+
+    @dataclasses.dataclass
+    class DB:
+        kind: Annotated[Literal['b'], Field(validation_alias='type')] = 'b'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', nested_model_default_partial_update=True)
+        p: DA | DB = Field(DA(x=5), discriminator='kind')
+
+    env.set('P__TYPE', 'b')
+    assert Settings().p == DB()
+
+
+def test_nested_model_default_partial_update_with_stdlib_dataclass_unresolvable_discriminator(env):
+    """Test that a discriminator whose own annotation can't be resolved is looked up by its name only."""
+    KindC = Literal['c']
+
+    @dataclasses.dataclass
+    class DC:
+        kind: 'KindC' = 'c'
+        x: int = 0
+
+    @dataclasses.dataclass
+    class DB:
+        kind: Literal['b'] = 'b'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', nested_model_default_partial_update=True)
+        p: DC | DB = Field(DC(), discriminator='kind')
+
+    env.set('P__KIND', 'c')
+    env.set('P__X', '3')
+    assert Settings().p == DC(x=3)
+
+
+def test_nested_model_default_partial_update_with_stdlib_dataclass_default_without_discriminator():
+    """Test that a stdlib dataclass default without the discriminator field still fails validation."""
+
+    @dataclasses.dataclass
+    class DA:
+        kind: Literal['a'] = 'a'
+
+    @dataclasses.dataclass
+    class DB:
+        kind: Literal['b'] = 'b'
+
+    @dataclasses.dataclass
+    class NoKind:
+        y: int = 0
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(nested_model_default_partial_update=True)
+        q: DA | DB = Field(NoKind(), discriminator='kind')
+
+    with pytest.raises(ValidationError, match='union_tag_not_found'):
+        Settings()
+
+
 class _BlackCat(BaseModel):
     model_config = ConfigDict(extra='forbid')
     pet_type: Literal['cat'] = 'cat'
@@ -1651,6 +1953,50 @@ def test_nested_model_default_partial_update_with_optional_nested_discriminated_
     assert Settings(pet={'pet_type': 'cat', 'color': 'white'}).pet == _WhiteCat()
     assert Settings(pet={'pet_type': 'cat', 'color': 'black'}).pet == _BlackCat(black_name='custom')
     assert Settings().pet == _BlackCat(black_name='custom')
+
+
+@pytest.mark.parametrize(
+    'nested_discriminator',
+    [Discriminator('color'), Field(discriminator='color'), Field(discriminator=Discriminator('color'))],
+    ids=['Discriminator', 'Field', 'Field-with-Discriminator'],
+)
+@pytest.mark.parametrize(
+    'env_vars,expected',
+    [
+        pytest.param({'PET__PET_TYPE': 'cat', 'PET__COLOR': 'white'}, _WhiteCat(), id='other-member'),
+        pytest.param({'PET__BLACK_NAME': 'x'}, _BlackCat(black_name='x'), id='same-member'),
+    ],
+)
+def test_nested_model_default_partial_update_with_nested_discriminator_forms(
+    env, nested_discriminator, env_vars, expected
+):
+    """Test that a nested discriminator is recognised whether it is given as a ``Discriminator`` or a ``Field``."""
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', nested_model_default_partial_update=True)
+        pet: Annotated[_BlackCat | _WhiteCat, nested_discriminator] | _Dog = Field(
+            _BlackCat(black_name='custom'), discriminator='pet_type'
+        )
+
+    for name, value in env_vars.items():
+        env.set(name, value)
+    assert Settings().pet == expected
+
+
+def test_nested_model_default_partial_update_with_nested_field_without_discriminator(env):
+    """Test that a nested ``Field`` without a discriminator doesn't stop the default from being partially updated."""
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', nested_model_default_partial_update=True)
+        pet: _BlackCat | Annotated[_Dog, Field(title='Dog')] = Field(
+            _BlackCat(black_name='custom'), discriminator='pet_type'
+        )
+
+    env.set('PET__BLACK_NAME', 'x')
+    assert Settings().pet == _BlackCat(black_name='x')
+    env.pop('PET__BLACK_NAME')
+    env.set('PET__PET_TYPE', 'dog')
+    assert Settings().pet == _Dog()
 
 
 def test_env_str(env):
@@ -3693,6 +4039,61 @@ def test_dotenv_extra_forbid(tmp_path):
     ]
 
 
+def test_dotenv_empty_extra_value_allow(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('a=b\nx=\nno_value')
+
+    class Settings(BaseSettings):
+        a: str
+
+        model_config = SettingsConfigDict(env_file=p, extra='allow')
+
+    assert Settings().model_dump() == {'a': 'b', 'x': ''}
+
+
+def test_dotenv_empty_extra_value_forbid(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('a=b\nx=\nno_value')
+
+    class Settings(BaseSettings):
+        a: str
+
+        model_config = SettingsConfigDict(env_file=p, extra='forbid')
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert exc_info.value.errors(include_url=False) == [
+        {'type': 'extra_forbidden', 'loc': ('x',), 'msg': 'Extra inputs are not permitted', 'input': ''}
+    ]
+
+
+@pytest.mark.parametrize('extra', ['allow', 'forbid'])
+def test_dotenv_empty_extra_value_ignore_empty(tmp_path, extra):
+    p = tmp_path / '.env'
+    p.write_text('a=b\nx=\nno_value')
+
+    class Settings(BaseSettings):
+        a: str
+
+        model_config = SettingsConfigDict(env_file=p, extra=extra, env_ignore_empty=True)
+
+    assert Settings().model_dump() == {'a': 'b'}
+
+
+def test_dotenv_empty_extra_value_with_prefix(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('APP_a=b\nAPP_x=')
+
+    class Settings(BaseSettings):
+        a: str
+
+        model_config = SettingsConfigDict(env_file=p, env_prefix='APP_', extra='allow')
+
+    s = Settings()
+    assert s.a == 'b'
+    assert s.model_extra == {'x': ''}
+
+
 def test_dotenv_extra_case_insensitive(tmp_path):
     p = tmp_path / '.env'
     p.write_text('a=b')
@@ -4261,6 +4662,150 @@ def test_env_nested_dict_complex_value_type(env):
     env.set('nested_field__key', '["a", "b"]')
     s = Settings()
     assert s.model_dump() == {'nested_field': {'key': ['a', 'b']}}
+
+
+@pytest.mark.parametrize(
+    'value_type,value',
+    [
+        (list[dict[str, str]], [{'k': 'v'}]),
+        (dict[str, list[str]], {'k': ['v']}),
+        (dict[str, dict[str, int]], {'k': {'nested': 1}}),
+        (list[list[dict[str, str]]], [[{'k': 'v'}]]),
+        (Annotated[list[dict[str, str]], Field(min_length=1)], [{'k': 'v'}]),
+    ],
+)
+def test_env_nested_dict_nested_container_value_type(env, value_type, value):
+    """Regression test for https://github.com/pydantic/pydantic-settings/issues/1107"""
+
+    class Settings(BaseSettings):
+        nested_field: dict[str, value_type]
+
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set('nested_field__key', json.dumps(value))
+    s = Settings()
+    assert s.model_dump() == {'nested_field': {'key': value}}
+
+
+class _DictOfListOfDicts(BaseModel):
+    d: dict[str, list[dict[str, str]]] = {}
+
+
+@pytest.mark.parametrize(
+    'annotation,env_name,expected',
+    [
+        (typing.Optional[dict[str, list[dict[str, str]]]], 'field__key', {'key': [{'k': 'v'}]}),  # noqa: UP045
+        (dict[str, list[dict[str, str]]] | None, 'field__key', {'key': [{'k': 'v'}]}),
+        (_DictOfListOfDicts, 'field__d__key', {'d': {'key': [{'k': 'v'}]}}),
+        (dict[str, _DictOfListOfDicts], 'field__a__d__key', {'a': {'d': {'key': [{'k': 'v'}]}}}),
+    ],
+)
+def test_env_nested_dict_nested_container_value_type_in_wrapper(env, annotation, env_name, expected):
+    """Regression test for https://github.com/pydantic/pydantic-settings/issues/1107"""
+
+    class Settings(BaseSettings):
+        field: annotation
+
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set(env_name, '[{"k": "v"}]')
+    s = Settings()
+    assert s.model_dump() == {'field': expected}
+
+
+def test_env_nested_dict_model_value_key_matching_model_field(env):
+    """A dict key that matches a field name of the dict's value model is still a dict key."""
+
+    class Value(BaseModel):
+        name: str
+        count: int = 0
+
+    class Settings(BaseSettings):
+        values: dict[str, Value]
+
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set('values__name', '{"name": "a", "count": 1}')
+    env.set('values__count', '{"name": "b", "count": 2}')
+    env.set('values__other__name', 'c')
+    s = Settings()
+    assert s.model_dump() == {
+        'values': {
+            'name': {'name': 'a', 'count': 1},
+            'count': {'name': 'b', 'count': 2},
+            'other': {'name': 'c', 'count': 0},
+        }
+    }
+
+
+ListOrStr = TypeAliasType('ListOrStr', list[str] | str)
+
+
+@pytest.mark.parametrize('nested', [False, True])
+@pytest.mark.parametrize(
+    'value_type,env_value,expected',
+    [
+        (list[str] | str, '[]', []),
+        (list[str] | str, '["a", "b"]', ['a', 'b']),
+        (list[str] | None, '[]', []),
+        (list[str] | None, '["a", "b"]', ['a', 'b']),
+        (typing.Optional[list[str]], '["a"]', ['a']),  # noqa: UP045
+        (typing.Union[list[str], str], '["a"]', ['a']),  # noqa: UP007
+        (ListOrStr, '["a"]', ['a']),
+        (Annotated[list[str] | str, Field(min_length=1)], '["a"]', ['a']),
+        (list[str] | str, 'plain', 'plain'),
+        (list[str] | str, '[invalid', '[invalid'),
+        (list[str] | str, '123', '123'),
+        (list[str] | str, 'true', 'true'),
+        (list[str] | str, 'null', 'null'),
+        (list[str] | str, '"quoted"', '"quoted"'),
+        (list[str] | int, '123', 123),
+        (int | str, '123', '123'),
+        # Json values are left to pydantic
+        (Json[list[str] | str], '["a"]', ['a']),
+        (Json[list[str] | str], '"a"', 'a'),
+    ],
+)
+def test_env_nested_dict_union_value_type(env, nested, value_type, env_value, expected):
+    class SubModel(BaseModel):
+        values: dict[str, value_type]
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='APP_', env_nested_delimiter='__')
+        config: SubModel if nested else dict[str, value_type]
+
+    env.set('APP_CONFIG__VALUES__KEY' if nested else 'APP_CONFIG__KEY', env_value)
+    expected_values = {'key': expected}
+    assert Settings().model_dump() == {'config': {'values': expected_values} if nested else expected_values}
+
+
+@pytest.mark.parametrize('nested', [False, True])
+@pytest.mark.parametrize(
+    'value_type,marker,enable_decoding,expected',
+    [
+        (list[str] | str, None, True, ['a']),
+        (list[str] | str, None, False, '["a"]'),
+        (list[str] | str, NoDecode, True, '["a"]'),
+        (list[str] | str, ForceDecode, False, ['a']),
+        # values of non-union types are decoded regardless of the decoding settings
+        (list[str], None, False, ['a']),
+        (list[str], NoDecode, True, ['a']),
+    ],
+)
+def test_env_nested_dict_union_value_decoding_settings(env, nested, value_type, marker, enable_decoding, expected):
+    # NoDecode/ForceDecode apply to the field containing the dict
+    dict_type = dict[str, value_type] if marker is None else Annotated[dict[str, value_type], marker]
+
+    class SubModel(BaseModel):
+        values: dict_type
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__', enable_decoding=enable_decoding)
+        config: SubModel if nested else dict_type
+
+    env.set('CONFIG__VALUES__KEY' if nested else 'CONFIG__KEY', '["a"]')
+    expected_values = {'key': expected}
+    assert Settings().model_dump() == {'config': {'values': expected_values} if nested else expected_values}
 
 
 def test_nested_models_leaf_vs_deeper_env_dict_assumed(env):
