@@ -14,6 +14,7 @@ from pydantic_settings import (
     SettingsError,
 )
 from pydantic_settings.sources.providers import env as env_provider
+from pydantic_settings.sources.providers import nested_secrets
 from pydantic_settings.sources.providers.nested_secrets import SECRETS_DIR_MAX_SIZE
 
 
@@ -383,7 +384,7 @@ def test_cyclic_symlink_does_not_inflate_size(env, tmp_path):
     A cyclic (or repeated) symlink inside ``secrets_dir`` must not cause the
     directory walk to loop. Otherwise a single small file gets visited many times,
     inflating the ``secrets_dir_max_size`` accounting (and the number of loaded
-    secrets). Each real directory must be traversed at most once.
+    secrets). A link back to a directory being walked must not be followed.
     """
     env.set('DB__USER', 'user')
 
@@ -442,6 +443,98 @@ def test_symlinked_dir_escaping_secrets_dir_is_not_walked(tmp_path):
     # only the in-tree file is yielded, and nothing outside secrets_dir is walked
     assert [f.name for f in files] == ['legit']
     assert all(d == resolved_secrets or resolved_secrets in d.parents for d in walked), walked
+
+
+def _link_sorting_after_target(basedir: Path) -> None:
+    basedir.joinpath('a_random').mkdir()
+    basedir.joinpath('a_random', 'passwd').write_text('secret2')
+    basedir.joinpath('db').symlink_to('a_random', target_is_directory=True)
+
+
+def _kubernetes_volume(basedir: Path) -> None:
+    # what the kubelet writes: ..<timestamp>/db/passwd, ..data -> ..<timestamp>, db -> ..data/db
+    basedir.joinpath('..2026_10_16_00_00_00.123', 'db').mkdir(parents=True)
+    basedir.joinpath('..2026_10_16_00_00_00.123', 'db', 'passwd').write_text('secret2')
+    # Windows needs to be told these are directory links, the chained target is not detected as one
+    basedir.joinpath('..data').symlink_to('..2026_10_16_00_00_00.123', target_is_directory=True)
+    basedir.joinpath('db').symlink_to(Path('..data', 'db'), target_is_directory=True)
+
+
+@pytest.mark.parametrize('build', [_link_sorting_after_target, _kubernetes_volume])
+def test_second_link_to_subdir_is_loaded(build, env, tmp_path):
+    """A directory reached through a second link is loaded under that name too (#1061)."""
+    env.set('DB__USER', 'user')
+    build(tmp_path)
+
+    class Settings(AppSettings):
+        model_config = SettingsConfigDict(
+            secrets_dir=tmp_path,
+            env_nested_delimiter='__',
+            secrets_nested_subdir=True,
+        )
+
+    assert Settings().model_dump() == {
+        'app_key': None,
+        'db': {'user': 'user', 'passwd': 'secret2'},
+    }
+
+
+def test_second_link_is_loaded_after_unreadable_first_link(env, tmp_path, monkeypatch):
+    env.set('DB__USER', 'user')
+    _link_sorting_after_target(tmp_path)
+    real_iterdir = Path.iterdir
+
+    def iterdir(self: Path):
+        # the real directory cannot be listed under its first name, only through the link
+        if self == tmp_path / 'a_random':
+            raise PermissionError(str(self))
+        return real_iterdir(self)
+
+    monkeypatch.setattr(Path, 'iterdir', iterdir)
+
+    class Settings(AppSettings):
+        model_config = SettingsConfigDict(
+            secrets_dir=tmp_path,
+            env_nested_delimiter='__',
+            secrets_nested_subdir=True,
+        )
+
+    assert Settings().model_dump() == {
+        'app_key': None,
+        'db': {'user': 'user', 'passwd': 'secret2'},
+    }
+
+
+def test_hidden_entries_are_not_loaded(tmp_path):
+    _kubernetes_volume(tmp_path)
+    tmp_path.joinpath('.hidden').write_text('x')
+
+    assert NestedSecretsSettingsSource.load_secrets(tmp_path.resolve()) == {f'db{sep}passwd': 'secret2'}
+
+
+def test_symlink_loop_entry_is_skipped(tmp_path):
+    tmp_path.joinpath('token').write_text('secret')
+    tmp_path.joinpath('loop').symlink_to('loop')
+
+    assert NestedSecretsSettingsSource.load_secrets(tmp_path.resolve()) == {'token': 'secret'}
+
+
+def test_repeated_links_do_not_walk_unbounded(tmp_path, monkeypatch):
+    """Each level links twice to the next one, so the number of paths doubles per level.
+
+    The tree holds a single empty file, so ``secrets_dir_max_size`` cannot stop the walk.
+    """
+    monkeypatch.setattr(nested_secrets, 'SECRETS_DIR_MAX_ENTRIES', 100)
+    depth = 10
+    for i in range(depth):
+        tmp_path.joinpath(f'd{i}').mkdir()
+    for i in range(depth - 1):
+        for name in ('a', 'b'):
+            tmp_path.joinpath(f'd{i}', name).symlink_to(tmp_path / f'd{i + 1}')
+    tmp_path.joinpath(f'd{depth - 1}', 'x').write_text('')
+
+    with pytest.raises(SettingsError, match='secrets_dir has more than 100 entries'):
+        NestedSecretsSettingsSource.load_secrets(tmp_path.resolve())
 
 
 @pytest.mark.parametrize(
