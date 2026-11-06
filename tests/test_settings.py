@@ -5374,6 +5374,45 @@ def test_dotenv_match_prefix(tmp_path, prefix, case_sensitive):
         assert s.model_dump() == v
 
 
+@pytest.mark.parametrize('filtering', [None, 'only_existing', 'match_prefix'])
+@pytest.mark.parametrize('prefix', ['', 'TEST_'])
+@pytest.mark.parametrize('case_sensitive', [True, False])
+def test_dotenv_filtering_ignores_unassigned_values(tmp_path, filtering, prefix, case_sensitive):
+    variables = {
+        'unset': None,
+        'extra_unset': None,
+        'explicit_empty': '',
+        'extra_empty': '',
+        'declared': 'loaded',
+    }
+    p = tmp_path / '.env'
+    p.write_text(
+        '\n'.join(
+            f'{prefix}{name if case_sensitive else name.upper()}' + (f'={value}' if value is not None else '')
+            for name, value in variables.items()
+        )
+    )
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=p,
+            env_prefix=prefix,
+            dotenv_filtering=filtering,
+            case_sensitive=case_sensitive,
+            env_ignore_empty=False,
+            extra='allow',
+        )
+
+        unset: str = 'default'
+        explicit_empty: str = 'default'
+        declared: str
+
+    expected = {'unset': 'default', 'explicit_empty': '', 'declared': 'loaded'}
+    if filtering != 'only_existing':
+        expected['extra_empty'] = ''
+    assert Settings().model_dump() == expected
+
+
 def test_dotenv_match_prefix_case_normalization_changes_length(tmp_path):
     # `'İ'.lower()` is two code points, so slicing with the raw `env_prefix` length
     # would under-strip and leave a partial prefix behind.
