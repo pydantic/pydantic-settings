@@ -1760,12 +1760,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         return alias_path_only_defaults[arg_name]
 
     def _serialize_value(self, value: Any) -> str:
-        if value is None:
-            return self.cli_parse_none_str
         # Write enum members by value, and convert container items such as enum members,
         # dates or decimals to JSON-compatible values, so the CLI parser can read them back.
         if isinstance(value, Enum):
             value = value.value
+        if value is None:
+            return self.cli_parse_none_str
         if isinstance(value, (dict, list, set, tuple)):
             return json.dumps(to_jsonable_python(value))
         return str(value)
