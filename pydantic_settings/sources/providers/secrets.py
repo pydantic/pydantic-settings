@@ -125,9 +125,20 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
                         logger.debug('Secret file not found, skipping: %s', (secrets_path / env_name).resolve())
                     continue
 
+                try:
+                    resolved_path = path.resolve()
+                except (OSError, RuntimeError):
+                    continue
+
                 if path.is_file():
+                    if secrets_path.resolve() not in resolved_path.parents:
+                        warnings.warn(
+                            f'attempted to load secret file "{path}" but it resolves outside of "{secrets_path}".',
+                            stacklevel=4,
+                        )
+                        continue
                     if debug:
-                        logger.debug('Loading secret file: %s', path.resolve())
+                        logger.debug('Loading secret file: %s', resolved_path)
                     # Explicit encoding: `read_text()` would otherwise decode with the
                     # locale encoding, so a UTF-8 secret is corrupted on a non-UTF-8
                     # Windows code page (silently, when every byte happens to map).
