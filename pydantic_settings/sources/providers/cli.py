@@ -769,8 +769,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             elif is_use_decode != is_decode:
                 raise SettingsError('Mixing Decode and NoDecode across different AliasPath fields is not allowed')
             if is_use_decode:
-                # escape only backslashes that are not already part of a JSON escape sequence
-                item = re.sub(r'\\(?![\\"/bfnrtu])', r'\\\\', item)
                 try:
                     unquoted_item = item[1:-1] if item.startswith('"') and item.endswith('"') else item
                     float(unquoted_item)
@@ -872,7 +870,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 if val_string == self.cli_parse_none_str:
                     val_string = 'null'
                 if val_string not in ('true', 'false', 'null') and not val_string.startswith('"'):
-                    val_string = f'"{val_string}"'
+                    # json.dumps escapes quotes and backslashes, so raw values
+                    # like Windows paths or quoted text become valid JSON strings
+                    val_string = json.dumps(val_string)
             merged_list.append(val_string)
         else:
             key, val = (kv for kv in val_string.split('=', 1))

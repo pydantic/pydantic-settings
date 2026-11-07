@@ -1675,6 +1675,8 @@ def test_cli_list_arg_keeps_raw_backslashes():
         values: list[str]
 
     assert CliApp.run(Cfg, cli_args=['--values', 'C:\\path']).values == ['C:\\path']
+    # a raw segment starting with a JSON escape letter must not be decoded
+    assert CliApp.run(Cfg, cli_args=['--values', 'C:\\repo\\file']).values == ['C:\\repo\\file']
 
 
 @pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
