@@ -3639,6 +3639,28 @@ def test_secrets_escaping_symlink_mocked_is_ignored(tmp_path, monkeypatch):
         assert Settings().model_dump() == {'passwd': None}
 
 
+def test_secrets_resolve_error_is_skipped(tmp_path, monkeypatch):
+    secrets_dir = tmp_path / 'secrets'
+    secrets_dir.mkdir()
+    file_path = secrets_dir / 'passwd'
+    file_path.write_text('val')
+
+    orig_resolve = Path.resolve
+
+    def mock_resolve(self, *args, **kwargs):
+        if self == file_path:
+            raise OSError('mocked resolve error')
+        return orig_resolve(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'resolve', mock_resolve)
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(secrets_dir=secrets_dir)
+        passwd: str | None = None
+
+    assert Settings().passwd is None
+
+
 def test_secrets_dotenv_precedence(tmp_path):
     s = tmp_path / 'foo'
     s.write_text('foo_secret_value_str')
