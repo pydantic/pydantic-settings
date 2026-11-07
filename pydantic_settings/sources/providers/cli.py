@@ -769,7 +769,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             elif is_use_decode != is_decode:
                 raise SettingsError('Mixing Decode and NoDecode across different AliasPath fields is not allowed')
             if is_use_decode:
-                item = item.replace('\\', '\\\\')
+                # escape only backslashes that are not already part of a JSON escape sequence
+                item = re.sub(r'\\(?![\\"/bfnrtu])', r'\\\\', item)
                 try:
                     unquoted_item = item[1:-1] if item.startswith('"') and item.endswith('"') else item
                     float(unquoted_item)

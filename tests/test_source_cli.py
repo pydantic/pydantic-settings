@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import json
 import os
 import re
 import sys
@@ -1657,6 +1658,23 @@ def test_cli_list_json_value_parsing(arg_spaces):
 
     assert CliApp.run(Cfg, cli_args=['--json_list', '"","","",""']).model_dump() == {'json_list': ['', '', '', '']}
     assert CliApp.run(Cfg, cli_args=['--json_list', ',,,']).model_dump() == {'json_list': ['', '', '', '']}
+
+
+def test_cli_list_arg_preserves_json_escapes():
+    class Cfg(BaseSettings):
+        values: list[str]
+
+    values = ['He said "hello"', 'plain']
+
+    assert CliApp.run(Cfg, cli_args=['--values', json.dumps(values)]).values == values
+    assert CliApp.run(Cfg, cli_args=CliApp.serialize(Cfg(values=values))).values == values
+
+
+def test_cli_list_arg_keeps_raw_backslashes():
+    class Cfg(BaseSettings):
+        values: list[str]
+
+    assert CliApp.run(Cfg, cli_args=['--values', 'C:\\path']).values == ['C:\\path']
 
 
 @pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
