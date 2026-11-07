@@ -333,6 +333,38 @@ positional arguments:
         )
 
 
+def test_cli_subcommand_help_with_percent(capsys, monkeypatch):
+    class Deploy(BaseModel):
+        target: int = 80
+
+    class App(BaseSettings, cli_prog_name='app'):
+        deploy: CliSubCommand[Deploy] = Field(description='Roll out until 100% of hosts are healthy')
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['app', '--help'])
+
+        with pytest.raises(SystemExit):
+            CliApp.run(App)
+        assert 'Roll out until 100% of hosts are healthy' in capsys.readouterr().out
+
+
+def test_cli_subcommand_help_with_percent_from_class_docs(capsys, monkeypatch):
+    class Deploy(BaseModel):
+        """Deploy to 100% of hosts."""
+
+        target: int = 80
+
+    class App(BaseSettings, cli_prog_name='app', cli_use_class_docs_for_groups=True):
+        deploy: CliSubCommand[Deploy] = Field()
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['app', '--help'])
+
+        with pytest.raises(SystemExit):
+            CliApp.run(App)
+        assert 'Deploy to 100% of hosts.' in capsys.readouterr().out
+
+
 @pytest.mark.parametrize('avoid_json', [True, False])
 def test_cli_alias_arg(capsys, monkeypatch, avoid_json):
     class Cfg(BaseSettings, cli_avoid_json=avoid_json):

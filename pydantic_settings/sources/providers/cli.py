@@ -1234,9 +1234,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     subcommand_arg.kwargs['allow_abbrev'] = False
                     subcommand_arg.kwargs['formatter_class'] = self._formatter_class
                     subcommand_arg.kwargs['description'] = _get_model_description(sub_model)
-                    subcommand_arg.kwargs['help'] = None if len(arg.sub_models) > 1 else field_info.description
+                    help_text = None if len(arg.sub_models) > 1 else field_info.description
                     if self.cli_use_class_docs_for_groups:
-                        subcommand_arg.kwargs['help'] = _get_model_description(sub_model)
+                        help_text = _get_model_description(sub_model)
+                    # argparse treats `help` as a format string, so escape `%` like `_help_format` does
+                    subcommand_arg.kwargs['help'] = (
+                        help_text.replace('%', '%%')
+                        if help_text and issubclass(type(self._root_parser), ArgumentParser)
+                        else help_text
+                    )
 
                     subparsers = (
                         self._add_subparsers(
