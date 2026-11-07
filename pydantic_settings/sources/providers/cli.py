@@ -776,7 +776,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 except ValueError:
                     pass
             elif item.startswith('"') and item.endswith('"'):
-                item = item[1:-1]
+                # no-decode values are used raw, so undo the JSON escaping
+                # applied when the tokenizer wrapped the raw argument
+                item = json.loads(item)
             decode_list.append(item)
         merged_list_str = ','.join(decode_list)
         return f'[{merged_list_str}]' if is_use_decode else merged_list_str

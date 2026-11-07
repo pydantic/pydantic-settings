@@ -1679,6 +1679,19 @@ def test_cli_list_arg_keeps_raw_backslashes():
     assert CliApp.run(Cfg, cli_args=['--values', 'C:\\repo\\file']).values == ['C:\\repo\\file']
 
 
+def test_cli_list_arg_keeps_raw_backslashes_nodecode():
+    class Cfg(BaseSettings):
+        values: Annotated[list[str], NoDecode]
+
+        @field_validator('values', mode='before')
+        @classmethod
+        def split_values(cls, values: str) -> list[str]:
+            return values.split(',')
+
+    values = ['C:\\repo\\file', 'plain']
+    assert CliApp.run(Cfg, cli_args=['--values', ','.join(values)]).values == values
+
+
 @pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
 @pytest.mark.parametrize('prefix', ['', 'child.'])
 def test_cli_dict_arg(prefix, arg_spaces):
