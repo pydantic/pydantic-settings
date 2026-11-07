@@ -5374,6 +5374,35 @@ def test_dotenv_match_prefix(tmp_path, prefix, case_sensitive):
         assert s.model_dump() == v
 
 
+def test_dotenv_match_prefix_uppercase_field(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('APP_DEBUG=1')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_file=p, env_prefix='APP_', dotenv_filtering='match_prefix')
+
+        DEBUG: bool = False
+
+    assert Settings().model_dump() == {'DEBUG': True}
+
+
+def test_dotenv_match_prefix_uppercase_nested_field(tmp_path):
+    p = tmp_path / '.env'
+    p.write_text('APP_DB__HOST=localhost')
+
+    class Sub(BaseModel):
+        host: str = 'default'
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=p, env_prefix='APP_', env_nested_delimiter='__', dotenv_filtering='match_prefix'
+        )
+
+        DB: Sub = Sub()
+
+    assert Settings().model_dump() == {'DB': {'host': 'localhost'}}
+
+
 def test_dotenv_match_prefix_case_normalization_changes_length(tmp_path):
     # `'İ'.lower()` is two code points, so slicing with the raw `env_prefix` length
     # would under-strip and leave a partial prefix behind.
