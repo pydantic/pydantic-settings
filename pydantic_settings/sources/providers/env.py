@@ -159,6 +159,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     if not allow_parse_failure:
                         raise
 
+                if self.env_parse_enums and isinstance(value, list):
+                    value = [self._enum_name_to_val(field.annotation, item) for item in value]
+
                 if isinstance(value, dict):
                     return deep_update(value, self.explode_env_vars(field_name, field, self.env_vars))
                 return value
@@ -168,6 +171,14 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
         # No value resolved for this field; `None` tells the caller to skip it.
         return None
+
+    @staticmethod
+    def _enum_name_to_val(annotation: Any, item: Any) -> Any:
+        """Map `item` to an enum member if it is the name of one in `annotation`, otherwise return it unchanged."""
+        if not isinstance(item, str):
+            return item
+        enum_val = _annotation_enum_name_to_val(annotation, item)
+        return item if enum_val is None else enum_val
 
     def _matches_alias_path_head(self, field: FieldInfo | Any | None, key: str) -> bool:
         """

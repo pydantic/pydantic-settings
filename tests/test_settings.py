@@ -4321,6 +4321,34 @@ def test_env_parse_enums_with_nested_annotated(env):
     assert Settings(_env_parse_enums=True).fruit == FruitsEnum.kiwi
 
 
+def test_env_parse_enums_in_list(env):
+    class Settings(BaseSettings):
+        fruits: list[FruitsEnum] = []
+        optional_fruits: list[FruitsEnum] | None = None
+        fruit_tuple: tuple[FruitsEnum, ...] = ()
+        words: list[str] = []
+
+    env.set('FRUITS', '["kiwi", "lime"]')
+    env.set('OPTIONAL_FRUITS', '["pear", 2]')
+    env.set('FRUIT_TUPLE', '["lime"]')
+    env.set('WORDS', '["kiwi"]')
+
+    s = Settings(_env_parse_enums=True)
+    assert s.fruits == [FruitsEnum.kiwi, FruitsEnum.lime]
+    assert s.optional_fruits == [FruitsEnum.pear, FruitsEnum.lime]
+    assert s.fruit_tuple == (FruitsEnum.lime,)
+    assert s.words == ['kiwi']
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(_env_parse_enums=False)
+    assert [err['loc'] for err in exc_info.value.errors(include_url=False)] == [
+        ('fruits', 0),
+        ('fruits', 1),
+        ('optional_fruits', 0),
+        ('fruit_tuple', 0),
+    ]
+
+
 def test_env_parse_none_str(env):
     env.set('x', 'null')
     env.set('y', 'y_override')
