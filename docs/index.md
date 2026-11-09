@@ -2682,6 +2682,11 @@ a large file under `secrets_dir`.
 
 If multiple `secrets_dir` passed, the limit applies to each directory independently.
 
+Symbolic links are followed only while they stay inside `secrets_dir`, and a directory reached through several
+links is loaded under each of its names. Hidden entries (names starting with `.`) are skipped. The walk also stops
+with a `SettingsError` after `SECRETS_DIR_MAX_ENTRIES` (10,000) entries, so a tree of repeated links cannot make
+loading hang.
+
 #### secrets_case_sensitive
 
 Same as `case_sensitive`, but works for secrets only. If not specified, defaults to `case_sensitive`.
