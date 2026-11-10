@@ -4349,6 +4349,19 @@ def test_env_parse_enums_in_list(env):
     ]
 
 
+def test_env_parse_enums_in_fixed_tuple_only_converts_enum_positions(env):
+    class Settings(BaseSettings):
+        pair: tuple[str, FruitsEnum]
+        mixed: tuple[FruitsEnum, str, FruitsEnum]
+
+    env.set('PAIR', '["kiwi", "lime"]')
+    env.set('MIXED', '["pear", "kiwi", "kiwi"]')
+
+    s = Settings(_env_parse_enums=True)
+    assert s.pair == ('kiwi', FruitsEnum.lime)
+    assert s.mixed == (FruitsEnum.pear, 'kiwi', FruitsEnum.kiwi)
+
+
 def test_env_parse_none_str(env):
     env.set('x', 'null')
     env.set('y', 'y_override')

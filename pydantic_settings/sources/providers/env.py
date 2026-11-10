@@ -2,7 +2,7 @@ from __future__ import annotations as _annotations
 
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -13,6 +13,7 @@ from typing import (
 
 from pydantic import AliasChoices, AliasPath, Json, TypeAdapter, ValidationError
 from pydantic.fields import FieldInfo
+from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
 
 from ...utils import _lenient_issubclass, deep_update
@@ -160,7 +161,12 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                         raise
 
                 if self.env_parse_enums and isinstance(value, list):
-                    value = [self._enum_name_to_val(field.annotation, item) for item in value]
+                    item_annotations = self._sequence_item_annotations(field.annotation, len(value))
+                    if item_annotations is not None:
+                        value = [
+                            self._enum_name_to_val(annotation, item)
+                            for annotation, item in zip(item_annotations, value, strict=True)
+                        ]
 
                 if isinstance(value, dict):
                     return deep_update(value, self.explode_env_vars(field_name, field, self.env_vars))
@@ -170,6 +176,34 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             return self._coerce_env_val_strict(field, value)
 
         # No value resolved for this field; `None` tells the caller to skip it.
+        return None
+
+    @staticmethod
+    def _sequence_item_annotations(annotation: Any, length: int) -> list[Any] | None:
+        """
+        The annotation of each item of a sequence field holding `length` items, or `None` if it cannot be told.
+
+        A homogeneous sequence such as `list[X]` or `tuple[X, ...]` gives `X` for every item, while a
+        fixed-length `tuple[X, Y]` gives each position its own annotation.
+        """
+        if typing_objects.is_annotated(get_origin(annotation)):
+            return EnvSettingsSource._sequence_item_annotations(get_args(annotation)[0], length)
+        if is_union_origin(get_origin(annotation)):
+            for arg in get_args(annotation):
+                if arg is type(None):
+                    continue
+                item_annotations = EnvSettingsSource._sequence_item_annotations(arg, length)
+                if item_annotations is not None:
+                    return item_annotations
+            return None
+        origin = get_origin(annotation)
+        args = get_args(annotation)
+        if origin is tuple:
+            if len(args) == 2 and args[1] is Ellipsis:
+                return [args[0]] * length
+            return list(args) if len(args) == length else None
+        if _lenient_issubclass(origin, (Sequence, set, frozenset)) and len(args) == 1:
+            return [args[0]] * length
         return None
 
     @staticmethod
