@@ -1074,6 +1074,10 @@ class CliApp:
                   The dictionary is flattened into multiple CLI flags using
                   environment-variable-style assignment.
                   Example: `--config host=localhost --config port=5432`
+                  Items that `key=value` cannot represent, such as nested containers,
+                  `None`, or text containing commas or quotes, are emitted as one-item
+                  JSON objects instead.
+                  Example: `--config '{"hosts": ["a", "b"]}'`
             positionals_first: Controls whether positional arguments should be serialized
                 first compared to optional arguments. Defaults to `False`.
 
