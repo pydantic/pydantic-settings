@@ -4362,6 +4362,16 @@ def test_env_parse_enums_in_fixed_tuple_only_converts_enum_positions(env):
     assert s.mixed == (FruitsEnum.pear, 'kiwi', FruitsEnum.kiwi)
 
 
+def test_env_parse_enums_in_annotated_list_inside_optional(env):
+    class Settings(BaseSettings):
+        fruits: Annotated[list[FruitsEnum], MinLen(1)] | None = None
+
+    env.set('FRUITS', '["kiwi", "lime"]')
+
+    s = Settings(_env_parse_enums=True)
+    assert s.fruits == [FruitsEnum.kiwi, FruitsEnum.lime]
+
+
 def test_env_parse_none_str(env):
     env.set('x', 'null')
     env.set('y', 'y_override')
