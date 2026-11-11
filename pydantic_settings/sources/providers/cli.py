@@ -1791,6 +1791,25 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 values = [f'{k}={v}' for k, v in json.loads(value).items()]
         return values
 
+    def _serialize_optional_arg(
+        self, arg: _CliArg, option: str, value: str | list[Any] | dict[str, Any], index: int
+    ) -> list[str | list[Any] | dict[str, Any]]:
+        is_variadic = arg.kwargs.get('nargs') in ('*', '+')
+        include_option = index == 0 or not is_variadic
+        action = arg.kwargs.get('action')
+
+        if action in (BooleanOptionalAction, 'store_true', 'store_false'):
+            return [option] if include_option else []
+
+        if (
+            not is_variadic
+            and isinstance(value, str)
+            and (value == '--' or value.startswith(tuple(self.cli_flag_prefix_char)))
+        ):
+            return [f'{option}={value}']
+
+        return [option, value] if include_option else [value]
+
     @staticmethod
     def _flatten_serialized_args(
         serialized_args: dict[str, list[str]],
@@ -1887,12 +1906,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     model_default, value, list_style=list_style, dict_style=dict_style, is_no_decode=arg.is_no_decode
                 )
             ):
-                if index == 0 or arg.kwargs.get('nargs') not in ('*', '+'):
-                    optional_args.append(f'{flag_chars}{arg_name}')
-
-                # If implicit bool flag, do not add a value
-                if arg.kwargs.get('action') not in (BooleanOptionalAction, 'store_true', 'store_false'):
-                    optional_args.append(coerced_value)
+                option = f'{flag_chars}{arg_name}'
+                optional_args.extend(self._serialize_optional_arg(arg, option, coerced_value, index))
 
         return {
             'optional': [json.dumps(value) if not isinstance(value, str) else value for value in optional_args],
