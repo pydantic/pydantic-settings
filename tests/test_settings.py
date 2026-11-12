@@ -68,6 +68,7 @@ from pydantic_settings import (
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
     SettingsConfigDict,
+    SettingsFieldOpts,
     SettingsError,
 )
 from pydantic_settings.main import _settings_cache
@@ -3073,6 +3074,40 @@ def test_dotenv_source_positional_args_order(cd_tmp_path):
     source = DotEnvSettingsSource(BaseSettings(), '.env', 'utf-8', 'only_existing')
     assert source.dotenv_filtering == 'only_existing'
     assert source.env_file_depth == 0
+
+
+def test_settings_field_opts_disable_init_source():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(case_sensitive=True)
+
+        clean: Annotated[bool, SettingsFieldOpts(disable_sources=(InitSettingsSource,))] = Field(
+            default=False, alias='CLEAN'
+        )
+
+    assert Settings(CLEAN=True).clean is False
+    assert Settings(clean=True).clean is False
+
+
+def test_settings_field_opts_disable_env_source(monkeypatch):
+    class Settings(BaseSettings):
+        clean: Annotated[str, SettingsFieldOpts(disable_sources=(EnvSettingsSource,))] = 'default'
+
+    monkeypatch.setenv('clean', 'from environment')
+    assert Settings().clean == 'default'
+
+
+def test_settings_field_opts_disable_dotenv_extra_with_prefix(tmp_path):
+    env_file = tmp_path / '.env'
+    env_file.write_text('APP_CLEAN=from-dotenv\nAPP_APP_FOO=extra-value\n')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='APP_', dotenv_filtering='match_prefix', extra='allow')
+
+        clean: Annotated[str, SettingsFieldOpts(disable_sources=(DotEnvSettingsSource,))] = 'default'
+
+    settings = Settings(_env_file=env_file)
+    assert settings.clean == 'default'
+    assert settings.model_extra == {'app_foo': 'extra-value'}
 
 
 def test_model_env_file_override_model_config(tmp_path):

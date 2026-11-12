@@ -60,6 +60,7 @@ from pydantic_settings import (
     NoDecode,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
+    SettingsFieldOpts,
     SettingsError,
 )
 from pydantic_settings.sources import (
@@ -284,6 +285,16 @@ def test_cli_source_prioritization(env):
 
     cfg = CfgPrioritized()
     assert cfg.model_dump() == {'foo': 'FOO FROM ENV'}
+
+
+def test_settings_field_opts_disable_cli_source():
+    class Settings(BaseSettings):
+        clean: Annotated[bool, SettingsFieldOpts(disable_sources=(CliSettingsSource,))] = False
+
+    assert '--clean' not in CliApp.format_help(Settings)
+    assert CliApp.serialize(Settings(clean=True)) == []
+    with pytest.raises(SystemExit):
+        CliApp.run(Settings, cli_args=['--clean'])
 
 
 def test_cli_alias_subcommand_and_positional_args(capsys, monkeypatch):
