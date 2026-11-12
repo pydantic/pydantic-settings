@@ -60,8 +60,8 @@ from pydantic_settings import (
     NoDecode,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
-    SettingsFieldOpts,
     SettingsError,
+    SettingsFieldOpts,
 )
 from pydantic_settings.sources import (
     CLI_SUPPRESS,

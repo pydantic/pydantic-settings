@@ -3081,10 +3081,10 @@ def test_settings_field_opts_disable_init_source():
         model_config = SettingsConfigDict(case_sensitive=True)
 
         clean: Annotated[bool, SettingsFieldOpts(disable_sources=(InitSettingsSource,))] = Field(
-            default=False, alias='CLEAN'
+            default=False, validation_alias=AliasPath('options', 'clean')
         )
 
-    assert Settings(CLEAN=True).clean is False
+    assert Settings(options={'clean': True}).clean is False
     assert Settings(clean=True).clean is False
 
 
