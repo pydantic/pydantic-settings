@@ -1811,6 +1811,13 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         # one, and an end-of-options marker cannot swallow a known arg that follows it.
         return known + serialized_args['unknown'] + serialized_args['subcommand']
 
+    def _get_serializable_fields(self, model: type[Any]) -> list[tuple[str, FieldInfo]]:
+        return [
+            (field_name, field_info)
+            for field_name, field_info in _get_model_fields(model).items()
+            if not self.field_is_disabled(field_info)
+        ]
+
     def _serialized_args(
         self,
         model: PydanticModel,
@@ -1824,9 +1831,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         positional_args: list[str | list[Any] | dict[str, Any]] = []
         subcommand_args: list[str] = []
         unknown_args: list[str] = []
-        for field_name, field_info in _get_model_fields(type(model) if _is_submodel else self.settings_cls).items():
-            if self.field_is_disabled(field_info):
-                continue
+        model_cls = type(model) if _is_submodel else self.settings_cls
+        for field_name, field_info in self._get_serializable_fields(model_cls):
             model_default = getattr(model, field_name)
             if field_info.default == model_default:
                 continue

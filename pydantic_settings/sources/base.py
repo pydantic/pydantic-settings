@@ -461,6 +461,16 @@ class InitSettingsSource(PydanticBaseSettingsSource):
         for key in init_kwargs:
             normalized_provided.setdefault(normalize(key), []).append(key)
         for field_name, field_info in settings_cls.model_fields.items():
+            if not self.field_is_disabled(field_info):
+                continue
+            disabled_alias_names, *_ = _get_alias_names(
+                field_name, field_info, case_sensitive=case_sensitive, validate_by_alias=validate_by_alias
+            )
+            if normalize(field_name) not in disabled_alias_names:
+                disabled_alias_names = (*disabled_alias_names, normalize(field_name))
+            for name in disabled_alias_names:
+                init_kwarg_names.difference_update(normalized_provided.get(name, ()))
+        for field_name, field_info in settings_cls.model_fields.items():
             _warn_if_field_info_incomplete(field_info, field_name, self._init_state)
             if self.field_is_disabled(field_info):
                 continue

@@ -3482,12 +3482,18 @@ variables or dotenv files:
 ```py
 from typing import Annotated
 
-from pydantic_settings import BaseSettings, DotEnvSettingsSource, EnvSettingsSource, SettingsFieldOpts
+from pydantic_settings import (
+    BaseSettings,
+    DotEnvSettingsSource,
+    EnvSettingsSource,
+    SettingsFieldOpts,
+)
 
 
 class BuildSettings(BaseSettings):
     clean: Annotated[
-        bool, SettingsFieldOpts(disable_sources=(EnvSettingsSource, DotEnvSettingsSource))
+        bool,
+        SettingsFieldOpts(disable_sources=(EnvSettingsSource, DotEnvSettingsSource)),
     ] = False
 ```
 
