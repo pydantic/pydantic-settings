@@ -135,10 +135,7 @@ class DotEnvSettingsSource(EnvSettingsSource):
                         self.field_is_disabled(field)
                         and any(
                             env_name == field_env_name
-                            or (
-                                self.env_prefix_target == 'variable'
-                                and env_name == f'{prefix}{field_env_name}'
-                            )
+                            or (self.env_prefix_target == 'variable' and env_name == f'{prefix}{field_env_name}')
                             or (
                                 self.env_nested_delimiter
                                 and (
