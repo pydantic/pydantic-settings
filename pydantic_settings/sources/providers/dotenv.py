@@ -131,6 +131,20 @@ class DotEnvSettingsSource(EnvSettingsSource):
                     # length (e.g. `'İ'` lowers to two code points), so the raw
                     # `env_prefix` length would under-strip and leave a partial prefix.
                     normalized_env_name = env_name[len(prefix) :]
+                    if any(
+                        self.field_is_disabled(field)
+                        and any(
+                            candidate == field_env_name
+                            or (
+                                self.env_nested_delimiter
+                                and candidate.startswith(f'{field_env_name}{self.env_nested_delimiter}')
+                            )
+                            for candidate in (env_name, normalized_env_name)
+                            for _, field_env_name, _ in self._extract_field_info(field, field_name)
+                        )
+                        for field_name, field in self.settings_cls.model_fields.items()
+                    ):
+                        continue
                     if (
                         self.env_nested_delimiter
                         and self.env_nested_delimiter in normalized_env_name

@@ -905,6 +905,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         positional_args, subcommand_args, optional_args = [], [], []
         validate_by_alias = _validate_by_alias_enabled(_get_model_config(model))
         for field_name, field_info in _get_model_fields(model).items():
+            if self.field_is_disabled(field_info):
+                continue
             if _CliSubCommand in field_info.metadata:
                 if not field_info.is_required():
                     raise SettingsError(f'subcommand argument {model.__name__}.{field_name} has a default value')
@@ -1119,6 +1121,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if not self.cli_prefix:
                 validate_by_alias = _validate_by_alias_enabled(self.config)
                 for field_name, field_info in _get_model_fields(self.settings_cls).items():
+                    if self.field_is_disabled(field_info):
+                        continue
                     alias_names, *_ = _get_alias_names(
                         field_name, field_info, case_sensitive=self.case_sensitive, validate_by_alias=validate_by_alias
                     )
@@ -1821,6 +1825,8 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         subcommand_args: list[str] = []
         unknown_args: list[str] = []
         for field_name, field_info in _get_model_fields(type(model) if _is_submodel else self.settings_cls).items():
+            if self.field_is_disabled(field_info):
+                continue
             model_default = getattr(model, field_name)
             if field_info.default == model_default:
                 continue

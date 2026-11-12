@@ -27,6 +27,7 @@ from .types import (
     ForceDecode,
     NoDecode,
     PydanticModel,
+    SettingsFieldOpts,
     _CliSubCommand,
 )
 from .utils import (
@@ -176,6 +177,11 @@ class PydanticBaseSettingsSource(ABC):
             Whether the field is complex.
         """
         return _annotation_is_complex(field.annotation, field.metadata, self._init_state)
+
+    def field_is_disabled(self, field: FieldInfo) -> bool:
+        """Return whether this source is disabled for a field by ``SettingsFieldOpts``."""
+        opts = next((item for item in _get_field_metadata(field) if isinstance(item, SettingsFieldOpts)), None)
+        return bool(opts and type(self) in opts.disable_sources)
 
     def prepare_field_value(self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool) -> Any:
         """
@@ -456,6 +462,8 @@ class InitSettingsSource(PydanticBaseSettingsSource):
             normalized_provided.setdefault(normalize(key), []).append(key)
         for field_name, field_info in settings_cls.model_fields.items():
             _warn_if_field_info_incomplete(field_info, field_name, self._init_state)
+            if self.field_is_disabled(field_info):
+                continue
             # Canonical (case-preserving) alias names determine the output key, so the value
             # still matches pydantic's validation aliases, which are always case-sensitive.
             canonical_alias_names, *_ = _get_alias_names(field_name, field_info, validate_by_alias=validate_by_alias)
@@ -718,6 +726,8 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
 
         for field_name, field in self.settings_cls.model_fields.items():
             _warn_if_field_info_incomplete(field, field_name, self._init_state)
+            if self.field_is_disabled(field):
+                continue
             try:
                 field_value, field_key, value_is_complex = self._get_resolved_field_value(field, field_name)
             except Exception as e:

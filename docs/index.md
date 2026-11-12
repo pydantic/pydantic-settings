@@ -3471,6 +3471,31 @@ class ExplicitFilePathSettings(BaseSettings):
         )
 ```
 
+## Excluding fields from settings sources
+
+Use `SettingsFieldOpts` in an `Annotated` field to prevent selected settings sources from populating that field.
+The option takes exact source classes, so list each source class that should be excluded.
+
+For example, to allow `clean` to be set by command-line arguments and initialization, but not by environment
+variables or dotenv files:
+
+```py
+from typing import Annotated
+
+from pydantic_settings import BaseSettings, DotEnvSettingsSource, EnvSettingsSource, SettingsFieldOpts
+
+
+class BuildSettings(BaseSettings):
+    clean: Annotated[
+        bool, SettingsFieldOpts(disable_sources=(EnvSettingsSource, DotEnvSettingsSource))
+    ] = False
+```
+
+Config-file sources can be listed individually, such as `PyprojectTomlConfigSettingsSource`. The option affects
+settings sources that use the shared field iteration provided by `InitSettingsSource` or
+`PydanticBaseEnvSettingsSource`; custom sources that build their result independently must apply the option
+themselves.
+
 ## Field value priority
 
 In the case where a value is specified for the same `Settings` field in multiple ways,
