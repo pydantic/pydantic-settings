@@ -68,8 +68,8 @@ from pydantic_settings import (
     PydanticBaseSettingsSource,
     SecretsSettingsSource,
     SettingsConfigDict,
-    SettingsFieldOpts,
     SettingsError,
+    SettingsFieldOpts,
 )
 from pydantic_settings.main import _settings_cache
 from pydantic_settings.sources import DefaultSettingsSource, read_env_file
@@ -3083,6 +3083,7 @@ def test_settings_field_opts_disable_init_source():
         clean: Annotated[bool, SettingsFieldOpts(disable_sources=(InitSettingsSource,))] = Field(
             default=False, validation_alias=AliasPath('options', 'clean')
         )
+        dry_run: Annotated[bool, SettingsFieldOpts(disable_sources=(InitSettingsSource,))] = False
 
     assert Settings(options={'clean': True}).clean is False
     assert Settings(clean=True).clean is False
