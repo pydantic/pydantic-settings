@@ -1308,7 +1308,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                         arg.kwargs, field_info, arg.preferred_alias, model_default
                     )
 
-                self._convert_bool_flag(arg.kwargs, field_info, model_default)
+                self._convert_bool_flag(arg.kwargs, field_name, field_info, model_default)
 
                 non_recursive_sub_models = [m for m in arg.sub_models if m not in model_path]
                 if (
@@ -1367,8 +1367,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if _is_mapping_annotation(field_info.annotation):
                 self._cli_dict_args[kwargs['dest']] = field_info.annotation
 
-    def _convert_bool_flag(self, kwargs: dict[str, Any], field_info: FieldInfo, model_default: Any) -> None:
+    def _convert_bool_flag(
+        self, kwargs: dict[str, Any], field_name: str, field_info: FieldInfo, model_default: Any
+    ) -> None:
         if kwargs['metavar'] == 'bool':
+            default = (
+                getattr(model_default, field_name)
+                if _is_model_or_dataclass(type(model_default))
+                else field_info.default
+            )
             meta_bool_flags = [
                 meta
                 for meta in field_info.metadata
@@ -1381,7 +1388,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 if bool_flag is _CliImplicitFlag:
                     bool_flag = (
                         _CliToggleFlag
-                        if self.cli_implicit_flags == 'toggle' and isinstance(field_info.default, bool)
+                        if self.cli_implicit_flags == 'toggle' and isinstance(default, bool)
                         else _CliDualFlag
                     )
                 if bool_flag is _CliDualFlag:
@@ -1389,7 +1396,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     kwargs['action'] = BooleanOptionalAction
                 elif bool_flag is _CliToggleFlag:
                     del kwargs['metavar']
-                    kwargs['action'] = 'store_false' if field_info.default else 'store_true'
+                    kwargs['action'] = 'store_false' if default else 'store_true'
 
     def _convert_positional_arg(
         self, kwargs: dict[str, Any], field_info: FieldInfo, preferred_alias: str, model_default: Any
