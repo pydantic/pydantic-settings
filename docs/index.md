@@ -2406,6 +2406,10 @@ class Settings(BaseSettings):
 
 If any of `secrets_dir` is missing, it is ignored, and warning is shown. If any of `secrets_dir` is a file, error is raised.
 
+A secret file that is a symbolic link is read only if it resolves to a file inside its `secrets_dir`, as in the
+Kubernetes secret volume layout (`passwd` linking to `..data/passwd`). A link that resolves outside `secrets_dir` is
+skipped with a warning.
+
 
 ### Use Case: Docker Secrets
 

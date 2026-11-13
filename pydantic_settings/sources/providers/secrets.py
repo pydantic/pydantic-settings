@@ -83,6 +83,9 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
             if not path.is_dir():
                 raise SettingsError(f'secrets_dir must reference a directory, not a {path_type_label(path)}')
 
+        # resolved once here, used to check that every secret file stays inside its directory
+        self._resolved_secrets_paths = {path: path.resolve() for path in self.secrets_paths}
+
         return super().__call__()
 
     @classmethod
@@ -128,9 +131,25 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
                         logger.debug('Secret file not found, skipping: %s', (secrets_path / env_name).resolve())
                     continue
 
+                try:
+                    resolved_path = path.resolve()
+                except (OSError, RuntimeError) as e:
+                    # e.g. a symlink loop, which raises `RuntimeError` on Python < 3.13
+                    warnings.warn(
+                        f'attempted to load secret file "{path}" but it could not be resolved: {e}',
+                        stacklevel=4,
+                    )
+                    continue
+
                 if path.is_file():
+                    if self._resolved_secrets_paths[secrets_path] not in resolved_path.parents:
+                        warnings.warn(
+                            f'attempted to load secret file "{path}" but it resolves outside of "{secrets_path}".',
+                            stacklevel=4,
+                        )
+                        continue
                     if debug:
-                        logger.debug('Loading secret file: %s', path.resolve())
+                        logger.debug('Loading secret file: %s', resolved_path)
                     # Explicit encoding: `read_text()` would otherwise decode with the
                     # locale encoding, so a UTF-8 secret is corrupted on a non-UTF-8
                     # Windows code page (silently, when every byte happens to map).
