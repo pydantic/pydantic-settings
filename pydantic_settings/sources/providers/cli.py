@@ -769,7 +769,6 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             elif is_use_decode != is_decode:
                 raise SettingsError('Mixing Decode and NoDecode across different AliasPath fields is not allowed')
             if is_use_decode:
-                item = item.replace('\\', '\\\\')
                 try:
                     unquoted_item = item[1:-1] if item.startswith('"') and item.endswith('"') else item
                     float(unquoted_item)
@@ -777,7 +776,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 except ValueError:
                     pass
             elif item.startswith('"') and item.endswith('"'):
-                item = item[1:-1]
+                # no-decode values are used raw, so undo the JSON escaping
+                # applied when the tokenizer wrapped the raw argument
+                item = json.loads(item)
             decode_list.append(item)
         merged_list_str = ','.join(decode_list)
         return f'[{merged_list_str}]' if is_use_decode else merged_list_str
@@ -871,7 +872,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 if val_string == self.cli_parse_none_str:
                     val_string = 'null'
                 if val_string not in ('true', 'false', 'null') and not val_string.startswith('"'):
-                    val_string = f'"{val_string}"'
+                    # json.dumps escapes quotes and backslashes, so raw values
+                    # like Windows paths or quoted text become valid JSON strings
+                    val_string = json.dumps(val_string)
             merged_list.append(val_string)
         else:
             key, val = (kv for kv in val_string.split('=', 1))
@@ -1234,9 +1237,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     subcommand_arg.kwargs['allow_abbrev'] = False
                     subcommand_arg.kwargs['formatter_class'] = self._formatter_class
                     subcommand_arg.kwargs['description'] = _get_model_description(sub_model)
-                    subcommand_arg.kwargs['help'] = None if len(arg.sub_models) > 1 else field_info.description
+                    help_text = None if len(arg.sub_models) > 1 else field_info.description
                     if self.cli_use_class_docs_for_groups:
-                        subcommand_arg.kwargs['help'] = _get_model_description(sub_model)
+                        help_text = _get_model_description(sub_model)
+                    # argparse treats `help` as a format string, so escape `%` like `_help_format` does
+                    subcommand_arg.kwargs['help'] = (
+                        help_text.replace('%', '%%')
+                        if help_text and issubclass(type(self._root_parser), ArgumentParser)
+                        else help_text
+                    )
 
                     subparsers = (
                         self._add_subparsers(

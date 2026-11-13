@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import json
 import os
 import re
 import sys
@@ -331,6 +332,38 @@ positional arguments:
   -h, --help  show this help message and exit
 """
         )
+
+
+def test_cli_subcommand_help_with_percent(capsys, monkeypatch):
+    class Deploy(BaseModel):
+        target: int = 80
+
+    class App(BaseSettings, cli_prog_name='app'):
+        deploy: CliSubCommand[Deploy] = Field(description='Roll out until 100% of hosts are healthy')
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['app', '--help'])
+
+        with pytest.raises(SystemExit):
+            CliApp.run(App)
+        assert 'Roll out until 100% of hosts are healthy' in capsys.readouterr().out
+
+
+def test_cli_subcommand_help_with_percent_from_class_docs(capsys, monkeypatch):
+    class Deploy(BaseModel):
+        """Deploy to 100% of hosts."""
+
+        target: int = 80
+
+    class App(BaseSettings, cli_prog_name='app', cli_use_class_docs_for_groups=True):
+        deploy: CliSubCommand[Deploy] = Field()
+
+    with monkeypatch.context() as m:
+        m.setattr(sys, 'argv', ['app', '--help'])
+
+        with pytest.raises(SystemExit):
+            CliApp.run(App)
+        assert 'Deploy to 100% of hosts.' in capsys.readouterr().out
 
 
 @pytest.mark.parametrize('avoid_json', [True, False])
@@ -1625,6 +1658,38 @@ def test_cli_list_json_value_parsing(arg_spaces):
 
     assert CliApp.run(Cfg, cli_args=['--json_list', '"","","",""']).model_dump() == {'json_list': ['', '', '', '']}
     assert CliApp.run(Cfg, cli_args=['--json_list', ',,,']).model_dump() == {'json_list': ['', '', '', '']}
+
+
+def test_cli_list_arg_preserves_json_escapes():
+    class Cfg(BaseSettings):
+        values: list[str]
+
+    values = ['He said "hello"', 'plain']
+
+    assert CliApp.run(Cfg, cli_args=['--values', json.dumps(values)]).values == values
+    assert CliApp.run(Cfg, cli_args=CliApp.serialize(Cfg(values=values))).values == values
+
+
+def test_cli_list_arg_keeps_raw_backslashes():
+    class Cfg(BaseSettings):
+        values: list[str]
+
+    assert CliApp.run(Cfg, cli_args=['--values', 'C:\\path']).values == ['C:\\path']
+    # a raw segment starting with a JSON escape letter must not be decoded
+    assert CliApp.run(Cfg, cli_args=['--values', 'C:\\repo\\file']).values == ['C:\\repo\\file']
+
+
+def test_cli_list_arg_keeps_raw_backslashes_nodecode():
+    class Cfg(BaseSettings):
+        values: Annotated[list[str], NoDecode]
+
+        @field_validator('values', mode='before')
+        @classmethod
+        def split_values(cls, values: str) -> list[str]:
+            return values.split(',')
+
+    values = ['C:\\repo\\file', 'plain']
+    assert CliApp.run(Cfg, cli_args=['--values', ','.join(values)]).values == values
 
 
 @pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
