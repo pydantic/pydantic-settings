@@ -2749,6 +2749,20 @@ def test_cli_bool_flags(monkeypatch, enforce_required, implicit_flags_mode):
     assert serialized_args == flag_args
 
 
+def test_cli_toggle_flags_use_nested_model_default():
+    class Sub(BaseModel):
+        toggle: CliToggleFlag[bool] = False
+        implicit: bool = False
+
+    class Cfg(BaseSettings, cli_implicit_flags='toggle'):
+        sub: Sub = Sub(toggle=True, implicit=True)
+
+    assert CliApp.run(Cfg, cli_args=[]).model_dump() == {'sub': {'toggle': True, 'implicit': True}}
+    assert CliApp.run(Cfg, cli_args=['--no-sub.toggle', '--no-sub.implicit']).model_dump() == {
+        'sub': {'toggle': False, 'implicit': False}
+    }
+
+
 def test_cli_avoid_json(capsys, monkeypatch):
     class SubModel(BaseModel):
         v1: int
