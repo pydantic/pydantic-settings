@@ -3658,7 +3658,8 @@ def test_secrets_resolve_error_is_skipped(tmp_path, monkeypatch):
         model_config = SettingsConfigDict(secrets_dir=secrets_dir)
         passwd: str | None = None
 
-    assert Settings().passwd is None
+    with pytest.warns(UserWarning, match='attempted to load secret file .* but it could not be resolved'):
+        assert Settings().passwd is None
 
 
 def test_secrets_dotenv_precedence(tmp_path):
