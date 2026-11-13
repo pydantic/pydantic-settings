@@ -12,6 +12,8 @@ from pydantic_settings.sources.base import _unwrap_optional_annotation
 from pydantic_settings.sources.types import SecretVersion
 from pydantic_settings.sources.utils import (
     _annotation_contains_types,
+    _annotation_enum_name_to_val,
+    _annotation_enum_val_to_name,
     _annotation_is_complex,
     _get_field_annotation_and_metadata,
     _get_union_members,
@@ -286,3 +288,19 @@ def test_validate_by_name_enabled_matches_pydantic(config: ConfigDict, expected:
     else:
         pydantic_validates_by_name = True
     assert pydantic_validates_by_name is expected
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason='Native recursive type aliases require Python 3.12')
+def test_enum_conversion_recursive_alias():
+    from enum import Enum
+
+    class Colour(Enum):
+        RED = 'red-value'
+
+    namespace = {'Colour': Colour}
+    exec('type Recursive = list[Recursive] | Colour', namespace)
+    annotation = namespace['Recursive']
+    assert _annotation_enum_name_to_val(annotation, 'RED') is Colour.RED
+    assert _annotation_enum_val_to_name(annotation, Colour.RED) == 'RED'
+    assert _annotation_enum_name_to_val(annotation, 'missing') is None
+    assert _annotation_enum_val_to_name(annotation, 'missing') is None

@@ -4412,6 +4412,40 @@ def test_env_parse_enums_with_nested_annotated(env):
     assert Settings(_env_parse_enums=True).fruit == FruitsEnum.kiwi
 
 
+@pytest.mark.parametrize('alias_kind', ['direct', 'chained', 'annotated', 'union', 'generic'])
+def test_env_parse_enums_through_type_alias(env, alias_kind):
+    FruitAlias = TypeAliasType('FruitAlias', FruitsEnum)
+    T = TypeVar('T')
+    annotation = {
+        'direct': FruitAlias,
+        'chained': TypeAliasType('OuterAlias', FruitAlias),
+        'annotated': TypeAliasType('AnnotatedAlias', Annotated[FruitAlias, Field(description='fruit')]),
+        'union': TypeAliasType('UnionAlias', FruitAlias | None),
+        'generic': TypeAliasType('GenericAlias', T | None, type_params=(T,))[FruitsEnum],
+    }[alias_kind]
+
+    class Nested(BaseModel):
+        fruit: annotation
+
+    class Settings(BaseSettings, env_nested_delimiter='__', env_parse_enums=True):
+        fruit: annotation
+        nested: Nested
+
+    env.set('FRUIT', 'kiwi')
+    env.set('NESTED__FRUIT', 'lime')
+    settings = Settings()
+    assert settings.fruit is FruitsEnum.kiwi
+    assert settings.nested.fruit is FruitsEnum.lime
+
+    with pytest.raises(ValidationError):
+        Settings(_env_parse_enums=False)
+    env.set('FRUIT', 'unknown')
+    with pytest.raises(ValidationError):
+        Settings()
+    env.set('FRUIT', '0')
+    assert Settings().fruit is FruitsEnum.pear
+
+
 def test_env_parse_none_str(env):
     env.set('x', 'null')
     env.set('y', 'y_override')
