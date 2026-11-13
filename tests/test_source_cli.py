@@ -1627,6 +1627,51 @@ def test_cli_list_json_value_parsing(arg_spaces):
     assert CliApp.run(Cfg, cli_args=['--json_list', ',,,']).model_dump() == {'json_list': ['', '', '', '']}
 
 
+def test_cli_null_clears_optional_collection():
+    class Cfg(BaseSettings):
+        nums: list[int] | None = [1]
+        names: list[str] | None = ['a']
+        mapping: dict[str, int] | None = {'k': 1}
+
+    assert CliApp.run(Cfg, cli_args=['--nums', 'null']).model_dump() == {
+        'nums': None,
+        'names': ['a'],
+        'mapping': {'k': 1},
+    }
+    assert CliApp.run(Cfg, cli_args=['--names', 'null']).model_dump() == {
+        'nums': [1],
+        'names': None,
+        'mapping': {'k': 1},
+    }
+    assert CliApp.run(Cfg, cli_args=['--mapping', 'null']).model_dump() == {
+        'nums': [1],
+        'names': ['a'],
+        'mapping': None,
+    }
+    # Only the whole value clears the field, a null among other items stays an item
+    with pytest.raises(ValidationError):
+        CliApp.run(Cfg, cli_args=['--nums', '1', '--nums', 'null'])
+
+
+def test_cli_null_clears_optional_collection_custom_none_str():
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(cli_parse_none_str='nil')
+
+        nums: list[int] | None = [1]
+        mapping: dict[str, int] | None = {'k': 1}
+
+    assert CliApp.run(Cfg, cli_args=['--nums', 'nil']).model_dump() == {'nums': None, 'mapping': {'k': 1}}
+    assert CliApp.run(Cfg, cli_args=['--mapping', 'nil']).model_dump() == {'nums': [1], 'mapping': None}
+
+
+def test_cli_null_stays_an_item_of_non_optional_list():
+    class Cfg(BaseSettings):
+        nums: list[int | None]
+
+    assert CliApp.run(Cfg, cli_args=['--nums', 'null']).model_dump() == {'nums': [None]}
+    assert CliApp.run(Cfg, cli_args=['--nums', '1', '--nums', 'null']).model_dump() == {'nums': [1, None]}
+
+
 @pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
 @pytest.mark.parametrize('prefix', ['', 'child.'])
 def test_cli_dict_arg(prefix, arg_spaces):

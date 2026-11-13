@@ -695,6 +695,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     parsed_args[field_name] = ','.join(val) if val else val
                     continue
 
+                if val == [self.cli_parse_none_str] and self._is_optional_field(field_name):
+                    # The whole value is the none string, which clears an Optional field as it does for a scalar.
+                    parsed_args[field_name] = self.cli_parse_none_str
+                    continue
+
                 parsed_args[field_name] = self._merge_parsed_list(val, field_name)
             elif field_name.endswith(':subcommand') and val is not None:
                 selected_subcommands.append(self._parser_map[field_name][val].dest)
@@ -711,6 +716,12 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     parsed_args[field_name] = snake_val
 
         return selected_subcommands
+
+    def _is_optional_field(self, field_name: str) -> bool:
+        cli_arg_map = self._parser_map.get(field_name, {})
+        return bool(cli_arg_map) and type(None) in _get_union_members(
+            next(iter(cli_arg_map.values())).field_info.annotation
+        )
 
     def _is_nested_alias_path_only_workaround(
         self, parsed_args: dict[str, list[str] | str], field_name: str, val: list[str]
