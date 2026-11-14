@@ -3,6 +3,7 @@
 from __future__ import annotations as _annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from importlib.resources.abc import Traversable as Traversable  # noqa: PLC0414  (explicit re-export)
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -22,6 +23,21 @@ class EnvNoneType(str):
 
 class NoDecode:
     """Annotation to prevent decoding of a field value."""
+
+
+@dataclass(frozen=True, init=False)
+class SettingsFieldOpts:
+    """Settings-specific options for a model field.
+
+    Args:
+        disable_sources: Settings source classes that must not populate this field.
+            Source classes are matched exactly; list each source class to disable.
+    """
+
+    disable_sources: tuple[type[Any], ...]
+
+    def __init__(self, disable_sources: Sequence[type[Any]] = ()) -> None:
+        object.__setattr__(self, 'disable_sources', tuple(disable_sources))
 
 
 class ForceDecode:
@@ -98,6 +114,7 @@ __all__ = [
     'PathType',
     'PydanticModel',
     'SecretVersion',
+    'SettingsFieldOpts',
     '_CliDualFlag',
     '_CliExplicitFlag',
     '_CliImplicitFlag',

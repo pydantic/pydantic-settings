@@ -44,6 +44,7 @@ from .types import (
     NoDecode,
     PathType,
     PydanticModel,
+    SettingsFieldOpts,
 )
 
 __all__ = [
@@ -84,6 +85,7 @@ __all__ = [
     'PydanticModel',
     'PyprojectTomlConfigSettingsSource',
     'SecretsSettingsSource',
+    'SettingsFieldOpts',
     'TomlConfigSettingsSource',
     'YamlConfigSettingsSource',
     'get_subcommand',
