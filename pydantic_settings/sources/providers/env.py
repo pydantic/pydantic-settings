@@ -3,15 +3,28 @@ from __future__ import annotations as _annotations
 import json
 import os
 from collections.abc import Mapping
+from functools import reduce
+from operator import or_
 from typing import (
     TYPE_CHECKING,
+    Annotated,
     Any,
     cast,
     get_args,
     get_origin,
 )
 
-from pydantic import AliasChoices, AliasPath, Json, TypeAdapter, ValidationError
+from pydantic import (
+    AfterValidator,
+    AliasChoices,
+    AliasPath,
+    BeforeValidator,
+    Json,
+    PlainValidator,
+    TypeAdapter,
+    ValidationError,
+    WrapValidator,
+)
 from pydantic.fields import FieldInfo
 from typing_inspection.introspection import is_union_origin
 
@@ -47,6 +60,32 @@ def _environ_is_case_insensitive() -> bool:
     requested case sensitivity is honored as-is.
     """
     return os.name == 'nt' and isinstance(os.environ, os._Environ)
+
+
+def _annotation_for_coercion(annotation: Any) -> Any:
+    """Retain type coercion and constraints without running the field's functional validators."""
+    resolved = _resolve_type_alias(annotation)
+    origin = get_origin(resolved)
+    args = get_args(resolved)
+    if origin is Annotated:
+        inner, *metadata = args
+        coerced_inner = _annotation_for_coercion(inner)
+        coercion_metadata = [
+            item
+            for item in metadata
+            if not isinstance(item, (BeforeValidator, AfterValidator, PlainValidator, WrapValidator))
+        ]
+        if coerced_inner is inner and len(coercion_metadata) == len(metadata):
+            return annotation
+        if coercion_metadata:
+            return cast('Any', Annotated)[(coerced_inner, *coercion_metadata)]
+        return coerced_inner
+    if is_union_origin(origin):
+        coercion_args = tuple(_annotation_for_coercion(arg) for arg in args)
+        if all(new is old for new, old in zip(coercion_args, args, strict=True)):
+            return annotation
+        return reduce(or_, coercion_args)
+    return annotation
 
 
 class EnvSettingsSource(PydanticBaseEnvSettingsSource):
@@ -400,13 +439,16 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     return value
                 has_json = any(isinstance(md, Json) for md in metadata)  # type: ignore[misc]
                 if not has_json and not _annotation_contains_types(annotation, (Json,), is_instance=True):
+                    # Only coerce here. Final model validation must run functional validators
+                    # once, including validators embedded in union members or type aliases.
+                    adapter = TypeAdapter(_annotation_for_coercion(field.annotation))
                     try:
-                        return TypeAdapter(cast('Any', field.annotation)).validate_python(value)
+                        return adapter.validate_python(value)
                     except ValidationError:
                         # Try JSON decoding as fallback (e.g. 'true' -> True for StrictBool)
                         decoded = json.loads(value)
                         if not isinstance(decoded, str):
-                            return TypeAdapter(cast('Any', field.annotation)).validate_python(decoded)
+                            return adapter.validate_python(decoded)
                         raise
         except (ValidationError, json.JSONDecodeError):
             # Allow validation error to be raised at time of instantiation
