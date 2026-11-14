@@ -14,6 +14,7 @@ from typing import (
     get_origin,
 )
 
+from annotated_types import BaseMetadata, GroupedMetadata
 from pydantic import (
     AfterValidator,
     AliasChoices,
@@ -26,6 +27,7 @@ from pydantic import (
     WrapValidator,
 )
 from pydantic.fields import FieldInfo
+from pydantic.types import Strict
 from typing_inspection.introspection import is_union_origin
 
 from ...utils import _lenient_issubclass, deep_update
@@ -63,18 +65,32 @@ def _environ_is_case_insensitive() -> bool:
 
 
 def _annotation_for_coercion(annotation: Any) -> Any:
-    """Retain type coercion and constraints without running the field's functional validators."""
+    """Defer after validators while preserving early validators' existing coercion semantics.
+
+    ``None`` means an early validator was found, so the original adapter must be used.
+    """
     resolved = _resolve_type_alias(annotation)
     origin = get_origin(resolved)
     args = get_args(resolved)
     if origin is Annotated:
         inner, *metadata = args
+        if any(isinstance(item, (BeforeValidator, PlainValidator, WrapValidator)) for item in metadata):
+            return None
         coerced_inner = _annotation_for_coercion(inner)
-        coercion_metadata = [
-            item
-            for item in metadata
-            if not isinstance(item, (BeforeValidator, AfterValidator, PlainValidator, WrapValidator))
-        ]
+        if coerced_inner is None:
+            return None
+        defer_constraints = coerced_inner is not inner
+        coercion_metadata: list[Any] = []
+        for item in metadata:
+            if isinstance(item, AfterValidator):
+                defer_constraints = True
+            elif defer_constraints and isinstance(item, (FieldInfo, GroupedMetadata)):
+                # Constraints after a validator must see its transformed value. Strict
+                # still controls primitive coercion, so preserve it separately.
+                items = item.metadata if isinstance(item, FieldInfo) else item
+                coercion_metadata.extend(md for md in items if isinstance(md, Strict))
+            elif not defer_constraints or isinstance(item, Strict) or not isinstance(item, BaseMetadata):
+                coercion_metadata.append(item)
         if coerced_inner is inner and len(coercion_metadata) == len(metadata):
             return annotation
         if coercion_metadata:
@@ -82,6 +98,8 @@ def _annotation_for_coercion(annotation: Any) -> Any:
         return coerced_inner
     if is_union_origin(origin):
         coercion_args = tuple(_annotation_for_coercion(arg) for arg in args)
+        if any(arg is None for arg in coercion_args):
+            return None
         if all(new is old for new, old in zip(coercion_args, args, strict=True)):
             return annotation
         return reduce(or_, coercion_args)
@@ -439,9 +457,12 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     return value
                 has_json = any(isinstance(md, Json) for md in metadata)  # type: ignore[misc]
                 if not has_json and not _annotation_contains_types(annotation, (Json,), is_instance=True):
-                    # Only coerce here. Final model validation must run functional validators
-                    # once, including validators embedded in union members or type aliases.
-                    adapter = TypeAdapter(_annotation_for_coercion(field.annotation))
+                    # After validators run during final model validation. Early validators
+                    # retain their existing source coercion and input semantics.
+                    coercion_annotation = _annotation_for_coercion(field.annotation)
+                    adapter = TypeAdapter(
+                        cast('Any', field.annotation if coercion_annotation is None else coercion_annotation)
+                    )
                     try:
                         return adapter.validate_python(value)
                     except ValidationError:
