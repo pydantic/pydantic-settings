@@ -638,7 +638,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         }
         if selected_subcommands:
             last_selected_subcommand = max(selected_subcommands, key=len)
-            if not any(field_name for field_name in parsed_args if f'{last_selected_subcommand}.' in field_name):
+            if not any(field_name.startswith(f'{last_selected_subcommand}.') for field_name in parsed_args):
                 parsed_args[last_selected_subcommand] = '{}'
         else:
             last_selected_subcommand = ''
