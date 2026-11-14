@@ -3607,6 +3607,97 @@ def test_secrets_file_is_a_directory_multiple_one(tmp_path):
     assert conf.foo == 'secret_value'  # value obtained from first directory
 
 
+def test_secrets_symlink_file_escaping_secrets_dir_is_ignored(tmp_path):
+    secrets_dir = tmp_path / 'secrets'
+    secrets_dir.mkdir()
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    outside.joinpath('passwd').write_text('outside-value')
+
+    link = secrets_dir / 'passwd'
+    try:
+        link.symlink_to(outside / 'passwd')
+    except OSError:
+        pytest.skip('symlinks not supported on this platform')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(secrets_dir=secrets_dir)
+
+        passwd: str | None = None
+
+    with pytest.warns(UserWarning, match='attempted to load secret file .* but it resolves outside of'):
+        assert Settings().model_dump() == {'passwd': None}
+
+
+def test_secrets_in_tree_symlink_is_followed(tmp_path):
+    secrets_dir = tmp_path / 'secrets'
+    secrets_dir.mkdir()
+    data_dir = secrets_dir / '..data'
+    data_dir.mkdir()
+    (data_dir / 'passwd').write_text('in-tree-value')
+
+    link = secrets_dir / 'passwd'
+    try:
+        link.symlink_to(data_dir / 'passwd')
+    except OSError:
+        pytest.skip('symlinks not supported on this platform')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(secrets_dir=secrets_dir)
+
+        passwd: str | None = None
+
+    assert Settings().model_dump() == {'passwd': 'in-tree-value'}
+
+
+def test_secrets_escaping_symlink_mocked_is_ignored(tmp_path, monkeypatch):
+    secrets_dir = tmp_path / 'secrets'
+    secrets_dir.mkdir()
+    file_path = secrets_dir / 'passwd'
+    file_path.write_text('outside-value')
+    outside_path = tmp_path / 'outside' / 'passwd'
+
+    orig_resolve = Path.resolve
+
+    def mock_resolve(self, *args, **kwargs):
+        if self == file_path:
+            return outside_path
+        return orig_resolve(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'resolve', mock_resolve)
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(secrets_dir=secrets_dir)
+
+        passwd: str | None = None
+
+    with pytest.warns(UserWarning, match='attempted to load secret file .* but it resolves outside of'):
+        assert Settings().model_dump() == {'passwd': None}
+
+
+def test_secrets_resolve_error_is_skipped(tmp_path, monkeypatch):
+    secrets_dir = tmp_path / 'secrets'
+    secrets_dir.mkdir()
+    file_path = secrets_dir / 'passwd'
+    file_path.write_text('val')
+
+    orig_resolve = Path.resolve
+
+    def mock_resolve(self, *args, **kwargs):
+        if self == file_path:
+            raise OSError('mocked resolve error')
+        return orig_resolve(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'resolve', mock_resolve)
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(secrets_dir=secrets_dir)
+        passwd: str | None = None
+
+    with pytest.warns(UserWarning, match='attempted to load secret file .* but it could not be resolved'):
+        assert Settings().passwd is None
+
+
 def test_secrets_dotenv_precedence(tmp_path):
     s = tmp_path / 'foo'
     s.write_text('foo_secret_value_str')
