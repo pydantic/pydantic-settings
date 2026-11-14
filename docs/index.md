@@ -196,6 +196,12 @@ class Settings(BaseSettings):
     The default `env_prefix` is `''` (empty string). `env_prefix` is not only for env settings but also for
     dotenv files, secrets, and other sources.
 
+    By default, `EnvSettingsSource` only loads values for fields declared on the model (`only_existing`).
+    When using `extra='allow'` and an `env_prefix`, you can opt in to capturing undeclared prefix-matching
+    environment variables by setting `env_filtering='match_prefix'`. Note that when `env_nested_delimiter` is set,
+    undeclared prefix-matching variables with delimiters (e.g. `APP_foo__bar`) end up as flat keys in extras
+    (such as `foo__bar`), matching the dotenv behavior.
+
 If you want to change the environment variable name for a single field, you can use an alias.
 
 There are two ways to do this:

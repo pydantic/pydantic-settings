@@ -17,7 +17,7 @@ from typing_inspection.introspection import is_union_origin
 
 from ...utils import _lenient_issubclass, deep_update
 from ..base import PydanticBaseEnvSettingsSource
-from ..types import EnvNoneType, EnvPrefixTarget
+from ..types import EnvFiltering, EnvNoneType, EnvPrefixTarget
 from ..utils import (
     InitState,
     _annotation_contains_types,
@@ -66,6 +66,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         env_parse_none_str: str | None = None,
         env_parse_enums: bool | None = None,
         _init_state: InitState | None = None,
+        env_filtering: EnvFiltering | None = None,
     ) -> None:
         super().__init__(
             settings_cls,
@@ -81,6 +82,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         self.env_nested_max_split = _resolve_setting(env_nested_max_split, self.config, 'env_nested_max_split')
         self.maxsplit = (self.env_nested_max_split or 0) - 1
         self.env_prefix_len = len(self.env_prefix)
+        self.env_filtering = _resolve_setting(env_filtering, self.config, 'env_filtering')
 
         self.env_vars = self._load_env_vars()
 
@@ -412,6 +414,64 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             # Allow validation error to be raised at time of instantiation
             pass
         return value
+
+    def __call__(self) -> dict[str, Any]:
+        data: dict[str, Any] = super().__call__()
+        return self._filter_and_merge_data(data)
+
+    def _filter_and_merge_data(self, data: dict[str, Any]) -> dict[str, Any]:
+        if self.env_filtering == 'match_prefix':
+            return self._merge_extra_env_vars(data)
+        return data
+
+    def _collect_field_claims(self) -> tuple[set[str], tuple[str, ...], set[str]]:
+        """Precompute env var names, complex nested prefixes, and field/alias keys
+        claimed by model fields.
+        """
+        claimed_env_names: set[str] = set()
+        complex_prefixes: list[str] = []
+        claimed_keys: set[str] = set()
+
+        for field_name, field in self.settings_cls.model_fields.items():
+            claimed_keys.add(self._apply_case_sensitive(field_name))
+            annotation, metadata = _get_field_annotation_and_metadata(field)
+            is_complex = _annotation_is_complex(annotation, metadata, self._init_state) or (
+                is_union_origin(get_origin(annotation)) and _union_is_complex(annotation, metadata, self._init_state)
+            )
+            for field_key, field_env_name, _ in self._extract_field_info(field, field_name):
+                claimed_env_names.add(field_env_name)
+                claimed_keys.add(self._apply_case_sensitive(field_key))
+                if self.env_nested_delimiter and (
+                    is_complex or self._matches_alias_path_head(field, self._apply_case_sensitive(field_key))
+                ):
+                    complex_prefixes.append(f'{field_env_name}{self.env_nested_delimiter}')
+
+        return claimed_env_names, tuple(complex_prefixes), claimed_keys
+
+    def _merge_extra_env_vars(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Merge prefix-matching undeclared environment variables into ``data``."""
+        if not self.env_prefix:
+            return data
+
+        claimed_env_names, complex_prefixes, claimed_keys = self._collect_field_claims()
+        prefix = self._apply_case_sensitive(self.env_prefix)
+
+        for env_name, env_value in self.env_vars.items():
+            if env_value is None or not env_name.startswith(prefix):
+                continue
+            normalized_env_name = env_name[len(prefix) :]
+            if (
+                normalized_env_name in data
+                or env_name in claimed_env_names
+                or normalized_env_name in claimed_keys
+                or (bool(complex_prefixes) and env_name.startswith(complex_prefixes))
+            ):
+                continue
+            if self.env_parse_none_str is not None and isinstance(env_value, EnvNoneType):
+                env_value = None
+            data[normalized_env_name] = env_value
+
+        return data
 
     def __repr__(self) -> str:
         return (
