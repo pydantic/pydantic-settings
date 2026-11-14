@@ -4630,6 +4630,31 @@ def test_cli_serialize_non_default_values():
     assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
 
 
+@pytest.mark.parametrize('value', ['--help', '--', '-x', '-1e3'])
+def test_cli_serialize_option_looking_string_values(value):
+    class Cfg(BaseSettings):
+        pattern: str = 'default'
+
+    cfg = Cfg(pattern=value)
+    serialized_cli_args = CliApp.serialize(cfg)
+
+    assert serialized_cli_args == [f'--pattern={value}']
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
+@pytest.mark.parametrize('value', ['--', '+help'])
+def test_cli_serialize_option_looking_string_values_with_custom_prefix(value):
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(cli_flag_prefix_char='+')
+        pattern: str = 'default'
+
+    cfg = Cfg(pattern=value)
+    serialized_cli_args = CliApp.serialize(cfg)
+
+    assert serialized_cli_args == [f'++pattern={value}']
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
+
+
 @pytest.mark.parametrize(
     'config, expected_none_str',
     [
