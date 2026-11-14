@@ -3,16 +3,31 @@ from __future__ import annotations as _annotations
 import json
 import os
 from collections.abc import Mapping
+from functools import reduce
+from operator import or_
 from typing import (
     TYPE_CHECKING,
+    Annotated,
     Any,
     cast,
     get_args,
     get_origin,
 )
 
-from pydantic import AliasChoices, AliasPath, Json, TypeAdapter, ValidationError
+from annotated_types import BaseMetadata, GroupedMetadata
+from pydantic import (
+    AfterValidator,
+    AliasChoices,
+    AliasPath,
+    BeforeValidator,
+    Json,
+    PlainValidator,
+    TypeAdapter,
+    ValidationError,
+    WrapValidator,
+)
 from pydantic.fields import FieldInfo
+from pydantic.types import Strict
 from typing_inspection.introspection import is_union_origin
 
 from ...utils import _lenient_issubclass, deep_update
@@ -47,6 +62,48 @@ def _environ_is_case_insensitive() -> bool:
     requested case sensitivity is honored as-is.
     """
     return os.name == 'nt' and isinstance(os.environ, os._Environ)
+
+
+def _annotation_for_coercion(annotation: Any) -> Any:
+    """Defer after validators while preserving early validators' existing coercion semantics.
+
+    ``None`` means an early validator was found, so the original adapter must be used.
+    """
+    resolved = _resolve_type_alias(annotation)
+    origin = get_origin(resolved)
+    args = get_args(resolved)
+    if origin is Annotated:
+        inner, *metadata = args
+        if any(isinstance(item, (BeforeValidator, PlainValidator, WrapValidator)) for item in metadata):
+            return None
+        coerced_inner = _annotation_for_coercion(inner)
+        if coerced_inner is None:
+            return None
+        defer_constraints = coerced_inner is not inner
+        coercion_metadata: list[Any] = []
+        for item in metadata:
+            if isinstance(item, AfterValidator):
+                defer_constraints = True
+            elif defer_constraints and isinstance(item, (FieldInfo, GroupedMetadata)):
+                # Constraints after a validator must see its transformed value. Strict
+                # still controls primitive coercion, so preserve it separately.
+                items = item.metadata if isinstance(item, FieldInfo) else item
+                coercion_metadata.extend(md for md in items if isinstance(md, Strict))
+            elif not defer_constraints or isinstance(item, Strict) or not isinstance(item, BaseMetadata):
+                coercion_metadata.append(item)
+        if coerced_inner is inner and len(coercion_metadata) == len(metadata):
+            return annotation
+        if coercion_metadata:
+            return cast('Any', Annotated)[(coerced_inner, *coercion_metadata)]
+        return coerced_inner
+    if is_union_origin(origin):
+        coercion_args = tuple(_annotation_for_coercion(arg) for arg in args)
+        if any(arg is None for arg in coercion_args):
+            return None
+        if all(new is old for new, old in zip(coercion_args, args, strict=True)):
+            return annotation
+        return reduce(or_, coercion_args)
+    return annotation
 
 
 class EnvSettingsSource(PydanticBaseEnvSettingsSource):
@@ -400,13 +457,19 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     return value
                 has_json = any(isinstance(md, Json) for md in metadata)  # type: ignore[misc]
                 if not has_json and not _annotation_contains_types(annotation, (Json,), is_instance=True):
+                    # After validators run during final model validation. Early validators
+                    # retain their existing source coercion and input semantics.
+                    coercion_annotation = _annotation_for_coercion(field.annotation)
+                    adapter = TypeAdapter(
+                        cast('Any', field.annotation if coercion_annotation is None else coercion_annotation)
+                    )
                     try:
-                        return TypeAdapter(cast('Any', field.annotation)).validate_python(value)
+                        return adapter.validate_python(value)
                     except ValidationError:
                         # Try JSON decoding as fallback (e.g. 'true' -> True for StrictBool)
                         decoded = json.loads(value)
                         if not isinstance(decoded, str):
-                            return TypeAdapter(cast('Any', field.annotation)).validate_python(decoded)
+                            return adapter.validate_python(decoded)
                         raise
         except (ValidationError, json.JSONDecodeError):
             # Allow validation error to be raised at time of instantiation
