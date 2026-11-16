@@ -243,7 +243,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         field: FieldInfo | Any | None,
         key: str,
         case_sensitive: bool | None = None,
-        _seen: set[int] | None = None,
+        _seen: tuple[Any, ...] = (),
     ) -> FieldInfo | None:
         """
         Find the field in a sub model by key(env name)
@@ -280,12 +280,11 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         # A named alias (TypeAliasType) is opaque to get_args and is_model_class, so resolve it first: without
         # this, sub-fields behind an alias are never found and the nested env values are dropped or
         # mis-decoded (#1047).
-        annotation = _resolve_type_alias(field.annotation if isinstance(field, FieldInfo) else field)
-        seen = _seen or set()
-        annotation_id = id(annotation)
-        if annotation_id in seen:
+        raw_annotation = field.annotation if isinstance(field, FieldInfo) else field
+        if raw_annotation in _seen:
             return None
-        seen = seen | {annotation_id}
+        seen = (*_seen, raw_annotation)
+        annotation = _resolve_type_alias(raw_annotation)
         if _lenient_issubclass(get_origin(annotation), dict):
             # get value type if it's a dict
             args = get_args(annotation)

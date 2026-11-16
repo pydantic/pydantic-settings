@@ -844,6 +844,26 @@ def test_nested_recursive_type_alias_does_not_recurse(env):
         namespace['Settings']()
 
 
+@pytest.mark.skipif(sys.version_info < (3, 12), reason='recursive type statement requires Python 3.12')
+def test_nested_generic_recursive_type_alias_does_not_recurse(env):
+    namespace = {
+        '__name__': __name__,
+        'BaseSettings': BaseSettings,
+        'SettingsConfigDict': SettingsConfigDict,
+    }
+    exec(
+        'type Recursive[T] = list[Recursive[T] | T]\n'
+        'class Settings(BaseSettings):\n'
+        '    model_config = SettingsConfigDict(env_nested_delimiter="__")\n'
+        '    value: Recursive[int] = []',
+        namespace,
+    )
+
+    env.set('value__x', '1')
+    with pytest.raises(ValidationError, match='valid list'):
+        namespace['Settings']()
+
+
 def test_nested_type_alias_parsing(env):
     Values = TypeAliasType('Values', TypeAliasType('Inner', list[int]))
 
