@@ -239,7 +239,11 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
     # We have to change the method to a non-static method and use
     # `self.case_sensitive` instead in V3.
     def next_field(
-        self, field: FieldInfo | Any | None, key: str, case_sensitive: bool | None = None
+        self,
+        field: FieldInfo | Any | None,
+        key: str,
+        case_sensitive: bool | None = None,
+        _seen: set[int] | None = None,
     ) -> FieldInfo | None:
         """
         Find the field in a sub model by key(env name)
@@ -277,12 +281,17 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         # this, sub-fields behind an alias are never found and the nested env values are dropped or
         # mis-decoded (#1047).
         annotation = _resolve_type_alias(field.annotation if isinstance(field, FieldInfo) else field)
+        seen = _seen or set()
+        annotation_id = id(annotation)
+        if annotation_id in seen:
+            return None
+        seen = seen | {annotation_id}
         if _lenient_issubclass(get_origin(annotation), dict):
             # get value type if it's a dict
             args = get_args(annotation)
             return args[-1] if args else None
         for type_ in get_args(annotation):
-            type_has_key = self.next_field(type_, key, case_sensitive)
+            type_has_key = self.next_field(type_, key, case_sensitive, seen)
             if type_has_key:
                 return type_has_key
         if _is_model_or_dataclass(annotation):
