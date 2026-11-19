@@ -359,6 +359,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     allow_json_failure = True
                     if not is_complex and self._raw_union_is_complex(target_field):
                         env_val = self._decode_union_value(last_key, parent_field, env_val)
+                    if not is_complex and self.env_parse_enums and isinstance(env_val, str):
+                        enum_val = _annotation_enum_name_to_val(target_field, env_val)
+                        env_val = env_val if enum_val is None else enum_val
                 else:
                     # nested field type is dict
                     is_complex, allow_json_failure = True, True
