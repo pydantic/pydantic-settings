@@ -100,6 +100,9 @@ class _CliInternalArgParser(ArgumentParser):
 # argparse reads args like `-1` or `-.5` as values, not options
 _NEGATIVE_NUMBER = re.compile(r'^-\d+$|^-\d*\.\d+$')
 
+# a number as JSON writes it; `float()` also accepts `.5`, `007`, `+1`, `1_000` and `inf`, which JSON rejects
+_JSON_NUMBER = re.compile(r'-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][-+]?\d+)?')
+
 
 def _count_option_values(action: Action | None) -> int | None:
     """Count the args that `action` takes as values, `None` for any number."""
@@ -770,12 +773,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 raise SettingsError('Mixing Decode and NoDecode across different AliasPath fields is not allowed')
             if is_use_decode:
                 item = item.replace('\\', '\\\\')
-                try:
-                    unquoted_item = item[1:-1] if item.startswith('"') and item.endswith('"') else item
-                    float(unquoted_item)
+                unquoted_item = item[1:-1] if item.startswith('"') and item.endswith('"') else item
+                if _JSON_NUMBER.fullmatch(unquoted_item):
                     item = f'"{unquoted_item}"' if is_num_type_str else unquoted_item
-                except ValueError:
-                    pass
             elif item.startswith('"') and item.endswith('"'):
                 item = item[1:-1]
             decode_list.append(item)
@@ -865,9 +865,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             raise SettingsError('Mismatched quotes')
         val_string = item[:consumed].strip()
         if merge_type in (list, str):
-            try:
-                float(val_string)
-            except ValueError:
+            if not _JSON_NUMBER.fullmatch(val_string):
                 if val_string == self.cli_parse_none_str:
                     val_string = 'null'
                 if val_string not in ('true', 'false', 'null') and not val_string.startswith('"'):
