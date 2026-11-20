@@ -59,6 +59,28 @@ class TestPyprojectTomlConfigSettingsSource:
         assert obj.toml_data == {'field': 'some'}
         assert obj.toml_file_path == pyproject
 
+    def test___init___explicit_expanduser(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """Test __init__ explicit file with ~ expansion."""
+        monkeypatch.setenv('HOME', str(tmp_path))
+        monkeypatch.setenv('USERPROFILE', str(tmp_path))
+        pyproject = tmp_path / 'child' / 'pyproject.toml'
+        pyproject.parent.mkdir()
+        pyproject.write_text(SOME_TOML_DATA)
+        obj = PyprojectTomlConfigSettingsSource(SimpleSettings, Path('~/child/pyproject.toml'))
+        assert obj.toml_table_header == ('some', 'table')
+        assert obj.toml_data == {'field': 'some'}
+        assert obj.toml_file_path == pyproject.resolve()
+
+    def test___init___explicit_expanduser_missing(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """Test __init__ explicit file with ~ expansion when file is missing."""
+        monkeypatch.setenv('HOME', str(tmp_path))
+        monkeypatch.setenv('USERPROFILE', str(tmp_path))
+        pyproject = tmp_path / 'child' / 'pyproject.toml'
+        obj = PyprojectTomlConfigSettingsSource(SimpleSettings, Path('~/child/pyproject.toml'))
+        assert obj.toml_table_header == ('some', 'table')
+        assert not obj.toml_data
+        assert obj.toml_file_path == pyproject.resolve()
+
     def test___init___explicit_missing(self, mocker: MockerFixture, tmp_path: Path) -> None:
         """Test __init__ explicit file missing."""
         mocker.patch(f'{MODULE}.Path.cwd', return_value=tmp_path)
