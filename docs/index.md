@@ -1900,6 +1900,48 @@ Ordinary nested models share their parent's parser. Declaring multiple `CliUnkno
 still duplicates its leftovers; this case is not covered by the subcommand behavior above. Custom parsers whose
 `parse_known_args` method cannot be replaced also cannot capture subcommand leftovers independently.
 
+#### CLI Nested Argument Delimiter
+
+Nested CLI arguments use `.` by default, for example `--database.host`. Set
+`cli_nested_delimiter` to change the separator between model levels:
+
+```python
+from pydantic import BaseModel
+
+from pydantic_settings import BaseSettings, CliApp, SettingsConfigDict
+
+
+class Database(BaseModel):
+    host: str = 'localhost'
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(cli_nested_delimiter='__')
+    database: Database = Database()
+
+
+settings = CliApp.run(Settings, cli_args=['--database__host', 'example.org'])
+print(settings.database.host)
+#> example.org
+print(CliApp.serialize(settings))
+#> ['--database__host', 'example.org']
+```
+
+The separator applies to generated option names, help text, and serialized CLI arguments.
+It does not change environment variable names, `env_nested_delimiter`, or internal model
+paths. Dots in a field's literal alias remain dots; this option does not change existing
+limitations when parsing dotted aliases in nested models. An existing dotted `cli_prefix`, such as
+`app.service`, denotes structural levels and becomes `app__service` with the separator above.
+Subcommand names and positional arguments are unchanged.
+
+`cli_shortcuts` keys use the generated option spelling (for example, `database__host`);
+shortcut names themselves are used verbatim. For a single settings initialization, pass
+`_cli_nested_delimiter`, or pass `cli_nested_delimiter` directly to `CliSettingsSource`.
+The delimiter must be a nonempty string without whitespace, control characters, or `=`.
+If a custom separator makes previously distinct option names collide, a `SettingsError`
+is raised rather than silently hiding an option. Existing duplicate aliases and shortcuts
+keep their first-match behavior.
+
 #### CLI Kebab Case for Arguments
 
 Change whether CLI arguments should use kebab case by enabling `cli_kebab_case`. By default, `cli_kebab_case=True` will
