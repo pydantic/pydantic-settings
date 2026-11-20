@@ -55,9 +55,15 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         self.yaml_data = self._read_files(self.yaml_file_path, deep_merge=deep_merge)
 
         if self.yaml_config_section is not None:
-            section_data = self._traverse_nested_section(
-                self.yaml_data, self.yaml_config_section, self.yaml_config_section
-            )
+            if self._existing_files(self.yaml_file_path):
+                section_data = self._traverse_nested_section(
+                    self.yaml_data, self.yaml_config_section, self.yaml_config_section
+                )
+            else:
+                # None of the configured files exist. A missing file contributes
+                # an empty mapping (see `_read_files`), so there is no section to
+                # look up; fall back to defaults just like without a section.
+                section_data = {}
             # An empty section (`section:` with no children) parses to `None`; treat it as an
             # empty mapping so it falls back to defaults, mirroring `_read_file`'s `or {}` for
             # an empty whole file. A non-mapping section (e.g. a scalar) is a user error, so

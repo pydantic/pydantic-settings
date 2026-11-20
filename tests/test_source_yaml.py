@@ -243,6 +243,33 @@ def test_yaml_config_section(tmp_path):
 
 
 @pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
+def test_yaml_config_section_missing_file(tmp_path):
+    # A missing YAML file contributes an empty mapping, so configuring a
+    # section must not raise KeyError; defaults should be used instead.
+    p = tmp_path / 'optional.yaml'
+    assert not p.exists()
+
+    class Settings(BaseSettings):
+        port: int = 8000
+
+        model_config = SettingsConfigDict(yaml_file=p, yaml_config_section='app')
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls),)
+
+    s = Settings()
+    assert s.port == 8000
+
+
+@pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
 def test_invalid_yaml_config_section(tmp_path):
     p = tmp_path / '.env'
     p.write_text(
