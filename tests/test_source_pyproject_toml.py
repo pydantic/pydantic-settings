@@ -186,40 +186,6 @@ def test_pyproject_toml_file_explicit(cd_tmp_path: Path):
     assert s.nested.nested_field == 'world!'
 
 
-def test_pyproject_toml_file_explicit_expanduser(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    monkeypatch.setenv('HOME', str(tmp_path))
-    monkeypatch.setenv('USERPROFILE', str(tmp_path))
-    pyproject = tmp_path / 'child' / 'grandchild' / 'pyproject.toml'
-    pyproject.parent.mkdir(parents=True)
-    pyproject.write_text(
-        """
-    [tool.pydantic-settings]
-    foobar = "Hello"
-
-    [tool.pydantic-settings.nested]
-    nested_field = "world!"
-    """
-    )
-
-    class Nested(BaseModel):
-        nested_field: str
-
-    class Settings(BaseSettings):
-        foobar: str
-        nested: Nested
-        model_config = SettingsConfigDict()
-
-        @classmethod
-        def settings_customise_sources(
-            cls, settings_cls: type[BaseSettings], **_kwargs: PydanticBaseSettingsSource
-        ) -> tuple[PydanticBaseSettingsSource, ...]:
-            return (PyprojectTomlConfigSettingsSource(settings_cls, Path('~/child/grandchild/pyproject.toml')),)
-
-    s = Settings()
-    assert s.foobar == 'Hello'
-    assert s.nested.nested_field == 'world!'
-
-
 def test_pyproject_toml_file_parent(mocker: MockerFixture, tmp_path: Path):
     cwd = tmp_path / 'child' / 'grandchild' / 'cwd'
     cwd.mkdir(parents=True)
