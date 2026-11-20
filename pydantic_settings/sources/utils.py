@@ -363,27 +363,35 @@ def _strip_annotated(annotation: Any) -> Any:
     return annotation
 
 
-def _annotation_enum_val_to_name(annotation: Any, value: Any) -> str | None:
+def _annotation_enum_val_to_name(annotation: Any, value: Any, _seen: tuple[Any, ...] = ()) -> str | None:
+    if annotation in _seen:
+        return None
+    seen = (*_seen, annotation)
+    annotation = _resolve_type_alias(annotation)
     for type_ in (annotation, get_origin(annotation)):
         if _lenient_issubclass(type_, Enum):
             enum_type = cast('type[Enum]', type_)
             if value in enum_type.__members__.values():
                 return enum_type(value).name
     for arg in get_args(annotation):
-        enum_name = _annotation_enum_val_to_name(arg, value)
+        enum_name = _annotation_enum_val_to_name(arg, value, seen)
         if enum_name is not None:
             return enum_name
     return None
 
 
-def _annotation_enum_name_to_val(annotation: Any, name: Any) -> Any:
+def _annotation_enum_name_to_val(annotation: Any, name: Any, _seen: tuple[Any, ...] = ()) -> Any:
+    if annotation in _seen:
+        return None
+    seen = (*_seen, annotation)
+    annotation = _resolve_type_alias(annotation)
     for type_ in (annotation, get_origin(annotation)):
         if _lenient_issubclass(type_, Enum):
             enum_type = cast('type[Enum]', type_)
             if name in enum_type.__members__:
                 return enum_type[name]
     for arg in get_args(annotation):
-        enum_val = _annotation_enum_name_to_val(arg, name)
+        enum_val = _annotation_enum_name_to_val(arg, name, seen)
         if enum_val is not None:
             return enum_val
     return None
