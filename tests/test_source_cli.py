@@ -2488,6 +2488,20 @@ def test_cli_text_types_are_scalar_values():
         CliApp.run(Settings, cli_args=['--name', 'a', 'c'], cli_exit_on_error=False)
 
 
+def test_cli_list_of_enums_by_name():
+    class Pet(IntEnum):
+        dog = 0
+        cat = 1
+
+    class Cfg(BaseSettings):
+        pets: list[Pet] = []
+
+    expected = [Pet.cat, Pet.dog]
+    assert CliApp.run(Cfg, cli_args=['--pets', 'cat', '--pets', 'dog']).pets == expected
+    assert CliApp.run(Cfg, cli_args=['--pets', 'cat,dog']).pets == expected
+    assert CliApp.run(Cfg, cli_args=['--pets', '["cat", 0]']).pets == expected
+
+
 def test_cli_enums(capsys, monkeypatch):
     class Pet(IntEnum):
         dog = 0
