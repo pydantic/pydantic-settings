@@ -4934,6 +4934,18 @@ def test_cli_serialize_variadic_styles(list_style, dict_style):
     assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
 
 
+@pytest.mark.parametrize('value', [b'hello', b'', b"quote'and\\path", 'caf\u00e9'.encode()])
+def test_cli_serialize_scalar_bytes(value):
+    class Settings(BaseSettings):
+        blob: bytes
+
+    original = Settings(blob=value)
+    args = CliApp.serialize(original)
+
+    assert args == ['--blob', value.decode()]
+    assert CliApp.run(Settings, cli_args=args).blob == value
+
+
 def test_cli_serialize_enum_values():
     class Color(Enum):
         RED = 'red'
