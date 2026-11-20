@@ -1234,9 +1234,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     subcommand_arg.kwargs['allow_abbrev'] = False
                     subcommand_arg.kwargs['formatter_class'] = self._formatter_class
                     subcommand_arg.kwargs['description'] = _get_model_description(sub_model)
-                    subcommand_arg.kwargs['help'] = None if len(arg.sub_models) > 1 else field_info.description
+                    subcommand_help = None if len(arg.sub_models) > 1 else field_info.description
                     if self.cli_use_class_docs_for_groups:
-                        subcommand_arg.kwargs['help'] = _get_model_description(sub_model)
+                        subcommand_help = _get_model_description(sub_model)
+                    subcommand_arg.kwargs['help'] = subcommand_help and self._help_escape(subcommand_help)
 
                     subparsers = (
                         self._add_subparsers(
@@ -1725,7 +1726,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if _CliToggleFlag not in field_info.metadata:
                 _help += f' {default}' if _help else default
         _help = self._help_format_env_vars(_help, env_var_names)
-        return _help.replace('%', '%%') if issubclass(type(self._root_parser), ArgumentParser) else _help
+        return self._help_escape(_help)
+
+    def _help_escape(self, help_text: str) -> str:
+        return help_text.replace('%', '%%') if issubclass(type(self._root_parser), ArgumentParser) else help_text
 
     def _is_field_suppressed(self, field_info: FieldInfo) -> bool:
         _help = field_info.description or ''
