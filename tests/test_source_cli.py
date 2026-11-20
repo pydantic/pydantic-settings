@@ -1436,6 +1436,30 @@ def test_cli_list_arg(prefix, arg_spaces):
     check_answer(cfg, prefix, expected)
 
 
+@pytest.mark.parametrize(
+    'cli_args,expected',
+    [
+        (['--floats', '.5'], {'floats': [0.5], 'ints': []}),
+        (['--floats', '5.'], {'floats': [5.0], 'ints': []}),
+        (['--floats', '1_000'], {'floats': [1000.0], 'ints': []}),
+        (['--floats', 'inf'], {'floats': [float('inf')], 'ints': []}),
+        (['--ints', '007'], {'floats': [], 'ints': [7]}),
+        (['--ints', '+1'], {'floats': [], 'ints': [1]}),
+        (['--floats', '0.5'], {'floats': [0.5], 'ints': []}),
+        (['--floats', '1e3'], {'floats': [1000.0], 'ints': []}),
+    ],
+)
+def test_cli_list_arg_float_like_values(cli_args, expected):
+    # `float()` accepts values that are not valid JSON numbers (`.5`, `5.`,
+    # `007`, `+1`, `1_000`, `inf`), so they must be quoted before the merged
+    # list is decoded as JSON, and pydantic then coerces them.
+    class Cfg(BaseSettings):
+        floats: list[float] = []
+        ints: list[int] = []
+
+    assert CliApp.run(Cfg, cli_args=cli_args).model_dump() == expected
+
+
 @pytest.mark.parametrize('empty_array', ['[]', ' [ \t ] '])
 @pytest.mark.parametrize(
     'field_type,expected',
