@@ -493,6 +493,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             env_parse_none_str=self.cli_parse_none_str,
             env_parse_enums=True,
             env_prefix=self.cli_prefix,
+            # The CLI prefix always applies to the parsed argument names, whatever
+            # `env_prefix_target` the settings use for environment variables.
+            env_prefix_target='variable',
             case_sensitive=case_sensitive,
             env_nested_max_split=0,
             _init_state=_init_state,
