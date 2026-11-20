@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from ...exceptions import SettingsError
-from ..utils import InitState, parse_env_vars
+from ..utils import InitState
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
@@ -18,26 +18,23 @@ if TYPE_CHECKING:
 boto3_client = None
 
 
-def import_aws_secrets_manager() -> None:
+def _import_boto3(service_label: str, extra: str) -> None:
     global boto3_client
 
     try:
         from boto3 import client as boto3_client
     except ImportError as e:  # pragma: no cover
         raise ImportError(
-            'AWS Secrets Manager dependencies are not installed, run `pip install pydantic-settings[aws-secrets-manager]`'
+            f'{service_label} dependencies are not installed, run `pip install pydantic-settings[{extra}]`'
         ) from e
+
+
+def import_aws_secrets_manager() -> None:
+    _import_boto3('AWS Secrets Manager', 'aws-secrets-manager')
 
 
 def import_aws_systems_manager() -> None:
-    global boto3_client
-
-    try:
-        from boto3 import client as boto3_client
-    except ImportError as e:  # pragma: no cover
-        raise ImportError(
-            'AWS Systems Manager dependencies are not installed, run `pip install pydantic-settings[aws-systems-manager]`'
-        ) from e
+    _import_boto3('AWS Systems Manager', 'aws-systems-manager')
 
 
 class AWSSecretsManagerSettingsSource(EnvSettingsSource):
@@ -81,12 +78,7 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
 
         response = self._secretsmanager_client.get_secret_value(**request)
 
-        return parse_env_vars(
-            json.loads(response['SecretString']),
-            self.case_sensitive,
-            self.env_ignore_empty,
-            self.env_parse_none_str,
-        )
+        return self._parse_env_vars(json.loads(response['SecretString']))
 
     def __repr__(self) -> str:
         return (
@@ -141,12 +133,7 @@ class AWSSystemsManagerSettingsSource(EnvSettingsSource):
                 key = parameter['Name'].removeprefix(prefix)
                 parameters[key] = parameter.get('Value')
 
-        return parse_env_vars(
-            parameters,
-            self.case_sensitive,
-            self.env_ignore_empty,
-            self.env_parse_none_str,
-        )
+        return self._parse_env_vars(parameters)
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}(ssm_path={self._ssm_path!r}, env_nested_delimiter={self.env_nested_delimiter!r})'

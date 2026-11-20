@@ -10,7 +10,7 @@ from typing import (
 
 from ..base import ConfigFileSourceMixin, InitSettingsSource
 from ..types import DEFAULT_PATH, ConfigFileSourceType
-from ..utils import InitState
+from ..utils import InitState, _resolve_setting
 
 if TYPE_CHECKING:
     import tomllib
@@ -43,11 +43,7 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         _init_state: InitState | None = None,
     ):
         self.toml_file_path = toml_file if toml_file != DEFAULT_PATH else settings_cls.model_config.get('toml_file')
-        self.toml_table_header = (
-            toml_table_header
-            if toml_table_header is not None
-            else settings_cls.model_config.get('toml_table_header', ())
-        )
+        self.toml_table_header = _resolve_setting(toml_table_header, settings_cls.model_config, 'toml_table_header', ())
         self.toml_data = self._read_files(self.toml_file_path, deep_merge=deep_merge)
 
         if self._any_file_exists(self.toml_file_path):
