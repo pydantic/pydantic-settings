@@ -9,7 +9,7 @@ from pydantic.fields import FieldInfo
 
 from ...exceptions import SettingsError
 from ..types import SecretVersion
-from ..utils import InitState, _parse_env_none_str, _validate_by_name_enabled
+from ..utils import InitState, _get_field_metadata, _parse_env_none_str, _validate_by_name_enabled
 from .env import EnvSettingsSource
 
 if TYPE_CHECKING:
@@ -244,7 +244,7 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
             configuration).
         """
 
-        secret_version = next((m.version for m in field.metadata if isinstance(m, SecretVersion)), None)
+        secret_version = next((m.version for m in _get_field_metadata(field) if isinstance(m, SecretVersion)), None)
 
         # If a secret version is specified, try to get that specific version of the secret from
         # GCP Secret Manager via the GoogleSecretManagerMapping. This allows different versions
