@@ -4934,6 +4934,33 @@ def test_cli_serialize_variadic_styles(list_style, dict_style):
     assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
 
 
+@pytest.mark.parametrize(
+    'config, expected_none_str',
+    [
+        ({}, 'null'),
+        ({'cli_avoid_json': True}, 'None'),
+        ({'cli_parse_none_str': 'void'}, 'void'),
+        ({'cli_avoid_json': True, 'cli_parse_none_str': 'void'}, 'void'),
+        ({'env_parse_none_str': 'unset', 'cli_parse_none_str': 'void'}, 'unset'),
+    ],
+)
+def test_cli_serialize_none_enum_value(config, expected_none_str):
+    class Mode(Enum):
+        EMPTY = None
+        TEXT = 'text'
+
+    class Cfg(BaseSettings):
+        model_config = SettingsConfigDict(**config)
+        mode: Mode = Mode.TEXT
+        positional: CliPositionalArg[Mode]
+
+    cfg = Cfg(mode=Mode.EMPTY, positional=Mode.EMPTY)
+    serialized_cli_args = CliApp.serialize(cfg)
+
+    assert serialized_cli_args == ['--mode', expected_none_str, expected_none_str]
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args).model_dump() == cfg.model_dump()
+
+
 def test_cli_serialize_enum_values():
     class Color(Enum):
         RED = 'red'
