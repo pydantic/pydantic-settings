@@ -161,6 +161,25 @@ def _collect_sub_models(type_: Any, sub_models: list[type[BaseModel]]) -> None:
             _collect_sub_models(arg, sub_models)
 
 
+def _env_style_dict_item(key: str, value: Any) -> str:
+    """Format one dict item for `dict_style='env'`, as `key=value` when the CLI parser reads it back unchanged.
+
+    The parser splits items on commas and quotes, splits each item at its first `=` and strips surrounding whitespace,
+    so containers, `None` and text it would alter are written as a one-item JSON object, which it accepts alongside
+    `key=value` items.
+    """
+    item = f'{key}={value}'
+    if (
+        isinstance(value, (str, int, float))
+        and not any(char in item for char in ',"')
+        and '=' not in key
+        and item == item.strip()
+        and not item.startswith(('[', '{'))
+    ):
+        return item
+    return json.dumps({key: value})
+
+
 def _is_mapping_annotation(annotation: Any) -> bool:
     """Check if any union member of an annotation is itself a Mapping, ignoring Mappings nested in collections."""
     return any(_lenient_issubclass(get_origin(member) or member, Mapping) for member in _get_union_members(annotation))
@@ -1788,7 +1807,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 elif list_style == 'argparse':
                     values = [f'{v}' for v in json.loads(value)]
             elif isinstance(model_default, dict) and dict_style == 'env':
-                values = [f'{k}={v}' for k, v in json.loads(value).items()]
+                values = [_env_style_dict_item(k, v) for k, v in json.loads(value).items()]
         return values
 
     @staticmethod
