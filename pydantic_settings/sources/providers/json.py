@@ -35,6 +35,7 @@ class JsonConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
     ):
         self.json_file_path = json_file if json_file != DEFAULT_PATH else settings_cls.model_config.get('json_file')
         self.json_file_encoding = _resolve_setting(json_file_encoding, settings_cls.model_config, 'json_file_encoding')
+        self._case_insensitive_file_keys = self._get_case_insensitive_field_names(settings_cls)
         self.json_data = self._read_files(self.json_file_path, deep_merge=deep_merge)
         super().__init__(settings_cls, self.json_data, _init_state=_init_state)
 
