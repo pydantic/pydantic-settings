@@ -168,6 +168,7 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
     _secret_client: SecretManagerServiceClient | None
     _project_id: str | None
     _explicit_project_id: str | None
+    _project_id_state: str | None
 
     def __init__(
         self,
@@ -213,6 +214,7 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
         # value and is written exclusively by _resolve_gcp_project.
         self._explicit_project_id = project_id
         self._project_id = None
+        self._project_id_state = None
         self._credentials = credentials
         self._secret_client = secret_client
         self._project_id_field = project_id_field
@@ -288,7 +290,11 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
         ``project_id`` argument, the ``project_id_field`` value from previous settings
         sources (``current_state``), and finally ``google.auth.default()``.
         """
-        if self._project_id is not None:
+        state_value = self.current_state.get(self._project_id_field)
+        state_project_id = state_value if isinstance(state_value, str) else None
+        if self._project_id is not None and (
+            self._explicit_project_id is not None or state_project_id == self._project_id_state
+        ):
             return
 
         project_id = self._explicit_project_id
@@ -296,9 +302,7 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
 
         # Fall back to a value resolved by a previous (higher priority) settings source.
         if project_id is None:
-            state_project_id = self.current_state.get(self._project_id_field)
-            if isinstance(state_project_id, str):
-                project_id = state_project_id
+            project_id = state_project_id
 
         # Fall back to google.auth.default for whatever is still missing.
         # Credentials are only needed if we have to build a client ourselves — if the
@@ -322,6 +326,7 @@ class GoogleSecretManagerSettingsSource(EnvSettingsSource):
 
         self._credentials = credentials
         self._project_id = project_id
+        self._project_id_state = state_project_id
         if self._secret_client is None:
             self._secret_client = SecretManagerServiceClient(credentials=self._credentials)
 
