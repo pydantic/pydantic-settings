@@ -196,9 +196,13 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             paths.extend(tuple(choice.path) for choice in v_alias.choices if isinstance(choice, AliasPath))
         for path in paths:
             head = path[0]
-            if len(path) > 1 and isinstance(head, str) and self._apply_case_sensitive(head) == key:
+            if len(path) > 1 and isinstance(head, str) and self._alias_path_head_env_name(head) == key:
                 return True
         return False
+
+    def _alias_path_head_env_name(self, head: str) -> str:
+        """The env name segment for an ``AliasPath`` head, as ``_extract_field_info`` would name it."""
+        return self._apply_case_sensitive(head)
 
     def _field_is_complex(self, field: FieldInfo) -> tuple[bool, bool]:
         """
