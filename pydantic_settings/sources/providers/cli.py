@@ -1783,10 +1783,14 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if not is_no_decode and isinstance(model_default, (list, dict)) and not model_default:
                 return values
             if isinstance(model_default, list):
+                list_values = json.loads(value)
+                if any(isinstance(item, (dict, list)) for item in list_values):
+                    # Keep nested items in JSON instead of Python reprs or flattened arrays.
+                    return values
                 if list_style == 'lazy':
-                    values = [','.join(f'{v}' for v in json.loads(value))]
+                    values = [','.join(f'{v}' for v in list_values)]
                 elif list_style == 'argparse':
-                    values = [f'{v}' for v in json.loads(value)]
+                    values = [f'{v}' for v in list_values]
             elif isinstance(model_default, dict) and dict_style == 'env':
                 values = [f'{k}={v}' for k, v in json.loads(value).items()]
         return values
