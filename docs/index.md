@@ -175,6 +175,25 @@ print(BaseAppSettings.model_validate(data))
 #> name='app'
 ```
 
+## Model constants
+
+To define a class-level value that settings sources must not override, annotate it as `ClassVar`:
+
+```py
+from typing import ClassVar
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    api_version: ClassVar[str] = 'v1'
+```
+
+Because a `ClassVar` is not a Pydantic model field, it is not read from environment variables, dotenv files,
+or other settings sources. It is also omitted from `model_fields`, serialization, and JSON Schema, and cannot
+be set as an initialization field. Use a regular field when the value should be included in the model or
+overridden through initialization.
+
 ## Environment variable names
 
 By default, the environment variable name is the same as the field name.
