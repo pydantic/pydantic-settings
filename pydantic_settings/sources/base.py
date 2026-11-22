@@ -151,12 +151,12 @@ class PydanticBaseSettingsSource(ABC):
         """
         return self._settings_sources_data
 
-    @abstractmethod
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         """
         Gets the value, the key for model creation, and a flag to determine whether value is complex.
 
-        This is an abstract method that should be overridden in every settings source classes.
+        Sources that load all values in `__call__` do not need to implement this method.
+        Sources that look up fields individually should override it.
 
         Args:
             field: The field.
@@ -165,6 +165,7 @@ class PydanticBaseSettingsSource(ABC):
         Returns:
             A tuple that contains the value, key and a flag to determine whether value is complex.
         """
+        raise NotImplementedError
 
     def field_is_complex(self, field: FieldInfo) -> bool:
         """
@@ -530,6 +531,10 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         self.env_ignore_empty = _resolve_setting(env_ignore_empty, self.config, 'env_ignore_empty', False)
         self.env_parse_none_str = _resolve_setting(env_parse_none_str, self.config, 'env_parse_none_str')
         self.env_parse_enums = _resolve_setting(env_parse_enums, self.config, 'env_parse_enums')
+
+    @abstractmethod
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        """Get a field's value, validation key and complexity flag from this source."""
 
     def _apply_case_sensitive(self, value: str) -> str:
         return _get_env_var_key(value, self.case_sensitive)
