@@ -6,9 +6,10 @@ import importlib.resources
 import json
 from importlib.resources.abc import Traversable
 from pathlib import Path
+from typing import Any
 
 import pytest
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 from pydantic.alias_generators import to_camel
 
 from pydantic_settings import (
@@ -338,3 +339,24 @@ def test_json_file_encoding_overrides_the_utf8_default(tmp_path: Path) -> None:
             return (JsonConfigSettingsSource(settings_cls),)
 
     assert Settings().city == 'café'
+
+
+def test_shared_alias_choices_fallback(tmp_path: Path) -> None:
+    p = tmp_path / 'config.json'
+    p.write_text('{"TIMEOUT": 30}')
+
+    class Settings(BaseSettings):
+        read_timeout: int = Field(1, validation_alias=AliasChoices('READ_TIMEOUT', 'TIMEOUT'))
+        write_timeout: int = Field(2, validation_alias=AliasChoices('WRITE_TIMEOUT', 'TIMEOUT'))
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            **kwargs: Any,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (JsonConfigSettingsSource(settings_cls, json_file=p),)
+
+    s = Settings()
+    assert s.read_timeout == 30
+    assert s.write_timeout == 30
