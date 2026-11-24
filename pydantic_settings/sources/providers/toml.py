@@ -44,6 +44,7 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
     ):
         self.toml_file_path = toml_file if toml_file != DEFAULT_PATH else settings_cls.model_config.get('toml_file')
         self.toml_table_header = _resolve_setting(toml_table_header, settings_cls.model_config, 'toml_table_header', ())
+        self._case_insensitive_file_keys = self._get_case_insensitive_field_names(settings_cls)
         self.toml_data = self._read_files(self.toml_file_path, deep_merge=deep_merge)
 
         if self._any_file_exists(self.toml_file_path):
@@ -53,6 +54,11 @@ class TomlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
                 self.toml_data = self.toml_data[key]
 
         super().__init__(settings_cls, self.toml_data, _init_state=_init_state)
+
+    def _get_config_section(self, data: dict[str, Any]) -> Any:
+        for key in self.toml_table_header:
+            data = data[key]
+        return data
 
     def _read_file(self, file_path: Path | Traversable) -> dict[str, Any]:
         import_toml()
