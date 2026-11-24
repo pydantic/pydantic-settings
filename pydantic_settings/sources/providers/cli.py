@@ -101,7 +101,7 @@ class _CliInternalArgParser(ArgumentParser):
 _NEGATIVE_NUMBER = re.compile(r'^-\d+$|^-\d*\.\d+$')
 
 # a number as JSON writes it; `float()` also accepts `.5`, `007`, `+1`, `1_000` and `inf`, which JSON rejects
-_JSON_NUMBER = re.compile(r'-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][-+]?\d+)?')
+_JSON_NUMBER = re.compile(r'-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?')
 
 
 def _count_option_values(action: Action | None) -> int | None:

@@ -1639,6 +1639,12 @@ def test_cli_list_numbers_not_written_as_json(arg_spaces):
         Cfg, cli_args=['--floats', arg_spaces('.5,5.,-.5,1_0.5'), '--floats', '"2."', '--floats', 'inf']
     ).floats == [0.5, 5.0, -0.5, 10.5, 2.0, float('inf')]
     assert CliApp.run(Cfg, cli_args=['--ints', arg_spaces('007,+1,1_000'), '--ints', '"08"']).ints == [7, 1, 1000, 8]
+
+    # JSON numbers only use ASCII digits, `Decimal()` also accepts other Unicode digits
+    class DecimalCfg(BaseSettings):
+        values: list[Decimal]
+
+    assert CliApp.run(DecimalCfg, cli_args=['--values', arg_spaces('1٢,٣')]).values == [Decimal('12'), Decimal('3')]
     assert CliApp.run(Cfg, cli_args=['--strs', arg_spaces('.5,007,+1,1_000,inf'), '--strs', '"5."']).strs == [
         '.5',
         '007',
