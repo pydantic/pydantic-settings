@@ -773,7 +773,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 try:
                     unquoted_item = item[1:-1] if item.startswith('"') and item.endswith('"') else item
                     float(unquoted_item)
-                    item = f'"{unquoted_item}"' if is_num_type_str else unquoted_item
+                    is_json_num = bool(
+                        re.fullmatch(r'-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?', unquoted_item)
+                    )
+                    item = f'"{unquoted_item}"' if (is_num_type_str or not is_json_num) else unquoted_item
                 except ValueError:
                     pass
             elif item.startswith('"') and item.endswith('"'):

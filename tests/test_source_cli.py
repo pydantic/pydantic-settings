@@ -5990,3 +5990,18 @@ def test_serialize_cli_unknown_args_subcommand_end_of_options():
         serialized = CliApp.serialize(root, positionals_first=positionals_first)
         assert serialized == ['--flag', 'world', 'sub_cmd', '--v0', '2', '--', '--unk=3']
         assert CliApp.run(Root, cli_args=serialized) == root
+
+
+def test_cli_list_non_json_number_formats():
+    class Cfg(BaseSettings):
+        floats: list[float] = []
+        ints: list[int] = []
+
+    res = CliApp.run(Cfg, cli_args=['--floats', '.5', '--floats', '5.', '--floats', '+1', '--floats', 'inf'])
+    assert res.floats[0] == 0.5
+    assert res.floats[1] == 5.0
+    assert res.floats[2] == 1.0
+    assert res.floats[3] == float('inf')
+
+    res_int = CliApp.run(Cfg, cli_args=['--ints', '007'])
+    assert res_int.ints == [7]
