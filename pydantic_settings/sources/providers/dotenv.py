@@ -125,6 +125,9 @@ class DotEnvSettingsSource(EnvSettingsSource):
         if self.dotenv_filtering == 'match_prefix':
             # In this case add all env vars that match the prefix, stripping the prefix.
             prefix = self._apply_case_sensitive(self.env_prefix)
+            # `env_vars` keys are case-normalised, so the keys of `data` must be too
+            # (a field `DEBUG` loaded from `APP_DEBUG` must not come back as extra `debug`).
+            data_keys = {self._apply_case_sensitive(key) for key in data}
             for env_name, env_value in self.env_vars.items():
                 if env_name.startswith(prefix):
                     # Slice with the case-normalized prefix: `str.lower()` can change
@@ -134,10 +137,10 @@ class DotEnvSettingsSource(EnvSettingsSource):
                     if (
                         self.env_nested_delimiter
                         and self.env_nested_delimiter in normalized_env_name
-                        and normalized_env_name.partition(self.env_nested_delimiter)[0] in data
+                        and normalized_env_name.partition(self.env_nested_delimiter)[0] in data_keys
                     ):
                         continue
-                    if normalized_env_name not in data:
+                    if normalized_env_name not in data_keys:
                         data[normalized_env_name] = env_value
             return data
 
