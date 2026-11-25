@@ -212,7 +212,6 @@ def test_multiple_file_yaml_deep_merge(tmp_path, deep_merge):
 
 
 @pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
-@pytest.mark.skipif(yaml is None, reason='pyYaml is not installed')
 def test_missing_yaml_file_with_section_uses_defaults(tmp_path):
     missing = tmp_path / 'optional.yaml'
 
@@ -235,6 +234,7 @@ def test_missing_yaml_file_with_section_uses_defaults(tmp_path):
     assert Settings().port == 8000
 
 
+@pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
 def test_yaml_config_section(tmp_path):
     p = tmp_path / '.env'
     p.write_text(
