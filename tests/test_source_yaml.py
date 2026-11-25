@@ -212,6 +212,29 @@ def test_multiple_file_yaml_deep_merge(tmp_path, deep_merge):
 
 
 @pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
+@pytest.mark.skipif(yaml is None, reason='pyYaml is not installed')
+def test_missing_yaml_file_with_section_uses_defaults(tmp_path):
+    missing = tmp_path / 'optional.yaml'
+
+    class Settings(BaseSettings):
+        port: int = 8000
+        model_config = SettingsConfigDict(yaml_file=missing, yaml_config_section='app')
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (YamlConfigSettingsSource(settings_cls),)
+
+    assert not missing.exists()
+    assert Settings().port == 8000
+
+
 def test_yaml_config_section(tmp_path):
     p = tmp_path / '.env'
     p.write_text(
