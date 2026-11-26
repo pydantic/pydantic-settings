@@ -37,7 +37,7 @@ def path_type_label(p: Path) -> str:
     """
     Find out what sort of thing a path is.
     """
-    assert p.exists(), 'path does not exist'
+    assert p.exists() or p.is_symlink(), 'path does not exist'
     for method_name, name in _PATH_TYPE_LABELS:
         if getattr(p, method_name)():
             return name
