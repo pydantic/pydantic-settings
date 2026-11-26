@@ -12,7 +12,7 @@ import typing
 import uuid
 import warnings
 import weakref
-from collections.abc import Callable, Hashable
+from collections.abc import Callable, Hashable, Mapping, MutableMapping
 from collections.abc import Set as AbstractSet
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime
@@ -4809,6 +4809,42 @@ def test_env_nested_dict_complex_value_type(env):
     env.set('nested_field__key', '["a", "b"]')
     s = Settings()
     assert s.model_dump() == {'nested_field': {'key': ['a', 'b']}}
+
+
+@pytest.mark.parametrize('mapping_type', [dict, Mapping, MutableMapping, typing.Mapping, typing.MutableMapping])
+@pytest.mark.parametrize(
+    'wrapper', [lambda t: t, lambda t: t | None, lambda t: Annotated[t, 'meta']], ids=['plain', 'optional', 'annotated']
+)
+def test_env_nested_mapping_json_value(env, mapping_type, wrapper):
+    """Nested env values are JSON decoded under any mapping field, as under a dict field."""
+
+    class Sub(BaseModel):
+        y: list[int] = []
+
+    class Settings(BaseSettings):
+        plain: wrapper(mapping_type[str, list[int]]) = None
+        models: wrapper(mapping_type[str, Sub]) = None
+        anything: wrapper(mapping_type[str, Any]) = None
+
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set('plain__a', '[1, 2]')
+    env.set('models__k__y', '[3]')
+    env.set('anything__z', '[4]')
+    # `Any` is not a complex type, so its value stays a string, as under a dict field
+    assert Settings().model_dump() == {'plain': {'a': [1, 2]}, 'models': {'k': {'y': [3]}}, 'anything': {'z': '[4]'}}
+
+
+@pytest.mark.parametrize('annotation', [dict, Mapping, MutableMapping, typing.Mapping, typing.MutableMapping])
+def test_nested_env_delimiter_bare_mapping_json_value(env, annotation):
+    class Cfg(BaseSettings):
+        mvals: annotation
+
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set('mvals__k1', '[1]')
+    env.set('mvals__k2', 'v2')
+    assert Cfg().model_dump() == {'mvals': {'k1': [1], 'k2': 'v2'}}
 
 
 @pytest.mark.parametrize(

@@ -2,7 +2,7 @@ from __future__ import annotations as _annotations
 
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import Mapping, MutableMapping
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -284,8 +284,8 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             return None
         seen = (*_seen, raw_annotation)
         annotation = _strip_annotated(_resolve_type_alias(raw_annotation))
-        if _lenient_issubclass(get_origin(annotation), dict):
-            # get value type if it's a dict
+        if _lenient_issubclass(get_origin(annotation), Mapping):
+            # get value type if it's a dict or another mapping
             args = get_args(annotation)
             return args[-1] if args else None
         for type_ in get_args(annotation):
@@ -324,7 +324,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             return {}
 
         ann = field.annotation
-        is_dict = ann is dict or _lenient_issubclass(get_origin(ann), dict)
+        is_dict = ann in (dict, Mapping, MutableMapping) or _lenient_issubclass(get_origin(ann), Mapping)
 
         prefixes = [
             f'{env_name}{self.env_nested_delimiter}' for _, env_name, _ in self._extract_field_info(field, field_name)
