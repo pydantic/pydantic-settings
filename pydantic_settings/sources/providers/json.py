@@ -42,7 +42,8 @@ class JsonConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         # Default to UTF-8 rather than the locale encoding, matching `DotEnvSettingsSource`
         # and `SecretsSettingsSource`: RFC 8259 mandates UTF-8 for interchanged JSON, and
         # the locale default corrupts (or fails to decode) it on a non-UTF-8 Windows code page.
-        encoding = self.json_file_encoding if self.json_file_encoding is not None else 'utf-8'
+        # `utf-8-sig` also skips a byte order mark, which `json.loads` rejects.
+        encoding = self.json_file_encoding if self.json_file_encoding is not None else 'utf-8-sig'
         with file_path.open(encoding=encoding) as json_file:
             content = json_file.read()
         # An empty (or whitespace-only) file is not valid JSON; treat it as an empty

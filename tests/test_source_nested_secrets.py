@@ -1,3 +1,4 @@
+import codecs
 from enum import StrEnum
 from os import sep
 from pathlib import Path
@@ -853,3 +854,10 @@ def test_load_secrets_utf8_under_non_utf8_locale(tmp_path, non_utf8_default_enco
     (tmp_path / 'token').write_bytes('café-pässwörd'.encode())
 
     assert NestedSecretsSettingsSource.load_secrets(tmp_path) == {'token': 'café-pässwörd'}
+
+
+def test_load_secrets_skips_utf8_bom(tmp_path):
+    """Windows PowerShell 5.1 `Set-Content -Encoding UTF8` writes a byte order mark, which is not part of the secret."""
+    (tmp_path / 'token').write_bytes(codecs.BOM_UTF8 + 'pässwörd\n'.encode())
+
+    assert NestedSecretsSettingsSource.load_secrets(tmp_path) == {'token': 'pässwörd'}
