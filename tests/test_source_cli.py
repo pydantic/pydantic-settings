@@ -1644,7 +1644,7 @@ def test_cli_list_numbers_not_written_as_json(arg_spaces):
     class DecimalCfg(BaseSettings):
         values: list[Decimal]
 
-    assert CliApp.run(DecimalCfg, cli_args=['--values', arg_spaces('1٢,٣')]).values == [Decimal('12'), Decimal('3')]
+    assert CliApp.run(DecimalCfg, cli_args=['--values', arg_spaces('1٢,٣')]).values == [Decimal(12), Decimal(3)]
     assert CliApp.run(Cfg, cli_args=['--strs', arg_spaces('.5,007,+1,1_000,inf'), '--strs', '"5."']).strs == [
         '.5',
         '007',
