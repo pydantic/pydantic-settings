@@ -2,6 +2,7 @@
 
 from __future__ import annotations as _annotations
 
+from itertools import islice
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -48,16 +49,11 @@ class PyprojectTomlConfigSettingsSource(TomlConfigSettingsSource):
         if provided:
             return provided.expanduser().resolve()
         rv = Path.cwd() / 'pyproject.toml'
-        count = 0
         if not rv.is_file():
-            child = rv.parent.parent / 'pyproject.toml'
-            while count < depth:
-                if child.is_file():
-                    return child
-                if str(child.parent) == rv.root:
-                    break  # end discovery after checking system root once
-                child = child.parent.parent / 'pyproject.toml'
-                count += 1
+            for parent in islice(rv.parent.parents, max(depth, 0)):
+                candidate = parent / 'pyproject.toml'
+                if candidate.is_file():
+                    return candidate
         return rv
 
 
