@@ -39,7 +39,11 @@ def path_type_label(p: Path) -> str:
     """
     assert p.exists() or p.is_symlink(), 'path does not exist'
     for method_name, name in _PATH_TYPE_LABELS:
-        if getattr(p, method_name)():
+        try:
+            matched = getattr(p, method_name)()
+        except NotImplementedError:
+            continue
+        if matched:
             return name
 
     return 'unknown'  # pragma: no cover

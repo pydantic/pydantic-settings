@@ -10,11 +10,12 @@ from pydantic_settings.utils import path_type_label
 
 def _mock_broken_symlink(monkeypatch: pytest.MonkeyPatch, target: Path) -> None:
     """Make ``target`` behave as a dangling symlink without requiring OS symlink privileges."""
-    orig_exists = Path.exists
-    orig_is_file = Path.is_file
-    orig_is_dir = Path.is_dir
-    orig_is_mount = Path.is_mount
-    orig_is_symlink = Path.is_symlink
+    path_cls = type(target)
+    orig_exists = path_cls.exists
+    orig_is_file = path_cls.is_file
+    orig_is_dir = path_cls.is_dir
+    orig_is_mount = path_cls.is_mount
+    orig_is_symlink = path_cls.is_symlink
 
     def mock_exists(self, *args, **kwargs):
         if self == target:
@@ -41,11 +42,11 @@ def _mock_broken_symlink(monkeypatch: pytest.MonkeyPatch, target: Path) -> None:
             return True
         return orig_is_symlink(self)
 
-    monkeypatch.setattr(Path, 'exists', mock_exists)
-    monkeypatch.setattr(Path, 'is_file', mock_is_file)
-    monkeypatch.setattr(Path, 'is_dir', mock_is_dir)
-    monkeypatch.setattr(Path, 'is_mount', mock_is_mount)
-    monkeypatch.setattr(Path, 'is_symlink', mock_is_symlink)
+    monkeypatch.setattr(path_cls, 'exists', mock_exists)
+    monkeypatch.setattr(path_cls, 'is_file', mock_is_file)
+    monkeypatch.setattr(path_cls, 'is_dir', mock_is_dir)
+    monkeypatch.setattr(path_cls, 'is_mount', mock_is_mount)
+    monkeypatch.setattr(path_cls, 'is_symlink', mock_is_symlink)
 
 
 def test_path_type_label_broken_symlink_mocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -58,6 +59,19 @@ def test_path_type_label_broken_symlink_mocked(tmp_path: Path, monkeypatch: pyte
     missing = tmp_path / 'does_not_exist'
     with pytest.raises(AssertionError, match='path does not exist'):
         path_type_label(missing)
+
+
+def test_path_type_label_skips_unsupported_probe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Platforms where a probe such as ``WindowsPath.is_mount`` raises ``NotImplementedError`` fall through."""
+    broken = tmp_path / 'broken'
+    broken.write_text('placeholder')
+    _mock_broken_symlink(monkeypatch, broken)
+
+    def unsupported_is_mount(self):
+        raise NotImplementedError('Path.is_mount() is unsupported on this system')
+
+    monkeypatch.setattr(type(broken), 'is_mount', unsupported_is_mount)
+    assert path_type_label(broken) == 'symlink'
 
 
 def test_path_type_label_broken_symlink(tmp_path: Path) -> None:
