@@ -5,7 +5,7 @@ import re
 import sys
 import time
 import typing
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from collections.abc import MutableMapping, MutableSequence
 from copy import deepcopy
 from datetime import date
@@ -1577,6 +1577,30 @@ def test_cli_empty_json_list_serialize_roundtrip():
 
     cfg = Cfg(values=[])
     assert CliApp.run(Cfg, cli_args=CliApp.serialize(cfg, list_style='json')) == cfg
+
+
+@pytest.mark.parametrize('list_style', ['json', 'argparse', 'lazy'])
+def test_cli_serialize_frozenset_and_deque_roundtrip(list_style):
+    class Cfg(BaseSettings):
+        tags: frozenset[str] = frozenset()
+        queue: deque[str] = deque()
+        numbers: deque[int] = deque()
+        empty: deque[str] = deque(['default'])
+
+    cfg = CliApp.run(Cfg, cli_args=['--tags', '["x"]', '--queue', '["x","y"]', '--numbers', '[1,2]', '--empty', '[]'])
+    serialized_cli_args = CliApp.serialize(cfg, list_style=list_style)
+    if list_style == 'json':
+        assert serialized_cli_args == [
+            '--tags',
+            '["x"]',
+            '--queue',
+            '["x", "y"]',
+            '--numbers',
+            '[1, 2]',
+            '--empty',
+            '[]',
+        ]
+    assert CliApp.run(Cfg, cli_args=serialized_cli_args) == cfg
 
 
 class _MQTTVersion(IntEnum):
@@ -5304,6 +5328,31 @@ def test_cli_nested_model_validate_by_alias_false():
         sub: Sub = Sub()
 
     assert CliApp.run(Settings, cli_args=['--sub.apple=honeycrisp']).sub.apple == 'honeycrisp'
+
+
+def test_cli_validate_by_alias_false_with_cli_prefix():
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(validate_by_alias=False, cli_prefix='app')
+
+        apple: str = Field('default', alias='pomo')
+        plain: str = 'default'
+
+    assert CliApp.run(Settings, cli_args=['--app.apple=honeycrisp']).apple == 'honeycrisp'
+    assert CliApp.run(Settings, cli_args=['--app.plain=gala']).plain == 'gala'
+
+
+def test_cli_nested_model_validate_by_alias_false_with_cli_prefix():
+    class Sub(BaseModel):
+        model_config = ConfigDict(validate_by_alias=False)
+
+        apple: str = Field('default', alias='pomo')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(validate_by_alias=False, cli_prefix='app')
+
+        sub: Sub = Sub()
+
+    assert CliApp.run(Settings, cli_args=['--app.sub.apple=honeycrisp']).sub.apple == 'honeycrisp'
 
 
 def test_cli_app_run_base_model_validate_by_alias_false():

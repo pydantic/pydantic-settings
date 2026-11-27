@@ -888,6 +888,62 @@ def test_optional_recursive_union_type_alias(env, raw_value, expected):
     assert Settings().value == expected
 
 
+def test_nested_env_under_type_alias_field(env):
+    class Sub(BaseModel):
+        x: list[int] = []
+
+    class Settings(BaseSettings):
+        m: TypeAliasType('MaybeSub', Sub | None) = None
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set('m__x', '[1,2]')
+    assert Settings().m == Sub(x=[1, 2])
+
+
+def test_case_insensitive_nested_type_alias_sub_model(env):
+    class Sub(BaseModel):
+        Val: int = 0
+
+    SubAlias = TypeAliasType('SubAlias', Sub)
+
+    class Outer(BaseModel):
+        i: SubAlias = Sub()
+
+    class Settings(BaseSettings):
+        m: SubAlias = Sub()
+        o: Outer = Outer()
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+    env.set('M__VAL', '5')
+    env.set('O__I__VAL', '5')
+    s = Settings()
+    assert s.m == Sub(Val=5)
+    assert s.o.i == Sub(Val=5)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason='recursive type statement requires Python 3.12')
+@pytest.mark.parametrize(
+    'alias_def, annotation',
+    [
+        ('type Recursive = list[Recursive]', 'Recursive'),
+        ('type Recursive[T] = list[Recursive[T] | T]', 'Recursive[int]'),
+    ],
+)
+def test_nested_recursive_type_alias_does_not_recurse(env, alias_def, annotation):
+    namespace = {'__name__': __name__, 'BaseSettings': BaseSettings, 'SettingsConfigDict': SettingsConfigDict}
+    exec(
+        f'{alias_def}\n'
+        'class Settings(BaseSettings):\n'
+        '    model_config = SettingsConfigDict(env_nested_delimiter="__")\n'
+        f'    value: {annotation} = []',
+        namespace,
+    )
+
+    env.set('value__x', '1')
+    with pytest.raises(ValidationError, match='valid list'):
+        namespace['Settings']()
+
+
 @pytest.mark.parametrize('annotation, raw_value, expected', [(Json[list[int]], '[1, 2]', [1, 2]), (Json[int], '5', 5)])
 @pytest.mark.parametrize('nested', [False, True])
 def test_inline_json_strict(env, annotation, raw_value, expected, nested):
@@ -3569,6 +3625,97 @@ def test_secrets_file_is_a_directory_multiple_one(tmp_path):
         conf = Settings(_secrets_dir=[d1, d2])
 
     assert conf.foo == 'secret_value'  # value obtained from first directory
+
+
+def test_secrets_symlink_file_escaping_secrets_dir_is_ignored(tmp_path):
+    secrets_dir = tmp_path / 'secrets'
+    secrets_dir.mkdir()
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    outside.joinpath('passwd').write_text('outside-value')
+
+    link = secrets_dir / 'passwd'
+    try:
+        link.symlink_to(outside / 'passwd')
+    except OSError:
+        pytest.skip('symlinks not supported on this platform')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(secrets_dir=secrets_dir)
+
+        passwd: str | None = None
+
+    with pytest.warns(UserWarning, match='attempted to load secret file .* but it resolves outside of'):
+        assert Settings().model_dump() == {'passwd': None}
+
+
+def test_secrets_in_tree_symlink_is_followed(tmp_path):
+    secrets_dir = tmp_path / 'secrets'
+    secrets_dir.mkdir()
+    data_dir = secrets_dir / '..data'
+    data_dir.mkdir()
+    (data_dir / 'passwd').write_text('in-tree-value')
+
+    link = secrets_dir / 'passwd'
+    try:
+        link.symlink_to(data_dir / 'passwd')
+    except OSError:
+        pytest.skip('symlinks not supported on this platform')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(secrets_dir=secrets_dir)
+
+        passwd: str | None = None
+
+    assert Settings().model_dump() == {'passwd': 'in-tree-value'}
+
+
+def test_secrets_escaping_symlink_mocked_is_ignored(tmp_path, monkeypatch):
+    secrets_dir = tmp_path / 'secrets'
+    secrets_dir.mkdir()
+    file_path = secrets_dir / 'passwd'
+    file_path.write_text('outside-value')
+    outside_path = tmp_path / 'outside' / 'passwd'
+
+    orig_resolve = Path.resolve
+
+    def mock_resolve(self, *args, **kwargs):
+        if self == file_path:
+            return outside_path
+        return orig_resolve(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'resolve', mock_resolve)
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(secrets_dir=secrets_dir)
+
+        passwd: str | None = None
+
+    with pytest.warns(UserWarning, match='attempted to load secret file .* but it resolves outside of'):
+        assert Settings().model_dump() == {'passwd': None}
+
+
+def test_secrets_resolve_error_is_skipped(tmp_path, monkeypatch):
+    secrets_dir = tmp_path / 'secrets'
+    secrets_dir.mkdir()
+    file_path = secrets_dir / 'passwd'
+    file_path.write_text('val')
+
+    orig_resolve = Path.resolve
+
+    def mock_resolve(self, *args, **kwargs):
+        if self == file_path:
+            raise OSError('mocked resolve error')
+        return orig_resolve(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'resolve', mock_resolve)
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(secrets_dir=secrets_dir)
+        passwd: str | None = None
+
+    with pytest.warns(UserWarning, match='attempted to load secret file .* but it could not be resolved'):
+        assert Settings().passwd is None
 
 
 def test_secrets_dotenv_precedence(tmp_path):
