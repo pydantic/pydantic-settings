@@ -156,6 +156,18 @@ def test_cli_validation_alias_with_cli_prefix():
     assert CliApp.run(Settings, cli_args=['--p.foo', 'bar']).foobar == 'bar'
 
 
+@pytest.mark.parametrize('env_prefix_target', ['variable', 'alias', 'all'])
+def test_cli_prefix_ignores_env_prefix_target(env_prefix_target):
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_prefix='APP_', env_prefix_target=env_prefix_target, cli_prefix='app')
+
+        foo: int = 0
+        bar: int = Field(0, alias='baz')
+
+    settings = CliApp.run(Settings, cli_args=['--app.foo', '1', '--app.baz', '2'])
+    assert settings.model_dump() == {'foo': 1, 'bar': 2}
+
+
 def test_cli_validation_alias_differs_from_alias():
     class Settings(BaseSettings, cli_exit_on_error=False):
         database_url: str = Field('sqlite://', alias='dbAlias', validation_alias='DATABASE_URL')
