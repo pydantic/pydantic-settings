@@ -12,7 +12,7 @@ from typing import (
     get_origin,
 )
 
-from pydantic import AliasChoices, AliasPath, ConfigDict, Json, TypeAdapter, ValidationError
+from pydantic import AliasChoices, AliasPath, ConfigDict, Json, PydanticUserError, TypeAdapter, ValidationError
 from pydantic.fields import FieldInfo
 from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
@@ -204,7 +204,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
         def lax_validate(annotation: Any, value: str) -> Any:
             try:
-                return TypeAdapter(annotation, config=ConfigDict(arbitrary_types_allowed=True)).validate_python(value)
+                return EnvSettingsSource._type_adapter(annotation).validate_python(value)
             except ValidationError:
                 return value
 
@@ -261,13 +261,19 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
     @staticmethod
     def _matches_annotation(annotation: Any, value: Any, strict: bool = False) -> bool:
         try:
-            # The settings model already allows any arbitrary type in its fields, so only validation decides here.
-            TypeAdapter(annotation, config=ConfigDict(arbitrary_types_allowed=True, strict=strict)).validate_python(
-                value
-            )
+            EnvSettingsSource._type_adapter(annotation).validate_python(value, strict=True if strict else None)
         except ValidationError:
             return False
         return True
+
+    @staticmethod
+    def _type_adapter(annotation: Any) -> TypeAdapter[Any]:
+        try:
+            # The settings model already allows any arbitrary type in its fields, so only validation decides here.
+            return TypeAdapter(annotation, config=ConfigDict(arbitrary_types_allowed=True))
+        except PydanticUserError:
+            # Models, dataclasses and TypedDicts carry their own config and reject one here.
+            return TypeAdapter(annotation)
 
     def _matches_alias_path_head(self, field: FieldInfo | Any | None, key: str) -> bool:
         """

@@ -6013,6 +6013,34 @@ def test_env_strict_coercion_json_string_items(env):
     assert [err['loc'] for err in exc_info.value.errors(include_url=False)] == [('floats', 0), ('strict_ints', 0)]
 
 
+def test_env_strict_coercion_json_nested_models(env):
+    """Models and dataclasses own their config, so the strict check must not pass one to `TypeAdapter`."""
+
+    class Child(BaseModel):
+        x: float = 0
+
+    @pydantic_dataclasses.dataclass
+    class ChildDataclass:
+        x: float = 0
+
+    class StrictSettings(BaseSettings, strict=True):
+        child: Child = Child()
+        child_dataclass: ChildDataclass = ChildDataclass()
+        children: list[Child] = []
+
+    env.set('CHILD', '{"x": 0.5}')
+    env.set('CHILD_DATACLASS', '{"x": 0.5}')
+    env.set('CHILDREN', '[{"x": 1.5}]')
+    s = StrictSettings()
+    assert s.child == Child(x=0.5)
+    assert s.child_dataclass == ChildDataclass(x=0.5)
+    assert s.children == [Child(x=1.5)]
+
+    env.set('CHILDREN', '["not a model"]')
+    with pytest.raises(ValidationError):
+        StrictSettings()
+
+
 def test_env_strict_coercion_optional_strict_types(env):
     class StrictSettings(BaseSettings, strict=True):
         my_bool: StrictBool | None = None
