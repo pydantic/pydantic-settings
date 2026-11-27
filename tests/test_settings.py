@@ -16,7 +16,7 @@ from collections.abc import Callable, Hashable
 from collections.abc import Set as AbstractSet
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime
-from enum import Enum, IntEnum
+from enum import Enum, IntEnum, StrEnum
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar
 from unittest import mock
@@ -4466,6 +4466,127 @@ def test_env_parse_enums_with_nested_annotated(env):
     env.set('FRUIT', 'kiwi')
 
     assert Settings(_env_parse_enums=True).fruit == FruitsEnum.kiwi
+
+
+def test_env_parse_enums_in_list(env):
+    class Settings(BaseSettings):
+        fruits: list[FruitsEnum] = []
+        optional_fruits: list[FruitsEnum] | None = None
+        fruit_tuple: tuple[FruitsEnum, ...] = ()
+        words: list[str] = []
+
+    env.set('FRUITS', '["kiwi", "lime"]')
+    env.set('OPTIONAL_FRUITS', '["pear", 2]')
+    env.set('FRUIT_TUPLE', '["lime"]')
+    env.set('WORDS', '["kiwi"]')
+
+    s = Settings(_env_parse_enums=True)
+    assert s.fruits == [FruitsEnum.kiwi, FruitsEnum.lime]
+    assert s.optional_fruits == [FruitsEnum.pear, FruitsEnum.lime]
+    assert s.fruit_tuple == (FruitsEnum.lime,)
+    assert s.words == ['kiwi']
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(_env_parse_enums=False)
+    assert [err['loc'] for err in exc_info.value.errors(include_url=False)] == [
+        ('fruits', 0),
+        ('fruits', 1),
+        ('optional_fruits', 0),
+        ('fruit_tuple', 0),
+    ]
+
+
+def test_env_parse_enums_in_fixed_tuple_only_converts_enum_positions(env):
+    class Settings(BaseSettings):
+        pair: tuple[str, FruitsEnum]
+        mixed: tuple[FruitsEnum, str, FruitsEnum]
+
+    env.set('PAIR', '["kiwi", "lime"]')
+    env.set('MIXED', '["pear", "kiwi", "kiwi"]')
+
+    s = Settings(_env_parse_enums=True)
+    assert s.pair == ('kiwi', FruitsEnum.lime)
+    assert s.mixed == (FruitsEnum.pear, 'kiwi', FruitsEnum.kiwi)
+
+
+def test_env_parse_enums_in_annotated_list_inside_optional(env):
+    class Settings(BaseSettings):
+        fruits: Annotated[list[FruitsEnum], MinLen(1)] | None = None
+
+    env.set('FRUITS', '["kiwi", "lime"]')
+
+    s = Settings(_env_parse_enums=True)
+    assert s.fruits == [FruitsEnum.kiwi, FruitsEnum.lime]
+
+
+def test_env_parse_enums_in_dict_and_nested_containers(env):
+    class Nested(BaseModel):
+        fruits: list[FruitsEnum] = []
+
+    class Settings(BaseSettings, env_nested_delimiter='__'):
+        by_name: dict[str, FruitsEnum] = {}
+        by_fruit: dict[FruitsEnum, int] = {}
+        grid: list[list[FruitsEnum]] = []
+        baskets: dict[str, list[FruitsEnum]] = {}
+        nested: Nested = Nested()
+
+    env.set('BY_NAME', '{"a": "kiwi", "b": 2}')
+    env.set('BY_FRUIT', '{"lime": 3}')
+    env.set('GRID', '[["kiwi"], ["pear", "lime"]]')
+    env.set('BASKETS__a', '["kiwi"]')
+    env.set('NESTED__FRUITS', '["lime"]')
+
+    s = Settings(_env_parse_enums=True)
+    assert s.by_name == {'a': FruitsEnum.kiwi, 'b': FruitsEnum.lime}
+    assert s.by_fruit == {FruitsEnum.lime: 3}
+    assert s.grid == [[FruitsEnum.kiwi], [FruitsEnum.pear, FruitsEnum.lime]]
+    assert s.baskets == {'a': [FruitsEnum.kiwi]}
+    assert s.nested.fruits == [FruitsEnum.lime]
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(_env_parse_enums=False)
+    assert [err['loc'] for err in exc_info.value.errors(include_url=False)] == [
+        ('by_name', 'a'),
+        ('by_fruit', 'lime', '[key]'),
+        ('grid', 0, 0),
+        ('grid', 1, 0),
+        ('grid', 1, 1),
+        ('baskets', 'a', 0),
+        ('nested', 'fruits', 0),
+    ]
+
+
+def test_env_parse_enums_in_union_of_lists_only_converts_matching_branch(env):
+    class Settings(BaseSettings):
+        fruits_or_words: list[FruitsEnum] | list[str] = []
+        words_or_fruits: list[str] | list[FruitsEnum] = []
+
+    env.set('FRUITS_OR_WORDS', '["kiwi", "free"]')
+    env.set('WORDS_OR_FRUITS', '["kiwi", "lime"]')
+
+    s = Settings(_env_parse_enums=True)
+    assert s.fruits_or_words == ['kiwi', 'free']
+    assert s.words_or_fruits == [FruitsEnum.kiwi, FruitsEnum.lime]
+
+
+def test_env_parse_enums_does_not_reparse_str_enum_member(env):
+    class Swapped(StrEnum):
+        A = 'B'
+        B = 'A'
+
+    class Child(BaseModel):
+        value: Swapped = Swapped.B
+        values: list[Swapped] = []
+
+    class Settings(BaseSettings, env_nested_delimiter='__'):
+        child: Child = Child()
+
+    env.set('CHILD__VALUE', 'A')
+    env.set('CHILD__VALUES', '["A"]')
+
+    s = Settings(_env_parse_enums=True)
+    assert s.child.value is Swapped.A
+    assert s.child.values == [Swapped.A]
 
 
 def test_env_parse_none_str(env):
