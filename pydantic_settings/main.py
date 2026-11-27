@@ -27,6 +27,7 @@ from .sources import (
     DotenvFiltering,
     DotEnvSettingsSource,
     DotenvType,
+    EnvFiltering,
     EnvPrefixTarget,
     EnvSettingsSource,
     InitSettingsSource,
@@ -68,6 +69,16 @@ class SettingsConfigDict(ConfigDict, total=False):
     env_file: DotenvType | None
     env_file_encoding: str | None
     dotenv_filtering: DotenvFiltering | None
+    env_filtering: EnvFiltering | None
+    """
+    Filtering behavior for the environment variables source.
+
+    - 'only_existing': Only load values for fields declared on the model.
+    - 'match_prefix': Load values for declared fields, and if `env_prefix` is set,
+      also include undeclared environment variables that start with `env_prefix`
+      as extra inputs (with the prefix removed).
+    - None (default): Same as 'only_existing', matching existing behavior.
+    """
     env_ignore_empty: bool
     env_nested_delimiter: str | None
     env_nested_max_split: int | None
