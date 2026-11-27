@@ -2,8 +2,6 @@
 
 from __future__ import annotations as _annotations
 
-import logging
-import os
 import warnings
 from pathlib import Path
 from typing import (
@@ -13,12 +11,12 @@ from typing import (
 
 from pydantic.fields import FieldInfo
 
-from pydantic_settings.utils import _settings_debug_enabled, logger, path_type_label
+from pydantic_settings.utils import _debug_logging_enabled, logger, path_type_label
 
 from ...exceptions import SettingsError
 from ..base import PydanticBaseEnvSettingsSource
 from ..types import EnvPrefixTarget, PathType
-from ..utils import InitState
+from ..utils import InitState, _as_list, _resolve_setting
 
 if TYPE_CHECKING:
     from pydantic_settings.main import BaseSettings
@@ -51,7 +49,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
             env_parse_enums,
             _init_state,
         )
-        self.secrets_dir = secrets_dir if secrets_dir is not None else self.config.get('secrets_dir')
+        self.secrets_dir = _resolve_setting(secrets_dir, self.config, 'secrets_dir')
 
     def __call__(self) -> dict[str, Any]:
         """
@@ -62,8 +60,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         if self.secrets_dir is None:
             return secrets
 
-        secrets_dirs = [self.secrets_dir] if isinstance(self.secrets_dir, (str, os.PathLike)) else self.secrets_dir
-        secrets_paths = [Path(p).expanduser() for p in secrets_dirs]
+        secrets_paths = [Path(p).expanduser() for p in _as_list(self.secrets_dir)]
         self.secrets_paths = []
 
         for path in secrets_paths:
@@ -82,6 +79,9 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
         for path in self.secrets_paths:
             if not path.is_dir():
                 raise SettingsError(f'secrets_dir must reference a directory, not a {path_type_label(path)}')
+
+        # resolved once here, used to check that every secret file stays inside its directory
+        self._resolved_secrets_paths = {path: path.resolve() for path in self.secrets_paths}
 
         return super().__call__()
 
@@ -116,7 +116,7 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
                 a flag to determine whether value is complex.
         """
 
-        debug = _settings_debug_enabled() and logger.isEnabledFor(logging.DEBUG)
+        debug = _debug_logging_enabled()
 
         for field_key, env_name, value_is_complex in self._extract_field_info(field, field_name):
             # paths reversed to match the last-wins behaviour of `env_file`
@@ -128,9 +128,25 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
                         logger.debug('Secret file not found, skipping: %s', (secrets_path / env_name).resolve())
                     continue
 
+                try:
+                    resolved_path = path.resolve()
+                except (OSError, RuntimeError) as e:
+                    # e.g. a symlink loop, which raises `RuntimeError` on Python < 3.13
+                    warnings.warn(
+                        f'attempted to load secret file "{path}" but it could not be resolved: {e}',
+                        stacklevel=4,
+                    )
+                    continue
+
                 if path.is_file():
+                    if self._resolved_secrets_paths[secrets_path] not in resolved_path.parents:
+                        warnings.warn(
+                            f'attempted to load secret file "{path}" but it resolves outside of "{secrets_path}".',
+                            stacklevel=4,
+                        )
+                        continue
                     if debug:
-                        logger.debug('Loading secret file: %s', path.resolve())
+                        logger.debug('Loading secret file: %s', resolved_path)
                     # Explicit encoding: `read_text()` would otherwise decode with the
                     # locale encoding, so a UTF-8 secret is corrupted on a non-UTF-8
                     # Windows code page (silently, when every byte happens to map).
