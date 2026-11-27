@@ -1,3 +1,4 @@
+import codecs
 import dataclasses
 import gc
 import json
@@ -3486,6 +3487,18 @@ def test_secrets_path_utf8_under_non_utf8_locale(tmp_path, non_utf8_default_enco
         model_config = SettingsConfigDict(secrets_dir=tmp_path)
 
     assert Settings().model_dump() == {'foo': 'café-pässwörd'}
+
+
+def test_secrets_path_utf8_bom(tmp_path):
+    """Windows PowerShell 5.1 `Set-Content -Encoding UTF8` writes a byte order mark, which is not part of the secret."""
+    (tmp_path / 'foo').write_bytes(codecs.BOM_UTF8 + 'pässwörd\n'.encode())
+
+    class Settings(BaseSettings):
+        foo: str
+
+        model_config = SettingsConfigDict(secrets_dir=tmp_path)
+
+    assert Settings().model_dump() == {'foo': 'pässwörd'}
 
 
 def test_secrets_path_json(tmp_path):

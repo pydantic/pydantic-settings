@@ -2,6 +2,7 @@
 Test pydantic_settings.JsonConfigSettingsSource.
 """
 
+import codecs
 import importlib.resources
 import json
 from importlib.resources.abc import Traversable
@@ -325,6 +326,30 @@ def test_json_file_encoding_overrides_the_utf8_default(tmp_path: Path) -> None:
         city: str
 
         model_config = SettingsConfigDict(json_file=p, json_file_encoding='latin-1')
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls: type[BaseSettings],
+            init_settings: PydanticBaseSettingsSource,
+            env_settings: PydanticBaseSettingsSource,
+            dotenv_settings: PydanticBaseSettingsSource,
+            file_secret_settings: PydanticBaseSettingsSource,
+        ) -> tuple[PydanticBaseSettingsSource, ...]:
+            return (JsonConfigSettingsSource(settings_cls),)
+
+    assert Settings().city == 'café'
+
+
+def test_json_file_with_utf8_bom(tmp_path: Path) -> None:
+    """Windows PowerShell 5.1 `Set-Content -Encoding UTF8` writes a byte order mark."""
+    p = tmp_path / 'config.json'
+    p.write_bytes(codecs.BOM_UTF8 + '{"city": "café"}'.encode())
+
+    class Settings(BaseSettings):
+        city: str
+
+        model_config = SettingsConfigDict(json_file=p)
 
         @classmethod
         def settings_customise_sources(

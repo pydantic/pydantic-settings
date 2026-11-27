@@ -150,7 +150,8 @@ class SecretsSettingsSource(PydanticBaseEnvSettingsSource):
                     # Explicit encoding: `read_text()` would otherwise decode with the
                     # locale encoding, so a UTF-8 secret is corrupted on a non-UTF-8
                     # Windows code page (silently, when every byte happens to map).
-                    return path.read_text(encoding='utf-8').strip(), field_key, value_is_complex
+                    # `utf-8-sig` skips a byte order mark, which `strip()` would keep.
+                    return path.read_text(encoding='utf-8-sig').strip(), field_key, value_is_complex
                 warnings.warn(
                     f'attempted to load secret file "{path}" but found a {path_type_label(path)} instead.',
                     stacklevel=4,
