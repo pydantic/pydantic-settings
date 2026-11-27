@@ -19,7 +19,7 @@ from pydantic.fields import FieldInfo
 from typing_inspection.introspection import is_union_origin
 
 from ..exceptions import SettingsError
-from ..utils import deep_update
+from ..utils import _lenient_issubclass, deep_update
 from .types import (
     ConfigFileSourceType,
     EnvNoneType,
@@ -636,6 +636,19 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
         """
         values: dict[str, Any] = {}
 
+        mapping_annotation = _strip_annotated(_unwrap_optional_annotation(_resolve_type_alias(field.annotation)))
+        if _lenient_issubclass(get_origin(mapping_annotation), Mapping) and (
+            mapping_args := get_args(mapping_annotation)
+        ):
+            # The keys are chosen by the user and keep their case, the values are matched against their own type.
+            value_field = FieldInfo(annotation=mapping_args[-1])
+            return {
+                key: self._replace_field_names_case_insensitively(value_field, value)
+                if isinstance(value, dict)
+                else value
+                for key, value in field_values.items()
+            }
+
         for name, value in field_values.items():
             sub_model_field: FieldInfo | None = None
 
@@ -662,13 +675,7 @@ class PydanticBaseEnvSettingsSource(PydanticBaseSettingsSource):
                 values[name] = value
                 continue
 
-            if (
-                sub_model_field is not None
-                and _is_model_or_dataclass(
-                    _strip_annotated(_unwrap_optional_annotation(_resolve_type_alias(sub_model_field.annotation)))
-                )
-                and isinstance(value, dict)
-            ):
+            if sub_model_field is not None and isinstance(value, dict):
                 values[field_key] = self._replace_field_names_case_insensitively(sub_model_field, value)
             else:
                 values[field_key] = value

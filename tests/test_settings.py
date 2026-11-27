@@ -12,7 +12,7 @@ import typing
 import uuid
 import warnings
 import weakref
-from collections.abc import Callable, Hashable
+from collections.abc import Callable, Hashable, Mapping, MutableMapping
 from collections.abc import Set as AbstractSet
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime
@@ -5112,6 +5112,61 @@ def test_case_insensitive_nested_list(env):
     env.set('nested__FOO', '["string1", "string2"]')
     s = Settings()
     assert s.model_dump() == {'nested': {'FOO': ['string1', 'string2']}}
+
+
+class _CaseServer(BaseModel):
+    hostName: str = 'localhost'
+    Port: int = 80
+
+
+@pydantic_dataclasses.dataclass
+class _CaseServerDataclass:
+    hostName: str = 'localhost'
+    Port: int = 80
+
+
+@pytest.mark.parametrize('server', [_CaseServer, _CaseServerDataclass], ids=['model', 'dataclass'])
+@pytest.mark.parametrize('mapping_type', [dict, Mapping, MutableMapping])
+@pytest.mark.parametrize('wrapper', [lambda t: t, lambda t: t | None], ids=['plain', 'optional'])
+def test_case_insensitive_dict_of_models(env, server, mapping_type, wrapper):
+    """Field names of a model used as a dict value are matched case-insensitively, dict keys keep their case."""
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+        servers: wrapper(mapping_type[str, server]) = None
+
+    env.set('servers__web__HOSTNAME', 'a.example')
+    env.set('servers__web__port', '8080')
+    assert Settings().model_dump() == {'servers': {'web': {'hostName': 'a.example', 'Port': 8080}}}
+
+
+@pytest.mark.parametrize('server', [_CaseServer, _CaseServerDataclass], ids=['model', 'dataclass'])
+def test_case_insensitive_dict_of_models_json(env, server):
+    class Settings(BaseSettings):
+        servers: dict[str, server] = {}
+
+    # `hostname` is a dict key here, not a field name: it keeps its case and its own value is mapped
+    env.set('SERVERS', json.dumps({'Web-Main': {'HOSTNAME': 'a.example', 'port': 1}, 'hostname': {'PORT': 2}}))
+    assert Settings().model_dump() == {
+        'servers': {
+            'Web-Main': {'hostName': 'a.example', 'Port': 1},
+            'hostname': {'hostName': 'localhost', 'Port': 2},
+        }
+    }
+
+
+def test_case_insensitive_dict_of_models_nested(env):
+    class Inner(BaseModel):
+        servers: dict[str, dict[str, _CaseServer]] = {}
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+        inner: Inner
+
+    env.set('inner__servers__eu__web__HOSTNAME', 'a.example')
+    assert Settings().model_dump() == {'inner': {'servers': {'eu': {'web': {'hostName': 'a.example', 'Port': 80}}}}}
 
 
 def test_settings_source_current_state(env):
