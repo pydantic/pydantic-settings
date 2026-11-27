@@ -110,6 +110,53 @@ class TestAWSSecretsManagerSettingsSource:
         assert latest()['user'] == 'v2-user'
 
     @mock_aws
+    def test_non_string_json_values(self) -> None:
+        """Arrays, objects, numbers and booleans in the secret JSON are loaded like their string-encoded form."""
+
+        class SqlServer(BaseModel):
+            host: str
+            port: int
+
+        class AWSSecretsManagerSettings(BaseSettings):
+            """AWSSecretsManager settings."""
+
+            hosts: list[str]
+            sql_server: SqlServer
+            port: int
+            debug: bool
+            name: str
+
+            @classmethod
+            def settings_customise_sources(
+                cls,
+                settings_cls: type[BaseSettings],
+                init_settings: PydanticBaseSettingsSource,
+                env_settings: PydanticBaseSettingsSource,
+                dotenv_settings: PydanticBaseSettingsSource,
+                file_secret_settings: PydanticBaseSettingsSource,
+            ) -> tuple[PydanticBaseSettingsSource, ...]:
+                return (AWSSecretsManagerSettingsSource(settings_cls, 'test-secret'),)
+
+        secret_data = {
+            'hosts': ['a', 'b'],
+            'sql_server': {'host': 'db', 'port': 5432},
+            'port': 8000,
+            'debug': True,
+            'name': 123,
+        }
+
+        client = boto3.client('secretsmanager')
+        client.create_secret(Name='test-secret', SecretString=json.dumps(secret_data))
+
+        settings = AWSSecretsManagerSettings()  # type: ignore
+
+        assert settings.hosts == ['a', 'b']
+        assert settings.sql_server == SqlServer(host='db', port=5432)
+        assert settings.port == 8000
+        assert settings.debug is True
+        assert settings.name == '123'
+
+    @mock_aws
     def test_secret_manager_case_insensitive_success(self) -> None:
         """Test secret manager getitem case insensitive success."""
 

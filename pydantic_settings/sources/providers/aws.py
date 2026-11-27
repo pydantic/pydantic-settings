@@ -77,8 +77,17 @@ class AWSSecretsManagerSettingsSource(EnvSettingsSource):
             request['VersionId'] = self._version_id
 
         response = self._secretsmanager_client.get_secret_value(**request)
+        secret = json.loads(response['SecretString'])
 
-        return self._parse_env_vars(json.loads(response['SecretString']))
+        # Values in the secret JSON may be arrays, objects, numbers or booleans rather than
+        # strings. Re-encode them as JSON so they are handled like an environment variable
+        # holding the same value (e.g. decoded for complex fields) instead of failing later.
+        return self._parse_env_vars(
+            {
+                key: value if value is None or isinstance(value, str) else json.dumps(value)
+                for key, value in secret.items()
+            }
+        )
 
     def __repr__(self) -> str:
         return (
