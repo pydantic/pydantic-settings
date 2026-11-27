@@ -11,7 +11,7 @@ from typing import (
     get_origin,
 )
 
-from pydantic import AliasChoices, AliasPath, Json, TypeAdapter, ValidationError
+from pydantic import AliasChoices, AliasPath, ConfigDict, Json, TypeAdapter, ValidationError
 from pydantic.fields import FieldInfo
 from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
@@ -193,7 +193,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         if is_union_origin(origin):
             for arg in args:
                 parsed = EnvSettingsSource._parse_enum_names(arg, value)
-                if parsed != value:
+                # Only pick a branch that the parsed value fully matches, so e.g. `["kiwi", "free"]` for
+                # `list[Fruit] | list[str]` is left alone instead of being half converted to enum members.
+                if parsed != value and EnvSettingsSource._matches_annotation(arg, parsed):
                     return parsed
             return value
         if isinstance(value, list):
@@ -218,6 +220,15 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                 for key, item in value.items()
             }
         return value
+
+    @staticmethod
+    def _matches_annotation(annotation: Any, value: Any) -> bool:
+        try:
+            # The settings model already allows any arbitrary type in its fields, so only validation decides here.
+            TypeAdapter(annotation, config=ConfigDict(arbitrary_types_allowed=True)).validate_python(value)
+        except ValidationError:
+            return False
+        return True
 
     def _matches_alias_path_head(self, field: FieldInfo | Any | None, key: str) -> bool:
         """

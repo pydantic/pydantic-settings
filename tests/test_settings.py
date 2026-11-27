@@ -4556,6 +4556,19 @@ def test_env_parse_enums_in_dict_and_nested_containers(env):
     ]
 
 
+def test_env_parse_enums_in_union_of_lists_only_converts_matching_branch(env):
+    class Settings(BaseSettings):
+        fruits_or_words: list[FruitsEnum] | list[str] = []
+        words_or_fruits: list[str] | list[FruitsEnum] = []
+
+    env.set('FRUITS_OR_WORDS', '["kiwi", "free"]')
+    env.set('WORDS_OR_FRUITS', '["kiwi", "lime"]')
+
+    s = Settings(_env_parse_enums=True)
+    assert s.fruits_or_words == ['kiwi', 'free']
+    assert s.words_or_fruits == [FruitsEnum.kiwi, FruitsEnum.lime]
+
+
 def test_env_parse_none_str(env):
     env.set('x', 'null')
     env.set('y', 'y_override')
