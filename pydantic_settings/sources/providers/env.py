@@ -161,13 +161,8 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     if not allow_parse_failure:
                         raise
 
-                if self.env_parse_enums and isinstance(value, list):
-                    item_annotations = self._sequence_item_annotations(field.annotation, len(value))
-                    if item_annotations is not None:
-                        value = [
-                            self._enum_name_to_val(annotation, item)
-                            for annotation, item in zip(item_annotations, value, strict=True)
-                        ]
+                if self.env_parse_enums:
+                    value = self._parse_enum_names(field.annotation, value)
 
                 if isinstance(value, dict):
                     return deep_update(value, self.explode_env_vars(field_name, field, self.env_vars))
@@ -180,40 +175,49 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         return None
 
     @staticmethod
-    def _sequence_item_annotations(annotation: Any, length: int) -> list[Any] | None:
+    def _parse_enum_names(annotation: Any, value: Any) -> Any:
         """
-        The annotation of each item of a sequence field holding `length` items, or `None` if it cannot be told.
+        Replace enum member names in a decoded value with the members, following `annotation` into containers.
 
-        A homogeneous sequence such as `list[X]` or `tuple[X, ...]` gives `X` for every item, while a
-        fixed-length `tuple[X, Y]` gives each position its own annotation.
+        A string that is the name of a member of an enum in `annotation` becomes that member. List items and
+        dict keys and values are handled recursively, e.g. `["kiwi"]` for `list[Fruit]` or `{"a": ["kiwi"]}`
+        for `dict[str, list[Fruit]]`. Anything that does not match is returned unchanged.
         """
-        if typing_objects.is_annotated(get_origin(annotation)):
-            return EnvSettingsSource._sequence_item_annotations(get_args(annotation)[0], length)
-        if is_union_origin(get_origin(annotation)):
-            for arg in get_args(annotation):
-                if arg is type(None):
-                    continue
-                item_annotations = EnvSettingsSource._sequence_item_annotations(arg, length)
-                if item_annotations is not None:
-                    return item_annotations
-            return None
+        if isinstance(value, str):
+            enum_val = _annotation_enum_name_to_val(annotation, value)
+            return value if enum_val is None else enum_val
         origin = get_origin(annotation)
         args = get_args(annotation)
-        if origin is tuple:
-            if len(args) == 2 and args[1] is Ellipsis:
-                return [args[0]] * length
-            return list(args) if len(args) == length else None
-        if _lenient_issubclass(origin, (Sequence, set, frozenset)) and len(args) == 1:
-            return [args[0]] * length
-        return None
-
-    @staticmethod
-    def _enum_name_to_val(annotation: Any, item: Any) -> Any:
-        """Map `item` to an enum member if it is the name of one in `annotation`, otherwise return it unchanged."""
-        if not isinstance(item, str):
-            return item
-        enum_val = _annotation_enum_name_to_val(annotation, item)
-        return item if enum_val is None else enum_val
+        if typing_objects.is_annotated(origin):
+            return EnvSettingsSource._parse_enum_names(args[0], value)
+        if is_union_origin(origin):
+            for arg in args:
+                parsed = EnvSettingsSource._parse_enum_names(arg, value)
+                if parsed != value:
+                    return parsed
+            return value
+        if isinstance(value, list):
+            if origin is tuple:
+                if len(args) == 2 and args[1] is Ellipsis:
+                    item_annotations = [args[0]] * len(value)
+                elif len(args) == len(value):
+                    item_annotations = list(args)
+                else:
+                    return value
+            elif _lenient_issubclass(origin, (Sequence, set, frozenset)) and len(args) == 1:
+                item_annotations = [args[0]] * len(value)
+            else:
+                return value
+            return [
+                EnvSettingsSource._parse_enum_names(item_annotation, item)
+                for item_annotation, item in zip(item_annotations, value, strict=True)
+            ]
+        if isinstance(value, dict) and _lenient_issubclass(origin, Mapping) and len(args) == 2:
+            return {
+                EnvSettingsSource._parse_enum_names(args[0], key): EnvSettingsSource._parse_enum_names(args[1], item)
+                for key, item in value.items()
+            }
+        return value
 
     def _matches_alias_path_head(self, field: FieldInfo | Any | None, key: str) -> bool:
         """
@@ -424,6 +428,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     except ValueError:
                         if not allow_json_failure:
                             raise
+                if self.env_parse_enums:
+                    target_annotation = target_field.annotation if isinstance(target_field, FieldInfo) else target_field
+                    env_val = self._parse_enum_names(target_annotation, env_val)
             if isinstance(env_var, dict) and (
                 last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] == {}
             ):

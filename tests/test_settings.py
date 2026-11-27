@@ -4519,6 +4519,43 @@ def test_env_parse_enums_in_annotated_list_inside_optional(env):
     assert s.fruits == [FruitsEnum.kiwi, FruitsEnum.lime]
 
 
+def test_env_parse_enums_in_dict_and_nested_containers(env):
+    class Nested(BaseModel):
+        fruits: list[FruitsEnum] = []
+
+    class Settings(BaseSettings, env_nested_delimiter='__'):
+        by_name: dict[str, FruitsEnum] = {}
+        by_fruit: dict[FruitsEnum, int] = {}
+        grid: list[list[FruitsEnum]] = []
+        baskets: dict[str, list[FruitsEnum]] = {}
+        nested: Nested = Nested()
+
+    env.set('BY_NAME', '{"a": "kiwi", "b": 2}')
+    env.set('BY_FRUIT', '{"lime": 3}')
+    env.set('GRID', '[["kiwi"], ["pear", "lime"]]')
+    env.set('BASKETS__a', '["kiwi"]')
+    env.set('NESTED__FRUITS', '["lime"]')
+
+    s = Settings(_env_parse_enums=True)
+    assert s.by_name == {'a': FruitsEnum.kiwi, 'b': FruitsEnum.lime}
+    assert s.by_fruit == {FruitsEnum.lime: 3}
+    assert s.grid == [[FruitsEnum.kiwi], [FruitsEnum.pear, FruitsEnum.lime]]
+    assert s.baskets == {'a': [FruitsEnum.kiwi]}
+    assert s.nested.fruits == [FruitsEnum.lime]
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(_env_parse_enums=False)
+    assert [err['loc'] for err in exc_info.value.errors(include_url=False)] == [
+        ('by_name', 'a'),
+        ('by_fruit', 'lime', '[key]'),
+        ('grid', 0, 0),
+        ('grid', 1, 0),
+        ('grid', 1, 1),
+        ('baskets', 'a', 0),
+        ('nested', 'fruits', 0),
+    ]
+
+
 def test_env_parse_none_str(env):
     env.set('x', 'null')
     env.set('y', 'y_override')
