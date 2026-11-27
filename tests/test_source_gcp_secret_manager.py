@@ -7,6 +7,7 @@ from typing import Annotated
 import pytest
 from pydantic import BaseModel, Field, ValidationError
 from pytest_mock import MockerFixture
+from typing_extensions import TypeAliasType
 
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 from pydantic_settings.sources import GoogleSecretManagerSettingsSource
@@ -571,6 +572,46 @@ class TestGoogleSecretManagerSettingsSource:
 
         assert s.test_secret_v1 == 'v1-value'
         assert s.test_secret_latest == 'latest-value'
+
+    @pytest.mark.parametrize('alias_kind', ['inline', 'named', 'chained'])
+    @pytest.mark.parametrize('case_sensitive', [True, False])
+    @pytest.mark.parametrize('missing_version', [False, True])
+    def test_secret_version_in_type_alias(
+        self, mock_secret_client_factory, alias_kind, case_sensitive, missing_version
+    ):
+        client = mock_secret_client_factory(
+            [
+                {'name': 'test-secret', 'version': 'latest', 'value': 'latest-value'},
+                {'name': 'test-secret', 'version': '1', 'value': 'pinned-value'},
+            ]
+        )
+        version = 'missing' if missing_version else '1'
+        secret_type = Annotated[str, SecretVersion(version)]
+        if alias_kind != 'inline':
+            secret_type = TypeAliasType('VersionedSecret', secret_type)
+        if alias_kind == 'chained':
+            secret_type = TypeAliasType('ChainedSecret', secret_type)
+        alias = 'test-secret' if case_sensitive else 'TEST-SECRET'
+
+        class Settings(BaseSettings):
+            model_config = SettingsConfigDict(populate_by_name=True)
+            pinned: secret_type = Field(default='fallback', alias=alias)
+            latest: str = Field(alias='test-secret')
+
+            @classmethod
+            def settings_customise_sources(
+                cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+            ):
+                return (
+                    GoogleSecretManagerSettingsSource(
+                        settings_cls, secret_client=client, project_id='test-project', case_sensitive=case_sensitive
+                    ),
+                )
+
+        for _ in range(2):
+            settings = Settings()
+            assert settings.pinned == ('fallback' if missing_version else 'pinned-value')
+            assert settings.latest == 'latest-value'
 
     def test_secret_version_annotation_missing_secret(self, mock_secret_client, mocker):
         """Test SecretVersion annotation when secret is missing"""
