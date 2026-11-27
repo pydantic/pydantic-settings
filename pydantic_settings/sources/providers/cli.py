@@ -251,7 +251,8 @@ class _CliArg(BaseModel):
             and self.validate_by_alias
             and not self.is_parser_submodel
         ):
-            # Strip prefix if validation alias is set and value is not complex.
+            # Strip prefix if validation alias is set, is the preferred name (validate_by_alias), and value is not complex.
+            # With validate_by_alias=False the field name is used and is looked up with the prefix.
             # Related https://github.com/pydantic/pydantic-settings/pull/25
             return f'{self.arg_prefix}{self.preferred_alias}'[self.env_prefix_len :]
         return f'{self.arg_prefix}{self.preferred_alias}'
