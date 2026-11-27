@@ -3572,14 +3572,16 @@ By flipping `env_settings` and `init_settings`, environment variables now have p
 ### Adding sources
 
 As explained earlier, *pydantic* ships with multiples built-in settings sources. However, you may occasionally
-need to add your own custom sources, `settings_customise_sources` makes this very easy:
+need to add your own custom sources, `settings_customise_sources` makes this very easy.
+
+A source that loads all its values at once only needs to implement `__call__`.
+The `get_field_value` hook is optional for `PydanticBaseSettingsSource` subclasses, but remains required
+for `PydanticBaseEnvSettingsSource` subclasses, whose default `__call__` looks up each field individually.
 
 ```py
 import json
 from pathlib import Path
 from typing import Any
-
-from pydantic.fields import FieldInfo
 
 from pydantic_settings import (
     BaseSettings,
@@ -3597,35 +3599,9 @@ class JsonConfigSettingsSource(PydanticBaseSettingsSource):
     when reading `config.json`
     """
 
-    def get_field_value(
-        self, field: FieldInfo, field_name: str
-    ) -> tuple[Any, str, bool]:
-        encoding = self.config.get('env_file_encoding')
-        file_content_json = json.loads(
-            Path('tests/example_test_config.json').read_text(encoding)
-        )
-        field_value = file_content_json.get(field_name)
-        return field_value, field_name, False
-
-    def prepare_field_value(
-        self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool
-    ) -> Any:
-        return value
-
     def __call__(self) -> dict[str, Any]:
-        d: dict[str, Any] = {}
-
-        for field_name, field in self.settings_cls.model_fields.items():
-            field_value, field_key, value_is_complex = self.get_field_value(
-                field, field_name
-            )
-            field_value = self.prepare_field_value(
-                field_name, field, field_value, value_is_complex
-            )
-            if field_value is not None:
-                d[field_key] = field_value
-
-        return d
+        encoding = self.config.get('env_file_encoding')
+        return json.loads(Path('tests/example_test_config.json').read_text(encoding))
 
 
 class Settings(BaseSettings):
@@ -3661,16 +3637,10 @@ Each source of settings can access the output of the previous ones.
 ```python
 from typing import Any
 
-from pydantic.fields import FieldInfo
-
 from pydantic_settings import PydanticBaseSettingsSource
 
 
 class MyCustomSource(PydanticBaseSettingsSource):
-    def get_field_value(
-        self, field: FieldInfo, field_name: str
-    ) -> tuple[Any, str, bool]: ...
-
     def __call__(self) -> dict[str, Any]:
         # Retrieve the aggregated settings from previous sources
         current_state = self.current_state
