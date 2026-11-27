@@ -2,7 +2,8 @@ from __future__ import annotations as _annotations
 
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from enum import Enum
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -11,8 +12,9 @@ from typing import (
     get_origin,
 )
 
-from pydantic import AliasChoices, AliasPath, Json, TypeAdapter, ValidationError
+from pydantic import AliasChoices, AliasPath, ConfigDict, Json, TypeAdapter, ValidationError
 from pydantic.fields import FieldInfo
+from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
 
 from ...utils import _lenient_issubclass, deep_update
@@ -30,6 +32,7 @@ from ..utils import (
     _literal_has_numeric_enum,
     _resolve_setting,
     _resolve_type_alias,
+    _strip_annotated,
     _union_has_strict_types,
     _union_is_complex,
     _unwrap_union_member,
@@ -159,6 +162,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     if not allow_parse_failure:
                         raise
 
+                if self.env_parse_enums:
+                    value = self._parse_enum_names(field.annotation, value)
+
                 if isinstance(value, dict):
                     return deep_update(value, self.explode_env_vars(field_name, field, self.env_vars))
                 return value
@@ -168,6 +174,65 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
         # No value resolved for this field; `None` tells the caller to skip it.
         return None
+
+    @staticmethod
+    def _parse_enum_names(annotation: Any, value: Any) -> Any:
+        """
+        Replace enum member names in a decoded value with the members, following `annotation` into containers.
+
+        A string that is the name of a member of an enum in `annotation` becomes that member. List items and
+        dict keys and values are handled recursively, e.g. `["kiwi"]` for `list[Fruit]` or `{"a": ["kiwi"]}`
+        for `dict[str, list[Fruit]]`. Anything that does not match is returned unchanged.
+        """
+        if isinstance(value, Enum):
+            # Already converted; a `str`-based member must not be looked up again as a name.
+            return value
+        if isinstance(value, str):
+            enum_val = _annotation_enum_name_to_val(annotation, value)
+            return value if enum_val is None else enum_val
+        origin = get_origin(annotation)
+        args = get_args(annotation)
+        if typing_objects.is_annotated(origin):
+            return EnvSettingsSource._parse_enum_names(args[0], value)
+        if is_union_origin(origin):
+            for arg in args:
+                parsed = EnvSettingsSource._parse_enum_names(arg, value)
+                # Only pick a branch that the parsed value fully matches, so e.g. `["kiwi", "free"]` for
+                # `list[Fruit] | list[str]` is left alone instead of being half converted to enum members.
+                if parsed != value and EnvSettingsSource._matches_annotation(arg, parsed):
+                    return parsed
+            return value
+        if isinstance(value, list):
+            if origin is tuple:
+                if len(args) == 2 and args[1] is Ellipsis:
+                    item_annotations = [args[0]] * len(value)
+                elif len(args) == len(value):
+                    item_annotations = list(args)
+                else:
+                    return value
+            elif _lenient_issubclass(origin, (Sequence, set, frozenset)) and len(args) == 1:
+                item_annotations = [args[0]] * len(value)
+            else:
+                return value
+            return [
+                EnvSettingsSource._parse_enum_names(item_annotation, item)
+                for item_annotation, item in zip(item_annotations, value, strict=True)
+            ]
+        if isinstance(value, dict) and _lenient_issubclass(origin, Mapping) and len(args) == 2:
+            return {
+                EnvSettingsSource._parse_enum_names(args[0], key): EnvSettingsSource._parse_enum_names(args[1], item)
+                for key, item in value.items()
+            }
+        return value
+
+    @staticmethod
+    def _matches_annotation(annotation: Any, value: Any) -> bool:
+        try:
+            # The settings model already allows any arbitrary type in its fields, so only validation decides here.
+            TypeAdapter(annotation, config=ConfigDict(arbitrary_types_allowed=True)).validate_python(value)
+        except ValidationError:
+            return False
+        return True
 
     def _matches_alias_path_head(self, field: FieldInfo | Any | None, key: str) -> bool:
         """
@@ -239,7 +304,11 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
     # We have to change the method to a non-static method and use
     # `self.case_sensitive` instead in V3.
     def next_field(
-        self, field: FieldInfo | Any | None, key: str, case_sensitive: bool | None = None
+        self,
+        field: FieldInfo | Any | None,
+        key: str,
+        case_sensitive: bool | None = None,
+        _seen: tuple[Any, ...] = (),
     ) -> FieldInfo | None:
         """
         Find the field in a sub model by key(env name)
@@ -273,17 +342,22 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         if not field:
             return None
 
-        annotation = field.annotation if isinstance(field, FieldInfo) else field
+        raw_annotation = field.annotation if isinstance(field, FieldInfo) else field
+        # Stop on recursive aliases (`type R = list[R]`), which would otherwise be resolved forever.
+        if raw_annotation in _seen:
+            return None
+        seen = (*_seen, raw_annotation)
+        annotation = _strip_annotated(_resolve_type_alias(raw_annotation))
         if _lenient_issubclass(get_origin(annotation), dict):
             # get value type if it's a dict
             args = get_args(annotation)
             return args[-1] if args else None
         for type_ in get_args(annotation):
-            type_has_key = self.next_field(type_, key, case_sensitive)
+            type_has_key = self.next_field(type_, key, case_sensitive, seen)
             if type_has_key:
                 return type_has_key
         if _is_model_or_dataclass(annotation):
-            fields = _get_model_fields(annotation)  # type: ignore[arg-type]
+            fields = _get_model_fields(annotation)
             model_config = _get_model_config(annotation)
             # `case_sensitive is None` is here to be compatible with the old behavior.
             # Has to be removed in V3.
@@ -369,6 +443,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     except ValueError:
                         if not allow_json_failure:
                             raise
+                if self.env_parse_enums:
+                    target_annotation = target_field.annotation if isinstance(target_field, FieldInfo) else target_field
+                    env_val = self._parse_enum_names(target_annotation, env_val)
             if isinstance(env_var, dict) and (
                 last_key not in env_var or not isinstance(env_val, EnvNoneType) or env_var[last_key] == {}
             ):
