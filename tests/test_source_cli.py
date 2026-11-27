@@ -1749,6 +1749,34 @@ def test_cli_list_json_value_parsing(arg_spaces):
 
 
 @pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
+def test_cli_list_numbers_not_written_as_json(arg_spaces):
+    class Cfg(BaseSettings):
+        floats: list[float] = []
+        ints: list[int] = []
+        strs: list[str] = []
+
+    # `float()` accepts these, but they are not JSON numbers
+    assert CliApp.run(
+        Cfg, cli_args=['--floats', arg_spaces('.5,5.,-.5,1_0.5'), '--floats', '"2."', '--floats', 'inf']
+    ).floats == [0.5, 5.0, -0.5, 10.5, 2.0, float('inf')]
+    assert CliApp.run(Cfg, cli_args=['--ints', arg_spaces('007,+1,1_000'), '--ints', '"08"']).ints == [7, 1, 1000, 8]
+
+    # JSON numbers only use ASCII digits, `Decimal()` also accepts other Unicode digits
+    class DecimalCfg(BaseSettings):
+        values: list[Decimal]
+
+    assert CliApp.run(DecimalCfg, cli_args=['--values', arg_spaces('1٢,٣')]).values == [Decimal(12), Decimal(3)]
+    assert CliApp.run(Cfg, cli_args=['--strs', arg_spaces('.5,007,+1,1_000,inf'), '--strs', '"5."']).strs == [
+        '.5',
+        '007',
+        '+1',
+        '1_000',
+        'inf',
+        '5.',
+    ]
+
+
+@pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
 @pytest.mark.parametrize('prefix', ['', 'child.'])
 def test_cli_dict_arg(prefix, arg_spaces):
     class Child(BaseModel):
