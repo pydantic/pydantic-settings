@@ -5990,6 +5990,29 @@ def test_env_strict_coercion(env):
     }
 
 
+def test_env_strict_coercion_json_string_items(env):
+    class StrictSettings(BaseSettings, strict=True):
+        floats: list[float] = []
+        ints_or_strs: list[int] | list[str] = []
+        prices: dict[str, float] = {}
+        strict_ints: list[StrictInt] = []
+
+    env.set('FLOATS', '["0.5", 1.5]')
+    env.set('INTS_OR_STRS', '["007"]')
+    env.set('PRICES', '{"a": "2.5"}')
+    s = StrictSettings()
+    assert s.floats == [0.5, 1.5]
+    assert s.ints_or_strs == ['007']
+    assert s.prices == {'a': 2.5}
+
+    # only strings are converted, so values JSON already typed keep strict validation
+    env.set('FLOATS', '[true]')
+    env.set('STRICT_INTS', '["1"]')
+    with pytest.raises(ValidationError) as exc_info:
+        StrictSettings()
+    assert [err['loc'] for err in exc_info.value.errors(include_url=False)] == [('floats', 0), ('strict_ints', 0)]
+
+
 def test_env_strict_coercion_optional_strict_types(env):
     class StrictSettings(BaseSettings, strict=True):
         my_bool: StrictBool | None = None

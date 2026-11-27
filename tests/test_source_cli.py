@@ -1735,6 +1735,20 @@ def test_cli_list_decimal_keeps_precision(arg_spaces):
 
 
 @pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
+def test_cli_strict_list_and_dict_values(arg_spaces):
+    class Cfg(BaseSettings, strict=True):
+        floats: list[float] = []
+        ints: list[int] = []
+        counts: dict[str, int] = {}
+
+    cfg = CliApp.run(
+        Cfg,
+        cli_args=['--floats', arg_spaces('.5,1.5'), '--ints', arg_spaces('007,+1'), '--counts', arg_spaces('a=1,b=2')],
+    )
+    assert cfg.model_dump() == {'floats': [0.5, 1.5], 'ints': [7, 1], 'counts': {'a': 1, 'b': 2}}
+
+
+@pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
 def test_cli_list_json_value_parsing(arg_spaces):
     class Cfg(BaseSettings):
         json_list: list[str | bool | None]
