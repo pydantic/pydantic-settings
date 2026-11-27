@@ -151,6 +151,17 @@ def _get_model_description(model_cls: type[Any]) -> str | None:
     return None
 
 
+def _escape_argparse_description(description: str | None) -> str | None:
+    """Escape bare `%` in a description for argparse.
+
+    argparse only %-formats a description when it contains `%(prog)`, so a bare `%` is fine on its own but breaks
+    `--help` once `%(prog)` is present. `%(prog)` and already escaped `%%` are kept as they are.
+    """
+    if description is None or '%(prog)' not in description:
+        return description
+    return re.sub(r'%%|%\(prog\)|%', lambda m: '%%' if m.group() == '%' else m.group(), description)
+
+
 def _collect_sub_models(type_: Any, sub_models: list[type[BaseModel]]) -> None:
     """Recursively collect BaseModel subclasses from possibly nested union types."""
     stripped = _strip_annotated(type_)
@@ -276,9 +287,11 @@ class _CliArg(BaseModel):
             not self.subcommand_dest
             and self.arg_prefix
             and self.field_info.validation_alias is not None
+            and self.validate_by_alias
             and not self.is_parser_submodel
         ):
-            # Strip prefix if validation alias is set and value is not complex.
+            # Strip prefix if validation alias is set, is the preferred name (validate_by_alias), and value is not complex.
+            # With validate_by_alias=False the field name is used and is looked up with the prefix.
             # Related https://github.com/pydantic/pydantic-settings/pull/25
             return f'{self.arg_prefix}{self.preferred_alias}'[self.env_prefix_len :]
         return f'{self.arg_prefix}{self.preferred_alias}'
@@ -502,7 +515,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             _CliInternalArgParser(
                 cli_exit_on_error=self.cli_exit_on_error,
                 prog=self.cli_prog_name,
-                description=_get_model_description(settings_cls),
+                description=_escape_argparse_description(_get_model_description(settings_cls)),
                 formatter_class=formatter_class,
                 prefix_chars=self.cli_flag_prefix_char,
                 allow_abbrev=False,
@@ -1233,17 +1246,20 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     subcommand_arg.args = [subcommand_alias]
                     subcommand_arg.kwargs['allow_abbrev'] = False
                     subcommand_arg.kwargs['formatter_class'] = self._formatter_class
-                    subcommand_arg.kwargs['description'] = _get_model_description(sub_model)
-                    subcommand_arg.kwargs['help'] = None if len(arg.sub_models) > 1 else field_info.description
+                    subcommand_arg.kwargs['description'] = self._description_escape(_get_model_description(sub_model))
+                    subcommand_help = None if len(arg.sub_models) > 1 else field_info.description
                     if self.cli_use_class_docs_for_groups:
-                        subcommand_arg.kwargs['help'] = _get_model_description(sub_model)
+                        subcommand_help = _get_model_description(sub_model)
+                    subcommand_arg.kwargs['help'] = subcommand_help and self._help_escape(subcommand_help)
 
                     subparsers = (
                         self._add_subparsers(
                             parser,
                             title='subcommands',
                             dest=f'{arg_prefix}:subcommand',
-                            description=field_info.description if len(arg.sub_models) > 1 else None,
+                            description=self._description_escape(field_info.description)
+                            if len(arg.sub_models) > 1
+                            else None,
                         )
                         if subparsers is None
                         else subparsers
@@ -1515,6 +1531,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         is_model_suppressed = self._is_field_suppressed(field_info) or is_model_suppressed
         if is_model_suppressed:
             model_group_kwargs['description'] = CLI_SUPPRESS
+        model_group_kwargs['description'] = self._description_escape(model_group_kwargs['description'])
         added_args.append(arg_names[0])
         kwargs['required'] = False
         kwargs['nargs'] = '?'
@@ -1522,7 +1539,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         kwargs['help'] = (
             CLI_SUPPRESS
             if is_model_suppressed or self.cli_avoid_json
-            else self._help_format_env_vars(f'set {arg_names[0]} from JSON string (default: {{}})', env_var_names)
+            else self._help_escape(
+                self._help_format_env_vars(f'set {arg_names[0]} from JSON string (default: {{}})', env_var_names)
+            )
         )
         self._add_env_var_names(kwargs['dest'], kwargs['help'], env_var_names)
         model_group = self._add_group(parser, **model_group_kwargs)
@@ -1725,7 +1744,15 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if _CliToggleFlag not in field_info.metadata:
                 _help += f' {default}' if _help else default
         _help = self._help_format_env_vars(_help, env_var_names)
-        return _help.replace('%', '%%') if issubclass(type(self._root_parser), ArgumentParser) else _help
+        return self._help_escape(_help)
+
+    def _help_escape(self, help_text: str) -> str:
+        return help_text.replace('%', '%%') if issubclass(type(self._root_parser), ArgumentParser) else help_text
+
+    def _description_escape(self, description: str | None) -> str | None:
+        if issubclass(type(self._root_parser), ArgumentParser):
+            return _escape_argparse_description(description)
+        return description
 
     def _is_field_suppressed(self, field_info: FieldInfo) -> bool:
         _help = field_info.description or ''
@@ -1766,7 +1793,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         # dates or decimals to JSON-compatible values, so the CLI parser can read them back.
         if isinstance(value, Enum):
             value = value.value
-        if isinstance(value, (dict, list, set, tuple)):
+        if isinstance(value, (Mapping, Sequence, AbstractSet)) and not isinstance(value, (str, bytes, bytearray)):
             return json.dumps(to_jsonable_python(value))
         return str(value)
 

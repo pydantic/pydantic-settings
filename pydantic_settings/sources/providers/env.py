@@ -31,6 +31,7 @@ from ..utils import (
     _literal_has_numeric_enum,
     _resolve_setting,
     _resolve_type_alias,
+    _strip_annotated,
     _union_has_strict_types,
     _union_is_complex,
     _unwrap_union_member,
@@ -284,7 +285,11 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
     # We have to change the method to a non-static method and use
     # `self.case_sensitive` instead in V3.
     def next_field(
-        self, field: FieldInfo | Any | None, key: str, case_sensitive: bool | None = None
+        self,
+        field: FieldInfo | Any | None,
+        key: str,
+        case_sensitive: bool | None = None,
+        _seen: tuple[Any, ...] = (),
     ) -> FieldInfo | None:
         """
         Find the field in a sub model by key(env name)
@@ -318,17 +323,22 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         if not field:
             return None
 
-        annotation = field.annotation if isinstance(field, FieldInfo) else field
+        raw_annotation = field.annotation if isinstance(field, FieldInfo) else field
+        # Stop on recursive aliases (`type R = list[R]`), which would otherwise be resolved forever.
+        if raw_annotation in _seen:
+            return None
+        seen = (*_seen, raw_annotation)
+        annotation = _strip_annotated(_resolve_type_alias(raw_annotation))
         if _lenient_issubclass(get_origin(annotation), dict):
             # get value type if it's a dict
             args = get_args(annotation)
             return args[-1] if args else None
         for type_ in get_args(annotation):
-            type_has_key = self.next_field(type_, key, case_sensitive)
+            type_has_key = self.next_field(type_, key, case_sensitive, seen)
             if type_has_key:
                 return type_has_key
         if _is_model_or_dataclass(annotation):
-            fields = _get_model_fields(annotation)  # type: ignore[arg-type]
+            fields = _get_model_fields(annotation)
             model_config = _get_model_config(annotation)
             # `case_sensitive is None` is here to be compatible with the old behavior.
             # Has to be removed in V3.

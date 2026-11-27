@@ -52,9 +52,14 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         self.yaml_config_section = _resolve_setting(
             yaml_config_section, settings_cls.model_config, 'yaml_config_section'
         )
+        if self.yaml_config_section == '':
+            # Validate up front so an empty section is rejected even when no yaml file exists.
+            raise ValueError('yaml_config_section cannot be empty')
         self.yaml_data = self._read_files(self.yaml_file_path, deep_merge=deep_merge)
 
-        if self.yaml_config_section is not None:
+        # Like `toml_table_header`, only look up the section when a yaml file was actually
+        # read; a missing (optional) file should fall back to defaults, not raise `KeyError`.
+        if self.yaml_config_section is not None and self._existing_files(self.yaml_file_path):
             section_data = self._traverse_nested_section(
                 self.yaml_data, self.yaml_config_section, self.yaml_config_section
             )
@@ -99,10 +104,6 @@ class YamlConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         # Track the original path for error messages
         if original_path is None:
             original_path = section_path
-
-        # Only reject truly empty paths
-        if not section_path:
-            raise ValueError('yaml_config_section cannot be empty')
 
         # Try the full path as a literal key first (even with leading/trailing/consecutive dots)
         try:
