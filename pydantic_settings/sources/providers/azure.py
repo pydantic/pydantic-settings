@@ -183,6 +183,12 @@ class AzureKeyVaultSettingsSource(EnvSettingsSource):
             ]
         return field_info
 
+    def _alias_path_head_env_name(self, head: str) -> str:
+        env_name = super()._alias_path_head_env_name(head)
+        if self._dash_to_underscore and not self._snake_case_conversion:
+            return env_name.replace('_', '-')
+        return env_name
+
     def explode_env_vars(self, field_name: str, field: FieldInfo, env_vars: Mapping[str, str | None]) -> dict[str, Any]:
         values = super().explode_env_vars(field_name, field, env_vars)
         if self._dash_to_underscore and not self._snake_case_conversion:
