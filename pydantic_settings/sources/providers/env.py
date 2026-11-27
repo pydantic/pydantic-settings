@@ -3,6 +3,7 @@ from __future__ import annotations as _annotations
 import json
 import os
 from collections.abc import Mapping, Sequence
+from enum import Enum
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -183,6 +184,9 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         dict keys and values are handled recursively, e.g. `["kiwi"]` for `list[Fruit]` or `{"a": ["kiwi"]}`
         for `dict[str, list[Fruit]]`. Anything that does not match is returned unchanged.
         """
+        if isinstance(value, Enum):
+            # Already converted; a `str`-based member must not be looked up again as a name.
+            return value
         if isinstance(value, str):
             enum_val = _annotation_enum_name_to_val(annotation, value)
             return value if enum_val is None else enum_val

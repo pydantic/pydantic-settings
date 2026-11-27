@@ -16,7 +16,7 @@ from collections.abc import Callable, Hashable
 from collections.abc import Set as AbstractSet
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime
-from enum import Enum, IntEnum
+from enum import Enum, IntEnum, StrEnum
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar
 from unittest import mock
@@ -4567,6 +4567,26 @@ def test_env_parse_enums_in_union_of_lists_only_converts_matching_branch(env):
     s = Settings(_env_parse_enums=True)
     assert s.fruits_or_words == ['kiwi', 'free']
     assert s.words_or_fruits == [FruitsEnum.kiwi, FruitsEnum.lime]
+
+
+def test_env_parse_enums_does_not_reparse_str_enum_member(env):
+    class Swapped(StrEnum):
+        A = 'B'
+        B = 'A'
+
+    class Child(BaseModel):
+        value: Swapped = Swapped.B
+        values: list[Swapped] = []
+
+    class Settings(BaseSettings, env_nested_delimiter='__'):
+        child: Child = Child()
+
+    env.set('CHILD__VALUE', 'A')
+    env.set('CHILD__VALUES', '["A"]')
+
+    s = Settings(_env_parse_enums=True)
+    assert s.child.value is Swapped.A
+    assert s.child.values == [Swapped.A]
 
 
 def test_env_parse_none_str(env):
