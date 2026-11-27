@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Hashable, Mapping, Sequence
 from dataclasses import asdict, is_dataclass
 from dataclasses import fields as dataclass_fields
+from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast, get_args, get_type_hints
 
@@ -31,6 +32,7 @@ from .types import (
 )
 from .utils import (
     InitState,
+    _annotation_contains_decimal,
     _annotation_is_complex,
     _get_alias_names,
     _get_env_var_key,
@@ -213,7 +215,10 @@ class PydanticBaseSettingsSource(ABC):
         ):
             return value
 
-        return json.loads(value)
+        # JSON numbers are read as floats by default, which drops digits and trailing zeros that a `Decimal`
+        # field would keep, e.g. `1.10` or `0.1234567890123456789`.
+        parse_float = Decimal if field and _annotation_contains_decimal(field.annotation) else None
+        return json.loads(value, parse_float=parse_float)
 
     @abstractmethod
     def __call__(self) -> dict[str, Any]:

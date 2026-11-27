@@ -1726,6 +1726,15 @@ def test_cli_set_arg():
 
 
 @pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
+def test_cli_list_decimal_keeps_precision(arg_spaces):
+    class Cfg(BaseSettings):
+        amounts: list[Decimal]
+
+    cfg = CliApp.run(Cfg, cli_args=['--amounts', arg_spaces('1.10,2.50'), '--amounts', '[0.1234567890123456789]'])
+    assert [str(amount) for amount in cfg.amounts] == ['1.10', '2.50', '0.1234567890123456789']
+
+
+@pytest.mark.parametrize('arg_spaces', [no_add_cli_arg_spaces, add_cli_arg_spaces])
 def test_cli_list_json_value_parsing(arg_spaces):
     class Cfg(BaseSettings):
         json_list: list[str | bool | None]

@@ -8,6 +8,7 @@ from collections import deque
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import is_dataclass
+from decimal import Decimal
 from enum import Enum
 from itertools import islice
 from pathlib import Path
@@ -418,6 +419,22 @@ def _get_model_fields(model_cls: type[Any]) -> dict[str, FieldInfo]:
     raise SettingsError(f'Error: {model_cls.__name__} is not subclass of BaseModel or pydantic.dataclasses.dataclass')
 
 
+def _annotation_contains_decimal(annotation: Any, _seen: tuple[Any, ...] = ()) -> bool:
+    """Whether `annotation` contains `Decimal`, including in the fields of nested models and pydantic dataclasses."""
+    annotation = _resolve_type_alias(annotation)
+    # Stop on recursive models and aliases, which would otherwise be inspected forever.
+    if annotation in _seen:
+        return False
+    if _lenient_issubclass(annotation, Decimal):
+        return True
+    _seen = (*_seen, annotation)
+    if _is_model_or_dataclass(annotation):
+        return any(
+            _annotation_contains_decimal(field.annotation, _seen) for field in _get_model_fields(annotation).values()
+        )
+    return any(_annotation_contains_decimal(arg, _seen) for arg in get_args(annotation))
+
+
 def _get_alias_names(
     field_name: str,
     field_info: FieldInfo,
@@ -508,6 +525,7 @@ def _is_function(obj: Any) -> bool:
 
 __all__ = [
     'InitState',
+    '_annotation_contains_decimal',
     '_annotation_contains_types',
     '_annotation_enum_name_to_val',
     '_annotation_enum_val_to_name',
