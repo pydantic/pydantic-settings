@@ -113,6 +113,51 @@ class TestPyprojectTomlConfigSettingsSource:
         assert obj.toml_data == {'field': 'some'}
         assert obj.toml_file_path == tmp_path / 'pyproject.toml'
 
+    def test___init___stops_at_filesystem_root(self, mocker: MockerFixture, tmp_path: Path) -> None:
+        """Test upward discovery stops after checking the filesystem root once."""
+        cwd = tmp_path / 'child'
+        checked: list[Path] = []
+
+        def fake_is_file(self: Path) -> bool:
+            checked.append(self)
+            return False
+
+        mocker.patch(f'{MODULE}.Path.cwd', return_value=cwd)
+        mocker.patch.object(Path, 'is_file', fake_is_file)
+
+        result = PyprojectTomlConfigSettingsSource._pick_pyproject_toml_file(None, 99)
+        assert result == cwd / 'pyproject.toml'
+        assert checked == [parent / 'pyproject.toml' for parent in (cwd, *cwd.parents)]
+
+    def test___init___cwd_at_filesystem_root(self, mocker: MockerFixture, tmp_path: Path) -> None:
+        """Test starting at the filesystem root checks root pyproject.toml only once."""
+        root = Path(tmp_path.anchor)
+        checked: list[Path] = []
+
+        def fake_is_file(self: Path) -> bool:
+            checked.append(self)
+            return False
+
+        mocker.patch(f'{MODULE}.Path.cwd', return_value=root)
+        mocker.patch.object(Path, 'is_file', fake_is_file)
+
+        result = PyprojectTomlConfigSettingsSource._pick_pyproject_toml_file(None, 99)
+        assert result == root / 'pyproject.toml'
+        assert checked == [root / 'pyproject.toml']
+
+    def test___init___negative_depth(self, mocker: MockerFixture, tmp_path: Path) -> None:
+        """Test negative depth does not traverse parent directories."""
+        cwd = tmp_path / 'child'
+        mocker.patch(f'{MODULE}.Path.cwd', return_value=cwd)
+        (tmp_path / 'pyproject.toml').write_text(SOME_TOML_DATA)
+
+        class Settings(BaseSettings):
+            model_config = SettingsConfigDict(pyproject_toml_depth=-1)
+
+        obj = PyprojectTomlConfigSettingsSource(Settings)
+        assert obj.toml_file_path == cwd / 'pyproject.toml'
+        assert not obj.toml_data
+
 
 def test_pyproject_toml_file(cd_tmp_path: Path):
     pyproject = cd_tmp_path / 'pyproject.toml'
