@@ -487,16 +487,18 @@ def test_yaml_config_section_with_literal_dots(tmp_path):
 
 
 @pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
-def test_yaml_config_section_empty_path(tmp_path):
-    """Test that empty section path is rejected."""
+@pytest.mark.parametrize('file_exists', [True, False])
+def test_yaml_config_section_empty_path(tmp_path, file_exists):
+    """Test that empty section path is rejected, even when the yaml file does not exist."""
     p = tmp_path / 'config.yaml'
-    p.write_text(
+    if file_exists:
+        p.write_text(
+            """
+        app:
+          settings:
+            host: "localhost"
         """
-    app:
-      settings:
-        host: "localhost"
-    """
-    )
+        )
 
     class Settings(BaseSettings):
         host: str
@@ -544,10 +546,12 @@ def test_yaml_config_section_empty_section(tmp_path):
 
 
 @pytest.mark.skipif(yaml is None, reason='pyYAML is not installed')
-@pytest.mark.parametrize('yaml_file', ['missing.yaml', None])
+@pytest.mark.parametrize('yaml_file', ['missing.yaml', ['missing1.yaml', 'missing2.yaml'], None])
 def test_yaml_config_section_missing_yaml_file(tmp_path, yaml_file):
     """If a section is configured but no yaml file is read, fall back to defaults instead of raising."""
-    if yaml_file is not None:
+    if isinstance(yaml_file, list):
+        yaml_file = [tmp_path / f for f in yaml_file]
+    elif yaml_file is not None:
         yaml_file = tmp_path / yaml_file
 
     class Settings(BaseSettings):
