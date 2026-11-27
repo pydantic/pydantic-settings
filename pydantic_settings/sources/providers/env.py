@@ -2,7 +2,7 @@ from __future__ import annotations as _annotations
 
 import json
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from enum import Enum
 from typing import (
     TYPE_CHECKING,
@@ -12,7 +12,7 @@ from typing import (
     get_origin,
 )
 
-from pydantic import AliasChoices, AliasPath, ConfigDict, Json, TypeAdapter, ValidationError
+from pydantic import AliasChoices, AliasPath, ConfigDict, Json, PydanticUserError, TypeAdapter, ValidationError
 from pydantic.fields import FieldInfo
 from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
@@ -164,6 +164,7 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
 
                 if self.env_parse_enums:
                     value = self._parse_enum_names(field.annotation, value)
+                value = self._coerce_env_val_strict(field, value)
 
                 if isinstance(value, dict):
                     return deep_update(value, self.explode_env_vars(field_name, field, self.env_vars))
@@ -180,27 +181,57 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
         """
         Replace enum member names in a decoded value with the members, following `annotation` into containers.
 
-        A string that is the name of a member of an enum in `annotation` becomes that member. List items and
-        dict keys and values are handled recursively, e.g. `["kiwi"]` for `list[Fruit]` or `{"a": ["kiwi"]}`
-        for `dict[str, list[Fruit]]`. Anything that does not match is returned unchanged.
+        A string that is the name of a member of an enum in `annotation` becomes that member, e.g. `["kiwi"]` for
+        `list[Fruit]` or `{"a": ["kiwi"]}` for `dict[str, list[Fruit]]`. Anything that does not match is returned
+        unchanged.
         """
-        if isinstance(value, Enum):
-            # Already converted; a `str`-based member must not be looked up again as a name.
-            return value
-        if isinstance(value, str):
+
+        def enum_name_to_val(annotation: Any, value: str) -> Any:
             enum_val = _annotation_enum_name_to_val(annotation, value)
             return value if enum_val is None else enum_val
+
+        return EnvSettingsSource._convert_json_strings(annotation, value, enum_name_to_val)
+
+    @staticmethod
+    def _coerce_json_strings(annotation: Any, value: Any) -> Any:
+        """
+        Convert the strings in a decoded value to their type in `annotation`, as lax validation would.
+
+        In strict mode, JSON numbers and booleans already have their type, but a string such as `"0.5"` for a
+        `float` item is rejected. Such strings come from quoted JSON values and from the CLI, which passes every
+        dict value and any list item that is not a JSON number (e.g. `.5` or `007`) as a string.
+        """
+
+        def lax_validate(annotation: Any, value: str) -> Any:
+            try:
+                return EnvSettingsSource._type_adapter(annotation).validate_python(value)
+            except ValidationError:
+                return value
+
+        return EnvSettingsSource._convert_json_strings(annotation, value, lax_validate)
+
+    @staticmethod
+    def _convert_json_strings(annotation: Any, value: Any, convert: Callable[[Any, str], Any]) -> Any:
+        """
+        Apply `convert(item_annotation, item)` to each string in a decoded value, following `annotation` into
+        list items and dict keys and values, including nested ones. Anything else is returned unchanged.
+        """
+        if isinstance(value, Enum):
+            # Already converted; a `str`-based member must not be converted again.
+            return value
+        if isinstance(value, str):
+            return convert(annotation, value)
         origin = get_origin(annotation)
         args = get_args(annotation)
         if typing_objects.is_annotated(origin):
-            return EnvSettingsSource._parse_enum_names(args[0], value)
+            return EnvSettingsSource._convert_json_strings(args[0], value, convert)
         if is_union_origin(origin):
             for arg in args:
-                parsed = EnvSettingsSource._parse_enum_names(arg, value)
-                # Only pick a branch that the parsed value fully matches, so e.g. `["kiwi", "free"]` for
+                converted = EnvSettingsSource._convert_json_strings(arg, value, convert)
+                # Only pick a branch that the converted value fully matches, so e.g. `["kiwi", "free"]` for
                 # `list[Fruit] | list[str]` is left alone instead of being half converted to enum members.
-                if parsed != value and EnvSettingsSource._matches_annotation(arg, parsed):
-                    return parsed
+                if converted != value and EnvSettingsSource._matches_annotation(arg, converted):
+                    return converted
             return value
         if isinstance(value, list):
             if origin is tuple:
@@ -215,24 +246,34 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             else:
                 return value
             return [
-                EnvSettingsSource._parse_enum_names(item_annotation, item)
+                EnvSettingsSource._convert_json_strings(item_annotation, item, convert)
                 for item_annotation, item in zip(item_annotations, value, strict=True)
             ]
         if isinstance(value, dict) and _lenient_issubclass(origin, Mapping) and len(args) == 2:
             return {
-                EnvSettingsSource._parse_enum_names(args[0], key): EnvSettingsSource._parse_enum_names(args[1], item)
+                EnvSettingsSource._convert_json_strings(args[0], key, convert): (
+                    EnvSettingsSource._convert_json_strings(args[1], item, convert)
+                )
                 for key, item in value.items()
             }
         return value
 
     @staticmethod
-    def _matches_annotation(annotation: Any, value: Any) -> bool:
+    def _matches_annotation(annotation: Any, value: Any, strict: bool = False) -> bool:
         try:
-            # The settings model already allows any arbitrary type in its fields, so only validation decides here.
-            TypeAdapter(annotation, config=ConfigDict(arbitrary_types_allowed=True)).validate_python(value)
+            EnvSettingsSource._type_adapter(annotation).validate_python(value, strict=True if strict else None)
         except ValidationError:
             return False
         return True
+
+    @staticmethod
+    def _type_adapter(annotation: Any) -> TypeAdapter[Any]:
+        try:
+            # The settings model already allows any arbitrary type in its fields, so only validation decides here.
+            return TypeAdapter(annotation, config=ConfigDict(arbitrary_types_allowed=True))
+        except PydanticUserError:
+            # Models, dataclasses and TypedDicts carry their own config and reject one here.
+            return TypeAdapter(annotation)
 
     def _matches_alias_path_head(self, field: FieldInfo | Any | None, key: str) -> bool:
         """
@@ -472,7 +513,11 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
                     should_coerce = (
                         is_union_origin(get_origin(annotation)) and _union_has_strict_types(annotation)
                     ) or _literal_has_numeric_enum(annotation)
-            if should_coerce and isinstance(value, str) and isinstance(field, FieldInfo):
+            if should_coerce and isinstance(value, (list, dict)) and isinstance(field, FieldInfo):
+                # A decoded JSON value: only its strings need converting, and only if it is not valid as it is.
+                if not self._matches_annotation(field.annotation, value, strict=True):
+                    return self._coerce_json_strings(field.annotation, value)
+            elif should_coerce and isinstance(value, str) and isinstance(field, FieldInfo):
                 if value == self.env_parse_none_str:
                     return value
                 has_json = any(isinstance(md, Json) for md in metadata)  # type: ignore[misc]
