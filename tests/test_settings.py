@@ -16,6 +16,7 @@ from collections.abc import Callable, Hashable
 from collections.abc import Set as AbstractSet
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from enum import Enum, IntEnum, StrEnum
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar
@@ -530,6 +531,46 @@ def test_nested_env_with_basemodel(env):
     s = Settings(top={'apple': 'value'})
     assert s.top.apple == 'value'
     assert s.top.banana == 'secret_value'
+
+
+def test_json_decimal_keeps_precision(env):
+    class Money(BaseModel):
+        amount: Decimal
+        rate: float = 0
+
+    class Node(BaseModel):
+        value: Decimal
+        children: list['Node'] = []
+
+    class Settings(BaseSettings):
+        amounts: list[Decimal] = []
+        prices: dict[str, Decimal] = {}
+        money: Money | None = None
+        tree: Node | None = None
+        floats: list[float] = []
+
+    env.set('amounts', '[1.10, 0.1234567890123456789, 5]')
+    env.set('prices', '{"a": 2.50}')
+    env.set('money', '{"amount": 1.10, "rate": 0.5}')
+    env.set('tree', '{"value": 1.10, "children": [{"value": 2.50}]}')
+    env.set('floats', '[1.10]')
+
+    s = Settings()
+    assert [str(amount) for amount in s.amounts] == ['1.10', '0.1234567890123456789', '5']
+    assert str(s.prices['a']) == '2.50'
+    assert str(s.money.amount) == '1.10'
+    assert s.money.rate == 0.5
+    assert str(s.tree.value) == '1.10'
+    assert str(s.tree.children[0].value) == '2.50'
+    assert s.floats == [1.1]
+
+
+def test_json_decimal_strict(env):
+    class Settings(BaseSettings, strict=True):
+        amounts: list[Decimal] = []
+
+    env.set('amounts', '[1.10]')
+    assert [str(amount) for amount in Settings().amounts] == ['1.10']
 
 
 def test_merge_dict(env):
