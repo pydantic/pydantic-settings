@@ -752,6 +752,50 @@ def test_cli_subcommand_help_not_escaped_for_non_argparse_root_parser():
     assert parser_kwargs['help'] == '100% done'
 
 
+def test_cli_nested_model_json_help_string_format(capsys):
+    class Sub(BaseModel):
+        x: int = 1
+
+    class Cfg(BaseSettings, cli_prog_name='example.py', env_prefix='MY%', cli_show_env_vars=True):
+        aliased: Sub = Field(Sub(), alias='s%d')
+        prefixed: Sub = Sub()
+
+    with pytest.raises(SystemExit):
+        CliApp.run(Cfg, cli_args=['--help'])
+    out = ' '.join(capsys.readouterr().out.split())
+    assert 'set s%d from JSON string (default: {}) [env: S%D]' in out
+    assert 'set prefixed from JSON string (default: {}) [env: MY%PREFIXED]' in out
+
+    assert CliApp.run(Cfg, cli_args=['--s%d.x', '2']).aliased == Sub(x=2)
+
+
+def test_cli_description_string_format(capsys):
+    class Sub(BaseModel):
+        """%(prog)s sub, 100% done"""
+
+        x: int = 1
+
+    class Other(BaseModel):
+        pass
+
+    class Cfg(BaseSettings, cli_prog_name='example.py'):
+        """%(prog)s root, 100% done, 50%% kept"""
+
+        group: Sub = Field(Sub(), description='%(prog)s group, 100% done')
+        cmd: CliSubCommand[Sub | Other] = Field(description='%(prog)s subcommands, 100% done')
+
+    with pytest.raises(SystemExit):
+        CliApp.run(Cfg, cli_args=['--help'])
+    out = ' '.join(capsys.readouterr().out.split())
+    assert 'example.py root, 100% done, 50% kept' in out
+    assert 'example.py group, 100% done' in out
+    assert 'example.py subcommands, 100% done' in out
+
+    with pytest.raises(SystemExit):
+        CliApp.run(Cfg, cli_args=['Sub', '--help'])
+    assert 'example.py Sub sub, 100% done' in ' '.join(capsys.readouterr().out.split())
+
+
 def test_cli_help_string_format(capsys, monkeypatch):
     class Cfg(BaseSettings, cli_parse_args=True, cli_prog_name='example.py'):
         date_str: str = '%Y-%m-%d'

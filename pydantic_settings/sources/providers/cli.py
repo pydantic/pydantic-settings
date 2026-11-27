@@ -151,6 +151,17 @@ def _get_model_description(model_cls: type[Any]) -> str | None:
     return None
 
 
+def _escape_argparse_description(description: str | None) -> str | None:
+    """Escape bare `%` in a description for argparse.
+
+    argparse only %-formats a description when it contains `%(prog)`, so a bare `%` is fine on its own but breaks
+    `--help` once `%(prog)` is present. `%(prog)` and already escaped `%%` are kept as they are.
+    """
+    if description is None or '%(prog)' not in description:
+        return description
+    return re.sub(r'%%|%\(prog\)|%', lambda m: '%%' if m.group() == '%' else m.group(), description)
+
+
 def _collect_sub_models(type_: Any, sub_models: list[type[BaseModel]]) -> None:
     """Recursively collect BaseModel subclasses from possibly nested union types."""
     stripped = _strip_annotated(type_)
@@ -504,7 +515,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             _CliInternalArgParser(
                 cli_exit_on_error=self.cli_exit_on_error,
                 prog=self.cli_prog_name,
-                description=_get_model_description(settings_cls),
+                description=_escape_argparse_description(_get_model_description(settings_cls)),
                 formatter_class=formatter_class,
                 prefix_chars=self.cli_flag_prefix_char,
                 allow_abbrev=False,
@@ -1235,7 +1246,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                     subcommand_arg.args = [subcommand_alias]
                     subcommand_arg.kwargs['allow_abbrev'] = False
                     subcommand_arg.kwargs['formatter_class'] = self._formatter_class
-                    subcommand_arg.kwargs['description'] = _get_model_description(sub_model)
+                    subcommand_arg.kwargs['description'] = self._description_escape(_get_model_description(sub_model))
                     subcommand_help = None if len(arg.sub_models) > 1 else field_info.description
                     if self.cli_use_class_docs_for_groups:
                         subcommand_help = _get_model_description(sub_model)
@@ -1246,7 +1257,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                             parser,
                             title='subcommands',
                             dest=f'{arg_prefix}:subcommand',
-                            description=field_info.description if len(arg.sub_models) > 1 else None,
+                            description=self._description_escape(field_info.description)
+                            if len(arg.sub_models) > 1
+                            else None,
                         )
                         if subparsers is None
                         else subparsers
@@ -1518,6 +1531,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         is_model_suppressed = self._is_field_suppressed(field_info) or is_model_suppressed
         if is_model_suppressed:
             model_group_kwargs['description'] = CLI_SUPPRESS
+        model_group_kwargs['description'] = self._description_escape(model_group_kwargs['description'])
         added_args.append(arg_names[0])
         kwargs['required'] = False
         kwargs['nargs'] = '?'
@@ -1525,7 +1539,9 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         kwargs['help'] = (
             CLI_SUPPRESS
             if is_model_suppressed or self.cli_avoid_json
-            else self._help_format_env_vars(f'set {arg_names[0]} from JSON string (default: {{}})', env_var_names)
+            else self._help_escape(
+                self._help_format_env_vars(f'set {arg_names[0]} from JSON string (default: {{}})', env_var_names)
+            )
         )
         self._add_env_var_names(kwargs['dest'], kwargs['help'], env_var_names)
         model_group = self._add_group(parser, **model_group_kwargs)
@@ -1732,6 +1748,11 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
 
     def _help_escape(self, help_text: str) -> str:
         return help_text.replace('%', '%%') if issubclass(type(self._root_parser), ArgumentParser) else help_text
+
+    def _description_escape(self, description: str | None) -> str | None:
+        if issubclass(type(self._root_parser), ArgumentParser):
+            return _escape_argparse_description(description)
+        return description
 
     def _is_field_suppressed(self, field_info: FieldInfo) -> bool:
         _help = field_info.description or ''
