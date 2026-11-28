@@ -3,7 +3,8 @@ from __future__ import annotations as _annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AliasChoices, AliasGenerator, AnyHttpUrl, Field
+import pytest
+from pydantic import AliasChoices, AliasGenerator, AnyHttpUrl, BaseModel, ConfigDict, Field, ValidationError
 from pydantic.alias_generators import to_camel
 
 from pydantic_settings import (
@@ -180,3 +181,113 @@ def test_init_kwargs_override_env_with_alias_and_extra_forbid(env):
     #   Extra inputs are not permitted [type=extra_forbidden, input_value='dev', input_type=str]
     s = Settings(env_kind='hosted')
     assert s.env_kind == 'hosted'
+
+
+def test_nested_model_merging_alias_and_field_name(tmp_path: Path):
+    """Test #923: Nested models are merged when one source uses field name and another uses alias."""
+    env_file = tmp_path / '.env'
+    env_file.write_text('SUBMODEL={"a": 1}\n')
+
+    class SubModel(BaseModel):
+        a: int
+        b: int
+
+    class Settings(BaseSettings):
+        sub: SubModel = Field(validation_alias='SUBMODEL')
+        model_config = SettingsConfigDict(
+            env_file=env_file,
+            populate_by_name=True,
+            extra='forbid',
+        )
+
+    # Init passes 'sub' by field name; env_file provides 'SUBMODEL' by alias
+    s = Settings(sub={'b': 2})
+    assert s.sub.a == 1
+    assert s.sub.b == 2
+
+
+def test_nested_model_merging_alias_choices_across_sources(tmp_path: Path, env):
+    """Test #923: Nested models merge when different sources use different AliasChoices."""
+    env_file = tmp_path / '.env'
+    env_file.write_text('SUB={"a": 10}\n')
+
+    class SubModel(BaseModel):
+        a: int
+        b: int
+
+    class Settings(BaseSettings):
+        sub: SubModel = Field(validation_alias=AliasChoices('SUBMODEL', 'SUB'))
+        model_config = SettingsConfigDict(
+            env_file=env_file,
+            env_nested_delimiter='__',
+            extra='forbid',
+        )
+
+    # Env provides SUBMODEL__b=20; env_file provides SUB={"a": 10}
+    env.set('SUBMODEL__b', '20')
+    s = Settings()
+    assert s.sub.a == 10
+    assert s.sub.b == 20
+
+
+def test_nested_submodel_field_alias_merging(tmp_path: Path):
+    """Test #923: Nested submodel fields with aliases merge across sources."""
+    env_file = tmp_path / '.env'
+    env_file.write_text('SUB={"fa": 100}\n')
+
+    class SubModel(BaseModel):
+        field_a: int = Field(validation_alias=AliasChoices('fa', 'field_a'))
+        field_b: int = Field(validation_alias='fb')
+        model_config = ConfigDict(populate_by_name=True)
+
+    class Settings(BaseSettings):
+        sub: SubModel = Field(validation_alias='SUB')
+        model_config = SettingsConfigDict(
+            env_file=env_file,
+            extra='forbid',
+        )
+
+    # Init provides field_b by field name; env_file provides fa by alias
+    s = Settings(sub={'field_b': 200})
+    assert s.sub.field_a == 100
+    assert s.sub.field_b == 200
+
+
+def test_nested_model_no_merge_when_populate_by_name_false(tmp_path: Path):
+    """Test #923: When populate_by_name=False, field name in source is not matched to alias."""
+
+    class SubModel(BaseModel):
+        a: int = 1
+
+    class Settings(BaseSettings):
+        sub: SubModel = Field(validation_alias='SUBMODEL')
+        model_config = SettingsConfigDict(
+            populate_by_name=False,
+            extra='forbid',
+        )
+
+    # Passing by field name should raise ValidationError because populate_by_name is False
+    with pytest.raises(ValidationError):
+        Settings(sub={'a': 2})
+
+
+def test_nested_model_merging_case_sensitive(tmp_path: Path):
+    """Test #923: Case sensitivity is respected when normalizing nested keys."""
+    env_file = tmp_path / '.env'
+    env_file.write_text('SUB={"a": 1}\n')
+
+    class SubModel(BaseModel):
+        a: int
+        b: int
+
+    class Settings(BaseSettings):
+        sub: SubModel = Field(validation_alias='sub')
+        model_config = SettingsConfigDict(
+            env_file=env_file,
+            case_sensitive=True,
+            extra='forbid',
+        )
+
+    # With case_sensitive=True, 'SUB' in env_file does NOT match 'sub'
+    with pytest.raises(ValidationError):
+        Settings(sub={'b': 2})
