@@ -4171,6 +4171,36 @@ def test_nested_discriminated_union(env):
     assert s.a_or_b.b == 'world'
 
 
+def test_nested_discriminated_union_shared_field_name(env):
+    """A nested env value is decoded for the member the discriminator selects, not the first one with the key."""
+
+    class Redis(BaseModel):
+        kind: Literal['redis'] = 'redis'
+        hosts: str = 'localhost:6379'
+
+    class Cluster(BaseModel):
+        kind: Literal['cluster'] = 'cluster'
+        hosts: list[str] = []
+
+    class App(BaseModel):
+        cache: Cluster | Redis | None = Field(None, discriminator='kind')
+
+    class Settings(BaseSettings):
+        model_config = SettingsConfigDict(env_nested_delimiter='__')
+
+        cache: Redis | Cluster = Field(Redis(), discriminator='kind')
+        app: App = App()
+
+    env.set('cache__kind', 'cluster')
+    env.set('cache__hosts', '["n1:6379", "n2:6379"]')
+    env.set('app__cache__kind', 'redis')
+    env.set('app__cache__hosts', 'n3:6379')
+
+    s = Settings()
+    assert s.cache == Cluster(hosts=['n1:6379', 'n2:6379'])
+    assert s.app.cache == Redis(hosts='n3:6379')
+
+
 def test_nested_model_case_insensitive(env):
     class SubSubSub(BaseModel):
         VaL3: str

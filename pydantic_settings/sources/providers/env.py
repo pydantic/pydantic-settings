@@ -18,7 +18,7 @@ from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
 
 from ...utils import _lenient_issubclass, deep_update
-from ..base import PydanticBaseEnvSettingsSource
+from ..base import PydanticBaseEnvSettingsSource, _get_discriminator, _get_discriminator_keys
 from ..types import EnvNoneType, EnvPrefixTarget
 from ..utils import (
     InitState,
@@ -28,6 +28,7 @@ from ..utils import (
     _get_field_annotation_and_metadata,
     _get_model_config,
     _get_model_fields,
+    _get_union_members,
     _is_model_or_dataclass,
     _literal_has_numeric_enum,
     _resolve_setting,
@@ -447,15 +448,22 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             target_field: FieldInfo | None = field
             # the closest field containing the target, its decoding settings apply to raw types
             parent_field = field
+            # the env name prefix of the current level, where a discriminator's value is looked up
+            level_prefix = prefix
             for key in keys:
-                target_field = self.next_field(target_field, key, self.case_sensitive)
+                target_field = self.next_field(
+                    self._discriminated_member(target_field, level_prefix, env_vars), key, self.case_sensitive
+                )
+                level_prefix += f'{key}{self.env_nested_delimiter}'
                 if isinstance(target_field, FieldInfo):
                     parent_field = target_field
                 if isinstance(env_var, dict):
                     env_var = env_var.setdefault(key, {})
 
             # get proper field with last_key
-            target_field = self.next_field(target_field, last_key, self.case_sensitive)
+            target_field = self.next_field(
+                self._discriminated_member(target_field, level_prefix, env_vars), last_key, self.case_sensitive
+            )
 
             # check if env_val maps to a complex field and if so, parse the env_val
             if (target_field or is_dict) and env_val:
@@ -492,6 +500,42 @@ class EnvSettingsSource(PydanticBaseEnvSettingsSource):
             ):
                 env_var[last_key] = self._coerce_env_val_strict(target_field, env_val)
         return result
+
+    def _discriminated_member(
+        self, field: FieldInfo | Any | None, level_prefix: str, env_vars: Mapping[str, str | None]
+    ) -> FieldInfo | Any | None:
+        """
+        Get the member of a discriminated union field that the env var of its discriminator selects.
+
+        `next_field` takes a key's field from the first union member that has it, so without this a value for
+        another member would be decoded, enum-parsed and coerced for the first member's field type.
+
+        Args:
+            field: The field.
+            level_prefix: The env name prefix of the field's own fields, e.g. `cache__`.
+            env_vars: Environment variables.
+
+        Returns:
+            The selected member, or `field` unchanged if it isn't a discriminated union with a string
+            discriminator or its discriminator env var doesn't select exactly one member.
+        """
+        if not isinstance(field, FieldInfo):
+            return field
+        discriminator = _get_discriminator(field)
+        if not isinstance(discriminator, str):
+            return field
+        selected = []
+        for member in _get_union_members(field.annotation):
+            if not _is_model_or_dataclass(member):
+                continue
+            # pydantic requires each member to have the discriminator field, typed as a `Literal` of its tags.
+            # An env value is a string, which pydantic only matches to a string tag.
+            tag_annotation = _get_model_fields(member)[discriminator].annotation
+            tags = [tag for tag in get_args(tag_annotation) if isinstance(tag, str)]
+            keys = _get_discriminator_keys(member, discriminator)
+            if any(env_vars.get(f'{level_prefix}{self._apply_case_sensitive(key)}') in tags for key in keys):
+                selected.append(member)
+        return selected[0] if len(selected) == 1 else field
 
     def _coerce_env_val_strict(self, field: FieldInfo | None, value: Any) -> Any:
         """
