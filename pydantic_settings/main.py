@@ -8,7 +8,7 @@ import warnings
 from argparse import Namespace
 from collections.abc import Mapping
 from types import SimpleNamespace
-from typing import Any, ClassVar, Literal, Self, TextIO, TypeVar, cast
+from typing import Any, ClassVar, Literal, Self, TextIO, TypeVar, cast, get_args, get_origin
 from weakref import WeakKeyDictionary
 
 from pydantic import AliasChoices, AliasPath, ConfigDict
@@ -46,12 +46,16 @@ from .sources.utils import (
     InitState,
     _get_alias_names,
     _get_model_config,
+    _get_model_fields,
+    _is_model_or_dataclass,
     _resolve_setting,
+    _resolve_type_alias,
+    _strip_annotated,
     _validate_by_alias_enabled,
     _validate_by_name_enabled,
     _warn_if_field_info_incomplete,
 )
-from .utils import _debug_logging_enabled, deep_update, logger
+from .utils import _debug_logging_enabled, _lenient_issubclass, deep_update, logger
 
 T = TypeVar('T')
 
@@ -522,6 +526,154 @@ class BaseSettings(BaseModel):
         return sources, _init_kwargs if _init_kwargs is not None else {}
 
     @classmethod
+    def _normalize_nested_model_value(
+        cls,
+        annotation: Any,
+        val: Any,
+        init_state: InitState,
+        case_sensitive: bool,
+    ) -> Any:
+        nested_annotation = _strip_annotated(_unwrap_optional_annotation(_resolve_type_alias(annotation)))
+        if _is_model_or_dataclass(nested_annotation) and isinstance(val, dict):
+            return cls._settings_normalize_source_keys(
+                nested_annotation, val, init_state, case_sensitive=case_sensitive
+            )
+        if isinstance(val, list):
+            origin = get_origin(nested_annotation)
+            args = get_args(nested_annotation)
+            if (_lenient_issubclass(origin, list) or origin is list) and args:
+                item_annotation = _strip_annotated(_unwrap_optional_annotation(_resolve_type_alias(args[0])))
+                if _is_model_or_dataclass(item_annotation):
+                    return [
+                        cls._settings_normalize_source_keys(
+                            item_annotation, item, init_state, case_sensitive=case_sensitive
+                        )
+                        if isinstance(item, dict)
+                        else item
+                        for item in val
+                    ]
+        return val
+
+    @staticmethod
+    def _get_field_matchable_names(
+        field_name: str,
+        field_info: FieldInfo,
+        validate_by_alias: bool,
+        validate_by_name: bool,
+    ) -> tuple[str, list[str]]:
+        alias_names, is_alias_path_only = _get_alias_names(field_name, field_info, validate_by_alias=validate_by_alias)
+        canonical_key = alias_names[0] if alias_names and not is_alias_path_only else field_name
+
+        matchable_names: list[str] = []
+        if validate_by_alias and not is_alias_path_only:
+            matchable_names.extend(alias_names)
+        if validate_by_name and field_name not in matchable_names:
+            matchable_names.append(field_name)
+
+        return canonical_key, matchable_names
+
+    @classmethod
+    def _build_field_key_index(
+        cls,
+        model_fields: dict[str, FieldInfo],
+        validate_by_alias: bool,
+        validate_by_name: bool,
+        is_case_sensitive: bool,
+        init_state: InitState,
+    ) -> tuple[list[tuple[str, FieldInfo, str, list[str]]], dict[str, list[str]], dict[str, int]]:
+        field_specs: list[tuple[str, FieldInfo, str, list[str]]] = []
+        exact_owners: dict[str, list[str]] = {}
+        canonical_counts: dict[str, int] = {}
+
+        for field_name, field_info in model_fields.items():
+            _warn_if_field_info_incomplete(field_info, field_name, init_state)
+            canonical_key, matchable_names = cls._get_field_matchable_names(
+                field_name, field_info, validate_by_alias, validate_by_name
+            )
+            field_specs.append((field_name, field_info, canonical_key, matchable_names))
+            ck_norm = canonical_key if is_case_sensitive else canonical_key.lower()
+            canonical_counts[ck_norm] = canonical_counts.get(ck_norm, 0) + 1
+            for m in matchable_names:
+                exact_owners.setdefault(m, []).append(field_name)
+
+        return field_specs, exact_owners, canonical_counts
+
+    @staticmethod
+    def _collect_matched_keys(
+        field_name: str,
+        matchable_names: list[str],
+        remaining: dict[str, Any],
+        exact_owners: dict[str, list[str]],
+        is_case_sensitive: bool,
+    ) -> list[str]:
+        matched_keys: list[str] = []
+        for m in matchable_names:
+            if m in remaining and exact_owners.get(m) == [field_name] and m not in matched_keys:
+                matched_keys.append(m)
+            if not is_case_sensitive:
+                matched_keys.extend(
+                    k for k in remaining if k not in exact_owners and k.lower() == m.lower() and k not in matched_keys
+                )
+        return matched_keys
+
+    @classmethod
+    def _settings_normalize_source_keys(
+        cls,
+        model_cls: type[Any],
+        data: dict[str, Any],
+        init_state: InitState,
+        case_sensitive: bool | None = None,
+    ) -> dict[str, Any]:
+        """Normalize keys in a source's data dict to canonical field keys so sources merge consistently."""
+        model_config = _get_model_config(model_cls)
+        is_case_sensitive = model_config.get('case_sensitive')
+        if is_case_sensitive is None:
+            is_case_sensitive = case_sensitive if case_sensitive is not None else False
+
+        field_specs, exact_owners, canonical_counts = cls._build_field_key_index(
+            _get_model_fields(model_cls),
+            _validate_by_alias_enabled(model_config),
+            _validate_by_name_enabled(model_config),
+            is_case_sensitive,
+            init_state,
+        )
+
+        remaining = data.copy()
+        normalized_output: dict[str, Any] = {}
+
+        for field_name, field_info, canonical_key, matchable_names in field_specs:
+            ck_norm = canonical_key if is_case_sensitive else canonical_key.lower()
+            if canonical_counts[ck_norm] > 1 or any(
+                other != field_name for other in exact_owners.get(canonical_key, ())
+            ):
+                for m in matchable_names:
+                    if m in remaining and exact_owners.get(m) == [field_name]:
+                        remaining[m] = cls._normalize_nested_model_value(
+                            field_info.annotation, remaining[m], init_state, is_case_sensitive
+                        )
+                continue
+
+            matched_keys = cls._collect_matched_keys(
+                field_name, matchable_names, remaining, exact_owners, is_case_sensitive
+            )
+            if not matched_keys:
+                continue
+
+            val = remaining.pop(matched_keys[0])
+            for other_key in matched_keys[1:]:
+                other_val = remaining.pop(other_key)
+                if isinstance(val, dict) and isinstance(other_val, dict):
+                    val = deep_update(other_val, val)
+                elif val is None and other_val is not None:
+                    val = other_val
+
+            normalized_output[canonical_key] = cls._normalize_nested_model_value(
+                field_info.annotation, val, init_state, is_case_sensitive
+            )
+
+        return {**remaining, **normalized_output}
+
+    @classmethod
     def _settings_build_values(
         cls, sources: tuple[PydanticBaseSettingsSource, ...], init_kwargs: dict[str, Any]
     ) -> dict[str, Any]:
@@ -530,6 +682,8 @@ class BaseSettings(BaseModel):
             defaults: dict[str, Any] = {}
             default_objects: dict[str, Any] = {}
             states: dict[str, dict[str, Any]] = {}
+            last_source = sources[-1]
+            init_state = last_source._init_state if isinstance(last_source, PydanticBaseSettingsSource) else InitState()
             for source in sources:
                 if isinstance(source, PydanticBaseSettingsSource):
                     source._set_current_state(state)
@@ -543,7 +697,8 @@ class BaseSettings(BaseModel):
                     default_objects = source._default_objects
 
                 states[source_name] = source_state
-                state = deep_update(source_state, state)
+                normalized_source_state = cls._settings_normalize_source_keys(cls, source_state, init_state)
+                state = deep_update(normalized_source_state, state)
 
             # Strip any default values not explicitly set before returning final state
             for key in defaults.keys() & default_objects.keys():
@@ -553,10 +708,6 @@ class BaseSettings(BaseModel):
 
             if _debug_logging_enabled():
                 cls._settings_log_debug(states)
-            # The last source is the `DefaultSettingsSource` instance created in `_settings_init_sources()`,
-            # holding the init state shared by all built-in sources:
-            last_source = sources[-1]
-            init_state = last_source._init_state if isinstance(last_source, PydanticBaseSettingsSource) else InitState()
             cls._settings_restore_init_kwarg_names(cls, init_kwargs, state, init_state)
 
             return state
@@ -619,7 +770,7 @@ class BaseSettings(BaseModel):
                         source_key = field_name if field_name in state_kwarg_name else next(iter(state_kwarg_name))
                     # Get the value from the source key and remove all matching keys
                     value = state.pop(source_key)
-                    for key in state_kwarg_name - {source_key}:
+                    for key in state_kwarg_name - {source_key}:  # pragma: no cover
                         state.pop(key, None)
                     state[target_key] = value
 
