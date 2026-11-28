@@ -530,7 +530,7 @@ class BaseSettings(BaseModel):
         cls,
         annotation: Any,
         val: Any,
-        init_state: InitState | None,
+        init_state: InitState,
         case_sensitive: bool,
     ) -> Any:
         nested_annotation = _strip_annotated(_unwrap_optional_annotation(_resolve_type_alias(annotation)))
@@ -540,19 +540,18 @@ class BaseSettings(BaseModel):
             )
         if isinstance(val, list):
             origin = get_origin(nested_annotation)
-            if _lenient_issubclass(origin, list) or origin is list:
-                args = get_args(nested_annotation)
-                if args:
-                    item_annotation = _strip_annotated(_unwrap_optional_annotation(_resolve_type_alias(args[0])))
-                    if _is_model_or_dataclass(item_annotation):
-                        return [
-                            cls._settings_normalize_source_keys(
-                                item_annotation, item, init_state, case_sensitive=case_sensitive
-                            )
-                            if isinstance(item, dict)
-                            else item
-                            for item in val
-                        ]
+            args = get_args(nested_annotation)
+            if (_lenient_issubclass(origin, list) or origin is list) and args:
+                item_annotation = _strip_annotated(_unwrap_optional_annotation(_resolve_type_alias(args[0])))
+                if _is_model_or_dataclass(item_annotation):
+                    return [
+                        cls._settings_normalize_source_keys(
+                            item_annotation, item, init_state, case_sensitive=case_sensitive
+                        )
+                        if isinstance(item, dict)
+                        else item
+                        for item in val
+                    ]
         return val
 
     @staticmethod
@@ -566,73 +565,113 @@ class BaseSettings(BaseModel):
         canonical_key = alias_names[0] if alias_names and not is_alias_path_only else field_name
 
         matchable_names: list[str] = []
-        if validate_by_alias:
-            if not is_alias_path_only:
-                matchable_names.extend(alias_names)
-            v_alias = field_info.validation_alias if field_info.validation_alias is not None else field_info.alias
-            if isinstance(v_alias, AliasChoices):
-                for choice in v_alias.choices:
-                    if isinstance(choice, str) and choice not in matchable_names:
-                        matchable_names.append(choice)
+        if validate_by_alias and not is_alias_path_only:
+            matchable_names.extend(alias_names)
         if validate_by_name and field_name not in matchable_names:
             matchable_names.append(field_name)
 
         return canonical_key, matchable_names
 
     @classmethod
+    def _build_field_key_index(
+        cls,
+        model_fields: dict[str, FieldInfo],
+        validate_by_alias: bool,
+        validate_by_name: bool,
+        is_case_sensitive: bool,
+        init_state: InitState,
+    ) -> tuple[list[tuple[str, FieldInfo, str, list[str]]], dict[str, list[str]], dict[str, int]]:
+        field_specs: list[tuple[str, FieldInfo, str, list[str]]] = []
+        exact_owners: dict[str, list[str]] = {}
+        canonical_counts: dict[str, int] = {}
+
+        for field_name, field_info in model_fields.items():
+            _warn_if_field_info_incomplete(field_info, field_name, init_state)
+            canonical_key, matchable_names = cls._get_field_matchable_names(
+                field_name, field_info, validate_by_alias, validate_by_name
+            )
+            field_specs.append((field_name, field_info, canonical_key, matchable_names))
+            ck_norm = canonical_key if is_case_sensitive else canonical_key.lower()
+            canonical_counts[ck_norm] = canonical_counts.get(ck_norm, 0) + 1
+            for m in matchable_names:
+                exact_owners.setdefault(m, []).append(field_name)
+
+        return field_specs, exact_owners, canonical_counts
+
+    @staticmethod
+    def _collect_matched_keys(
+        field_name: str,
+        matchable_names: list[str],
+        remaining: dict[str, Any],
+        exact_owners: dict[str, list[str]],
+        is_case_sensitive: bool,
+    ) -> list[str]:
+        matched_keys: list[str] = []
+        for m in matchable_names:
+            if m in remaining and exact_owners.get(m) == [field_name] and m not in matched_keys:
+                matched_keys.append(m)
+            if not is_case_sensitive:
+                matched_keys.extend(
+                    k for k in remaining if k not in exact_owners and k.lower() == m.lower() and k not in matched_keys
+                )
+        return matched_keys
+
+    @classmethod
     def _settings_normalize_source_keys(
         cls,
         model_cls: type[Any],
         data: dict[str, Any],
-        init_state: InitState | None = None,
+        init_state: InitState,
         case_sensitive: bool | None = None,
     ) -> dict[str, Any]:
         """Normalize keys in a source's data dict to canonical field keys so sources merge consistently."""
-        if not isinstance(data, dict) or not _is_model_or_dataclass(model_cls):
-            return data
-
-        normalized_data = data.copy()
-        model_fields = _get_model_fields(model_cls)
         model_config = _get_model_config(model_cls)
-        validate_by_alias = _validate_by_alias_enabled(model_config)
-        validate_by_name = _validate_by_name_enabled(model_config)
         is_case_sensitive = model_config.get('case_sensitive')
         if is_case_sensitive is None:
             is_case_sensitive = case_sensitive if case_sensitive is not None else False
 
-        for field_name, field_info in model_fields.items():
-            if init_state is not None:
-                _warn_if_field_info_incomplete(field_info, field_name, init_state)
+        field_specs, exact_owners, canonical_counts = cls._build_field_key_index(
+            _get_model_fields(model_cls),
+            _validate_by_alias_enabled(model_config),
+            _validate_by_name_enabled(model_config),
+            is_case_sensitive,
+            init_state,
+        )
 
-            canonical_key, matchable_names = cls._get_field_matchable_names(
-                field_name, field_info, validate_by_alias, validate_by_name
+        remaining = data.copy()
+        normalized_output: dict[str, Any] = {}
+
+        for field_name, field_info, canonical_key, matchable_names in field_specs:
+            ck_norm = canonical_key if is_case_sensitive else canonical_key.lower()
+            if canonical_counts[ck_norm] > 1 or any(
+                other != field_name for other in exact_owners.get(canonical_key, ())
+            ):
+                for m in matchable_names:
+                    if m in remaining and exact_owners.get(m) == [field_name]:
+                        remaining[m] = cls._normalize_nested_model_value(
+                            field_info.annotation, remaining[m], init_state, is_case_sensitive
+                        )
+                continue
+
+            matched_keys = cls._collect_matched_keys(
+                field_name, matchable_names, remaining, exact_owners, is_case_sensitive
+            )
+            if not matched_keys:
+                continue
+
+            val = remaining.pop(matched_keys[0])
+            for other_key in matched_keys[1:]:
+                other_val = remaining.pop(other_key)
+                if isinstance(val, dict) and isinstance(other_val, dict):
+                    val = deep_update(other_val, val)
+                elif val is None and other_val is not None:
+                    val = other_val
+
+            normalized_output[canonical_key] = cls._normalize_nested_model_value(
+                field_info.annotation, val, init_state, is_case_sensitive
             )
 
-            matched_keys = [
-                k
-                for k in list(normalized_data.keys())
-                if any((k == m) if is_case_sensitive else (k.lower() == m.lower()) for m in matchable_names)
-            ]
-
-            if matched_keys:
-                primary_key = canonical_key if canonical_key in matched_keys else matched_keys[0]
-                val = normalized_data[primary_key]
-
-                for other_key in matched_keys:
-                    if other_key != primary_key:
-                        other_val = normalized_data.pop(other_key)
-                        if isinstance(val, dict) and isinstance(other_val, dict):
-                            val = deep_update(other_val, val)
-                        elif val is None and other_val is not None:
-                            val = other_val
-
-                if primary_key != canonical_key:
-                    normalized_data.pop(primary_key, None)
-
-                val = cls._normalize_nested_model_value(field_info.annotation, val, init_state, is_case_sensitive)
-                normalized_data[canonical_key] = val
-
-        return normalized_data
+        return {**remaining, **normalized_output}
 
     @classmethod
     def _settings_build_values(
@@ -731,10 +770,8 @@ class BaseSettings(BaseModel):
                         source_key = field_name if field_name in state_kwarg_name else next(iter(state_kwarg_name))
                     # Get the value from the source key and remove all matching keys
                     value = state.pop(source_key)
-                    for key in state_kwarg_name - {source_key}:
-                        other_val = state.pop(key, None)
-                        if isinstance(value, dict) and isinstance(other_val, dict):
-                            value = deep_update(other_val, value)
+                    for key in state_kwarg_name - {source_key}:  # pragma: no cover
+                        state.pop(key, None)
                     state[target_key] = value
 
     @staticmethod

@@ -291,3 +291,53 @@ def test_nested_model_merging_case_sensitive(tmp_path: Path):
     # With case_sensitive=True, 'SUB' in env_file does NOT match 'sub'
     with pytest.raises(ValidationError):
         Settings(sub={'b': 2})
+
+
+def test_nested_model_preserves_distinct_case_fields():
+    """Preserve exact field matches when a nested model defines both `foo` and `FOO` with case_sensitive=False."""
+
+    class SubModel(BaseModel):
+        foo: int
+        FOO: int
+
+    class Settings(BaseSettings):
+        sub: SubModel
+        model_config = SettingsConfigDict(case_sensitive=False)
+
+    s = Settings(sub={'foo': 1, 'FOO': 2})
+    assert s.sub.foo == 1
+    assert s.sub.FOO == 2
+
+
+def test_nested_model_alias_choices_precedence():
+    """Select the highest-priority AliasChoices key regardless of input dict insertion order."""
+
+    class Leaf(BaseModel):
+        x: int
+        y: int
+
+    class SubModel(BaseModel):
+        val: int = Field(validation_alias=AliasChoices('a', 'b', 'c'))
+        leaf: Leaf = Field(validation_alias=AliasChoices('l1', 'l2'))
+        opt: int | None = Field(default=None, validation_alias=AliasChoices('o1', 'o2'))
+        items: list[Leaf] = Field(default_factory=list)
+
+    class Settings(BaseSettings):
+        sub: SubModel
+
+    s = Settings(
+        sub={
+            'c': 3,
+            'b': 2,
+            'l2': {'x': 1, 'y': 2},
+            'l1': {'x': 10},
+            'o1': None,
+            'o2': 7,
+            'items': [{'x': 1, 'y': 2}],
+        }
+    )
+    assert s.sub.val == 2
+    assert s.sub.leaf.x == 10
+    assert s.sub.leaf.y == 2
+    assert s.sub.opt == 7
+    assert s.sub.items[0].x == 1
